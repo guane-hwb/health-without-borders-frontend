@@ -9,13 +9,12 @@ class ApiException implements Exception {
   final int? statusCode;
 
   @override
-  String toString() =>
-      'ApiException(statusCode: $statusCode, message: $message)';
+  String toString() => 'ApiException(statusCode: $statusCode, message: $message)';
 }
 
 class ApiClient {
   ApiClient({required this.baseUrl, http.Client? client})
-    : _client = client ?? http.Client();
+      : _client = client ?? http.Client();
 
   final String baseUrl;
   final http.Client _client;

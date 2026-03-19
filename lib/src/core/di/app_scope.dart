@@ -15,8 +15,7 @@ class AppScope extends InheritedWidget {
   final PatientRepository patientRepository;
 
   static AppScope of(BuildContext context) {
-    final AppScope? scope = context
-        .dependOnInheritedWidgetOfExactType<AppScope>();
+    final AppScope? scope = context.dependOnInheritedWidgetOfExactType<AppScope>();
     if (scope == null) {
       throw StateError('AppScope not found in widget tree.');
     }

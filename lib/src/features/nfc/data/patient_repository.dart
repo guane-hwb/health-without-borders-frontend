@@ -5,8 +5,8 @@ class PatientRepository {
   PatientRepository({
     required ApiClient apiClient,
     required AuthRepository authRepository,
-  }) : _apiClient = apiClient,
-       _authRepository = authRepository;
+  })  : _apiClient = apiClient,
+        _authRepository = authRepository;
 
   final ApiClient _apiClient;
   final AuthRepository _authRepository;

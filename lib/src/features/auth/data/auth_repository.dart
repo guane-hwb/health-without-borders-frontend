@@ -7,8 +7,8 @@ class AuthRepository {
   AuthRepository({
     required ApiClient apiClient,
     FlutterSecureStorage? secureStorage,
-  }) : _apiClient = apiClient,
-       _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  })  : _apiClient = apiClient,
+        _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const String _tokenKey = 'hwb_access_token';
 

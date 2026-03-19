@@ -44,24 +44,20 @@ Map<String, dynamic> buildPatientSyncPayload(RegisterNfcDraft draft) {
       'chronicConditions': '',
     },
     'vaccines': draft.vaccines
-        .map(
-          (VaccineEntry entry) => <String, dynamic>{
-            'vaccine': entry.vaccine,
-            'doses': entry.doses,
-            'date': entry.date,
-            'administratedBy': entry.administratedBy,
-          },
-        )
+        .map((VaccineEntry entry) => <String, dynamic>{
+              'vaccine': entry.vaccine,
+              'doses': entry.doses,
+              'date': entry.date,
+              'administratedBy': entry.administratedBy,
+            })
         .toList(),
     'allergens': draft.allergens
-        .map(
-          (AllergenEntry entry) => <String, dynamic>{
-            'allergen': entry.allergen,
-            'reaction': entry.reaction,
-            'severity': entry.severity,
-            'notes': entry.notes,
-          },
-        )
+        .map((AllergenEntry entry) => <String, dynamic>{
+              'allergen': entry.allergen,
+              'reaction': entry.reaction,
+              'severity': entry.severity,
+              'notes': entry.notes,
+            })
         .toList(),
   };
 }
