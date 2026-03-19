@@ -7,8 +7,27 @@ import '../../nfc/presentation/loss_of_wristband_screen.dart';
 import '../../nfc/presentation/read_nfc_screen.dart';
 import '../../nfc/presentation/register_nfc_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  String _language = 'ES';
+  bool _showAltLanguage = false;
+
+  void _toggleLanguage() {
+    setState(() {
+      _language = _language == 'ES' ? 'EN' : 'ES';
+      _showAltLanguage = true;
+    });
+    Future<void>.delayed(const Duration(milliseconds: 1400), () {
+      if (!mounted) return;
+      setState(() => _showAltLanguage = false);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +39,11 @@ class HomeScreen extends StatelessWidget {
           SafeArea(
             child: Column(
               children: [
-                const _HomeHeader(),
+                _HomeHeader(
+                  language: _language,
+                  showAltLanguage: _showAltLanguage,
+                  onToggleLanguage: _toggleLanguage,
+                ),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(0, 18, 0, 44),
@@ -60,7 +83,8 @@ class HomeScreen extends StatelessWidget {
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const LossOfWristbandScreen(),
+                                builder: (_) =>
+                                    const LossOfWristbandScreen(),
                               ),
                             );
                           },
@@ -73,7 +97,8 @@ class HomeScreen extends StatelessWidget {
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const BrigadeHistoryScreen(),
+                                builder: (_) =>
+                                    const BrigadeHistoryScreen(),
                               ),
                             );
                           },
@@ -116,7 +141,11 @@ class _HomeBackground extends StatelessWidget {
             ),
             child: Stack(
               children: const [
-                Positioned(left: 26, top: 82, child: _BlurBubble(diameter: 42)),
+                Positioned(
+                  left: 26,
+                  top: 82,
+                  child: _BlurBubble(diameter: 42),
+                ),
                 Positioned(
                   right: 14,
                   top: 34,
@@ -130,7 +159,11 @@ class _HomeBackground extends StatelessWidget {
               ],
             ),
           ),
-          Expanded(child: Container(color: const Color(0xFFD3DBE0))),
+          Expanded(
+            child: Container(
+              color: const Color(0xFFD3DBE0),
+            ),
+          ),
         ],
       ),
     );
@@ -156,7 +189,15 @@ class _BlurBubble extends StatelessWidget {
 }
 
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader();
+  const _HomeHeader({
+    required this.language,
+    required this.showAltLanguage,
+    required this.onToggleLanguage,
+  });
+
+  final String language;
+  final bool showAltLanguage;
+  final VoidCallback onToggleLanguage;
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +205,11 @@ class _HomeHeader extends StatelessWidget {
       height: 103,
       child: Stack(
         children: [
-          Positioned.fill(child: Container(color: AppColors.primary)),
+          Positioned.fill(
+            child: Container(
+              color: AppColors.primary,
+            ),
+          ),
           const Positioned(
             left: 35,
             top: 12,
@@ -210,47 +255,69 @@ class _HomeHeader extends StatelessWidget {
           Positioned(
             right: 58,
             top: 59,
-            child: Container(
-              width: 42,
-              height: 24,
-              decoration: BoxDecoration(
-                color: AppColors.backgroundLight,
-                borderRadius: BorderRadius.circular(5),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x33000000),
-                    blurRadius: 10,
-                    offset: Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.language, size: 13, color: AppColors.secondary),
-                  SizedBox(width: 2),
-                  Text(
-                    'ES',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.secondary,
-                      fontWeight: FontWeight.w500,
+            child: InkWell(
+              onTap: onToggleLanguage,
+              borderRadius: BorderRadius.circular(5),
+              child: Container(
+                width: 42,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: AppColors.backgroundLight,
+                  borderRadius: BorderRadius.circular(5),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 10,
+                      offset: Offset(0, 1),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.language, size: 13, color: AppColors.secondary),
+                    const SizedBox(width: 2),
+                    Text(
+                      language,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.secondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
+          if (showAltLanguage)
+            Positioned(
+              right: 56,
+              top: 86,
+              child: Container(
+                width: 49,
+                height: 21,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEBF2F8),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  language == 'ES' ? 'EN' : 'ES',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ),
           const Positioned(
             right: 14,
             top: 52,
             child: SizedBox(
               width: 37,
               height: 37,
-              child: Icon(
-                Icons.account_circle_outlined,
-                color: AppColors.secondary,
-              ),
+              child: Icon(Icons.account_circle_outlined, color: AppColors.secondary),
             ),
           ),
         ],
@@ -327,3 +394,4 @@ class _HomeActionCard extends StatelessWidget {
     );
   }
 }
+
