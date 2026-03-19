@@ -6,6 +6,7 @@ import 'core/network/api_client.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'design/theme/app_theme.dart';
 import 'features/home/presentation/home_screen.dart';
+import 'features/nfc/data/catalog_repository.dart';
 import 'features/nfc/data/patient_repository.dart';
 
 class HealthWithoutBordersApp extends StatelessWidget {
@@ -22,11 +23,17 @@ class HealthWithoutBordersApp extends StatelessWidget {
     authRepository: _authRepository,
   );
 
+  late final CatalogRepository _catalogRepository = CatalogRepository(
+    apiClient: _apiClient,
+    authRepository: _authRepository,
+  );
+
   @override
   Widget build(BuildContext context) {
     return AppScope(
       authRepository: _authRepository,
       patientRepository: _patientRepository,
+      catalogRepository: _catalogRepository,
       child: MaterialApp(
         title: 'Health Without Borders',
         debugShowCheckedModeBanner: false,

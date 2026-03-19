@@ -2,30 +2,24 @@ import 'package:flutter/material.dart';
 
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
 
 class ShowAllergensScreen extends StatelessWidget {
-  const ShowAllergensScreen({super.key});
+  const ShowAllergensScreen({super.key, required this.patient});
 
-  static const List<_AllergenData> _allergens = <_AllergenData>[
-    _AllergenData(
-      name: 'Penicilina',
-      reaction: 'Ulrtricaria, enrojecimiento en la piel',
-      severity: 'Moderada',
-      notes: 'Diagnostico a los 3 años tras tratamiento de otitis',
-    ),
-    _AllergenData(
-      name: 'Maní',
-      reaction:
-          'Dificultad para respirar, hinchazón de labios y urticaria generalizada',
-      severity: 'Severa',
-      notes:
-          'Episodio de anafilaxia a los 5 años tras ingestión accidental. Requiere portar autoinyector de epinefrina en todo momento.',
-    ),
-  ];
+  final PatientFullRecord patient;
 
   @override
   Widget build(BuildContext context) {
+    final allergens = patient.allergies
+        .map((AllergyInfo a) => _AllergenData(
+              name: a.allergen,
+              reaction: a.reaction,
+              severity: '',
+              notes: a.notes ?? '',
+            ))
+        .toList();
     return Scaffold(
       backgroundColor: const Color(0xFFEBF2F8),
       body: SafeArea(
@@ -84,10 +78,10 @@ class ShowAllergensScreen extends StatelessWidget {
                         const _LastUpdatedCard(),
                         const SizedBox(height: 14),
                         ...List<Widget>.generate(
-                          _allergens.length,
+                          allergens.length,
                           (int i) => Padding(
                             padding: const EdgeInsets.only(bottom: 14),
-                            child: _AllergenDetailCard(allergen: _allergens[i]),
+                            child: _AllergenDetailCard(allergen: allergens[i]),
                           ),
                         ),
                       ],

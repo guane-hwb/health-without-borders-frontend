@@ -5,6 +5,9 @@ import 'src/app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env', isOptional: true);
+
+  const String envFile = String.fromEnvironment('ENV_FILE', defaultValue: '.env');
+  await dotenv.load(fileName: envFile, isOptional: true);
+
   runApp(HealthWithoutBordersApp());
 }

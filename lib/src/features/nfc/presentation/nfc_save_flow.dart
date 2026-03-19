@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../design/tokens/app_colors.dart';
 
-Future<void> showNfcSaveFlow(BuildContext context) {
+typedef SyncCallback = Future<void> Function();
+
+Future<void> showNfcSaveFlow(BuildContext context, {SyncCallback? onSync}) {
   return showModalBottomSheet<void>(
     context: context,
     isDismissible: false,
@@ -10,14 +12,16 @@ Future<void> showNfcSaveFlow(BuildContext context) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (_) => const _NfcSaveFlowSheet(),
+    builder: (_) => _NfcSaveFlowSheet(onSync: onSync),
   );
 }
 
-enum _NfcSaveState { putOnWristband, registering, success }
+enum _NfcSaveState { putOnWristband, registering, success, error }
 
 class _NfcSaveFlowSheet extends StatefulWidget {
-  const _NfcSaveFlowSheet();
+  const _NfcSaveFlowSheet({this.onSync});
+
+  final SyncCallback? onSync;
 
   @override
   State<_NfcSaveFlowSheet> createState() => _NfcSaveFlowSheetState();
@@ -25,14 +29,27 @@ class _NfcSaveFlowSheet extends StatefulWidget {
 
 class _NfcSaveFlowSheetState extends State<_NfcSaveFlowSheet> {
   _NfcSaveState _state = _NfcSaveState.putOnWristband;
+  String _errorMessage = '';
 
-  void _startRegistering() {
+  Future<void> _startRegistering() async {
     setState(() => _state = _NfcSaveState.registering);
-    Future<void>.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() => _state = _NfcSaveState.success);
+
+    if (widget.onSync != null) {
+      try {
+        await widget.onSync!();
+        if (mounted) setState(() => _state = _NfcSaveState.success);
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _state = _NfcSaveState.error;
+            _errorMessage = e.toString();
+          });
+        }
       }
-    });
+    } else {
+      await Future<void>.delayed(const Duration(seconds: 3));
+      if (mounted) setState(() => _state = _NfcSaveState.success);
+    }
   }
 
   @override
@@ -67,8 +84,15 @@ class _NfcSaveFlowSheetState extends State<_NfcSaveFlowSheet> {
         return _SuccessRegistration(
           onGoHome: () {
             Navigator.of(context).pop();
-            Navigator.of(context).popUntil((Route<dynamic> route) => route.isFirst);
+            Navigator.of(context)
+                .popUntil((Route<dynamic> route) => route.isFirst);
           },
+        );
+      case _NfcSaveState.error:
+        return _ErrorState(
+          message: _errorMessage,
+          onRetry: _startRegistering,
+          onCancel: () => Navigator.of(context).pop(),
         );
     }
   }
@@ -140,7 +164,7 @@ class _Registering extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
-          'Registrering in the NFC ...',
+          'Syncing with server ...',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -182,7 +206,7 @@ class _SuccessRegistration extends StatelessWidget {
         const Icon(Icons.check_circle, size: 80, color: AppColors.success),
         const SizedBox(height: 16),
         const Text(
-          'Succesful Registration',
+          'Successful Registration',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -211,6 +235,87 @@ class _SuccessRegistration extends StatelessWidget {
               style: TextStyle(color: AppColors.white, fontSize: 14),
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({
+    required this.message,
+    required this.onRetry,
+    required this.onCancel,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.error_outline, size: 80, color: AppColors.error),
+        const SizedBox(height: 16),
+        const Text(
+          'Sync Failed',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: AppColors.error,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            message,
+            textAlign: TextAlign.center,
+            style:
+                const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 40,
+                child: OutlinedButton(
+                  onPressed: onCancel,
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SizedBox(
+                height: 40,
+                child: ElevatedButton(
+                  onPressed: onRetry,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.secondary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text(
+                    'Retry',
+                    style: TextStyle(color: AppColors.white, fontSize: 14),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

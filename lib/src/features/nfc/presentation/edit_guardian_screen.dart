@@ -2,25 +2,36 @@ import 'package:flutter/material.dart';
 
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
 
 class EditGuardianScreen extends StatefulWidget {
-  const EditGuardianScreen({super.key});
+  const EditGuardianScreen({super.key, required this.patient});
+
+  final PatientFullRecord patient;
 
   @override
   State<EditGuardianScreen> createState() => _EditGuardianScreenState();
 }
 
 class _EditGuardianScreenState extends State<EditGuardianScreen> {
-  final TextEditingController _nameCtrl =
-      TextEditingController(text: 'Ana Torres');
-  final TextEditingController _docNumberCtrl =
-      TextEditingController(text: '10665987416');
-  final TextEditingController _addressCtrl = TextEditingController();
-  final TextEditingController _contactCtrl = TextEditingController();
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _docNumberCtrl;
+  late final TextEditingController _addressCtrl;
+  late final TextEditingController _contactCtrl;
 
   String _docType = 'Citizenship card';
   String _country = 'Colombia';
+
+  @override
+  void initState() {
+    super.initState();
+    final guardian = widget.patient.guardianInfo;
+    _nameCtrl = TextEditingController(text: guardian.name);
+    _docNumberCtrl = TextEditingController();
+    _addressCtrl = TextEditingController();
+    _contactCtrl = TextEditingController(text: guardian.phone);
+  }
 
   @override
   void dispose() {

@@ -2,21 +2,45 @@ import 'package:flutter/material.dart';
 
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
 
 class EditMedicalStaffScreen extends StatefulWidget {
-  const EditMedicalStaffScreen({super.key});
+  const EditMedicalStaffScreen({super.key, required this.patient});
+
+  final PatientFullRecord patient;
 
   @override
   State<EditMedicalStaffScreen> createState() => _EditMedicalStaffScreenState();
 }
 
 class _EditMedicalStaffScreenState extends State<EditMedicalStaffScreen> {
-  final TextEditingController _nameCtrl = TextEditingController();
-  final TextEditingController _placeCtrl = TextEditingController();
-  final TextEditingController _dateCtrl = TextEditingController();
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _placeCtrl;
+  late final TextEditingController _dateCtrl;
 
-  String _typeVisit = 'Select an option';
+  late String _typeVisit;
+
+  static const _typeVisitOptions = [
+    'Select an option',
+    'Consulta pediatrica',
+    'Urgencias',
+    'Control',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final latest = widget.patient.medicalHistory.isNotEmpty
+        ? widget.patient.medicalHistory.last
+        : null;
+    _nameCtrl = TextEditingController(text: latest?.physician ?? '');
+    _placeCtrl = TextEditingController(text: latest?.location ?? '');
+    _dateCtrl = TextEditingController(text: latest?.date ?? '');
+    _typeVisit = _typeVisitOptions.contains(latest?.type)
+        ? latest!.type
+        : _typeVisitOptions.first;
+  }
 
   @override
   void dispose() {

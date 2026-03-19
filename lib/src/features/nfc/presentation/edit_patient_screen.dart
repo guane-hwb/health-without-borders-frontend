@@ -2,26 +2,52 @@ import 'package:flutter/material.dart';
 
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
 
 class EditPatientScreen extends StatefulWidget {
-  const EditPatientScreen({super.key});
+  const EditPatientScreen({super.key, required this.patient});
+
+  final PatientFullRecord patient;
 
   @override
   State<EditPatientScreen> createState() => _EditPatientScreenState();
 }
 
 class _EditPatientScreenState extends State<EditPatientScreen> {
-  final TextEditingController _nameCtrl =
-      TextEditingController(text: 'Sofia Rojas');
-  final TextEditingController _dobCtrl =
-      TextEditingController(text: '2018-03-22');
-  final TextEditingController _weightCtrl = TextEditingController();
-  final TextEditingController _heightCtrl = TextEditingController();
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _dobCtrl;
+  late final TextEditingController _weightCtrl;
+  late final TextEditingController _heightCtrl;
 
-  String _gender = 'Female';
-  String _country = 'Colombia';
-  String _bloodType = 'A+';
+  late String _gender;
+  late String _country;
+  late String _bloodType;
+
+  @override
+  void initState() {
+    super.initState();
+    final info = widget.patient.patientInfo;
+    _nameCtrl = TextEditingController(text: info.fullName);
+    _dobCtrl = TextEditingController(text: info.dob);
+    _weightCtrl = TextEditingController(
+      text: info.weight != null ? info.weight.toString() : '',
+    );
+    _heightCtrl = TextEditingController(
+      text: info.height != null ? info.height.toString() : '',
+    );
+    _gender = const ['Female', 'Male'].contains(info.gender)
+        ? info.gender
+        : 'Female';
+    _country =
+        const ['Colombia', 'Venezuela', 'Other'].contains(info.address.country)
+            ? info.address.country
+            : 'Colombia';
+    _bloodType = const ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']
+            .contains(info.bloodType)
+        ? info.bloodType
+        : 'A+';
+  }
 
   @override
   void dispose() {

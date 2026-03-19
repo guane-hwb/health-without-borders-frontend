@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../../core/di/app_scope.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../domain/patient_record.dart';
 import 'nfc_save_flow.dart';
 import 'shared_read_nfc_header.dart';
 
@@ -260,7 +263,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
                 if (_currentStep < 3) {
                   setState(() => _currentStep++);
                 } else {
-                  showNfcSaveFlow(context);
+                  _syncAndSave(context);
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -292,6 +295,75 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     showDialog<void>(
       context: context,
       builder: (_) => const _PrivacyPolicyDialog(),
+    );
+  }
+
+  PatientFullRecord _buildRecord() {
+    final String today = DateTime.now().toIso8601String().split('T').first;
+    final List<String> nameParts = _patientNameCtrl.text.split(' ');
+    final String firstName = nameParts.isNotEmpty ? nameParts.first : '';
+    final String lastName =
+        nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+
+    return PatientFullRecord(
+      patientId: const Uuid().v4(),
+      deviceUid: _deviceUidCtrl.text,
+      patientInfo: PatientInfo(
+        firstName: firstName,
+        lastName: lastName,
+        dob: _dobCtrl.text,
+        gender: _gender == 'Select an option' ? '' : _gender,
+        bloodType: _bloodType == 'Select an option' ? '' : _bloodType,
+        address: Address(
+          country:
+              _patientCountry == 'Select an option' ? '' : _patientCountry,
+        ),
+        weight: double.tryParse(_weightCtrl.text),
+        height: double.tryParse(_heightCtrl.text),
+      ),
+      guardianInfo: GuardianInfo(
+        name: _guardianNameCtrl.text,
+        relationship: _guardianRelCtrl.text,
+        phone: _guardianContactCtrl.text,
+      ),
+      backgroundHistory: BackgroundHistory(
+        personalHistory: _personalHistoryCtrl.text.isEmpty
+            ? null
+            : _personalHistoryCtrl.text,
+        familyHistory:
+            _familyHistoryCtrl.text.isEmpty ? null : _familyHistoryCtrl.text,
+      ),
+      medicalHistory: [
+        MedicalHistoryItem(
+          type: _typeVisit == 'Select an option' ? 'General' : _typeVisit,
+          date: _staffDateCtrl.text.isEmpty ? today : _staffDateCtrl.text,
+          location: _staffPlaceCtrl.text,
+          physician: _staffNameCtrl.text,
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: _currentIllnessCtrl.text.isEmpty
+                ? null
+                : _currentIllnessCtrl.text,
+            generalPhysicalExamination: _generalExamCtrl.text.isEmpty
+                ? null
+                : _generalExamCtrl.text,
+            systemsExamination: _systemsExamCtrl.text.isEmpty
+                ? null
+                : _systemsExamCtrl.text,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _syncAndSave(BuildContext context) {
+    final PatientFullRecord record = _buildRecord();
+    final patientRepo = AppScope.of(context).patientRepository;
+
+    showNfcSaveFlow(
+      context,
+      onSync: () async {
+        await patientRepo.syncPatient(record);
+      },
     );
   }
 }

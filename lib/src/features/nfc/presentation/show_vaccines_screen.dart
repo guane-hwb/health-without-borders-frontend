@@ -2,38 +2,26 @@ import 'package:flutter/material.dart';
 
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../domain/patient_record.dart';
 import 'edit_vaccine_sheet.dart';
 import 'shared_read_nfc_header.dart';
 
 class ShowVaccinesScreen extends StatelessWidget {
-  const ShowVaccinesScreen({super.key});
+  const ShowVaccinesScreen({super.key, required this.patient});
 
-  static const List<_VaccineData> _vaccines = <_VaccineData>[
-    _VaccineData(
-      name: 'Triple viral (SRP)',
-      dose: '1ra Dosis',
-      date: '22/03/2019',
-      administeredBy: 'Enf. Carla fuentes',
-      administeredAt: 'IPS Salud Total, Barranquilla',
-    ),
-    _VaccineData(
-      name: 'Varicela',
-      dose: 'Unica',
-      date: '22/03/2019',
-      administeredBy: 'Enf. Carla fuentes',
-      administeredAt: 'IPS Salud Total, Barranquilla',
-    ),
-    _VaccineData(
-      name: 'Polio',
-      dose: 'Refuerzo',
-      date: '15/04/2023',
-      administeredBy: 'Enf. Mario Lopez',
-      administeredAt: 'Clinica pedriatrica la Asuncion',
-    ),
-  ];
+  final PatientFullRecord patient;
 
   @override
   Widget build(BuildContext context) {
+    final vaccines = patient.vaccinationRecord
+        .map((VaccinationRecordItem v) => _VaccineData(
+              name: v.vaccineName,
+              dose: 'Dose ${v.dose}',
+              date: v.date,
+              administeredBy: v.administratedBy,
+              administeredAt: v.administratedAt,
+            ))
+        .toList();
     return Scaffold(
       backgroundColor: const Color(0xFFEBF2F8),
       body: SafeArea(
@@ -92,10 +80,10 @@ class ShowVaccinesScreen extends StatelessWidget {
                         const _LastUpdatedCard(),
                         const SizedBox(height: 14),
                         ...List<Widget>.generate(
-                          _vaccines.length,
+                          vaccines.length,
                           (int i) => Padding(
                             padding: const EdgeInsets.only(bottom: 14),
-                            child: _VaccineCard(vaccine: _vaccines[i]),
+                            child: _VaccineCard(vaccine: vaccines[i]),
                           ),
                         ),
                       ],

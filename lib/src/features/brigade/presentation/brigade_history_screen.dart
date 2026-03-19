@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../../nfc/domain/patient_record.dart';
 import '../../nfc/presentation/shared_read_nfc_header.dart';
 
 enum _SyncStatus { pending, synchronizing, synchronized }
@@ -15,17 +16,7 @@ class BrigadeHistoryScreen extends StatefulWidget {
 
 class _BrigadeHistoryScreenState extends State<BrigadeHistoryScreen> {
   _SyncStatus _status = _SyncStatus.pending;
-
-  static const List<_PatientEntry> _patients = <_PatientEntry>[
-    _PatientEntry(name: 'Carlos Gomez', date: '20/02/2026'),
-    _PatientEntry(name: 'Camila Torres', date: '20/02/2026'),
-    _PatientEntry(name: 'Ivan Giraldo', date: '20/02/2026'),
-    _PatientEntry(name: 'Sara Cortez', date: '20/02/2026'),
-    _PatientEntry(name: 'Juan Manuel Rios', date: '20/02/2026'),
-    _PatientEntry(name: 'Martin Linarez', date: '20/02/2026'),
-    _PatientEntry(name: 'Maria Rojas', date: '20/02/2026'),
-    _PatientEntry(name: 'Laura Carvajal', date: '20/02/2026'),
-  ];
+  final List<PatientFullRecord> _patients = <PatientFullRecord>[];
 
   @override
   void initState() {
@@ -145,18 +136,47 @@ class _BrigadeHistoryScreenState extends State<BrigadeHistoryScreen> {
                           ),
                         ),
                         Expanded(
-                          child: ListView.separated(
-                            padding: EdgeInsets.zero,
-                            itemCount: _patients.length,
-                            separatorBuilder: (_, _) =>
-                                const Divider(height: 1),
-                            itemBuilder: (_, int index) {
-                              return _PatientRow(
-                                patient: _patients[index],
-                                status: _status,
-                              );
-                            },
-                          ),
+                          child: _patients.isEmpty
+                              ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(24),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.people_outline,
+                                            size: 48,
+                                            color: AppColors.disabled),
+                                        SizedBox(height: 12),
+                                        Text(
+                                          'Patients will appear here as they are synced',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: AppColors.textSecondary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              : ListView.separated(
+                                  padding: EdgeInsets.zero,
+                                  itemCount: _patients.length,
+                                  separatorBuilder: (_, _) =>
+                                      const Divider(height: 1),
+                                  itemBuilder: (_, int index) {
+                                    final patient = _patients[index];
+                                    final name =
+                                        '${patient.patientInfo.firstName} ${patient.patientInfo.lastName}';
+                                    final date =
+                                        patient.patientInfo.dob;
+                                    return _PatientRow(
+                                      patient:
+                                          _PatientEntry(name: name, date: date),
+                                      status: _status,
+                                    );
+                                  },
+                                ),
                         ),
                       ],
                     ),

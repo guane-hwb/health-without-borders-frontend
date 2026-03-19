@@ -36,7 +36,7 @@ class ApiClient {
         )
         .timeout(const Duration(seconds: 20));
 
-    return _decodeOrThrow(response);
+    return _decodeMapOrThrow(response);
   }
 
   Future<Map<String, dynamic>> postJson({
@@ -56,10 +56,36 @@ class ApiClient {
         )
         .timeout(const Duration(seconds: 20));
 
-    return _decodeOrThrow(response);
+    return _decodeMapOrThrow(response);
   }
 
-  Map<String, dynamic> _decodeOrThrow(http.Response response) {
+  Future<Map<String, dynamic>> getJson({
+    required String path,
+    Map<String, String>? headers,
+    Map<String, String>? queryParams,
+  }) async {
+    final Uri uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
+    final http.Response response = await _client
+        .get(uri, headers: <String, String>{...?headers})
+        .timeout(const Duration(seconds: 20));
+
+    return _decodeMapOrThrow(response);
+  }
+
+  Future<List<dynamic>> getJsonList({
+    required String path,
+    Map<String, String>? headers,
+    Map<String, String>? queryParams,
+  }) async {
+    final Uri uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
+    final http.Response response = await _client
+        .get(uri, headers: <String, String>{...?headers})
+        .timeout(const Duration(seconds: 20));
+
+    return _decodeListOrThrow(response);
+  }
+
+  Map<String, dynamic> _decodeMapOrThrow(http.Response response) {
     final Object? decoded = response.body.isEmpty
         ? <String, dynamic>{}
         : jsonDecode(response.body);
@@ -77,6 +103,25 @@ class ApiClient {
 
     final String message =
         decoded['detail']?.toString() ?? 'Request failed with backend.';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
+  List<dynamic> _decodeListOrThrow(http.Response response) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final Object? decoded =
+          response.body.isEmpty ? <dynamic>[] : jsonDecode(response.body);
+      if (decoded is List<dynamic>) return decoded;
+      throw ApiException(
+        'Expected a JSON array but got something else.',
+        statusCode: response.statusCode,
+      );
+    }
+
+    final Object? decoded =
+        response.body.isEmpty ? null : jsonDecode(response.body);
+    final String message = (decoded is Map<String, dynamic>)
+        ? decoded['detail']?.toString() ?? 'Request failed with backend.'
+        : 'Request failed with backend.';
     throw ApiException(message, statusCode: response.statusCode);
   }
 }

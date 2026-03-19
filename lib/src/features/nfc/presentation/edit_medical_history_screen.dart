@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
 
 class EditMedicalHistoryScreen extends StatefulWidget {
-  const EditMedicalHistoryScreen({super.key});
+  const EditMedicalHistoryScreen({super.key, required this.patient});
+
+  final PatientFullRecord patient;
 
   @override
   State<EditMedicalHistoryScreen> createState() =>
@@ -13,11 +16,35 @@ class EditMedicalHistoryScreen extends StatefulWidget {
 }
 
 class _EditMedicalHistoryScreenState extends State<EditMedicalHistoryScreen> {
-  final TextEditingController _currentIllnessCtrl = TextEditingController();
-  final TextEditingController _personalHistoryCtrl = TextEditingController();
-  final TextEditingController _familyHistoryCtrl = TextEditingController();
-  final TextEditingController _generalExamCtrl = TextEditingController();
-  final TextEditingController _systemsExamCtrl = TextEditingController();
+  late final TextEditingController _currentIllnessCtrl;
+  late final TextEditingController _personalHistoryCtrl;
+  late final TextEditingController _familyHistoryCtrl;
+  late final TextEditingController _generalExamCtrl;
+  late final TextEditingController _systemsExamCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final bg = widget.patient.backgroundHistory;
+    final latestEval = widget.patient.medicalHistory.isNotEmpty
+        ? widget.patient.medicalHistory.last.clinicalEvaluation
+        : null;
+    _currentIllnessCtrl = TextEditingController(
+      text: latestEval?.historyOfCurrentIllness ?? '',
+    );
+    _personalHistoryCtrl = TextEditingController(
+      text: bg?.personalHistory ?? '',
+    );
+    _familyHistoryCtrl = TextEditingController(
+      text: bg?.familyHistory ?? '',
+    );
+    _generalExamCtrl = TextEditingController(
+      text: latestEval?.generalPhysicalExamination ?? '',
+    );
+    _systemsExamCtrl = TextEditingController(
+      text: latestEval?.systemsExamination ?? '',
+    );
+  }
 
   @override
   void dispose() {

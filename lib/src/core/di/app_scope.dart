@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../features/auth/data/auth_repository.dart';
+import '../../features/nfc/data/catalog_repository.dart';
 import '../../features/nfc/data/patient_repository.dart';
 
 class AppScope extends InheritedWidget {
@@ -8,11 +9,13 @@ class AppScope extends InheritedWidget {
     super.key,
     required this.authRepository,
     required this.patientRepository,
+    required this.catalogRepository,
     required super.child,
   });
 
   final AuthRepository authRepository;
   final PatientRepository patientRepository;
+  final CatalogRepository catalogRepository;
 
   static AppScope of(BuildContext context) {
     final AppScope? scope = context.dependOnInheritedWidgetOfExactType<AppScope>();
@@ -25,6 +28,7 @@ class AppScope extends InheritedWidget {
   @override
   bool updateShouldNotify(covariant AppScope oldWidget) {
     return oldWidget.authRepository != authRepository ||
-        oldWidget.patientRepository != patientRepository;
+        oldWidget.patientRepository != patientRepository ||
+        oldWidget.catalogRepository != catalogRepository;
   }
 }

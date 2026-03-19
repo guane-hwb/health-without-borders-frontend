@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/di/app_scope.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../domain/patient_record.dart';
 import 'edit_guardian_screen.dart';
 import 'edit_medical_history_screen.dart';
 import 'edit_medical_staff_screen.dart';
@@ -12,7 +14,9 @@ import 'show_allergens_screen.dart';
 import 'show_vaccines_screen.dart';
 
 class ReadNfcGuardianScreen extends StatefulWidget {
-  const ReadNfcGuardianScreen({super.key});
+  const ReadNfcGuardianScreen({super.key, required this.patient});
+
+  final PatientFullRecord patient;
 
   @override
   State<ReadNfcGuardianScreen> createState() => _ReadNfcGuardianScreenState();
@@ -20,6 +24,8 @@ class ReadNfcGuardianScreen extends StatefulWidget {
 
 class _ReadNfcGuardianScreenState extends State<ReadNfcGuardianScreen> {
   int _selectedTab = 0;
+
+  PatientFullRecord get _p => widget.patient;
 
   @override
   Widget build(BuildContext context) {
@@ -37,14 +43,16 @@ class _ReadNfcGuardianScreenState extends State<ReadNfcGuardianScreen> {
                     child: Column(
                       children: [
                         _PatientProfileCard(
-                          onEdit: () => _push(const EditPatientScreen()),
+                          patient: _p,
+                          onEdit: () => _push(EditPatientScreen(patient: _p)),
                           onShowVaccines: () =>
-                              _push(const ShowVaccinesScreen()),
+                              _push(ShowVaccinesScreen(patient: _p)),
                         ),
                         const SizedBox(height: 18),
                         _AllergenCard(
+                          allergies: _p.allergies,
                           onMoreDetails: () =>
-                              _push(const ShowAllergensScreen()),
+                              _push(ShowAllergensScreen(patient: _p)),
                         ),
                         const SizedBox(height: 18),
                         _TabBar(
@@ -62,7 +70,7 @@ class _ReadNfcGuardianScreenState extends State<ReadNfcGuardianScreen> {
                           width: double.infinity,
                           height: 33,
                           child: ElevatedButton.icon(
-                            onPressed: () => showNfcSaveFlow(context),
+                            onPressed: () => _syncPatient(context),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.secondary,
                               shape: RoundedRectangleBorder(
@@ -107,19 +115,32 @@ class _ReadNfcGuardianScreenState extends State<ReadNfcGuardianScreen> {
     );
   }
 
+  void _syncPatient(BuildContext context) {
+    final patientRepo = AppScope.of(context).patientRepository;
+    showNfcSaveFlow(
+      context,
+      onSync: () async {
+        await patientRepo.syncPatient(_p);
+      },
+    );
+  }
+
   Widget _buildTabContent() {
     switch (_selectedTab) {
       case 1:
         return _MedicalHistoryTab(
-          onEdit: () => _push(const EditMedicalHistoryScreen()),
+          patient: _p,
+          onEdit: () => _push(EditMedicalHistoryScreen(patient: _p)),
         );
       case 2:
         return _MedicalStaffTab(
-          onEdit: () => _push(const EditMedicalStaffScreen()),
+          patient: _p,
+          onEdit: () => _push(EditMedicalStaffScreen(patient: _p)),
         );
       default:
         return _GuardianTab(
-          onEdit: () => _push(const EditGuardianScreen()),
+          patient: _p,
+          onEdit: () => _push(EditGuardianScreen(patient: _p)),
         );
     }
   }
@@ -127,15 +148,20 @@ class _ReadNfcGuardianScreenState extends State<ReadNfcGuardianScreen> {
 
 class _PatientProfileCard extends StatelessWidget {
   const _PatientProfileCard({
+    required this.patient,
     required this.onEdit,
     required this.onShowVaccines,
   });
 
+  final PatientFullRecord patient;
   final VoidCallback onEdit;
   final VoidCallback onShowVaccines;
 
   @override
   Widget build(BuildContext context) {
+    final PatientInfo info = patient.patientInfo;
+    final String chronic =
+        patient.backgroundHistory?.chronicConditions ?? 'N/A';
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -161,29 +187,29 @@ class _PatientProfileCard extends StatelessWidget {
                 child: Icon(Icons.person, size: 40, color: Color(0xFF1A237E)),
               ),
               const SizedBox(width: 14),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Sofia Rojas',
-                      style: TextStyle(
+                      info.fullName,
+                      style: const TextStyle(
                         color: AppColors.primary,
                         fontSize: 18,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
-                      'Femenino, 2018-03-22',
-                      style: TextStyle(
+                      '${info.gender}, ${info.dob}',
+                      style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 15,
                       ),
                     ),
                     Text(
-                      'Colombia',
-                      style: TextStyle(
+                      info.address.country,
+                      style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 15,
                       ),
@@ -213,32 +239,40 @@ class _PatientProfileCard extends StatelessWidget {
           Container(
             color: const Color(0xFFEBF2F8),
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.monitor_weight, size: 24, color: AppColors.secondary),
-                SizedBox(width: 8),
-                Text('Weight: 24 kg', style: TextStyle(fontSize: 15)),
-                SizedBox(width: 20),
-                Icon(Icons.open_in_full, size: 20, color: AppColors.secondary),
-                SizedBox(width: 8),
-                Text('Height: 122 cm', style: TextStyle(fontSize: 15)),
+                const Icon(Icons.monitor_weight,
+                    size: 24, color: AppColors.secondary),
+                const SizedBox(width: 8),
+                Text('Weight: ${info.weight ?? 'N/A'} kg',
+                    style: const TextStyle(fontSize: 15)),
+                const SizedBox(width: 20),
+                const Icon(Icons.open_in_full,
+                    size: 20, color: AppColors.secondary),
+                const SizedBox(width: 8),
+                Text('Height: ${info.height ?? 'N/A'} cm',
+                    style: const TextStyle(fontSize: 15)),
               ],
             ),
           ),
           const SizedBox(height: 8),
-          const Row(
+          Row(
             children: [
-              Icon(Icons.bloodtype, size: 24, color: AppColors.secondary),
-              SizedBox(width: 8),
-              Text('Blood type: A+', style: TextStyle(fontSize: 15)),
+              const Icon(Icons.bloodtype,
+                  size: 24, color: AppColors.secondary),
+              const SizedBox(width: 8),
+              Text('Blood type: ${info.bloodType}',
+                  style: const TextStyle(fontSize: 15)),
             ],
           ),
           const SizedBox(height: 4),
-          const Row(
+          Row(
             children: [
-              Icon(Icons.assignment, size: 24, color: AppColors.secondary),
-              SizedBox(width: 8),
-              Text('Chronic condition: Asma', style: TextStyle(fontSize: 15)),
+              const Icon(Icons.assignment,
+                  size: 24, color: AppColors.secondary),
+              const SizedBox(width: 8),
+              Text('Chronic condition: $chronic',
+                  style: const TextStyle(fontSize: 15)),
             ],
           ),
           const SizedBox(height: 10),
@@ -255,9 +289,10 @@ class _PatientProfileCard extends StatelessWidget {
               ),
               icon:
                   const Icon(Icons.vaccines, size: 20, color: AppColors.white),
-              label: const Text(
-                'Show Vaccines',
-                style: TextStyle(color: AppColors.white, fontSize: 12),
+              label: Text(
+                'Show Vaccines (${patient.vaccinationRecord.length})',
+                style:
+                    const TextStyle(color: AppColors.white, fontSize: 12),
               ),
             ),
           ),
@@ -268,8 +303,9 @@ class _PatientProfileCard extends StatelessWidget {
 }
 
 class _AllergenCard extends StatelessWidget {
-  const _AllergenCard({required this.onMoreDetails});
+  const _AllergenCard({required this.allergies, required this.onMoreDetails});
 
+  final List<AllergyInfo> allergies;
   final VoidCallback onMoreDetails;
 
   @override
@@ -298,10 +334,11 @@ class _AllergenCard extends StatelessWidget {
               children: [
                 const Icon(Icons.warning, size: 24, color: Colors.yellow),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Allergens (2 Detected)',
-                    style: TextStyle(color: AppColors.white, fontSize: 15),
+                    'Allergens (${allergies.length} Detected)',
+                    style: const TextStyle(
+                        color: AppColors.white, fontSize: 15),
                   ),
                 ),
                 Container(
@@ -311,10 +348,10 @@ class _AllergenCard extends StatelessWidget {
                     color: AppColors.white,
                     shape: BoxShape.circle,
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Text(
-                      '2',
-                      style: TextStyle(
+                      '${allergies.length}',
+                      style: const TextStyle(
                         color: AppColors.error,
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -325,13 +362,20 @@ class _AllergenCard extends StatelessWidget {
               ],
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 12, 14, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
             child: Column(
               children: [
-                _AllergenRow(name: 'Penicilina', severity: 'Moderada'),
-                SizedBox(height: 8),
-                _AllergenRow(name: 'Maní', severity: 'Severa'),
+                for (int i = 0; i < allergies.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 8),
+                  _AllergenRow(
+                    name: allergies[i].allergen,
+                    severity: allergies[i].reaction,
+                  ),
+                ],
+                if (allergies.isEmpty)
+                  const Text('No allergens recorded',
+                      style: TextStyle(fontSize: 14)),
               ],
             ),
           ),
@@ -388,17 +432,13 @@ class _AllergenRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.back_hand,
-            size: 20,
-            color: AppColors.textSecondary,
-          ),
+          const Icon(Icons.back_hand, size: 20, color: AppColors.textSecondary),
           const SizedBox(width: 6),
           Text(name, style: const TextStyle(fontSize: 15)),
           const Spacer(),
           const Icon(Icons.warning, size: 20, color: Colors.amber),
           const SizedBox(width: 4),
-          Text('Severity: $severity', style: const TextStyle(fontSize: 15)),
+          Text('Reaction: $severity', style: const TextStyle(fontSize: 15)),
         ],
       ),
     );
@@ -443,12 +483,10 @@ class _TabBar extends StatelessWidget {
                   color: selected ? AppColors.secondary : Colors.transparent,
                   borderRadius: index == 0
                       ? const BorderRadius.horizontal(
-                          left: Radius.circular(15),
-                        )
+                          left: Radius.circular(15))
                       : index == _tabs.length - 1
                           ? const BorderRadius.horizontal(
-                              right: Radius.circular(15),
-                            )
+                              right: Radius.circular(15))
                           : null,
                 ),
                 child: Row(
@@ -486,127 +524,107 @@ class _TabBar extends StatelessWidget {
 
 class _TabDef {
   const _TabDef(this.icon, this.label);
-
   final IconData icon;
   final String label;
 }
 
 class _GuardianTab extends StatelessWidget {
-  const _GuardianTab({required this.onEdit});
+  const _GuardianTab({required this.patient, required this.onEdit});
 
+  final PatientFullRecord patient;
   final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
+    final GuardianInfo g = patient.guardianInfo;
     return _SectionCard(
       headerTitle: 'Companion / Guardian',
       onEdit: onEdit,
-      children: const [
-        _InfoRow(icon: Icons.person, text: 'Name: Ana Torres'),
+      children: [
+        _InfoRow(icon: Icons.person, text: 'Name: ${g.name}'),
         _InfoRow(
-          icon: Icons.badge,
-          text: 'Identification number: 10665987416',
-        ),
-        _InfoRow(icon: Icons.family_restroom, text: 'Relationship: Madre'),
-        _InfoRow(
-          icon: Icons.call,
-          text: 'Contact (Cellphone): +57 310 987543',
-        ),
+            icon: Icons.family_restroom,
+            text: 'Relationship: ${g.relationship}'),
+        _InfoRow(icon: Icons.call, text: 'Contact: ${g.phone}'),
       ],
     );
   }
 }
 
 class _MedicalHistoryTab extends StatelessWidget {
-  const _MedicalHistoryTab({required this.onEdit});
+  const _MedicalHistoryTab({required this.patient, required this.onEdit});
 
+  final PatientFullRecord patient;
   final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
+    final bg = patient.backgroundHistory;
+    final MedicalHistoryItem? latestVisit =
+        patient.medicalHistory.isNotEmpty ? patient.medicalHistory.last : null;
+    final ClinicalEvaluation? eval = latestVisit?.clinicalEvaluation;
+
     return Column(
       children: [
         _SectionCard(
           headerTitle: 'Medical History',
           onEdit: onEdit,
-          children: const [
+          children: [
             _HistoryEntry(
               icon: Icons.description,
               title: 'History of current illness',
-              body:
-                  'La madre refiere que la niña presenta congestión nasal, estornudos y tos leve desde hace dos días.',
+              body: eval?.historyOfCurrentIllness ?? 'No data',
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             _HistoryEntry(
               icon: Icons.vaccines,
               title: 'Personal history',
-              body:
-                  'Esquema de vacunas completo para su edad. Sin alergias conocidas ni enfermedades previas.',
+              body: bg?.personalHistory ?? 'No data',
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             _HistoryEntry(
               icon: Icons.family_restroom,
               title: 'Family History',
-              body:
-                  'Padre con rinitis alérgica. Abuela materna con antecedentes de asma.',
+              body: bg?.familyHistory ?? 'No data',
             ),
           ],
         ),
         const SizedBox(height: 14),
-        const _LastUpdatedFooter(),
+        _LastUpdatedFooter(visit: latestVisit),
       ],
     );
   }
 }
 
 class _MedicalStaffTab extends StatelessWidget {
-  const _MedicalStaffTab({required this.onEdit});
+  const _MedicalStaffTab({required this.patient, required this.onEdit});
 
+  final PatientFullRecord patient;
   final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
+    final MedicalHistoryItem? v =
+        patient.medicalHistory.isNotEmpty ? patient.medicalHistory.last : null;
+
     return _SectionCard(
       headerTitle: 'Medical Staff',
       onEdit: onEdit,
-      children: const [
-        _InfoRow(icon: Icons.local_hospital, text: 'Medical staff'),
-        Padding(
-          padding: EdgeInsets.only(left: 34),
-          child: Text('Dr Joe Doe', style: TextStyle(fontSize: 15)),
-        ),
-        SizedBox(height: 6),
+      children: [
         _InfoRow(
-          icon: Icons.local_activity,
-          text: 'Type visit: Consulta pediatrica',
-        ),
-        _InfoRow(icon: Icons.apartment, text: 'Place: CONSULTORIO 01'),
-        SizedBox(height: 6),
-        Padding(
-          padding: EdgeInsets.only(left: 10),
-          child: Row(
-            children: [
-              Text(
-                'Date',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: EdgeInsets.only(left: 18),
-          child: Row(
-            children: [
-              Icon(Icons.calendar_today, size: 16, color: AppColors.secondary),
-              SizedBox(width: 6),
-              Text('19/08/2025', style: TextStyle(fontSize: 15)),
-              SizedBox(width: 18),
-              Icon(Icons.access_time, size: 16, color: AppColors.secondary),
-              SizedBox(width: 6),
-              Text('11:19', style: TextStyle(fontSize: 15)),
-            ],
-          ),
-        ),
+            icon: Icons.local_hospital,
+            text: 'Dr ${v?.physician ?? 'N/A'}'),
+        const SizedBox(height: 6),
+        _InfoRow(
+            icon: Icons.local_activity,
+            text: 'Type visit: ${v?.type ?? 'N/A'}'),
+        _InfoRow(
+            icon: Icons.apartment,
+            text: 'Place: ${v?.location ?? 'N/A'}'),
+        const SizedBox(height: 6),
+        _InfoRow(
+            icon: Icons.calendar_today,
+            text: 'Date: ${v?.date ?? 'N/A'}'),
       ],
     );
   }
@@ -671,10 +689,7 @@ class _SectionCard extends StatelessWidget {
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
-                      Icons.edit,
-                      size: 14,
-                      color: AppColors.white,
-                    ),
+                        Icons.edit, size: 14, color: AppColors.white),
                   ),
                 ),
               ],
@@ -764,7 +779,9 @@ class _HistoryEntry extends StatelessWidget {
 }
 
 class _LastUpdatedFooter extends StatelessWidget {
-  const _LastUpdatedFooter();
+  const _LastUpdatedFooter({this.visit});
+
+  final MedicalHistoryItem? visit;
 
   @override
   Widget build(BuildContext context) {
@@ -782,37 +799,43 @@ class _LastUpdatedFooter extends StatelessWidget {
           ),
         ],
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.work_outline, size: 28, color: AppColors.secondary),
-          SizedBox(width: 10),
+          const Icon(Icons.work_outline,
+              size: 28, color: AppColors.secondary),
+          const SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'Last Updated',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
               ),
-              Text('Enf. Mario Lopez', style: TextStyle(fontSize: 11)),
+              Text(visit?.physician ?? 'N/A',
+                  style: const TextStyle(fontSize: 11)),
             ],
           ),
-          Spacer(),
+          const Spacer(),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(Icons.calendar_today, size: 12, color: AppColors.secondary),
-                  SizedBox(width: 4),
-                  Text('19/08/2025 - 11:19', style: TextStyle(fontSize: 11)),
+                  const Icon(Icons.calendar_today,
+                      size: 12, color: AppColors.secondary),
+                  const SizedBox(width: 4),
+                  Text(visit?.date ?? 'N/A',
+                      style: const TextStyle(fontSize: 11)),
                 ],
               ),
-              SizedBox(height: 2),
+              const SizedBox(height: 2),
               Row(
                 children: [
-                  Icon(Icons.location_on, size: 12, color: AppColors.secondary),
-                  SizedBox(width: 4),
-                  Text('IPS Salud Total', style: TextStyle(fontSize: 11)),
+                  const Icon(Icons.location_on,
+                      size: 12, color: AppColors.secondary),
+                  const SizedBox(width: 4),
+                  Text(visit?.location ?? 'N/A',
+                      style: const TextStyle(fontSize: 11)),
                 ],
               ),
             ],
