@@ -1,0 +1,14 @@
+steps:
+  - name: "ghcr.io/cirruslabs/flutter:3.41.5"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        flutter pub get
+        flutter analyze
+        flutter test
+
+timeout: "900s"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
