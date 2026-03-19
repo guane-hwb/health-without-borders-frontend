@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../domain/catalog_data.dart';
 import '../domain/patient_record.dart';
 import 'nfc_save_flow.dart';
 import 'shared_read_nfc_header.dart';
@@ -1182,8 +1183,57 @@ class _PrivacyPolicyDialog extends StatelessWidget {
   }
 }
 
-class _AddVaccineSheet extends StatelessWidget {
+class _AddVaccineSheet extends StatefulWidget {
   const _AddVaccineSheet();
+
+  @override
+  State<_AddVaccineSheet> createState() => _AddVaccineSheetState();
+}
+
+class _AddVaccineSheetState extends State<_AddVaccineSheet> {
+  final TextEditingController _doseCtrl = TextEditingController();
+  final TextEditingController _dateCtrl = TextEditingController();
+  final TextEditingController _byCtrl = TextEditingController();
+  final TextEditingController _atCtrl = TextEditingController();
+
+  List<VaccineCatalogItem> _vaccines = <VaccineCatalogItem>[];
+  String? _selectedVaccine;
+  bool _isLoading = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_isLoading) {
+      _loadCatalogs();
+    }
+  }
+
+  Future<void> _loadCatalogs() async {
+    try {
+      final catalog = await AppScope.of(context).catalogRepository.getCatalogs();
+      final active = catalog.vaccines.where((v) => v.isActive).toList();
+      if (!mounted) return;
+      setState(() {
+        _vaccines = active;
+        if (_vaccines.isNotEmpty) {
+          _selectedVaccine = _vaccines.first.name;
+        }
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _doseCtrl.dispose();
+    _dateCtrl.dispose();
+    _byCtrl.dispose();
+    _atCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1220,19 +1270,37 @@ class _AddVaccineSheet extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             const _FieldLabel('Vaccine'),
-            const _InputField(icon: Icons.arrow_drop_down),
+            _isLoading
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 10),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
+                : _CatalogDropdown(
+                    value: _selectedVaccine,
+                    hint: 'Select vaccine',
+                    items: _vaccines.map((v) => v.name).toList(),
+                    onChanged: (String? value) {
+                      setState(() => _selectedVaccine = value);
+                    },
+                  ),
             const SizedBox(height: 10),
             const _FieldLabel('Dose'),
-            const _InputField(),
+            _InputField(controller: _doseCtrl),
             const SizedBox(height: 10),
             const _FieldLabel('Date'),
-            const _InputField(),
+            _InputField(controller: _dateCtrl),
             const SizedBox(height: 10),
             const _FieldLabel('Administrated By'),
-            const _InputField(),
+            _InputField(controller: _byCtrl),
             const SizedBox(height: 10),
             const _FieldLabel('Administrated At'),
-            const _InputField(),
+            _InputField(controller: _atCtrl),
             const SizedBox(height: 18),
             SizedBox(
               width: 120,
@@ -1259,8 +1327,48 @@ class _AddVaccineSheet extends StatelessWidget {
   }
 }
 
-class _AddAllergenSheet extends StatelessWidget {
+class _AddAllergenSheet extends StatefulWidget {
   const _AddAllergenSheet();
+
+  @override
+  State<_AddAllergenSheet> createState() => _AddAllergenSheetState();
+}
+
+class _AddAllergenSheetState extends State<_AddAllergenSheet> {
+  static const List<String> _allergens = <String>[
+    'Penicillin',
+    'Peanuts',
+    'Seafood',
+    'Eggs',
+    'Milk',
+    'Latex',
+  ];
+
+  static const List<String> _reactions = <String>[
+    'Habones',
+    'Edema de mucosas',
+    'Dificultad para respirar',
+    'Choque anafiláctico',
+    'Paro cardiaco',
+  ];
+
+  static const List<String> _severityLevels = <String>[
+    'Mild',
+    'Moderate',
+    'Severe',
+  ];
+
+  final TextEditingController _notesCtrl = TextEditingController();
+
+  String? _selectedAllergen = _allergens.first;
+  String? _selectedReaction = _reactions.first;
+  String? _selectedSeverity = _severityLevels.first;
+
+  @override
+  void dispose() {
+    _notesCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1297,16 +1405,37 @@ class _AddAllergenSheet extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             const _FieldLabel('Allergen'),
-            const _InputField(icon: Icons.arrow_drop_down),
+            _CatalogDropdown(
+              value: _selectedAllergen,
+              hint: 'Select allergen',
+              items: _allergens,
+              onChanged: (String? value) {
+                setState(() => _selectedAllergen = value);
+              },
+            ),
             const SizedBox(height: 10),
             const _FieldLabel('Reaction'),
-            const _InputField(),
+            _CatalogDropdown(
+              value: _selectedReaction,
+              hint: 'Select reaction',
+              items: _reactions,
+              onChanged: (String? value) {
+                setState(() => _selectedReaction = value);
+              },
+            ),
             const SizedBox(height: 10),
             const _FieldLabel('Severity'),
-            const _InputField(),
+            _CatalogDropdown(
+              value: _selectedSeverity,
+              hint: 'Select severity',
+              items: _severityLevels,
+              onChanged: (String? value) {
+                setState(() => _selectedSeverity = value);
+              },
+            ),
             const SizedBox(height: 10),
             const _FieldLabel('Notes'),
-            const _InputField(),
+            _InputField(controller: _notesCtrl),
             const SizedBox(height: 18),
             SizedBox(
               width: 120,
@@ -1327,6 +1456,47 @@ class _AddAllergenSheet extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CatalogDropdown extends StatelessWidget {
+  const _CatalogDropdown({
+    required this.value,
+    required this.hint,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final String? value;
+  final String hint;
+  final List<String> items;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          isExpanded: true,
+          hint: Text(hint),
+          value: value,
+          items: items
+              .map(
+                (String item) => DropdownMenuItem<String>(
+                  value: item,
+                  child: Text(item),
+                ),
+              )
+              .toList(),
+          onChanged: onChanged,
         ),
       ),
     );

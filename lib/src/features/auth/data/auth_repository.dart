@@ -23,10 +23,15 @@ class AuthRepository {
         return _cachedToken!;
       }
 
-      final String? stored = await _secureStorage.read(key: _tokenKey);
-      if (stored != null && stored.isNotEmpty) {
-        _cachedToken = stored;
-        return stored;
+      try {
+        final String? stored = await _secureStorage.read(key: _tokenKey);
+        if (stored != null && stored.isNotEmpty) {
+          _cachedToken = stored;
+          return stored;
+        }
+      } catch (_) {
+        // Some desktop builds can fail keychain access in local dev (-34018).
+        // Fall back to in-memory token only.
       }
     }
 
@@ -35,7 +40,11 @@ class AuthRepository {
 
   Future<void> clearSession() async {
     _cachedToken = null;
-    await _secureStorage.delete(key: _tokenKey);
+    try {
+      await _secureStorage.delete(key: _tokenKey);
+    } catch (_) {
+      // Ignore local secure storage failures in desktop dev.
+    }
   }
 
   Future<String> _loginAndPersist() async {
@@ -53,7 +62,11 @@ class AuthRepository {
     }
 
     _cachedToken = accessToken;
-    await _secureStorage.write(key: _tokenKey, value: accessToken);
+    try {
+      await _secureStorage.write(key: _tokenKey, value: accessToken);
+    } catch (_) {
+      // Ignore keychain failures and keep using in-memory token.
+    }
     return accessToken;
   }
 }
