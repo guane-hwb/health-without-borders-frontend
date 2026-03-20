@@ -5,12 +5,12 @@ class ScreenBottomHandle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: Color(0xFF666666),
-        borderRadius: BorderRadius.all(Radius.circular(10)),
+        color: const Color(0xFF3F4A5A).withValues(alpha: 0.65),
+        borderRadius: const BorderRadius.all(Radius.circular(10)),
       ),
-      child: SizedBox(height: 5),
+      child: const SizedBox(height: 5),
     );
   }
 }

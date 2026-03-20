@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/widgets/hwb_back_button.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/catalog_data.dart';
 import '../domain/patient_record.dart';
@@ -17,6 +18,8 @@ class RegisterNfcScreen extends StatefulWidget {
 }
 
 class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
+  static const String _draftScope = 'register_nfc';
+
   int _currentStep = 0;
   bool _privacyAccepted = false;
 
@@ -55,6 +58,16 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   final TextEditingController _staffDateCtrl = TextEditingController();
 
   String _typeVisit = 'Select an option';
+  bool _draftSetup = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_draftSetup) return;
+    _restoreDraft();
+    _bindDraftListeners();
+    _draftSetup = true;
+  }
 
   @override
   void dispose() {
@@ -101,6 +114,8 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        const HwbBackButton(),
+                        const SizedBox(height: 14),
                         _StepIndicator(currentStep: _currentStep),
                         const SizedBox(height: 14),
                         _buildCurrentStep(),
@@ -131,19 +146,25 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           deviceUidCtrl: _deviceUidCtrl,
           nameCtrl: _guardianNameCtrl,
           docType: _guardianDocType,
-          onDocTypeChanged: (String v) =>
-              setState(() => _guardianDocType = v),
+          onDocTypeChanged: (String v) => setState(() {
+            _guardianDocType = v;
+            _persistDraftMeta();
+          }),
           idCtrl: _guardianIdCtrl,
           relationshipCtrl: _guardianRelCtrl,
           country: _guardianCountry,
-          onCountryChanged: (String v) =>
-              setState(() => _guardianCountry = v),
+          onCountryChanged: (String v) => setState(() {
+            _guardianCountry = v;
+            _persistDraftMeta();
+          }),
           addressCtrl: _guardianAddressCtrl,
           contactCtrl: _guardianContactCtrl,
           emailCtrl: _guardianEmailCtrl,
           privacyAccepted: _privacyAccepted,
-          onPrivacyChanged: (bool v) =>
-              setState(() => _privacyAccepted = v),
+          onPrivacyChanged: (bool v) => setState(() {
+            _privacyAccepted = v;
+            _persistDraftMeta();
+          }),
           onShowPrivacyPolicy: () => _showPrivacyPolicy(context),
         );
       case 1:
@@ -151,15 +172,22 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           nameCtrl: _patientNameCtrl,
           dobCtrl: _dobCtrl,
           gender: _gender,
-          onGenderChanged: (String v) => setState(() => _gender = v),
+          onGenderChanged: (String v) => setState(() {
+            _gender = v;
+            _persistDraftMeta();
+          }),
           country: _patientCountry,
-          onCountryChanged: (String v) =>
-              setState(() => _patientCountry = v),
+          onCountryChanged: (String v) => setState(() {
+            _patientCountry = v;
+            _persistDraftMeta();
+          }),
           weightCtrl: _weightCtrl,
           heightCtrl: _heightCtrl,
           bloodType: _bloodType,
-          onBloodTypeChanged: (String v) =>
-              setState(() => _bloodType = v),
+          onBloodTypeChanged: (String v) => setState(() {
+            _bloodType = v;
+            _persistDraftMeta();
+          }),
         );
       case 2:
         return _Step3MedicalHistory(
@@ -177,8 +205,10 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           staffPlaceCtrl: _staffPlaceCtrl,
           staffDateCtrl: _staffDateCtrl,
           typeVisit: _typeVisit,
-          onTypeVisitChanged: (String v) =>
-              setState(() => _typeVisit = v),
+          onTypeVisitChanged: (String v) => setState(() {
+            _typeVisit = v;
+            _persistDraftMeta();
+          }),
         );
       case 3:
         return _Step4Summary(
@@ -213,14 +243,21 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         width: double.infinity,
         height: 40,
         child: ElevatedButton.icon(
-          onPressed: () => setState(() => _currentStep = 1),
+          onPressed: () => setState(() {
+            _currentStep = 1;
+            _persistDraftMeta();
+          }),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF00A396),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
             ),
           ),
-          icon: const Icon(Icons.arrow_forward, size: 18, color: AppColors.white),
+          icon: const Icon(
+            Icons.arrow_forward,
+            size: 18,
+            color: AppColors.white,
+          ),
           label: const Text(
             'Next',
             style: TextStyle(color: AppColors.white, fontSize: 14),
@@ -237,7 +274,10 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
             child: ElevatedButton.icon(
               onPressed: () {
                 if (_currentStep > 0) {
-                  setState(() => _currentStep--);
+                  setState(() {
+                    _currentStep--;
+                    _persistDraftMeta();
+                  });
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -246,8 +286,11 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              icon: const Icon(Icons.arrow_back_ios,
-                  size: 14, color: AppColors.white),
+              icon: const Icon(
+                Icons.arrow_back_ios,
+                size: 14,
+                color: AppColors.white,
+              ),
               label: const Text(
                 'Back',
                 style: TextStyle(color: AppColors.white, fontSize: 14),
@@ -262,7 +305,10 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
             child: ElevatedButton.icon(
               onPressed: () {
                 if (_currentStep < 3) {
-                  setState(() => _currentStep++);
+                  setState(() {
+                    _currentStep++;
+                    _persistDraftMeta();
+                  });
                 } else {
                   _syncAndSave(context);
                 }
@@ -282,8 +328,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
               ),
               label: Text(
                 _currentStep == 3 ? 'Save' : 'Next',
-                style:
-                    const TextStyle(color: AppColors.white, fontSize: 14),
+                style: const TextStyle(color: AppColors.white, fontSize: 14),
               ),
             ),
           ),
@@ -303,8 +348,9 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final String today = DateTime.now().toIso8601String().split('T').first;
     final List<String> nameParts = _patientNameCtrl.text.split(' ');
     final String firstName = nameParts.isNotEmpty ? nameParts.first : '';
-    final String lastName =
-        nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+    final String lastName = nameParts.length > 1
+        ? nameParts.sublist(1).join(' ')
+        : '';
 
     return PatientFullRecord(
       patientId: const Uuid().v4(),
@@ -316,8 +362,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         gender: _gender == 'Select an option' ? '' : _gender,
         bloodType: _bloodType == 'Select an option' ? '' : _bloodType,
         address: Address(
-          country:
-              _patientCountry == 'Select an option' ? '' : _patientCountry,
+          country: _patientCountry == 'Select an option' ? '' : _patientCountry,
         ),
         weight: double.tryParse(_weightCtrl.text),
         height: double.tryParse(_heightCtrl.text),
@@ -331,8 +376,9 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         personalHistory: _personalHistoryCtrl.text.isEmpty
             ? null
             : _personalHistoryCtrl.text,
-        familyHistory:
-            _familyHistoryCtrl.text.isEmpty ? null : _familyHistoryCtrl.text,
+        familyHistory: _familyHistoryCtrl.text.isEmpty
+            ? null
+            : _familyHistoryCtrl.text,
       ),
       medicalHistory: [
         MedicalHistoryItem(
@@ -359,13 +405,133 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   void _syncAndSave(BuildContext context) {
     final PatientFullRecord record = _buildRecord();
     final patientRepo = AppScope.of(context).patientRepository;
+    final draftCache = AppScope.of(context).formDraftCache;
 
     showNfcSaveFlow(
       context,
       onSync: () async {
         await patientRepo.syncPatient(record);
+        draftCache.clearScope(_draftScope);
       },
     );
+  }
+
+  void _restoreDraft() {
+    final draftCache = AppScope.of(context).formDraftCache;
+    _currentStep =
+        int.tryParse(draftCache.getValue(_draftScope, 'current_step') ?? '') ??
+        0;
+    _privacyAccepted =
+        (draftCache.getValue(_draftScope, 'privacy_accepted') ?? 'false') ==
+        'true';
+
+    _deviceUidCtrl.text = draftCache.getValue(_draftScope, 'device_uid') ?? '';
+    _guardianNameCtrl.text =
+        draftCache.getValue(_draftScope, 'guardian_name') ?? '';
+    _guardianIdCtrl.text =
+        draftCache.getValue(_draftScope, 'guardian_id') ?? '';
+    _guardianRelCtrl.text =
+        draftCache.getValue(_draftScope, 'guardian_relationship') ?? '';
+    _guardianAddressCtrl.text =
+        draftCache.getValue(_draftScope, 'guardian_address') ?? '';
+    _guardianContactCtrl.text =
+        draftCache.getValue(_draftScope, 'guardian_contact') ?? '';
+    _guardianEmailCtrl.text =
+        draftCache.getValue(_draftScope, 'guardian_email') ?? '';
+
+    _guardianDocType =
+        draftCache.getValue(_draftScope, 'guardian_doc_type') ??
+        _guardianDocType;
+    _guardianCountry =
+        draftCache.getValue(_draftScope, 'guardian_country') ??
+        _guardianCountry;
+
+    _patientNameCtrl.text =
+        draftCache.getValue(_draftScope, 'patient_name') ?? '';
+    _dobCtrl.text = draftCache.getValue(_draftScope, 'dob') ?? '';
+    _weightCtrl.text = draftCache.getValue(_draftScope, 'weight') ?? '';
+    _heightCtrl.text = draftCache.getValue(_draftScope, 'height') ?? '';
+
+    _gender = draftCache.getValue(_draftScope, 'gender') ?? _gender;
+    _patientCountry =
+        draftCache.getValue(_draftScope, 'patient_country') ?? _patientCountry;
+    _bloodType = draftCache.getValue(_draftScope, 'blood_type') ?? _bloodType;
+
+    _currentIllnessCtrl.text =
+        draftCache.getValue(_draftScope, 'current_illness') ?? '';
+    _personalHistoryCtrl.text =
+        draftCache.getValue(_draftScope, 'personal_history') ?? '';
+    _familyHistoryCtrl.text =
+        draftCache.getValue(_draftScope, 'family_history') ?? '';
+    _generalExamCtrl.text =
+        draftCache.getValue(_draftScope, 'general_exam') ?? '';
+    _systemsExamCtrl.text =
+        draftCache.getValue(_draftScope, 'systems_exam') ?? '';
+    _hospitalizationsCtrl.text =
+        draftCache.getValue(_draftScope, 'hospitalizations') ?? '';
+    _surgeriesCtrl.text = draftCache.getValue(_draftScope, 'surgeries') ?? '';
+    _transfusionsCtrl.text =
+        draftCache.getValue(_draftScope, 'transfusions') ?? '';
+    _epidemiologicalCtrl.text =
+        draftCache.getValue(_draftScope, 'epidemiological') ?? '';
+    _immunologicalCtrl.text =
+        draftCache.getValue(_draftScope, 'immunological') ?? '';
+    _staffNameCtrl.text = draftCache.getValue(_draftScope, 'staff_name') ?? '';
+    _staffPlaceCtrl.text =
+        draftCache.getValue(_draftScope, 'staff_place') ?? '';
+    _staffDateCtrl.text = draftCache.getValue(_draftScope, 'staff_date') ?? '';
+
+    _typeVisit = draftCache.getValue(_draftScope, 'type_visit') ?? _typeVisit;
+  }
+
+  void _bindDraftListeners() {
+    final draftCache = AppScope.of(context).formDraftCache;
+    void bindText(String key, TextEditingController controller) {
+      controller.addListener(() {
+        draftCache.setValue(_draftScope, key, controller.text);
+      });
+    }
+
+    bindText('device_uid', _deviceUidCtrl);
+    bindText('guardian_name', _guardianNameCtrl);
+    bindText('guardian_id', _guardianIdCtrl);
+    bindText('guardian_relationship', _guardianRelCtrl);
+    bindText('guardian_address', _guardianAddressCtrl);
+    bindText('guardian_contact', _guardianContactCtrl);
+    bindText('guardian_email', _guardianEmailCtrl);
+    bindText('patient_name', _patientNameCtrl);
+    bindText('dob', _dobCtrl);
+    bindText('weight', _weightCtrl);
+    bindText('height', _heightCtrl);
+    bindText('current_illness', _currentIllnessCtrl);
+    bindText('personal_history', _personalHistoryCtrl);
+    bindText('family_history', _familyHistoryCtrl);
+    bindText('general_exam', _generalExamCtrl);
+    bindText('systems_exam', _systemsExamCtrl);
+    bindText('hospitalizations', _hospitalizationsCtrl);
+    bindText('surgeries', _surgeriesCtrl);
+    bindText('transfusions', _transfusionsCtrl);
+    bindText('epidemiological', _epidemiologicalCtrl);
+    bindText('immunological', _immunologicalCtrl);
+    bindText('staff_name', _staffNameCtrl);
+    bindText('staff_place', _staffPlaceCtrl);
+    bindText('staff_date', _staffDateCtrl);
+  }
+
+  void _persistDraftMeta() {
+    final draftCache = AppScope.of(context).formDraftCache;
+    draftCache.setValue(_draftScope, 'current_step', _currentStep.toString());
+    draftCache.setValue(
+      _draftScope,
+      'privacy_accepted',
+      _privacyAccepted.toString(),
+    );
+    draftCache.setValue(_draftScope, 'guardian_doc_type', _guardianDocType);
+    draftCache.setValue(_draftScope, 'guardian_country', _guardianCountry);
+    draftCache.setValue(_draftScope, 'gender', _gender);
+    draftCache.setValue(_draftScope, 'patient_country', _patientCountry);
+    draftCache.setValue(_draftScope, 'blood_type', _bloodType);
+    draftCache.setValue(_draftScope, 'type_visit', _typeVisit);
   }
 }
 
@@ -400,15 +566,14 @@ class _StepIndicator extends StatelessWidget {
                   color: isCurrent
                       ? AppColors.secondary
                       : active
-                          ? const Color(0xFF00A396)
-                          : const Color(0xFFD0D0D0),
+                      ? const Color(0xFF00A396)
+                      : const Color(0xFFD0D0D0),
                 ),
                 child: Center(
                   child: Text(
                     '${index + 1}',
                     style: TextStyle(
-                      color:
-                          active ? AppColors.white : const Color(0xFF888888),
+                      color: active ? AppColors.white : const Color(0xFF888888),
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
@@ -475,8 +640,11 @@ class _Step1Guardian extends StatelessWidget {
                 color: AppColors.secondary,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.qr_code_scanner,
-                  color: AppColors.white, size: 22),
+              child: const Icon(
+                Icons.qr_code_scanner,
+                color: AppColors.white,
+                size: 22,
+              ),
             ),
           ],
         ),
@@ -505,19 +673,14 @@ class _Step1Guardian extends StatelessWidget {
         _FieldLabel.withStar('Country'),
         _DropdownField(
           value: country,
-          items: const [
-            'Select an option',
-            'Colombia',
-            'Venezuela',
-            'Other',
-          ],
+          items: const ['Select an option', 'Colombia', 'Venezuela', 'Other'],
           onChanged: onCountryChanged,
         ),
         const SizedBox(height: 10),
         _FieldLabel.withStar('Address'),
         _InputField(controller: addressCtrl, icon: Icons.location_on),
         const SizedBox(height: 10),
-        _FieldLabel.withStar('Contect'),
+        _FieldLabel.withStar('Contact'),
         _InputField(controller: contactCtrl, icon: Icons.call),
         const SizedBox(height: 18),
         const _SectionTitle('Authorization & Privacy'),
@@ -546,8 +709,7 @@ class _Step1Guardian extends StatelessWidget {
                         ),
                       ),
                       TextSpan(
-                        text:
-                            ' including the electronic receipt of receipts.',
+                        text: ' including the electronic receipt of receipts.',
                       ),
                     ],
                   ),
@@ -648,12 +810,7 @@ class _Step2Patient extends StatelessWidget {
         _FieldLabel.withStar('Country'),
         _DropdownField(
           value: country,
-          items: const [
-            'Select an option',
-            'Colombia',
-            'Venezuela',
-            'Other',
-          ],
+          items: const ['Select an option', 'Colombia', 'Venezuela', 'Other'],
           onChanged: onCountryChanged,
         ),
         const SizedBox(height: 18),
@@ -684,7 +841,7 @@ class _Step2Patient extends StatelessWidget {
         const SizedBox(height: 18),
         const _SectionTitle('Vaccine'),
         const SizedBox(height: 6),
-        _tableHeader(const ['Vaccine', 'Does', 'Date', 'Administrated By']),
+        _tableHeader(const ['Vaccine', 'Dose', 'Date', 'Administered By']),
         const SizedBox(height: 8),
         _addRowButton(context, 'Add Vaccine', _showAddVaccine),
         const SizedBox(height: 18),
@@ -700,9 +857,10 @@ class _Step2Patient extends StatelessWidget {
   Widget _tableHeader(List<String> cols) {
     return Row(
       children: cols
-          .map((String c) => Expanded(
-                child: Text(c, style: const TextStyle(fontSize: 11)),
-              ))
+          .map(
+            (String c) =>
+                Expanded(child: Text(c, style: const TextStyle(fontSize: 11))),
+          )
           .toList(),
     );
   }
@@ -855,8 +1013,10 @@ class _Step3MedicalHistory extends StatelessWidget {
             style: const TextStyle(fontSize: 14),
             decoration: InputDecoration(
               hintText: label,
-              hintStyle:
-                  const TextStyle(fontSize: 13, color: AppColors.disabled),
+              hintStyle: const TextStyle(
+                fontSize: 13,
+                color: AppColors.disabled,
+              ),
               isDense: true,
               contentPadding: const EdgeInsets.all(12),
               filled: true,
@@ -942,7 +1102,7 @@ class _Step4Summary extends StatelessWidget {
           _row(Icons.person, patientName),
           Row(
             children: [
-              _chip('Date Birthday', dob),
+              _chip('Birth Date', dob),
               const SizedBox(width: 8),
               _chip('Gender', gender),
               const SizedBox(width: 8),
@@ -965,12 +1125,14 @@ class _Step4Summary extends StatelessWidget {
         const SizedBox(height: 12),
         _summaryCard('General', [
           _historyBlock(
-              Icons.description, 'History of current illness', currentIllness),
+            Icons.description,
+            'History of current illness',
+            currentIllness,
+          ),
           const SizedBox(height: 6),
           _historyBlock(Icons.vaccines, 'Personal history', personalHistory),
           const SizedBox(height: 6),
-          _historyBlock(
-              Icons.family_restroom, 'Family History', familyHistory),
+          _historyBlock(Icons.family_restroom, 'Family History', familyHistory),
         ]),
         const SizedBox(height: 12),
         _summaryCard('Medical Staff', [
@@ -981,12 +1143,16 @@ class _Step4Summary extends StatelessWidget {
             padding: const EdgeInsets.only(left: 4, top: 4),
             child: Row(
               children: [
-                const Text('Date',
-                    style:
-                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Date',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(width: 10),
-                const Icon(Icons.calendar_today,
-                    size: 14, color: AppColors.secondary),
+                const Icon(
+                  Icons.calendar_today,
+                  size: 14,
+                  color: AppColors.secondary,
+                ),
                 const SizedBox(width: 4),
                 Text(staffDate, style: const TextStyle(fontSize: 13)),
               ],
@@ -1039,9 +1205,7 @@ class _Step4Summary extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: AppColors.secondary),
           const SizedBox(width: 8),
-          Expanded(
-            child: Text(text, style: const TextStyle(fontSize: 13)),
-          ),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
         ],
       ),
     );
@@ -1210,7 +1374,9 @@ class _AddVaccineSheetState extends State<_AddVaccineSheet> {
 
   Future<void> _loadCatalogs() async {
     try {
-      final catalog = await AppScope.of(context).catalogRepository.getCatalogs();
+      final catalog = await AppScope.of(
+        context,
+      ).catalogRepository.getCatalogs();
       final active = catalog.vaccines.where((v) => v.isActive).toList();
       if (!mounted) return;
       setState(() {
@@ -1296,10 +1462,10 @@ class _AddVaccineSheetState extends State<_AddVaccineSheet> {
             const _FieldLabel('Date'),
             _InputField(controller: _dateCtrl),
             const SizedBox(height: 10),
-            const _FieldLabel('Administrated By'),
+            const _FieldLabel('Administered By'),
             _InputField(controller: _byCtrl),
             const SizedBox(height: 10),
-            const _FieldLabel('Administrated At'),
+            const _FieldLabel('Administered At'),
             _InputField(controller: _atCtrl),
             const SizedBox(height: 18),
             SizedBox(
@@ -1490,10 +1656,8 @@ class _CatalogDropdown extends StatelessWidget {
           value: value,
           items: items
               .map(
-                (String item) => DropdownMenuItem<String>(
-                  value: item,
-                  child: Text(item),
-                ),
+                (String item) =>
+                    DropdownMenuItem<String>(value: item, child: Text(item)),
               )
               .toList(),
           onChanged: onChanged,
@@ -1563,10 +1727,13 @@ class _InputField extends StatelessWidget {
       style: const TextStyle(fontSize: 14),
       decoration: InputDecoration(
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        prefixIcon:
-            icon != null ? Icon(icon, size: 18, color: AppColors.secondary) : null,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
+        prefixIcon: icon != null
+            ? Icon(icon, size: 18, color: AppColors.secondary)
+            : null,
         filled: true,
         fillColor: AppColors.white,
         border: OutlineInputBorder(
@@ -1602,8 +1769,10 @@ class _DropdownField extends StatelessWidget {
           isExpanded: true,
           value: value,
           items: items
-              .map((String e) =>
-                  DropdownMenuItem<String>(value: e, child: Text(e)))
+              .map(
+                (String e) =>
+                    DropdownMenuItem<String>(value: e, child: Text(e)),
+              )
               .toList(),
           onChanged: (String? v) {
             if (v != null) onChanged(v);

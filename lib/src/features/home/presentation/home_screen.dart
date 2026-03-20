@@ -83,8 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    const LossOfWristbandScreen(),
+                                builder: (_) => const LossOfWristbandScreen(),
                               ),
                             );
                           },
@@ -97,8 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    const BrigadeHistoryScreen(),
+                                builder: (_) => const BrigadeHistoryScreen(),
                               ),
                             );
                           },
@@ -141,11 +139,7 @@ class _HomeBackground extends StatelessWidget {
             ),
             child: Stack(
               children: const [
-                Positioned(
-                  left: 26,
-                  top: 82,
-                  child: _BlurBubble(diameter: 42),
-                ),
+                Positioned(left: 26, top: 82, child: _BlurBubble(diameter: 42)),
                 Positioned(
                   right: 14,
                   top: 34,
@@ -159,11 +153,7 @@ class _HomeBackground extends StatelessWidget {
               ],
             ),
           ),
-          Expanded(
-            child: Container(
-              color: const Color(0xFFD3DBE0),
-            ),
-          ),
+          Expanded(child: Container(color: const Color(0xFFD3DBE0))),
         ],
       ),
     );
@@ -205,11 +195,7 @@ class _HomeHeader extends StatelessWidget {
       height: 103,
       child: Stack(
         children: [
-          Positioned.fill(
-            child: Container(
-              color: AppColors.primary,
-            ),
-          ),
+          Positioned.fill(child: Container(color: AppColors.primary)),
           const Positioned(
             left: 35,
             top: 12,
@@ -275,7 +261,11 @@ class _HomeHeader extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.language, size: 13, color: AppColors.secondary),
+                    const Icon(
+                      Icons.language,
+                      size: 13,
+                      color: AppColors.secondary,
+                    ),
                     const SizedBox(width: 2),
                     Text(
                       language,
@@ -317,7 +307,10 @@ class _HomeHeader extends StatelessWidget {
             child: SizedBox(
               width: 37,
               height: 37,
-              child: Icon(Icons.account_circle_outlined, color: AppColors.secondary),
+              child: Icon(
+                Icons.account_circle_outlined,
+                color: AppColors.secondary,
+              ),
             ),
           ),
         ],
@@ -326,7 +319,7 @@ class _HomeHeader extends StatelessWidget {
   }
 }
 
-class _HomeActionCard extends StatelessWidget {
+class _HomeActionCard extends StatefulWidget {
   const _HomeActionCard({
     required this.icon,
     required this.title,
@@ -340,58 +333,87 @@ class _HomeActionCard extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_HomeActionCard> createState() => _HomeActionCardState();
+}
+
+class _HomeActionCardState extends State<_HomeActionCard> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: onTap,
-      child: Container(
-        width: 329,
-        height: 114,
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x24000000),
-              blurRadius: 10,
-              offset: Offset(1, 7),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Row(
-          children: [
-            Icon(icon, size: 50, color: AppColors.primary),
-            const SizedBox(width: 18),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: AppColors.secondary,
-                      fontSize: 24 / 1.05,
-                      fontWeight: FontWeight.w600,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        scale: _isPressed ? 0.985 : 1,
+        child: SizedBox(
+          width: 329,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: widget.onTap,
+            onHighlightChanged: (bool value) {
+              setState(() => _isPressed = value);
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              height: 114,
+              decoration: BoxDecoration(
+                color: _isHovered ? const Color(0xFFF7FBFF) : AppColors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: _isHovered ? AppColors.primary : Colors.transparent,
+                  width: 1.1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(
+                      alpha: _isHovered ? 0.18 : 0.14,
                     ),
+                    blurRadius: _isHovered ? 14 : 10,
+                    offset: Offset(1, _isHovered ? 8 : 7),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                ],
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  Icon(widget.icon, size: 50, color: AppColors.primary),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.title,
+                          style: const TextStyle(
+                            color: AppColors.secondary,
+                            fontSize: 24 / 1.05,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          widget.subtitle,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
-

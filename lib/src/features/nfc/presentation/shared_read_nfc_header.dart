@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/tokens/app_colors.dart';
+import '../../home/presentation/home_screen.dart';
 
 class SharedReadNfcHeader extends StatelessWidget {
-  const SharedReadNfcHeader({super.key, this.title = 'Read NFC'});
+  const SharedReadNfcHeader({
+    super.key,
+    this.title = 'Read NFC',
+    this.showHomeAction = true,
+  });
 
   final String title;
+  final bool showHomeAction;
 
   @override
   Widget build(BuildContext context) {
@@ -44,16 +50,38 @@ class SharedReadNfcHeader extends StatelessWidget {
               ),
             ),
           ),
-          const Positioned(
+          Positioned(
             right: 14,
-            top: 52,
-            child: SizedBox(
-              width: 37,
-              height: 37,
-              child: Icon(
-                Icons.account_circle_outlined,
-                color: AppColors.secondary,
-              ),
+            top: 50,
+            child: Row(
+              children: [
+                if (showHomeAction)
+                  Tooltip(
+                    message: 'Go to Home',
+                    child: IconButton(
+                      onPressed: () {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const HomeScreen(),
+                          ),
+                          (Route<dynamic> route) => false,
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.home_rounded,
+                        color: AppColors.white,
+                      ),
+                    ),
+                  ),
+                const SizedBox(
+                  width: 37,
+                  height: 37,
+                  child: Icon(
+                    Icons.account_circle_outlined,
+                    color: AppColors.secondary,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
