@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/widgets/hwb_back_button.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
 import 'read_nfc_guardian_screen.dart';
@@ -50,8 +51,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen>
     _spinnerController.repeat();
 
     try {
-      final patient =
-          await AppScope.of(context).patientRepository.scanDevice(deviceUid);
+      final patient = await AppScope.of(
+        context,
+      ).patientRepository.scanDevice(deviceUid);
       if (mounted) {
         setState(() {
           _patient = patient;
@@ -92,32 +94,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen>
                   padding: const EdgeInsets.only(left: 21, top: 24),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: SizedBox(
-                      height: 33,
-                      child: ElevatedButton.icon(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00A396),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                        ),
-                        icon: const Icon(
-                          Icons.arrow_back_ios,
-                          size: 15,
-                          color: AppColors.white,
-                        ),
-                        label: const Text(
-                          'Back',
-                          style: TextStyle(
-                            color: AppColors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ),
-                    ),
+                    child: const HwbBackButton(),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -132,10 +109,14 @@ class _ReadNfcScreenState extends State<ReadNfcScreen>
                           decoration: InputDecoration(
                             hintText: 'Enter device UID or scan NFC',
                             hintStyle: const TextStyle(
-                                fontSize: 13, color: AppColors.disabled),
+                              fontSize: 13,
+                              color: AppColors.disabled,
+                            ),
                             isDense: true,
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 12),
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
                             filled: true,
                             fillColor: AppColors.white,
                             border: OutlineInputBorder(
@@ -160,8 +141,11 @@ class _ReadNfcScreenState extends State<ReadNfcScreen>
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          child: const Icon(Icons.nfc,
-                              color: AppColors.white, size: 22),
+                          child: const Icon(
+                            Icons.nfc,
+                            color: AppColors.white,
+                            size: 22,
+                          ),
                         ),
                       ),
                     ],
@@ -177,10 +161,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen>
                         color: AppColors.white,
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x40000000),
-                            blurRadius: 10,
-                          ),
+                          BoxShadow(color: Color(0x40000000), blurRadius: 10),
                         ],
                       ),
                       child: _buildCardContent(),
@@ -226,10 +207,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen>
           const Text(
             'Ready to scan',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 15,
-            ),
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 15),
           ),
           const SizedBox(height: 24),
         ],
@@ -288,10 +266,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen>
         const Text(
           'The wristband data was\nsuccessfully loaded',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 15,
-          ),
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 15),
         ),
         const SizedBox(height: 20),
         Padding(
@@ -303,8 +278,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen>
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) =>
-                        ReadNfcGuardianScreen(patient: _patient!),
+                    builder: (_) => ReadNfcGuardianScreen(patient: _patient!),
                   ),
                 );
               },

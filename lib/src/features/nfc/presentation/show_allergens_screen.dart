@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/widgets/hwb_back_button.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
@@ -13,12 +14,14 @@ class ShowAllergensScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final allergens = patient.allergies
-        .map((AllergyInfo a) => _AllergenData(
-              name: a.allergen,
-              reaction: a.reaction,
-              severity: '',
-              notes: a.notes ?? '',
-            ))
+        .map(
+          (AllergyInfo a) => _AllergenData(
+            name: a.allergen,
+            reaction: a.reaction,
+            severity: '',
+            notes: a.notes ?? '',
+          ),
+        )
         .toList();
     return Scaffold(
       backgroundColor: const Color(0xFFEBF2F8),
@@ -37,32 +40,7 @@ class ShowAllergensScreen extends StatelessWidget {
                           padding: const EdgeInsets.only(left: 3, top: 14),
                           child: Align(
                             alignment: Alignment.centerLeft,
-                            child: SizedBox(
-                              height: 33,
-                              child: ElevatedButton.icon(
-                                onPressed: () => Navigator.of(context).pop(),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF00A396),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 14),
-                                ),
-                                icon: const Icon(
-                                  Icons.arrow_back_ios,
-                                  size: 15,
-                                  color: AppColors.white,
-                                ),
-                                label: const Text(
-                                  'Back',
-                                  style: TextStyle(
-                                    color: AppColors.white,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            ),
+                            child: const HwbBackButton(),
                           ),
                         ),
                         const SizedBox(height: 14),
@@ -124,7 +102,11 @@ class _LastUpdatedCard extends StatelessWidget {
         color: AppColors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [
-          BoxShadow(color: Color(0x24000000), blurRadius: 10, offset: Offset(1, 4)),
+          BoxShadow(
+            color: Color(0x24000000),
+            blurRadius: 10,
+            offset: Offset(1, 4),
+          ),
         ],
       ),
       child: Row(
@@ -147,7 +129,11 @@ class _LastUpdatedCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(Icons.calendar_today, size: 14, color: AppColors.secondary),
+                  Icon(
+                    Icons.calendar_today,
+                    size: 14,
+                    color: AppColors.secondary,
+                  ),
                   SizedBox(width: 4),
                   Text('19/08/2025 - 11:19', style: TextStyle(fontSize: 12)),
                 ],
@@ -195,7 +181,11 @@ class _AllergenDetailCard extends StatelessWidget {
         color: AppColors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [
-          BoxShadow(color: Color(0x24000000), blurRadius: 10, offset: Offset(1, 4)),
+          BoxShadow(
+            color: Color(0x24000000),
+            blurRadius: 10,
+            offset: Offset(1, 4),
+          ),
         ],
       ),
       child: Column(
@@ -228,7 +218,11 @@ class _AllergenDetailCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _fieldRow(Icons.favorite_border, 'Reaction:', allergen.reaction),
+                _fieldRow(
+                  Icons.favorite_border,
+                  'Reaction:',
+                  allergen.reaction,
+                ),
                 const SizedBox(height: 8),
                 _fieldRow(Icons.warning_amber, 'Severity:', allergen.severity),
                 const SizedBox(height: 8),
@@ -250,7 +244,10 @@ class _AllergenDetailCard extends StatelessWidget {
         Expanded(
           child: RichText(
             text: TextSpan(
-              style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textPrimary,
+              ),
               children: <TextSpan>[
                 TextSpan(
                   text: '$label  ',

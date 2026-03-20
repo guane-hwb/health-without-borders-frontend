@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'core/cache/form_draft_cache.dart';
 import 'core/config/app_env.dart';
 import 'core/di/app_scope.dart';
 import 'core/network/api_client.dart';
@@ -27,6 +28,7 @@ class HealthWithoutBordersApp extends StatelessWidget {
     apiClient: _apiClient,
     authRepository: _authRepository,
   );
+  final FormDraftCache _formDraftCache = FormDraftCache();
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +36,7 @@ class HealthWithoutBordersApp extends StatelessWidget {
       authRepository: _authRepository,
       patientRepository: _patientRepository,
       catalogRepository: _catalogRepository,
+      formDraftCache: _formDraftCache,
       child: MaterialApp(
         title: 'Health Without Borders',
         debugShowCheckedModeBanner: false,

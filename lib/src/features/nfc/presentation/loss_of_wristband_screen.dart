@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/widgets/hwb_back_button.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import 'read_nfc_guardian_screen.dart';
 import 'shared_read_nfc_header.dart';
@@ -15,10 +16,39 @@ class LossOfWristbandScreen extends StatefulWidget {
 }
 
 class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
+  static const String _draftScope = 'loss_of_wristband';
+
   final TextEditingController _nameCtrl = TextEditingController();
   final TextEditingController _dobCtrl = TextEditingController();
   final TextEditingController _guardianCtrl = TextEditingController();
+
+  bool _draftSetup = false;
   bool _isSearching = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_draftSetup) return;
+
+    final draftCache = AppScope.of(context).formDraftCache;
+    _nameCtrl.text = draftCache.getValue(_draftScope, 'name') ?? '';
+    _dobCtrl.text = draftCache.getValue(_draftScope, 'birth_date') ?? '';
+    _guardianCtrl.text =
+        draftCache.getValue(_draftScope, 'guardian_name') ?? '';
+
+    _nameCtrl.addListener(
+      () => draftCache.setValue(_draftScope, 'name', _nameCtrl.text),
+    );
+    _dobCtrl.addListener(
+      () => draftCache.setValue(_draftScope, 'birth_date', _dobCtrl.text),
+    );
+    _guardianCtrl.addListener(
+      () =>
+          draftCache.setValue(_draftScope, 'guardian_name', _guardianCtrl.text),
+    );
+
+    _draftSetup = true;
+  }
 
   @override
   void dispose() {
@@ -44,6 +74,8 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        const HwbBackButton(),
+                        const SizedBox(height: 14),
                         const Text(
                           'Search Patient',
                           style: TextStyle(
@@ -56,10 +88,18 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                         _field('Name', _nameCtrl, Icons.person, true),
                         const SizedBox(height: 14),
                         _field(
-                            'Date of Birth', _dobCtrl, Icons.calendar_today, true),
+                          'Date of Birth',
+                          _dobCtrl,
+                          Icons.calendar_today,
+                          true,
+                        ),
                         const SizedBox(height: 14),
                         _field(
-                            'Guardian Name', _guardianCtrl, Icons.person, true),
+                          'Guardian Name',
+                          _guardianCtrl,
+                          Icons.person,
+                          true,
+                        ),
                         const Spacer(),
                         SizedBox(
                           width: double.infinity,
@@ -81,8 +121,11 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                                       color: AppColors.white,
                                     ),
                                   )
-                                : const Icon(Icons.search,
-                                    size: 20, color: AppColors.white),
+                                : const Icon(
+                                    Icons.search,
+                                    size: 20,
+                                    color: AppColors.white,
+                                  ),
                             label: Text(
                               _isSearching ? 'Searching...' : 'Search',
                               style: const TextStyle(
@@ -139,10 +182,11 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
           decoration: InputDecoration(
             isDense: true,
             hintText: label,
-            hintStyle:
-                const TextStyle(fontSize: 13, color: AppColors.disabled),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            hintStyle: const TextStyle(fontSize: 13, color: AppColors.disabled),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
             prefixIcon: Icon(icon, size: 18, color: AppColors.secondary),
             filled: true,
             fillColor: AppColors.white,
@@ -177,9 +221,9 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
       if (!mounted) return;
 
       if (results.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No patients found')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('No patients found')));
         return;
       }
 
@@ -190,14 +234,14 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Search failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Search failed: $e')));
     } finally {
       if (mounted) setState(() => _isSearching = false);
     }

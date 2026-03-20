@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/widgets/hwb_back_button.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../nfc/domain/patient_record.dart';
 import '../../nfc/presentation/shared_read_nfc_header.dart';
@@ -70,27 +71,7 @@ class _BrigadeHistoryScreenState extends State<BrigadeHistoryScreen> {
                   padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: SizedBox(
-                      height: 33,
-                      child: ElevatedButton.icon(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00A396),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 14),
-                        ),
-                        icon: const Icon(Icons.arrow_back_ios,
-                            size: 15, color: AppColors.white),
-                        label: const Text(
-                          'Back',
-                          style:
-                              TextStyle(color: AppColors.white, fontSize: 14),
-                        ),
-                      ),
-                    ),
+                    child: const HwbBackButton(),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -113,16 +94,22 @@ class _BrigadeHistoryScreenState extends State<BrigadeHistoryScreen> {
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: _headerColor,
                             borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(16)),
+                              top: Radius.circular(16),
+                            ),
                           ),
                           child: const Row(
                             children: [
-                              Icon(Icons.format_list_bulleted,
-                                  size: 20, color: AppColors.white),
+                              Icon(
+                                Icons.format_list_bulleted,
+                                size: 20,
+                                color: AppColors.white,
+                              ),
                               SizedBox(width: 8),
                               Text(
                                 'Brigade History',
@@ -143,9 +130,11 @@ class _BrigadeHistoryScreenState extends State<BrigadeHistoryScreen> {
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.people_outline,
-                                            size: 48,
-                                            color: AppColors.disabled),
+                                        Icon(
+                                          Icons.people_outline,
+                                          size: 48,
+                                          color: AppColors.disabled,
+                                        ),
                                         SizedBox(height: 12),
                                         Text(
                                           'Patients will appear here as they are synced',
@@ -168,11 +157,12 @@ class _BrigadeHistoryScreenState extends State<BrigadeHistoryScreen> {
                                     final patient = _patients[index];
                                     final name =
                                         '${patient.patientInfo.firstName} ${patient.patientInfo.lastName}';
-                                    final date =
-                                        patient.patientInfo.dob;
+                                    final date = patient.patientInfo.dob;
                                     return _PatientRow(
-                                      patient:
-                                          _PatientEntry(name: name, date: date),
+                                      patient: _PatientEntry(
+                                        name: name,
+                                        date: date,
+                                      ),
                                       status: _status,
                                     );
                                   },
@@ -301,9 +291,9 @@ class _PatientRow extends StatelessWidget {
       case _SyncStatus.pending:
         return 'Pending';
       case _SyncStatus.synchronizing:
-        return 'synchronizing';
+        return 'Synchronizing';
       case _SyncStatus.synchronized:
-        return 'Syncronized';
+        return 'Synchronized';
     }
   }
 }

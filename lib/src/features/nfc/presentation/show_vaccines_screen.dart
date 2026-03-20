@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/widgets/hwb_back_button.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
 import 'edit_vaccine_sheet.dart';
@@ -14,13 +15,15 @@ class ShowVaccinesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vaccines = patient.vaccinationRecord
-        .map((VaccinationRecordItem v) => _VaccineData(
-              name: v.vaccineName,
-              dose: 'Dose ${v.dose}',
-              date: v.date,
-              administeredBy: v.administratedBy,
-              administeredAt: v.administratedAt,
-            ))
+        .map(
+          (VaccinationRecordItem v) => _VaccineData(
+            name: v.vaccineName,
+            dose: 'Dose ${v.dose}',
+            date: v.date,
+            administeredBy: v.administratedBy,
+            administeredAt: v.administratedAt,
+          ),
+        )
         .toList();
     return Scaffold(
       backgroundColor: const Color(0xFFEBF2F8),
@@ -39,32 +42,7 @@ class ShowVaccinesScreen extends StatelessWidget {
                           padding: const EdgeInsets.only(left: 3, top: 14),
                           child: Align(
                             alignment: Alignment.centerLeft,
-                            child: SizedBox(
-                              height: 33,
-                              child: ElevatedButton.icon(
-                                onPressed: () => Navigator.of(context).pop(),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF00A396),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 14),
-                                ),
-                                icon: const Icon(
-                                  Icons.arrow_back_ios,
-                                  size: 15,
-                                  color: AppColors.white,
-                                ),
-                                label: const Text(
-                                  'Back',
-                                  style: TextStyle(
-                                    color: AppColors.white,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            ),
+                            child: const HwbBackButton(),
                           ),
                         ),
                         const SizedBox(height: 14),
@@ -143,7 +121,11 @@ class _LastUpdatedCard extends StatelessWidget {
         color: AppColors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [
-          BoxShadow(color: Color(0x24000000), blurRadius: 10, offset: Offset(1, 4)),
+          BoxShadow(
+            color: Color(0x24000000),
+            blurRadius: 10,
+            offset: Offset(1, 4),
+          ),
         ],
       ),
       child: Row(
@@ -166,7 +148,11 @@ class _LastUpdatedCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(Icons.calendar_today, size: 14, color: AppColors.secondary),
+                  Icon(
+                    Icons.calendar_today,
+                    size: 14,
+                    color: AppColors.secondary,
+                  ),
                   SizedBox(width: 4),
                   Text('19/08/2025 - 11:19', style: TextStyle(fontSize: 12)),
                 ],
@@ -216,7 +202,11 @@ class _VaccineCard extends StatelessWidget {
         color: AppColors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [
-          BoxShadow(color: Color(0x24000000), blurRadius: 10, offset: Offset(1, 4)),
+          BoxShadow(
+            color: Color(0x24000000),
+            blurRadius: 10,
+            offset: Offset(1, 4),
+          ),
         ],
       ),
       child: Column(
@@ -266,9 +256,9 @@ class _VaccineCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 4),
-                _field('Administred By:', vaccine.administeredBy),
+                _field('Administered By:', vaccine.administeredBy),
                 const SizedBox(height: 4),
-                _field('Administred At:', vaccine.administeredAt),
+                _field('Administered At:', vaccine.administeredAt),
               ],
             ),
           ),
