@@ -46,7 +46,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 return SingleChildScrollView(
                   padding: const EdgeInsets.only(bottom: 14),
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
                     child: IntrinsicHeight(
                       child: Column(
                         children: [
@@ -71,7 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 26),
                           _buildInput(
                             controller: _emailCtrl,
-                            hint: 'Input your email',
+                            hint: 'Enter your email',
                             icon: Icons.email_outlined,
                             keyboardType: TextInputType.emailAddress,
                           ),
@@ -83,10 +85,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             obscureText: _obscurePassword,
                             suffix: IconButton(
                               onPressed: () {
-                                setState(() => _obscurePassword = !_obscurePassword);
+                                setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                );
                               },
                               icon: Icon(
-                                _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                                _obscurePassword
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
                                 size: 18,
                               ),
                             ),
@@ -97,7 +103,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           TextButton(
                             onPressed: () {},
                             child: const Text(
-                              'Not have account, create on here',
+                              "Don't have an account? Create one here",
                               style: TextStyle(
                                 color: AppColors.secondary,
                                 fontSize: 18,
@@ -145,12 +151,14 @@ class _LoginScreenState extends State<LoginScreen> {
         onPressed: _isLoading ? null : _loginWithBackendToken,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           disabledBackgroundColor: AppColors.disabled,
         ),
         icon: const Icon(Icons.g_mobiledata, size: 24, color: AppColors.white),
         label: const Text(
-          'Sign with google',
+          'Sign in with Google',
           style: TextStyle(color: AppColors.white, fontSize: 32 / 1.8),
         ),
       ),
@@ -203,7 +211,10 @@ class _LoginScreenState extends State<LoginScreen> {
         style: const TextStyle(fontSize: 13),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(fontSize: 10, color: AppColors.textPrimary),
+          hintStyle: const TextStyle(
+            fontSize: 10,
+            color: AppColors.textPrimary,
+          ),
           prefixIcon: Icon(icon, size: 20, color: AppColors.secondary),
           suffixIcon: suffix,
           border: InputBorder.none,
@@ -221,7 +232,9 @@ class _LoginScreenState extends State<LoginScreen> {
         onPressed: _isLoading ? null : _loginWithBackendToken,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           disabledBackgroundColor: AppColors.disabled,
         ),
         icon: _isLoading
@@ -246,21 +259,23 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     try {
       // Auth repository currently logs in against backend env credentials.
-      await AppScope.of(context).authRepository.getAccessToken(forceRefresh: true);
+      await AppScope.of(
+        context,
+      ).authRepository.getAccessToken(forceRefresh: true);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Login failed: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -276,9 +291,16 @@ class _StatusBarMock extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 28),
       child: Row(
         children: const [
-          Text('10:15', style: TextStyle(fontSize: 15, color: AppColors.textPrimary)),
+          Text(
+            '10:15',
+            style: TextStyle(fontSize: 15, color: AppColors.textPrimary),
+          ),
           Spacer(),
-          Icon(Icons.signal_cellular_alt, size: 18, color: AppColors.textPrimary),
+          Icon(
+            Icons.signal_cellular_alt,
+            size: 18,
+            color: AppColors.textPrimary,
+          ),
           SizedBox(width: 4),
           Icon(Icons.wifi, size: 18, color: AppColors.textPrimary),
           SizedBox(width: 4),

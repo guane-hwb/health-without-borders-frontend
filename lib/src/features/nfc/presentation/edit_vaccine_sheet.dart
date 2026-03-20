@@ -52,7 +52,9 @@ class _EditVaccineSheetState extends State<EditVaccineSheet> {
 
   Future<void> _loadCatalogs() async {
     try {
-      final catalog = await AppScope.of(context).catalogRepository.getCatalogs();
+      final catalog = await AppScope.of(
+        context,
+      ).catalogRepository.getCatalogs();
       if (mounted) {
         setState(() {
           _vaccines = catalog.vaccines.where((v) => v.isActive).toList();
@@ -111,12 +113,11 @@ class _EditVaccineSheetState extends State<EditVaccineSheet> {
             const SizedBox(height: 14),
             _buildField('Dose *', _doseCtrl),
             const SizedBox(height: 14),
-            _buildField('Date *', _dateCtrl,
-                prefixIcon: Icons.calendar_today),
+            _buildField('Date *', _dateCtrl, prefixIcon: Icons.calendar_today),
             const SizedBox(height: 14),
-            _buildField('Administrated By *', _byCtrl),
+            _buildField('Administered By *', _byCtrl),
             const SizedBox(height: 14),
-            _buildField('Administrated At *', _atCtrl),
+            _buildField('Administered At *', _atCtrl),
             const SizedBox(height: 24),
             Row(
               children: [
@@ -131,12 +132,14 @@ class _EditVaccineSheetState extends State<EditVaccineSheet> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      icon: const Icon(Icons.save,
-                          size: 18, color: AppColors.white),
+                      icon: const Icon(
+                        Icons.save,
+                        size: 18,
+                        color: AppColors.white,
+                      ),
                       label: const Text(
                         'Save',
-                        style:
-                            TextStyle(color: AppColors.white, fontSize: 14),
+                        style: TextStyle(color: AppColors.white, fontSize: 14),
                       ),
                     ),
                   ),
@@ -155,8 +158,7 @@ class _EditVaccineSheetState extends State<EditVaccineSheet> {
                       ),
                       child: const Text(
                         'Cancel',
-                        style:
-                            TextStyle(color: AppColors.white, fontSize: 14),
+                        style: TextStyle(color: AppColors.white, fontSize: 14),
                       ),
                     ),
                   ),
@@ -203,14 +205,20 @@ class _EditVaccineSheetState extends State<EditVaccineSheet> {
                   child: DropdownButton<String>(
                     isExpanded: true,
                     value: _selectedVaccine,
-                    hint: const Text('Select a vaccine',
-                        style: TextStyle(fontSize: 14)),
+                    hint: const Text(
+                      'Select a vaccine',
+                      style: TextStyle(fontSize: 14),
+                    ),
                     items: _vaccines
-                        .map((VaccineCatalogItem v) => DropdownMenuItem(
-                              value: v.name,
-                              child: Text(v.name,
-                                  style: const TextStyle(fontSize: 14)),
-                            ))
+                        .map(
+                          (VaccineCatalogItem v) => DropdownMenuItem(
+                            value: v.name,
+                            child: Text(
+                              v.name,
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          ),
+                        )
                         .toList(),
                     onChanged: (String? v) {
                       if (v != null) setState(() => _selectedVaccine = v);
@@ -244,10 +252,11 @@ class _EditVaccineSheetState extends State<EditVaccineSheet> {
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
             isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            prefixIcon:
-                prefixIcon != null ? Icon(prefixIcon, size: 18) : null,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+            prefixIcon: prefixIcon != null ? Icon(prefixIcon, size: 18) : null,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(color: Color(0xFFE0E0E0)),

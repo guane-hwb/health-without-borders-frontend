@@ -41,10 +41,19 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
         : 'Female';
     _country =
         const ['Colombia', 'Venezuela', 'Other'].contains(info.address.country)
-            ? info.address.country
-            : 'Colombia';
-    _bloodType = const ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']
-            .contains(info.bloodType)
+        ? info.address.country
+        : 'Colombia';
+    _bloodType =
+        const [
+          'A+',
+          'A-',
+          'B+',
+          'B-',
+          'O+',
+          'O-',
+          'AB+',
+          'AB-',
+        ].contains(info.bloodType)
         ? info.bloodType
         : 'A+';
   }
@@ -78,45 +87,69 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
                         const SizedBox(height: 12),
                         _textField('Name', _nameCtrl, icon: Icons.person),
                         const SizedBox(height: 12),
-                        _textField('Date of Birth', _dobCtrl,
-                            icon: Icons.calendar_today),
+                        _textField(
+                          'Date of Birth',
+                          _dobCtrl,
+                          icon: Icons.calendar_today,
+                        ),
                         const SizedBox(height: 12),
-                        _dropdownField('Gender', _gender, ['Female', 'Male'],
-                            (String? v) {
+                        _dropdownField('Gender', _gender, ['Female', 'Male'], (
+                          String? v,
+                        ) {
                           if (v != null) setState(() => _gender = v);
                         }),
                         const SizedBox(height: 12),
                         _dropdownField(
-                            'Country', _country, ['Colombia', 'Venezuela', 'Other'],
-                            (String? v) {
-                          if (v != null) setState(() => _country = v);
-                        }),
+                          'Country',
+                          _country,
+                          ['Colombia', 'Venezuela', 'Other'],
+                          (String? v) {
+                            if (v != null) setState(() => _country = v);
+                          },
+                        ),
                         const SizedBox(height: 20),
                         _sectionTitle('Physical information'),
                         const SizedBox(height: 12),
-                        _textField('Weight', _weightCtrl,
-                            icon: Icons.monitor_weight),
+                        _textField(
+                          'Weight',
+                          _weightCtrl,
+                          icon: Icons.monitor_weight,
+                        ),
                         const SizedBox(height: 12),
-                        _textField('Height', _heightCtrl,
-                            icon: Icons.open_in_full),
+                        _textField(
+                          'Height',
+                          _heightCtrl,
+                          icon: Icons.open_in_full,
+                        ),
                         const SizedBox(height: 12),
-                        _dropdownField('Blood Type', _bloodType,
-                            ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'],
-                            (String? v) {
-                          if (v != null) setState(() => _bloodType = v);
-                        }),
+                        _dropdownField(
+                          'Blood Type',
+                          _bloodType,
+                          ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'],
+                          (String? v) {
+                            if (v != null) setState(() => _bloodType = v);
+                          },
+                        ),
                         const SizedBox(height: 20),
                         _sectionTitle('Vaccine'),
                         const SizedBox(height: 8),
-                        _tableHeader(
-                            const ['Vaccine', 'Does', 'Date', 'Administrated By']),
+                        _tableHeader(const [
+                          'Vaccine',
+                          'Dose',
+                          'Date',
+                          'Administered By',
+                        ]),
                         const SizedBox(height: 8),
                         _addButton('Add Vaccine'),
                         const SizedBox(height: 20),
                         _sectionTitle('Allergen'),
                         const SizedBox(height: 8),
-                        _tableHeader(
-                            const ['Allergen', 'Reaction', 'Severity', 'Notes']),
+                        _tableHeader(const [
+                          'Allergen',
+                          'Reaction',
+                          'Severity',
+                          'Notes',
+                        ]),
                         const SizedBox(height: 8),
                         _addButton('Add Allergen'),
                         const SizedBox(height: 24),
@@ -165,10 +198,13 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
             isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            prefixIcon:
-                icon != null ? Icon(icon, size: 18, color: AppColors.secondary) : null,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+            prefixIcon: icon != null
+                ? Icon(icon, size: 18, color: AppColors.secondary)
+                : null,
             filled: true,
             fillColor: AppColors.white,
             border: OutlineInputBorder(
@@ -203,8 +239,10 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
               isExpanded: true,
               value: value,
               items: items
-                  .map((String e) =>
-                      DropdownMenuItem<String>(value: e, child: Text(e)))
+                  .map(
+                    (String e) =>
+                        DropdownMenuItem<String>(value: e, child: Text(e)),
+                  )
                   .toList(),
               onChanged: onChanged,
             ),
@@ -217,9 +255,10 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
   Widget _tableHeader(List<String> columns) {
     return Row(
       children: columns
-          .map((String c) => Expanded(
-                child: Text(c, style: const TextStyle(fontSize: 11)),
-              ))
+          .map(
+            (String c) =>
+                Expanded(child: Text(c, style: const TextStyle(fontSize: 11))),
+          )
           .toList(),
     );
   }
@@ -259,8 +298,11 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              icon: const Icon(Icons.arrow_back_ios,
-                  size: 14, color: AppColors.white),
+              icon: const Icon(
+                Icons.arrow_back_ios,
+                size: 14,
+                color: AppColors.white,
+              ),
               label: const Text(
                 'Back to Read NFC',
                 style: TextStyle(color: AppColors.white, fontSize: 13),
