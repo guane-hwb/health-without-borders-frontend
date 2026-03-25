@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../../home/presentation/home_screen.dart';
 import '../domain/catalog_data.dart';
 import '../domain/patient_record.dart';
 import 'nfc_save_flow.dart';
@@ -109,6 +110,8 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        _topNavigationActions(context),
+                        const SizedBox(height: 14),
                         _StepIndicator(currentStep: _currentStep),
                         const SizedBox(height: 14),
                         _buildCurrentStep(),
@@ -129,6 +132,63 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _topNavigationActions(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          height: 34,
+          child: ElevatedButton.icon(
+            onPressed: () => Navigator.of(context).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.secondary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            icon: const Icon(
+              Icons.arrow_back_ios,
+              size: 14,
+              color: AppColors.white,
+            ),
+            label: const Text(
+              'Back',
+              style: TextStyle(color: AppColors.white, fontSize: 13),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          height: 34,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
+                (Route<dynamic> route) => false,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00A396),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            icon: const Icon(
+              Icons.home_rounded,
+              size: 16,
+              color: AppColors.white,
+            ),
+            label: const Text(
+              'Home',
+              style: TextStyle(color: AppColors.white, fontSize: 13),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
