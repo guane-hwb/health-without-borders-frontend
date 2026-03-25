@@ -46,6 +46,8 @@
 			</dict>
 		</dict>
 	</dict>
+	<key>NFCReaderUsageDescription</key>
+	<string>Health Without Borders uses NFC to read wristband IDs and retrieve patient records.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

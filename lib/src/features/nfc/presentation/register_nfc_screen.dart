@@ -1,4 +1,11 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/nfc_manager_android.dart';
+import 'package:nfc_manager/nfc_manager_ios.dart';
+import 'package:ndef_record/ndef_record.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/di/app_scope.dart';
@@ -19,6 +26,7 @@ class RegisterNfcScreen extends StatefulWidget {
 class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   int _currentStep = 0;
   bool _privacyAccepted = false;
+  bool _isWritingNfcTag = false;
 
   final TextEditingController _deviceUidCtrl = TextEditingController();
   final TextEditingController _guardianNameCtrl = TextEditingController();
@@ -129,21 +137,20 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       case 0:
         return _Step1Guardian(
           deviceUidCtrl: _deviceUidCtrl,
+          isWritingNfcTag: _isWritingNfcTag,
+          onWriteNfcTag: _writeDeviceUidToTag,
           nameCtrl: _guardianNameCtrl,
           docType: _guardianDocType,
-          onDocTypeChanged: (String v) =>
-              setState(() => _guardianDocType = v),
+          onDocTypeChanged: (String v) => setState(() => _guardianDocType = v),
           idCtrl: _guardianIdCtrl,
           relationshipCtrl: _guardianRelCtrl,
           country: _guardianCountry,
-          onCountryChanged: (String v) =>
-              setState(() => _guardianCountry = v),
+          onCountryChanged: (String v) => setState(() => _guardianCountry = v),
           addressCtrl: _guardianAddressCtrl,
           contactCtrl: _guardianContactCtrl,
           emailCtrl: _guardianEmailCtrl,
           privacyAccepted: _privacyAccepted,
-          onPrivacyChanged: (bool v) =>
-              setState(() => _privacyAccepted = v),
+          onPrivacyChanged: (bool v) => setState(() => _privacyAccepted = v),
           onShowPrivacyPolicy: () => _showPrivacyPolicy(context),
         );
       case 1:
@@ -153,13 +160,11 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           gender: _gender,
           onGenderChanged: (String v) => setState(() => _gender = v),
           country: _patientCountry,
-          onCountryChanged: (String v) =>
-              setState(() => _patientCountry = v),
+          onCountryChanged: (String v) => setState(() => _patientCountry = v),
           weightCtrl: _weightCtrl,
           heightCtrl: _heightCtrl,
           bloodType: _bloodType,
-          onBloodTypeChanged: (String v) =>
-              setState(() => _bloodType = v),
+          onBloodTypeChanged: (String v) => setState(() => _bloodType = v),
         );
       case 2:
         return _Step3MedicalHistory(
@@ -177,8 +182,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           staffPlaceCtrl: _staffPlaceCtrl,
           staffDateCtrl: _staffDateCtrl,
           typeVisit: _typeVisit,
-          onTypeVisitChanged: (String v) =>
-              setState(() => _typeVisit = v),
+          onTypeVisitChanged: (String v) => setState(() => _typeVisit = v),
         );
       case 3:
         return _Step4Summary(
@@ -220,7 +224,11 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
               borderRadius: BorderRadius.circular(10),
             ),
           ),
-          icon: const Icon(Icons.arrow_forward, size: 18, color: AppColors.white),
+          icon: const Icon(
+            Icons.arrow_forward,
+            size: 18,
+            color: AppColors.white,
+          ),
           label: const Text(
             'Next',
             style: TextStyle(color: AppColors.white, fontSize: 14),
@@ -246,8 +254,11 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              icon: const Icon(Icons.arrow_back_ios,
-                  size: 14, color: AppColors.white),
+              icon: const Icon(
+                Icons.arrow_back_ios,
+                size: 14,
+                color: AppColors.white,
+              ),
               label: const Text(
                 'Back',
                 style: TextStyle(color: AppColors.white, fontSize: 14),
@@ -282,8 +293,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
               ),
               label: Text(
                 _currentStep == 3 ? 'Save' : 'Next',
-                style:
-                    const TextStyle(color: AppColors.white, fontSize: 14),
+                style: const TextStyle(color: AppColors.white, fontSize: 14),
               ),
             ),
           ),
@@ -303,8 +313,9 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final String today = DateTime.now().toIso8601String().split('T').first;
     final List<String> nameParts = _patientNameCtrl.text.split(' ');
     final String firstName = nameParts.isNotEmpty ? nameParts.first : '';
-    final String lastName =
-        nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+    final String lastName = nameParts.length > 1
+        ? nameParts.sublist(1).join(' ')
+        : '';
 
     return PatientFullRecord(
       patientId: const Uuid().v4(),
@@ -316,8 +327,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         gender: _gender == 'Select an option' ? '' : _gender,
         bloodType: _bloodType == 'Select an option' ? '' : _bloodType,
         address: Address(
-          country:
-              _patientCountry == 'Select an option' ? '' : _patientCountry,
+          country: _patientCountry == 'Select an option' ? '' : _patientCountry,
         ),
         weight: double.tryParse(_weightCtrl.text),
         height: double.tryParse(_heightCtrl.text),
@@ -331,8 +341,9 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         personalHistory: _personalHistoryCtrl.text.isEmpty
             ? null
             : _personalHistoryCtrl.text,
-        familyHistory:
-            _familyHistoryCtrl.text.isEmpty ? null : _familyHistoryCtrl.text,
+        familyHistory: _familyHistoryCtrl.text.isEmpty
+            ? null
+            : _familyHistoryCtrl.text,
       ),
       medicalHistory: [
         MedicalHistoryItem(
@@ -365,6 +376,112 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       onSync: () async {
         await patientRepo.syncPatient(record);
       },
+    );
+  }
+
+  Future<void> _writeDeviceUidToTag() async {
+    final String deviceUid = _deviceUidCtrl.text.trim();
+    if (deviceUid.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a Device UID before writing to NFC.'),
+        ),
+      );
+      return;
+    }
+
+    final NfcAvailability availability = await NfcManager.instance
+        .checkAvailability();
+    if (availability != NfcAvailability.enabled) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('NFC is not available on this device.')),
+      );
+      return;
+    }
+
+    setState(() => _isWritingNfcTag = true);
+
+    try {
+      await NfcManager.instance.startSession(
+        pollingOptions: <NfcPollingOption>{
+          NfcPollingOption.iso14443,
+          NfcPollingOption.iso15693,
+          NfcPollingOption.iso18092,
+        },
+        alertMessageIos: 'Hold your iPhone near the wristband to write NFC.',
+        onDiscovered: (NfcTag tag) async {
+          try {
+            final NdefMessage message = _buildDeviceUidMessage(deviceUid);
+            final NdefIos? ndefIos = NdefIos.from(tag);
+            final NdefAndroid? ndefAndroid = NdefAndroid.from(tag);
+
+            if (ndefIos != null) {
+              if (ndefIos.status != NdefStatusIos.readWrite) {
+                throw StateError('NFC tag is read-only on iOS.');
+              }
+              await ndefIos.writeNdef(message);
+            } else if (ndefAndroid != null) {
+              if (!ndefAndroid.isWritable) {
+                throw StateError('NFC tag is read-only on Android.');
+              }
+              await ndefAndroid.writeNdefMessage(message);
+            } else {
+              throw StateError(
+                'The selected tag does not support NDEF writing.',
+              );
+            }
+
+            await NfcManager.instance.stopSession(
+              alertMessageIos: 'NFC write successful.',
+            );
+            if (!mounted) return;
+            setState(() => _isWritingNfcTag = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('NFC wristband updated successfully.'),
+              ),
+            );
+          } catch (error) {
+            await NfcManager.instance.stopSession(
+              errorMessageIos: 'NFC write failed. Please try again.',
+            );
+            if (!mounted) return;
+            setState(() => _isWritingNfcTag = false);
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('NFC write failed: $error')));
+          }
+        },
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isWritingNfcTag = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to start NFC writer: $error')),
+      );
+    }
+  }
+
+  NdefMessage _buildDeviceUidMessage(String deviceUid) {
+    final Uint8List languageCode = Uint8List.fromList(utf8.encode('en'));
+    final Uint8List textBytes = Uint8List.fromList(utf8.encode(deviceUid));
+    final Uint8List payload = Uint8List.fromList(<int>[
+      languageCode.length,
+      ...languageCode,
+      ...textBytes,
+    ]);
+
+    return NdefMessage(
+      records: <NdefRecord>[
+        NdefRecord(
+          typeNameFormat: TypeNameFormat.wellKnown,
+          type: Uint8List.fromList(<int>[0x54]), // RTD_TEXT ("T")
+          identifier: Uint8List(0),
+          payload: payload,
+        ),
+      ],
     );
   }
 }
@@ -400,15 +517,14 @@ class _StepIndicator extends StatelessWidget {
                   color: isCurrent
                       ? AppColors.secondary
                       : active
-                          ? const Color(0xFF00A396)
-                          : const Color(0xFFD0D0D0),
+                      ? const Color(0xFF00A396)
+                      : const Color(0xFFD0D0D0),
                 ),
                 child: Center(
                   child: Text(
                     '${index + 1}',
                     style: TextStyle(
-                      color:
-                          active ? AppColors.white : const Color(0xFF888888),
+                      color: active ? AppColors.white : const Color(0xFF888888),
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
@@ -426,6 +542,8 @@ class _StepIndicator extends StatelessWidget {
 class _Step1Guardian extends StatelessWidget {
   const _Step1Guardian({
     required this.deviceUidCtrl,
+    required this.onWriteNfcTag,
+    required this.isWritingNfcTag,
     required this.nameCtrl,
     required this.docType,
     required this.onDocTypeChanged,
@@ -442,6 +560,8 @@ class _Step1Guardian extends StatelessWidget {
   });
 
   final TextEditingController deviceUidCtrl;
+  final VoidCallback onWriteNfcTag;
+  final bool isWritingNfcTag;
   final TextEditingController nameCtrl;
   final String docType;
   final ValueChanged<String> onDocTypeChanged;
@@ -468,15 +588,33 @@ class _Step1Guardian extends StatelessWidget {
           children: [
             Expanded(child: _InputField(controller: deviceUidCtrl)),
             const SizedBox(width: 8),
-            Container(
+            SizedBox(
               width: 40,
               height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.secondary,
-                borderRadius: BorderRadius.circular(8),
+              child: ElevatedButton(
+                onPressed: isWritingNfcTag ? null : onWriteNfcTag,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.secondary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: EdgeInsets.zero,
+                ),
+                child: isWritingNfcTag
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.white,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.nfc_rounded,
+                        color: AppColors.white,
+                        size: 22,
+                      ),
               ),
-              child: const Icon(Icons.qr_code_scanner,
-                  color: AppColors.white, size: 22),
             ),
           ],
         ),
@@ -505,12 +643,7 @@ class _Step1Guardian extends StatelessWidget {
         _FieldLabel.withStar('Country'),
         _DropdownField(
           value: country,
-          items: const [
-            'Select an option',
-            'Colombia',
-            'Venezuela',
-            'Other',
-          ],
+          items: const ['Select an option', 'Colombia', 'Venezuela', 'Other'],
           onChanged: onCountryChanged,
         ),
         const SizedBox(height: 10),
@@ -546,8 +679,7 @@ class _Step1Guardian extends StatelessWidget {
                         ),
                       ),
                       TextSpan(
-                        text:
-                            ' including the electronic receipt of receipts.',
+                        text: ' including the electronic receipt of receipts.',
                       ),
                     ],
                   ),
@@ -648,12 +780,7 @@ class _Step2Patient extends StatelessWidget {
         _FieldLabel.withStar('Country'),
         _DropdownField(
           value: country,
-          items: const [
-            'Select an option',
-            'Colombia',
-            'Venezuela',
-            'Other',
-          ],
+          items: const ['Select an option', 'Colombia', 'Venezuela', 'Other'],
           onChanged: onCountryChanged,
         ),
         const SizedBox(height: 18),
@@ -700,9 +827,10 @@ class _Step2Patient extends StatelessWidget {
   Widget _tableHeader(List<String> cols) {
     return Row(
       children: cols
-          .map((String c) => Expanded(
-                child: Text(c, style: const TextStyle(fontSize: 11)),
-              ))
+          .map(
+            (String c) =>
+                Expanded(child: Text(c, style: const TextStyle(fontSize: 11))),
+          )
           .toList(),
     );
   }
@@ -855,8 +983,10 @@ class _Step3MedicalHistory extends StatelessWidget {
             style: const TextStyle(fontSize: 14),
             decoration: InputDecoration(
               hintText: label,
-              hintStyle:
-                  const TextStyle(fontSize: 13, color: AppColors.disabled),
+              hintStyle: const TextStyle(
+                fontSize: 13,
+                color: AppColors.disabled,
+              ),
               isDense: true,
               contentPadding: const EdgeInsets.all(12),
               filled: true,
@@ -965,12 +1095,14 @@ class _Step4Summary extends StatelessWidget {
         const SizedBox(height: 12),
         _summaryCard('General', [
           _historyBlock(
-              Icons.description, 'History of current illness', currentIllness),
+            Icons.description,
+            'History of current illness',
+            currentIllness,
+          ),
           const SizedBox(height: 6),
           _historyBlock(Icons.vaccines, 'Personal history', personalHistory),
           const SizedBox(height: 6),
-          _historyBlock(
-              Icons.family_restroom, 'Family History', familyHistory),
+          _historyBlock(Icons.family_restroom, 'Family History', familyHistory),
         ]),
         const SizedBox(height: 12),
         _summaryCard('Medical Staff', [
@@ -981,12 +1113,16 @@ class _Step4Summary extends StatelessWidget {
             padding: const EdgeInsets.only(left: 4, top: 4),
             child: Row(
               children: [
-                const Text('Date',
-                    style:
-                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Date',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(width: 10),
-                const Icon(Icons.calendar_today,
-                    size: 14, color: AppColors.secondary),
+                const Icon(
+                  Icons.calendar_today,
+                  size: 14,
+                  color: AppColors.secondary,
+                ),
                 const SizedBox(width: 4),
                 Text(staffDate, style: const TextStyle(fontSize: 13)),
               ],
@@ -1039,9 +1175,7 @@ class _Step4Summary extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: AppColors.secondary),
           const SizedBox(width: 8),
-          Expanded(
-            child: Text(text, style: const TextStyle(fontSize: 13)),
-          ),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
         ],
       ),
     );
@@ -1210,7 +1344,9 @@ class _AddVaccineSheetState extends State<_AddVaccineSheet> {
 
   Future<void> _loadCatalogs() async {
     try {
-      final catalog = await AppScope.of(context).catalogRepository.getCatalogs();
+      final catalog = await AppScope.of(
+        context,
+      ).catalogRepository.getCatalogs();
       final active = catalog.vaccines.where((v) => v.isActive).toList();
       if (!mounted) return;
       setState(() {
@@ -1490,10 +1626,8 @@ class _CatalogDropdown extends StatelessWidget {
           value: value,
           items: items
               .map(
-                (String item) => DropdownMenuItem<String>(
-                  value: item,
-                  child: Text(item),
-                ),
+                (String item) =>
+                    DropdownMenuItem<String>(value: item, child: Text(item)),
               )
               .toList(),
           onChanged: onChanged,
@@ -1563,10 +1697,13 @@ class _InputField extends StatelessWidget {
       style: const TextStyle(fontSize: 14),
       decoration: InputDecoration(
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        prefixIcon:
-            icon != null ? Icon(icon, size: 18, color: AppColors.secondary) : null,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
+        prefixIcon: icon != null
+            ? Icon(icon, size: 18, color: AppColors.secondary)
+            : null,
         filled: true,
         fillColor: AppColors.white,
         border: OutlineInputBorder(
@@ -1602,8 +1739,10 @@ class _DropdownField extends StatelessWidget {
           isExpanded: true,
           value: value,
           items: items
-              .map((String e) =>
-                  DropdownMenuItem<String>(value: e, child: Text(e)))
+              .map(
+                (String e) =>
+                    DropdownMenuItem<String>(value: e, child: Text(e)),
+              )
               .toList(),
           onChanged: (String? v) {
             if (v != null) onChanged(v);
