@@ -15,7 +15,8 @@ class ShowAllergensScreen extends StatelessWidget {
     final allergens = patient.allergies
         .map((AllergyInfo a) => _AllergenData(
               name: a.allergen,
-              reaction: a.reaction,
+              category: a.category,
+              reaction: a.reaction ?? '',
               severity: '',
               notes: a.notes ?? '',
             ))
@@ -171,15 +172,28 @@ class _LastUpdatedCard extends StatelessWidget {
 class _AllergenData {
   const _AllergenData({
     required this.name,
+    required this.category,
     required this.reaction,
     required this.severity,
     required this.notes,
   });
 
+  static const Map<String, String> categoryLabels = {
+    '01': 'Medicamento',
+    '02': 'Alimento',
+    '03': 'Sustancia ambiente',
+    '04': 'Sustancia piel',
+    '05': 'Picadura insectos',
+    '06': 'Otra',
+  };
+
   final String name;
+  final String category;
   final String reaction;
   final String severity;
   final String notes;
+
+  String get categoryLabel => categoryLabels[category] ?? 'Otra';
 }
 
 class _AllergenDetailCard extends StatelessWidget {

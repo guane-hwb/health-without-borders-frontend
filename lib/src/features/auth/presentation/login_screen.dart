@@ -20,14 +20,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
 
   @override
-  void initState() {
-    super.initState();
-    // Prefill with backend-integrated local credentials for fast testing.
-    _emailCtrl.text = 'doctor@hwb.org';
-    _passwordCtrl.text = 'Doctor123!';
-  }
-
-  @override
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
@@ -50,9 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: IntrinsicHeight(
                       child: Column(
                         children: [
-                          const SizedBox(height: 12),
-                          const _StatusBarMock(),
-                          const SizedBox(height: 32),
+                          const SizedBox(height: 44),
                           _buildAppIcon(),
                           const SizedBox(height: 20),
                           const Text(
@@ -65,10 +55,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                           const SizedBox(height: 56),
-                          _buildGoogleButton(),
-                          const SizedBox(height: 26),
-                          _buildOrUseEmail(),
-                          const SizedBox(height: 26),
                           _buildInput(
                             controller: _emailCtrl,
                             hint: 'Input your email',
@@ -86,26 +72,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                 setState(() => _obscurePassword = !_obscurePassword);
                               },
                               icon: Icon(
-                                _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                                _obscurePassword
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
                                 size: 18,
                               ),
                             ),
                           ),
                           const SizedBox(height: 40),
                           _buildLoginButton(),
-                          const SizedBox(height: 24),
-                          TextButton(
-                            onPressed: () {},
-                            child: const Text(
-                              'Not have account, create on here',
-                              style: TextStyle(
-                                color: AppColors.secondary,
-                                fontSize: 18,
-                                decoration: TextDecoration.underline,
-                                decorationColor: AppColors.secondary,
-                              ),
-                            ),
-                          ),
                           const Spacer(),
                           const ScreenBottomHandle(),
                         ],
@@ -133,48 +108,6 @@ class _LoginScreenState extends State<LoginScreen> {
         Icons.health_and_safety,
         size: 88,
         color: AppColors.white,
-      ),
-    );
-  }
-
-  Widget _buildGoogleButton() {
-    return SizedBox(
-      width: 321,
-      height: 41,
-      child: ElevatedButton.icon(
-        onPressed: _isLoading ? null : _loginWithBackendToken,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          disabledBackgroundColor: AppColors.disabled,
-        ),
-        icon: const Icon(Icons.g_mobiledata, size: 24, color: AppColors.white),
-        label: const Text(
-          'Sign with google',
-          style: TextStyle(color: AppColors.white, fontSize: 32 / 1.8),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOrUseEmail() {
-    return SizedBox(
-      width: 321,
-      child: Row(
-        children: const [
-          Expanded(child: Divider(color: AppColors.secondary, thickness: 1.2)),
-          SizedBox(width: 10),
-          Text(
-            'Or use email',
-            style: TextStyle(
-              color: AppColors.secondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          SizedBox(width: 10),
-          Expanded(child: Divider(color: AppColors.secondary, thickness: 1.2)),
-        ],
       ),
     );
   }
@@ -218,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
       width: 321,
       height: 41,
       child: ElevatedButton.icon(
-        onPressed: _isLoading ? null : _loginWithBackendToken,
+        onPressed: _isLoading ? null : _login,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -242,11 +175,23 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<void> _loginWithBackendToken() async {
+  Future<void> _login() async {
+    final email = _emailCtrl.text.trim();
+    final password = _passwordCtrl.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter email and password.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
-      // Auth repository currently logs in against backend env credentials.
-      await AppScope.of(context).authRepository.getAccessToken(forceRefresh: true);
+      await AppScope.of(context).authRepository.login(
+        email: email,
+        password: password,
+      );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
@@ -264,28 +209,6 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-}
-
-class _StatusBarMock extends StatelessWidget {
-  const _StatusBarMock();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Row(
-        children: const [
-          Text('10:15', style: TextStyle(fontSize: 15, color: AppColors.textPrimary)),
-          Spacer(),
-          Icon(Icons.signal_cellular_alt, size: 18, color: AppColors.textPrimary),
-          SizedBox(width: 4),
-          Icon(Icons.wifi, size: 18, color: AppColors.textPrimary),
-          SizedBox(width: 4),
-          Icon(Icons.battery_std, size: 18, color: AppColors.textPrimary),
-        ],
-      ),
-    );
   }
 }
 
@@ -337,30 +260,6 @@ class _LoginBackground extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppColors.primary.withValues(alpha: 0.09),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 70,
-            top: 285,
-            child: Container(
-              width: 220,
-              height: 220,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.primary.withValues(alpha: 0.08),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 28,
-            bottom: 168,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.primary.withValues(alpha: 0.08),
               ),
             ),
           ),

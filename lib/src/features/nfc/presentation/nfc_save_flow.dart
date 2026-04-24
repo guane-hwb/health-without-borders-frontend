@@ -215,7 +215,7 @@ class _SuccessRegistration extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         const Text(
-          'Patient information successfully saved',
+          'Patient saved locally and synced to cloud',
           style: TextStyle(fontSize: 14, color: AppColors.textPrimary),
         ),
         const SizedBox(height: 24),

@@ -15,46 +15,70 @@ class EditPatientScreen extends StatefulWidget {
 }
 
 class _EditPatientScreenState extends State<EditPatientScreen> {
-  late final TextEditingController _nameCtrl;
-  late final TextEditingController _dobCtrl;
+  // Immutable fields — displayed read-only
+  late final String _fullName;
+  late final String _dob;
+  late final String _biologicalSex;
+  late final String _bloodType;
+  late final String _documentInfo;
+
+  // Editable fields
   late final TextEditingController _weightCtrl;
   late final TextEditingController _heightCtrl;
+  late final TextEditingController _streetCtrl;
+  late final TextEditingController _cityCtrl;
+  late final TextEditingController _stateCtrl;
 
-  late String _gender;
-  late String _country;
-  late String _bloodType;
+  late String _nationalityCode;
+
+  static const Map<String, String> _sexLabels = {
+    'M': 'Masculino',
+    'F': 'Femenino',
+    'I': 'Indeterminado',
+  };
+
+  static const Map<String, String> _nationalityCodes = {
+    'COL': 'Colombia',
+    'VEN': 'Venezuela',
+    'ECU': 'Ecuador',
+    'PER': 'Perú',
+  };
 
   @override
   void initState() {
     super.initState();
     final info = widget.patient.patientInfo;
-    _nameCtrl = TextEditingController(text: info.fullName);
-    _dobCtrl = TextEditingController(text: info.dob);
+
+    // Immutable — backend protects these
+    _fullName = info.fullName;
+    _dob = info.dob;
+    _biologicalSex = _sexLabels[info.biologicalSex] ?? info.biologicalSex;
+    _bloodType = info.bloodType ?? 'N/A';
+    _documentInfo =
+        '${info.identification.documentType} ${info.identification.documentNumber}';
+
+    // Editable
     _weightCtrl = TextEditingController(
       text: info.weight != null ? info.weight.toString() : '',
     );
     _heightCtrl = TextEditingController(
       text: info.height != null ? info.height.toString() : '',
     );
-    _gender = const ['Female', 'Male'].contains(info.gender)
-        ? info.gender
-        : 'Female';
-    _country =
-        const ['Colombia', 'Venezuela', 'Other'].contains(info.address.country)
-            ? info.address.country
-            : 'Colombia';
-    _bloodType = const ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']
-            .contains(info.bloodType)
-        ? info.bloodType
-        : 'A+';
+    _streetCtrl = TextEditingController(text: info.address.street ?? '');
+    _cityCtrl = TextEditingController(text: info.address.city);
+    _stateCtrl = TextEditingController(text: info.address.state);
+    _nationalityCode = _nationalityCodes.containsKey(info.nationalityCode)
+        ? info.nationalityCode
+        : 'COL';
   }
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _dobCtrl.dispose();
     _weightCtrl.dispose();
     _heightCtrl.dispose();
+    _streetCtrl.dispose();
+    _cityCtrl.dispose();
+    _stateCtrl.dispose();
     super.dispose();
   }
 
@@ -74,51 +98,65 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _sectionTitle('Patient Information'),
+                        _sectionTitle('Patient Information (read-only)'),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Name, DOB, sex, blood type and document are protected by the backend.',
+                          style: TextStyle(
+                              fontSize: 11, color: AppColors.textSecondary),
+                        ),
                         const SizedBox(height: 12),
-                        _textField('Name', _nameCtrl, icon: Icons.person),
-                        const SizedBox(height: 12),
-                        _textField('Date of Birth', _dobCtrl,
-                            icon: Icons.calendar_today),
-                        const SizedBox(height: 12),
-                        _dropdownField('Gender', _gender, ['Female', 'Male'],
-                            (String? v) {
-                          if (v != null) setState(() => _gender = v);
-                        }),
+                        _readOnlyField('Name', _fullName, Icons.person),
+                        const SizedBox(height: 10),
+                        _readOnlyField(
+                            'Document', _documentInfo, Icons.badge),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                                child: _readOnlyField(
+                                    'DOB', _dob, Icons.calendar_today)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                                child: _readOnlyField(
+                                    'Sex', _biologicalSex, Icons.wc)),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        _readOnlyField(
+                            'Blood Type', _bloodType, Icons.bloodtype),
+                        const SizedBox(height: 20),
+                        _sectionTitle('Editable Information'),
                         const SizedBox(height: 12),
                         _dropdownField(
-                            'Country', _country, ['Colombia', 'Venezuela', 'Other'],
-                            (String? v) {
-                          if (v != null) setState(() => _country = v);
-                        }),
-                        const SizedBox(height: 20),
-                        _sectionTitle('Physical information'),
+                          'Nationality',
+                          _nationalityCode,
+                          _nationalityCodes,
+                          (String? v) {
+                            if (v != null) {
+                              setState(() => _nationalityCode = v);
+                            }
+                          },
+                        ),
                         const SizedBox(height: 12),
-                        _textField('Weight', _weightCtrl,
-                            icon: Icons.monitor_weight),
+                        _textField('Weight (Kg)', _weightCtrl,
+                            icon: Icons.monitor_weight,
+                            keyboard: TextInputType.number),
                         const SizedBox(height: 12),
-                        _textField('Height', _heightCtrl,
-                            icon: Icons.open_in_full),
+                        _textField('Height (cm)', _heightCtrl,
+                            icon: Icons.open_in_full,
+                            keyboard: TextInputType.number),
+                        const SizedBox(height: 20),
+                        _sectionTitle('Address'),
                         const SizedBox(height: 12),
-                        _dropdownField('Blood Type', _bloodType,
-                            ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'],
-                            (String? v) {
-                          if (v != null) setState(() => _bloodType = v);
-                        }),
-                        const SizedBox(height: 20),
-                        _sectionTitle('Vaccine'),
-                        const SizedBox(height: 8),
-                        _tableHeader(
-                            const ['Vaccine', 'Does', 'Date', 'Administrated By']),
-                        const SizedBox(height: 8),
-                        _addButton('Add Vaccine'),
-                        const SizedBox(height: 20),
-                        _sectionTitle('Allergen'),
-                        const SizedBox(height: 8),
-                        _tableHeader(
-                            const ['Allergen', 'Reaction', 'Severity', 'Notes']),
-                        const SizedBox(height: 8),
-                        _addButton('Add Allergen'),
+                        _textField('Street', _streetCtrl,
+                            icon: Icons.location_on),
+                        const SizedBox(height: 12),
+                        _textField('City', _cityCtrl,
+                            icon: Icons.location_city),
+                        const SizedBox(height: 12),
+                        _textField('State / Department', _stateCtrl,
+                            icon: Icons.map),
                         const SizedBox(height: 24),
                         _bottomButtons(context),
                       ],
@@ -150,10 +188,44 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
     );
   }
 
+  Widget _readOnlyField(String label, String value, IconData icon) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13)),
+        const SizedBox(height: 4),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8E8E8),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: AppColors.disabled),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                      fontSize: 14, color: AppColors.textSecondary),
+                ),
+              ),
+              const Icon(Icons.lock_outline,
+                  size: 14, color: AppColors.disabled),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _textField(
     String label,
     TextEditingController controller, {
     IconData? icon,
+    TextInputType keyboard = TextInputType.text,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -162,13 +234,15 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
         const SizedBox(height: 4),
         TextField(
           controller: controller,
+          keyboardType: keyboard,
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
             isDense: true,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            prefixIcon:
-                icon != null ? Icon(icon, size: 18, color: AppColors.secondary) : null,
+            prefixIcon: icon != null
+                ? Icon(icon, size: 18, color: AppColors.secondary)
+                : null,
             filled: true,
             fillColor: AppColors.white,
             border: OutlineInputBorder(
@@ -184,7 +258,7 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
   Widget _dropdownField(
     String label,
     String value,
-    List<String> items,
+    Map<String, String> options,
     ValueChanged<String?> onChanged,
   ) {
     return Column(
@@ -202,46 +276,17 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
             child: DropdownButton<String>(
               isExpanded: true,
               value: value,
-              items: items
-                  .map((String e) =>
-                      DropdownMenuItem<String>(value: e, child: Text(e)))
+              items: options.entries
+                  .map((e) => DropdownMenuItem<String>(
+                        value: e.key,
+                        child: Text(e.value),
+                      ))
                   .toList(),
               onChanged: onChanged,
             ),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _tableHeader(List<String> columns) {
-    return Row(
-      children: columns
-          .map((String c) => Expanded(
-                child: Text(c, style: const TextStyle(fontSize: 11)),
-              ))
-          .toList(),
-    );
-  }
-
-  Widget _addButton(String label) {
-    return SizedBox(
-      height: 30,
-      child: ElevatedButton.icon(
-        onPressed: () {},
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.secondary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-        ),
-        icon: const Icon(Icons.add, size: 16, color: AppColors.white),
-        label: Text(
-          label,
-          style: const TextStyle(color: AppColors.white, fontSize: 12),
-        ),
-      ),
     );
   }
 
@@ -262,7 +307,7 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
               icon: const Icon(Icons.arrow_back_ios,
                   size: 14, color: AppColors.white),
               label: const Text(
-                'Back to Read NFC',
+                'Back',
                 style: TextStyle(color: AppColors.white, fontSize: 13),
               ),
             ),
@@ -273,14 +318,18 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
           child: SizedBox(
             height: 40,
             child: ElevatedButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                // TODO: Build updated PatientFullRecord and pop with result
+                Navigator.of(context).pop();
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF00A396),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              icon: const Icon(Icons.save, size: 18, color: AppColors.white),
+              icon:
+                  const Icon(Icons.save, size: 18, color: AppColors.white),
               label: const Text(
                 'Save',
                 style: TextStyle(color: AppColors.white, fontSize: 13),

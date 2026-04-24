@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import 'core/config/app_env.dart';
 import 'core/di/app_scope.dart';
 import 'core/network/api_client.dart';
+import 'core/storage/local_database.dart';
+import 'core/sync/sync_engine.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'design/theme/app_theme.dart';
-import 'features/nfc/data/catalog_repository.dart';
 import 'features/nfc/data/patient_repository.dart';
 
 class HealthWithoutBordersApp extends StatelessWidget {
@@ -23,9 +24,11 @@ class HealthWithoutBordersApp extends StatelessWidget {
     authRepository: _authRepository,
   );
 
-  late final CatalogRepository _catalogRepository = CatalogRepository(
-    apiClient: _apiClient,
-    authRepository: _authRepository,
+  late final LocalDatabase _localDatabase = LocalDatabase.instance;
+
+  late final SyncEngine _syncEngine = SyncEngine(
+    patientRepository: _patientRepository,
+    localDatabase: _localDatabase,
   );
 
   @override
@@ -33,7 +36,8 @@ class HealthWithoutBordersApp extends StatelessWidget {
     return AppScope(
       authRepository: _authRepository,
       patientRepository: _patientRepository,
-      catalogRepository: _catalogRepository,
+      localDatabase: _localDatabase,
+      syncEngine: _syncEngine,
       child: MaterialApp(
         title: 'Health Without Borders',
         debugShowCheckedModeBanner: false,

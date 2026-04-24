@@ -7,22 +7,10 @@ class AppEnv {
       _optional('API_BASE_URL', defaultValue: 'http://localhost:8000')
           .replaceFirst(RegExp(r'/$'), '');
 
-  static String get authEmail => _required('API_AUTH_EMAIL');
-
-  static String get authPassword => _required('API_AUTH_PASSWORD');
-
   static String _optional(String key, {required String defaultValue}) {
     final String? value = _readEnvValue(key);
     if (value == null || value.trim().isEmpty) {
       return defaultValue;
-    }
-    return value.trim();
-  }
-
-  static String _required(String key) {
-    final String? value = _readEnvValue(key);
-    if (value == null || value.trim().isEmpty) {
-      throw StateError('Missing environment variable: $key');
     }
     return value.trim();
   }

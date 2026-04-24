@@ -4,7 +4,6 @@ import 'package:uuid/uuid.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
-import '../domain/catalog_data.dart';
 import '../domain/patient_record.dart';
 import 'nfc_save_flow.dart';
 import 'shared_read_nfc_header.dart';
@@ -300,25 +299,43 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   }
 
   PatientFullRecord _buildRecord() {
-    final String today = DateTime.now().toIso8601String().split('T').first;
-    final List<String> nameParts = _patientNameCtrl.text.split(' ');
-    final String firstName = nameParts.isNotEmpty ? nameParts.first : '';
-    final String lastName =
-        nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+    final String now = DateTime.now().toIso8601String();
+
+    // Map UI gender to backend biologicalSex code
+    final String bioSex;
+    switch (_gender) {
+      case 'Female': bioSex = 'F'; break;
+      case 'Male':   bioSex = 'M'; break;
+      default:       bioSex = 'I'; break;
+    }
+
+    // Map UI country to ISO 3166-1 alpha-3
+    final String natCode;
+    switch (_patientCountry) {
+      case 'Colombia':   natCode = 'COL'; break;
+      case 'Venezuela':  natCode = 'VEN'; break;
+      default:           natCode = 'COL'; break;
+    }
 
     return PatientFullRecord(
       patientId: const Uuid().v4(),
       deviceUid: _deviceUidCtrl.text,
       patientInfo: PatientInfo(
-        firstName: firstName,
-        lastName: lastName,
-        dob: _dobCtrl.text,
-        gender: _gender == 'Select an option' ? '' : _gender,
-        bloodType: _bloodType == 'Select an option' ? '' : _bloodType,
-        address: Address(
-          country:
-              _patientCountry == 'Select an option' ? '' : _patientCountry,
+        identification: PatientIdentification(
+          documentType: 'MS', // Default for minors without ID
+          documentNumber: '',
         ),
+        firstLastName: '',
+        firstName: _patientNameCtrl.text,
+        dob: _dobCtrl.text,
+        nationalityCode: natCode,
+        biologicalSex: bioSex,
+        address: Address(
+          city: '',
+          state: '',
+          country: natCode,
+        ),
+        bloodType: _bloodType == 'Select an option' ? null : _bloodType,
         weight: double.tryParse(_weightCtrl.text),
         height: double.tryParse(_heightCtrl.text),
       ),
@@ -331,15 +348,28 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         personalHistory: _personalHistoryCtrl.text.isEmpty
             ? null
             : _personalHistoryCtrl.text,
-        familyHistory:
-            _familyHistoryCtrl.text.isEmpty ? null : _familyHistoryCtrl.text,
+        chronicConditions: null,
+        familyHistory: <FamilyHistoryItem>[],
+        familyHistoryNotes: _familyHistoryCtrl.text.isEmpty
+            ? null
+            : _familyHistoryCtrl.text,
       ),
-      medicalHistory: [
+      medicalHistory: <MedicalHistoryItem>[
         MedicalHistoryItem(
-          type: _typeVisit == 'Select an option' ? 'General' : _typeVisit,
-          date: _staffDateCtrl.text.isEmpty ? today : _staffDateCtrl.text,
-          location: _staffPlaceCtrl.text,
-          physician: _staffNameCtrl.text,
+          type: _typeVisit == 'Select an option' ? 'Consultation' : _typeVisit,
+          startDateTime: _staffDateCtrl.text.isEmpty ? now : _staffDateCtrl.text,
+          careModality: '01',
+          serviceGroup: '01',
+          careEnvironment: '05',
+          provider: ProviderInfo(
+            repsCode: '',
+            name: _staffPlaceCtrl.text,
+          ),
+          practitioner: PractitionerInfo(
+            documentType: 'CC',
+            documentNumber: '',
+            name: _staffNameCtrl.text,
+          ),
           clinicalEvaluation: ClinicalEvaluation(
             historyOfCurrentIllness: _currentIllnessCtrl.text.isEmpty
                 ? null
@@ -351,6 +381,8 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
                 ? null
                 : _systemsExamCtrl.text,
           ),
+          diagnosis: <DiagnosisItem>[], // Backend LLM fills this
+          diagnosisType: '01',
         ),
       ],
     );
@@ -358,12 +390,22 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
   void _syncAndSave(BuildContext context) {
     final PatientFullRecord record = _buildRecord();
-    final patientRepo = AppScope.of(context).patientRepository;
+    final scope = AppScope.of(context);
 
     showNfcSaveFlow(
       context,
       onSync: () async {
-        await patientRepo.syncPatient(record);
+        // 1. Save locally FIRST (offline-first — never depends on internet)
+        await scope.localDatabase.savePatient(record);
+
+        // 2. Attempt cloud sync (best-effort — SyncEngine retries later)
+        try {
+          await scope.patientRepository.syncPatient(record);
+          await scope.localDatabase.markSynced(record.patientId);
+        } catch (_) {
+          // Sync failed — record stays in local DB with is_synced=false.
+          // The SyncEngine will retry automatically when connectivity returns.
+        }
       },
     );
   }
@@ -1191,43 +1233,17 @@ class _AddVaccineSheet extends StatefulWidget {
 }
 
 class _AddVaccineSheetState extends State<_AddVaccineSheet> {
+  final TextEditingController _vaccineNameCtrl = TextEditingController();
+  final TextEditingController _vaccineCodeCtrl = TextEditingController();
   final TextEditingController _doseCtrl = TextEditingController();
   final TextEditingController _dateCtrl = TextEditingController();
   final TextEditingController _byCtrl = TextEditingController();
   final TextEditingController _atCtrl = TextEditingController();
 
-  List<VaccineCatalogItem> _vaccines = <VaccineCatalogItem>[];
-  String? _selectedVaccine;
-  bool _isLoading = true;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_isLoading) {
-      _loadCatalogs();
-    }
-  }
-
-  Future<void> _loadCatalogs() async {
-    try {
-      final catalog = await AppScope.of(context).catalogRepository.getCatalogs();
-      final active = catalog.vaccines.where((v) => v.isActive).toList();
-      if (!mounted) return;
-      setState(() {
-        _vaccines = active;
-        if (_vaccines.isNotEmpty) {
-          _selectedVaccine = _vaccines.first.name;
-        }
-        _isLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-    }
-  }
-
   @override
   void dispose() {
+    _vaccineNameCtrl.dispose();
+    _vaccineCodeCtrl.dispose();
     _doseCtrl.dispose();
     _dateCtrl.dispose();
     _byCtrl.dispose();
@@ -1269,26 +1285,11 @@ class _AddVaccineSheetState extends State<_AddVaccineSheet> {
               ),
             ),
             const SizedBox(height: 14),
-            const _FieldLabel('Vaccine'),
-            _isLoading
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 10),
-                    child: Center(
-                      child: SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                  )
-                : _CatalogDropdown(
-                    value: _selectedVaccine,
-                    hint: 'Select vaccine',
-                    items: _vaccines.map((v) => v.name).toList(),
-                    onChanged: (String? value) {
-                      setState(() => _selectedVaccine = value);
-                    },
-                  ),
+            const _FieldLabel('Vaccine Name'),
+            _InputField(controller: _vaccineNameCtrl),
+            const SizedBox(height: 10),
+            const _FieldLabel('CVX Code'),
+            _InputField(controller: _vaccineCodeCtrl),
             const SizedBox(height: 10),
             const _FieldLabel('Dose'),
             _InputField(controller: _doseCtrl),
