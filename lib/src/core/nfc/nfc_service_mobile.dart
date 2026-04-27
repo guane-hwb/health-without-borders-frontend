@@ -73,22 +73,20 @@ class NfcService {
   // ── Private helpers ─────────────────────────────────────────────────────
 
   static Uint8List? _extractIdentifier(NfcTag tag) {
-    // Try each technology in order of likelihood for NTAG/MIFARE wristbands
-    final nfcA = NfcA.from(tag);
-    if (nfcA != null) return nfcA.identifier;
+    // Extract identifier from tag.data map — works across all nfc_manager versions
+    // and avoids platform-specific tech class imports that confuse the web analyzer.
+    final data = tag.data;
 
-    final nfcB = NfcB.from(tag);
-    if (nfcB != null) return nfcB.identifier;
-
-    final nfcV = NfcV.from(tag);
-    if (nfcV != null) return nfcV.identifier;
-
-    final nfcF = NfcF.from(tag);
-    if (nfcF != null) return nfcF.identifier;
-
-    // iOS-specific
-    final iso7816 = Iso7816.from(tag);
-    if (iso7816 != null) return iso7816.identifier;
+    // Try each technology key in order of likelihood for NTAG/MIFARE wristbands
+    for (final key in ['nfca', 'nfcb', 'nfcv', 'nfcf', 'iso7816']) {
+      final tech = data[key] as Map<dynamic, dynamic>?;
+      if (tech != null) {
+        final id = tech['identifier'];
+        if (id is List) {
+          return Uint8List.fromList(id.cast<int>());
+        }
+      }
+    }
 
     return null;
   }

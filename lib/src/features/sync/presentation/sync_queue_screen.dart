@@ -4,7 +4,6 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/storage/local_database.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
-import '../../nfc/domain/patient_record.dart';
 import '../../nfc/presentation/read_nfc_guardian_screen.dart';
 import '../../nfc/presentation/shared_read_nfc_header.dart';
 
@@ -85,9 +84,9 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
         ],
       ),
     );
-    if (confirm == true) {
+    if (confirm == true && mounted) {
       await AppScope.of(context).localDatabase.deleteRecord(entry.patientId);
-      _loadEntries();
+      if (mounted) _loadEntries();
     }
   }
 

@@ -45,15 +45,15 @@ class Address {
   final String? zone; // "U" or "R"
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        if (street != null) 'street': street,
-        'city': city,
-        if (cityCode != null) 'cityCode': cityCode,
-        'state': state,
-        if (zipCode != null) 'zipCode': zipCode,
-        'country': country,
-        if (countryName != null) 'countryName': countryName,
-        if (zone != null) 'zone': zone,
-      };
+    if (street != null) 'street': street,
+    'city': city,
+    if (cityCode != null) 'cityCode': cityCode,
+    'state': state,
+    if (zipCode != null) 'zipCode': zipCode,
+    'country': country,
+    if (countryName != null) 'countryName': countryName,
+    if (zone != null) 'zone': zone,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -77,9 +77,9 @@ class PatientIdentification {
   final String documentNumber;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'documentType': documentType,
-        'documentNumber': documentNumber,
-      };
+    'documentType': documentType,
+    'documentNumber': documentNumber,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +110,8 @@ class PatientInfo {
     return PatientInfo(
       identification: json['identification'] is Map<String, dynamic>
           ? PatientIdentification.fromJson(
-              json['identification'] as Map<String, dynamic>)
+              json['identification'] as Map<String, dynamic>,
+            )
           : PatientIdentification(documentType: 'MS', documentNumber: ''),
       firstLastName: json['firstLastName']?.toString() ?? '',
       secondLastName: json['secondLastName']?.toString(),
@@ -134,16 +135,16 @@ class PatientInfo {
   }
 
   final PatientIdentification identification;
-  final String firstLastName;  // Primer apellido (Elem. 3.1)
+  final String firstLastName; // Primer apellido (Elem. 3.1)
   final String? secondLastName; // Segundo apellido (Elem. 3.2)
-  final String firstName;       // Primer nombre (Elem. 3.3)
-  final String? secondName;     // Segundo nombre (Elem. 3.4)
-  final String dob;             // YYYY-MM-DD (Elem. 4)
+  final String firstName; // Primer nombre (Elem. 3.3)
+  final String? secondName; // Segundo nombre (Elem. 3.4)
+  final String dob; // YYYY-MM-DD (Elem. 4)
   final String nationalityCode; // ISO 3166-1 alpha-3 (Elem. 1.1)
   final String? nationalityName;
-  final String biologicalSex;   // "M", "F", "I" (Elem. 5)
+  final String biologicalSex; // "M", "F", "I" (Elem. 5)
   final String? genderIdentity; // "01"-"04", "99" (Elem. 6)
-  final String? ethnicity;      // "01"-"06" (Elem. 13.1)
+  final String? ethnicity; // "01"-"06" (Elem. 13.1)
   final String? ethnicCommunity;
   final String? disabilityCategory; // "00"-"07" (Elem. 10)
   final Address address;
@@ -161,25 +162,47 @@ class PatientInfo {
     return parts.join(' ').trim();
   }
 
+  PatientInfo copyWith({double? weight, double? height}) {
+    return PatientInfo(
+      identification: identification,
+      firstLastName: firstLastName,
+      secondLastName: secondLastName,
+      firstName: firstName,
+      secondName: secondName,
+      dob: dob,
+      nationalityCode: nationalityCode,
+      nationalityName: nationalityName,
+      biologicalSex: biologicalSex,
+      genderIdentity: genderIdentity,
+      ethnicity: ethnicity,
+      ethnicCommunity: ethnicCommunity,
+      disabilityCategory: disabilityCategory,
+      address: address,
+      bloodType: bloodType,
+      weight: weight ?? this.weight,
+      height: height ?? this.height,
+    );
+  }
+
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'identification': identification.toJson(),
-        'firstLastName': firstLastName,
-        if (secondLastName != null) 'secondLastName': secondLastName,
-        'firstName': firstName,
-        if (secondName != null) 'secondName': secondName,
-        'dob': dob,
-        'nationalityCode': nationalityCode,
-        if (nationalityName != null) 'nationalityName': nationalityName,
-        'biologicalSex': biologicalSex,
-        if (genderIdentity != null) 'genderIdentity': genderIdentity,
-        if (ethnicity != null) 'ethnicity': ethnicity,
-        if (ethnicCommunity != null) 'ethnicCommunity': ethnicCommunity,
-        if (disabilityCategory != null) 'disabilityCategory': disabilityCategory,
-        'address': address.toJson(),
-        if (bloodType != null) 'bloodType': bloodType,
-        if (weight != null) 'weight': weight,
-        if (height != null) 'height': height,
-      };
+    'identification': identification.toJson(),
+    'firstLastName': firstLastName,
+    if (secondLastName != null) 'secondLastName': secondLastName,
+    'firstName': firstName,
+    if (secondName != null) 'secondName': secondName,
+    'dob': dob,
+    'nationalityCode': nationalityCode,
+    if (nationalityName != null) 'nationalityName': nationalityName,
+    'biologicalSex': biologicalSex,
+    if (genderIdentity != null) 'genderIdentity': genderIdentity,
+    if (ethnicity != null) 'ethnicity': ethnicity,
+    if (ethnicCommunity != null) 'ethnicCommunity': ethnicCommunity,
+    if (disabilityCategory != null) 'disabilityCategory': disabilityCategory,
+    'address': address.toJson(),
+    if (bloodType != null) 'bloodType': bloodType,
+    if (weight != null) 'weight': weight,
+    if (height != null) 'height': height,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -208,11 +231,11 @@ class GuardianInfo {
   final String? deviceUid; // NFC UID of the guardian's wristband
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'name': name,
-        'relationship': relationship,
-        'phone': phone,
-        if (deviceUid != null) 'device_uid': deviceUid,
-      };
+    'name': name,
+    'relationship': relationship,
+    'phone': phone,
+    if (deviceUid != null) 'device_uid': deviceUid,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -241,14 +264,15 @@ class FamilyHistoryItem {
   final String? conditionCie10Code; // Resolved by LLM
   final String? conditionCie11Code; // Resolved by LLM
   final String conditionDescription; // Free text from frontend
-  final String relationship; // "01"=Padres, "02"=Hermanos, "03"=Tíos, "04"=Abuelos
+  final String
+  relationship; // "01"=Padres, "02"=Hermanos, "03"=Tíos, "04"=Abuelos
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        if (conditionCie10Code != null) 'conditionCie10Code': conditionCie10Code,
-        if (conditionCie11Code != null) 'conditionCie11Code': conditionCie11Code,
-        'conditionDescription': conditionDescription,
-        'relationship': relationship,
-      };
+    if (conditionCie10Code != null) 'conditionCie10Code': conditionCie10Code,
+    if (conditionCie11Code != null) 'conditionCie11Code': conditionCie11Code,
+    'conditionDescription': conditionDescription,
+    'relationship': relationship,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -266,9 +290,12 @@ class BackgroundHistory {
     return BackgroundHistory(
       chronicConditions: json['chronicConditions']?.toString(),
       personalHistory: json['personalHistory']?.toString(),
-      familyHistory: (json['familyHistory'] as List<dynamic>?)
-              ?.map((dynamic e) =>
-                  FamilyHistoryItem.fromJson(e as Map<String, dynamic>))
+      familyHistory:
+          (json['familyHistory'] as List<dynamic>?)
+              ?.map(
+                (dynamic e) =>
+                    FamilyHistoryItem.fromJson(e as Map<String, dynamic>),
+              )
               .toList() ??
           <FamilyHistoryItem>[],
       familyHistoryNotes: json['familyHistoryNotes']?.toString(),
@@ -281,12 +308,13 @@ class BackgroundHistory {
   final String? familyHistoryNotes;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        if (chronicConditions != null) 'chronicConditions': chronicConditions,
-        if (personalHistory != null) 'personalHistory': personalHistory,
-        'familyHistory':
-            familyHistory.map((FamilyHistoryItem f) => f.toJson()).toList(),
-        if (familyHistoryNotes != null) 'familyHistoryNotes': familyHistoryNotes,
-      };
+    if (chronicConditions != null) 'chronicConditions': chronicConditions,
+    if (personalHistory != null) 'personalHistory': personalHistory,
+    'familyHistory': familyHistory
+        .map((FamilyHistoryItem f) => f.toJson())
+        .toList(),
+    if (familyHistoryNotes != null) 'familyHistoryNotes': familyHistoryNotes,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -317,11 +345,11 @@ class AllergyInfo {
   final String? notes;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'category': category,
-        'allergen': allergen,
-        if (reaction != null) 'reaction': reaction,
-        if (notes != null) 'notes': notes,
-      };
+    'category': category,
+    'allergen': allergen,
+    if (reaction != null) 'reaction': reaction,
+    if (notes != null) 'notes': notes,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -359,14 +387,14 @@ class VaccinationRecordItem {
   final String status;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'date': date,
-        'vaccineName': vaccineName,
-        'vaccineCode': vaccineCode,
-        'dose': dose,
-        'administratedBy': administratedBy,
-        'administratedAt': administratedAt,
-        'status': status,
-      };
+    'date': date,
+    'vaccineName': vaccineName,
+    'vaccineCode': vaccineCode,
+    'dose': dose,
+    'administratedBy': administratedBy,
+    'administratedAt': administratedAt,
+    'status': status,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -383,8 +411,8 @@ class ClinicalEvaluation {
   factory ClinicalEvaluation.fromJson(Map<String, dynamic> json) {
     return ClinicalEvaluation(
       historyOfCurrentIllness: json['historyOfCurrentIllness']?.toString(),
-      generalPhysicalExamination:
-          json['generalPhysicalExamination']?.toString(),
+      generalPhysicalExamination: json['generalPhysicalExamination']
+          ?.toString(),
       systemsExamination: json['systemsExamination']?.toString(),
       treatmentPlanObservations: json['treatmentPlanObservations']?.toString(),
     );
@@ -396,15 +424,14 @@ class ClinicalEvaluation {
   final String? treatmentPlanObservations;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        if (historyOfCurrentIllness != null)
-          'historyOfCurrentIllness': historyOfCurrentIllness,
-        if (generalPhysicalExamination != null)
-          'generalPhysicalExamination': generalPhysicalExamination,
-        if (systemsExamination != null)
-          'systemsExamination': systemsExamination,
-        if (treatmentPlanObservations != null)
-          'treatmentPlanObservations': treatmentPlanObservations,
-      };
+    if (historyOfCurrentIllness != null)
+      'historyOfCurrentIllness': historyOfCurrentIllness,
+    if (generalPhysicalExamination != null)
+      'generalPhysicalExamination': generalPhysicalExamination,
+    if (systemsExamination != null) 'systemsExamination': systemsExamination,
+    if (treatmentPlanObservations != null)
+      'treatmentPlanObservations': treatmentPlanObservations,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -430,10 +457,10 @@ class DiagnosisItem {
   final String description;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'icd10Code': icd10Code,
-        if (icd11Code != null) 'icd11Code': icd11Code,
-        'description': description,
-      };
+    'icd10Code': icd10Code,
+    if (icd11Code != null) 'icd11Code': icd11Code,
+    'description': description,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -454,9 +481,9 @@ class RiskFactor {
   final String name;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'type': type,
-        'name': name,
-      };
+    'type': type,
+    'name': name,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -482,11 +509,10 @@ class IncapacityInfo {
   final int? maternityLeaveDays;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'scope': scope,
-        'days': days,
-        if (maternityLeaveDays != null)
-          'maternityLeaveDays': maternityLeaveDays,
-      };
+    'scope': scope,
+    'days': days,
+    if (maternityLeaveDays != null) 'maternityLeaveDays': maternityLeaveDays,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -512,10 +538,10 @@ class PractitionerInfo {
   final String name;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'documentType': documentType,
-        'documentNumber': documentNumber,
-        'name': name,
-      };
+    'documentType': documentType,
+    'documentNumber': documentNumber,
+    'name': name,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -535,9 +561,9 @@ class ProviderInfo {
   final String name;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'repsCode': repsCode,
-        'name': name,
-      };
+    'repsCode': repsCode,
+    'name': name,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -557,9 +583,9 @@ class PayerInfo {
   final String? name;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        if (code != null) 'code': code,
-        if (name != null) 'name': name,
-      };
+    if (code != null) 'code': code,
+    if (name != null) 'name': name,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -603,25 +629,31 @@ class MedicalHistoryItem {
           : null,
       practitioner: json['practitioner'] is Map<String, dynamic>
           ? PractitionerInfo.fromJson(
-              json['practitioner'] as Map<String, dynamic>)
+              json['practitioner'] as Map<String, dynamic>,
+            )
           : null,
       location: json['location']?.toString(),
       physician: json['physician']?.toString(),
-      clinicalEvaluation:
-          json['clinicalEvaluation'] is Map<String, dynamic>
-              ? ClinicalEvaluation.fromJson(
-                  json['clinicalEvaluation'] as Map<String, dynamic>)
-              : ClinicalEvaluation(),
-      diagnosis: (json['diagnosis'] as List<dynamic>?)
-              ?.map((dynamic e) =>
-                  DiagnosisItem.fromJson(e as Map<String, dynamic>))
+      clinicalEvaluation: json['clinicalEvaluation'] is Map<String, dynamic>
+          ? ClinicalEvaluation.fromJson(
+              json['clinicalEvaluation'] as Map<String, dynamic>,
+            )
+          : ClinicalEvaluation(),
+      diagnosis:
+          (json['diagnosis'] as List<dynamic>?)
+              ?.map(
+                (dynamic e) =>
+                    DiagnosisItem.fromJson(e as Map<String, dynamic>),
+              )
               .toList() ??
           <DiagnosisItem>[],
       diagnosisType: json['diagnosisType']?.toString() ?? '01',
       dischargeDisposition: json['dischargeDisposition']?.toString(),
-      riskFactors: (json['riskFactors'] as List<dynamic>?)
-              ?.map((dynamic e) =>
-                  RiskFactor.fromJson(e as Map<String, dynamic>))
+      riskFactors:
+          (json['riskFactors'] as List<dynamic>?)
+              ?.map(
+                (dynamic e) => RiskFactor.fromJson(e as Map<String, dynamic>),
+              )
               .toList() ??
           <RiskFactor>[],
       incapacity: json['incapacity'] is Map<String, dynamic>
@@ -636,14 +668,14 @@ class MedicalHistoryItem {
   final String type;
   final String startDateTime; // ISO 8601 datetime
   final String? endDateTime;
-  final String careModality;    // "01"-"09"
-  final String serviceGroup;   // "01"-"05"
+  final String careModality; // "01"-"09"
+  final String serviceGroup; // "01"-"05"
   final String careEnvironment; // "01"-"05"
   final String? entryRoute;
   final String? externalCause;
   final ProviderInfo? provider;
   final PractitionerInfo? practitioner;
-  final String? location;  // Legacy
+  final String? location; // Legacy
   final String? physician; // Legacy
   final ClinicalEvaluation clinicalEvaluation;
   final List<DiagnosisItem> diagnosis; // Empty array from frontend — LLM fills
@@ -654,29 +686,27 @@ class MedicalHistoryItem {
   final PayerInfo? payer;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'type': type,
-        'startDateTime': startDateTime,
-        if (endDateTime != null) 'endDateTime': endDateTime,
-        'careModality': careModality,
-        'serviceGroup': serviceGroup,
-        'careEnvironment': careEnvironment,
-        if (entryRoute != null) 'entryRoute': entryRoute,
-        if (externalCause != null) 'externalCause': externalCause,
-        if (provider != null) 'provider': provider!.toJson(),
-        if (practitioner != null) 'practitioner': practitioner!.toJson(),
-        if (location != null) 'location': location,
-        if (physician != null) 'physician': physician,
-        'clinicalEvaluation': clinicalEvaluation.toJson(),
-        'diagnosis':
-            diagnosis.map((DiagnosisItem d) => d.toJson()).toList(),
-        'diagnosisType': diagnosisType,
-        if (dischargeDisposition != null)
-          'dischargeDisposition': dischargeDisposition,
-        'riskFactors':
-            riskFactors.map((RiskFactor r) => r.toJson()).toList(),
-        if (incapacity != null) 'incapacity': incapacity!.toJson(),
-        if (payer != null) 'payer': payer!.toJson(),
-      };
+    'type': type,
+    'startDateTime': startDateTime,
+    if (endDateTime != null) 'endDateTime': endDateTime,
+    'careModality': careModality,
+    'serviceGroup': serviceGroup,
+    'careEnvironment': careEnvironment,
+    if (entryRoute != null) 'entryRoute': entryRoute,
+    if (externalCause != null) 'externalCause': externalCause,
+    if (provider != null) 'provider': provider!.toJson(),
+    if (practitioner != null) 'practitioner': practitioner!.toJson(),
+    if (location != null) 'location': location,
+    if (physician != null) 'physician': physician,
+    'clinicalEvaluation': clinicalEvaluation.toJson(),
+    'diagnosis': diagnosis.map((DiagnosisItem d) => d.toJson()).toList(),
+    'diagnosisType': diagnosisType,
+    if (dischargeDisposition != null)
+      'dischargeDisposition': dischargeDisposition,
+    'riskFactors': riskFactors.map((RiskFactor r) => r.toJson()).toList(),
+    if (incapacity != null) 'incapacity': incapacity!.toJson(),
+    if (payer != null) 'payer': payer!.toJson(),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -699,11 +729,12 @@ class PatientFullRecord {
       patientId: json['patientId']?.toString() ?? '',
       deviceUid: json['device_uid']?.toString() ?? '',
       patientInfo: json['patientInfo'] is Map<String, dynamic>
-          ? PatientInfo.fromJson(
-              json['patientInfo'] as Map<String, dynamic>)
+          ? PatientInfo.fromJson(json['patientInfo'] as Map<String, dynamic>)
           : PatientInfo(
               identification: PatientIdentification(
-                  documentType: 'MS', documentNumber: ''),
+                documentType: 'MS',
+                documentNumber: '',
+              ),
               firstLastName: '',
               firstName: '',
               dob: '',
@@ -711,33 +742,41 @@ class PatientFullRecord {
               address: Address(city: '', state: ''),
             ),
       guardianInfo: json['guardianInfo'] is Map<String, dynamic>
-          ? GuardianInfo.fromJson(
-              json['guardianInfo'] as Map<String, dynamic>)
+          ? GuardianInfo.fromJson(json['guardianInfo'] as Map<String, dynamic>)
           : GuardianInfo(name: '', relationship: '', phone: ''),
       backgroundHistory: json['backgroundHistory'] is Map<String, dynamic>
           ? BackgroundHistory.fromJson(
-              json['backgroundHistory'] as Map<String, dynamic>)
+              json['backgroundHistory'] as Map<String, dynamic>,
+            )
           : null,
-      allergies: (json['allergies'] as List<dynamic>?)
-              ?.map((dynamic e) =>
-                  AllergyInfo.fromJson(e as Map<String, dynamic>))
+      allergies:
+          (json['allergies'] as List<dynamic>?)
+              ?.map(
+                (dynamic e) => AllergyInfo.fromJson(e as Map<String, dynamic>),
+              )
               .toList() ??
           <AllergyInfo>[],
-      medicalHistory: (json['medicalHistory'] as List<dynamic>?)
-              ?.map((dynamic e) =>
-                  MedicalHistoryItem.fromJson(e as Map<String, dynamic>))
+      medicalHistory:
+          (json['medicalHistory'] as List<dynamic>?)
+              ?.map(
+                (dynamic e) =>
+                    MedicalHistoryItem.fromJson(e as Map<String, dynamic>),
+              )
               .toList() ??
           <MedicalHistoryItem>[],
-      vaccinationRecord: (json['vaccinationRecord'] as List<dynamic>?)
-              ?.map((dynamic e) =>
-                  VaccinationRecordItem.fromJson(e as Map<String, dynamic>))
+      vaccinationRecord:
+          (json['vaccinationRecord'] as List<dynamic>?)
+              ?.map(
+                (dynamic e) =>
+                    VaccinationRecordItem.fromJson(e as Map<String, dynamic>),
+              )
               .toList() ??
           <VaccinationRecordItem>[],
     );
   }
 
-  final String patientId;   // UUID v4 generated by frontend
-  final String deviceUid;   // NFC hardware UID
+  final String patientId; // UUID v4 generated by frontend
+  final String deviceUid; // NFC hardware UID
   final PatientInfo patientInfo;
   final GuardianInfo guardianInfo;
   final BackgroundHistory? backgroundHistory;
@@ -746,20 +785,20 @@ class PatientFullRecord {
   final List<VaccinationRecordItem> vaccinationRecord;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'patientId': patientId,
-        'device_uid': deviceUid,
-        'patientInfo': patientInfo.toJson(),
-        'guardianInfo': guardianInfo.toJson(),
-        if (backgroundHistory != null)
-          'backgroundHistory': backgroundHistory!.toJson(),
-        'allergies':
-            allergies.map((AllergyInfo a) => a.toJson()).toList(),
-        'medicalHistory':
-            medicalHistory.map((MedicalHistoryItem m) => m.toJson()).toList(),
-        'vaccinationRecord': vaccinationRecord
-            .map((VaccinationRecordItem v) => v.toJson())
-            .toList(),
-      };
+    'patientId': patientId,
+    'device_uid': deviceUid,
+    'patientInfo': patientInfo.toJson(),
+    'guardianInfo': guardianInfo.toJson(),
+    if (backgroundHistory != null)
+      'backgroundHistory': backgroundHistory!.toJson(),
+    'allergies': allergies.map((AllergyInfo a) => a.toJson()).toList(),
+    'medicalHistory': medicalHistory
+        .map((MedicalHistoryItem m) => m.toJson())
+        .toList(),
+    'vaccinationRecord': vaccinationRecord
+        .map((VaccinationRecordItem v) => v.toJson())
+        .toList(),
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -167,7 +167,7 @@ class _BrigadeHistoryScreenState extends State<BrigadeHistoryScreen> {
                                   itemBuilder: (_, int index) {
                                     final patient = _patients[index];
                                     final name =
-                                        '${patient.patientInfo.fullName}';
+                                        patient.patientInfo.fullName;
                                     final date =
                                         patient.patientInfo.dob;
                                     return _PatientRow(
