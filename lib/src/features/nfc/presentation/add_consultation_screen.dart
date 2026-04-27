@@ -18,10 +18,20 @@ import 'shared_read_nfc_header.dart';
 ///   2. Fill consultation form (vitals + chief complaint + diagnosis plan).
 ///   3. Save locally → sync to backend.
 class AddConsultationScreen extends StatefulWidget {
-  const AddConsultationScreen({super.key, this.patient});
+  const AddConsultationScreen({
+    super.key,
+    this.patient,
+    this.returnToProfile = false,
+  });
 
   /// Pre-loaded patient. When null the screen starts at the NFC scan step.
   final PatientFullRecord? patient;
+
+  /// When true, instead of saving locally + syncing, this screen will
+  /// `Navigator.pop()` with the newly-built `MedicalHistoryItem`. The
+  /// caller (typically `PatientProfileScreen`) is responsible for adding
+  /// it to the patient draft and triggering the sync.
+  final bool returnToProfile;
 
   @override
   State<AddConsultationScreen> createState() => _AddConsultationScreenState();
@@ -168,6 +178,13 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       diagnosis: <DiagnosisItem>[],
     );
 
+    // When called from PatientProfileScreen, just return the new item.
+    // The profile keeps the draft and triggers a single sync from there.
+    if (widget.returnToProfile) {
+      Navigator.of(context).pop(newConsultation);
+      return;
+    }
+
     final updatedRecord = PatientFullRecord(
       patientId: _patient!.patientId,
       deviceUid: _patient!.deviceUid,
@@ -191,11 +208,12 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
         await scope.patientRepository.syncPatient(updatedRecord);
         await scope.localDatabase.markSynced(updatedRecord.patientId);
       } catch (_) {}
-      if (mounted)
+      if (mounted) {
         setState(() {
           _saved = true;
           _isSaving = false;
         });
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);

@@ -699,26 +699,29 @@ class _UniCefBanner extends StatelessWidget {
     return Container(
       height: 110,
       decoration: BoxDecoration(
-        color: const Color(0xFF1CABE2).withValues(alpha: 0.07),
+        color: AppColors.primary.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFF1CABE2).withValues(alpha: 0.18),
-        ),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
       ),
       child: const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.child_care, size: 36, color: Color(0xFF1CABE2)),
-            SizedBox(height: 4),
+            Icon(Icons.health_and_safety, size: 40, color: AppColors.primary),
+            SizedBox(height: 6),
             Text(
-              'UNICEF',
+              'Health Without Borders',
               style: TextStyle(
-                color: Color(0xFF1CABE2),
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 5,
+                color: AppColors.primary,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
               ),
+            ),
+            SizedBox(height: 2),
+            Text(
+              'Salud sin fronteras para población migrante',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
             ),
           ],
         ),
