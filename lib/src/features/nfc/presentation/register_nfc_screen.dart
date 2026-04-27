@@ -365,14 +365,16 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     });
     try {
       final uid = await NfcService.readDeviceUid();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _deviceUid = uid;
           _manualUidCtrl.text = uid;
         });
+      }
     } on NfcNotAvailableException {
-      if (mounted)
+      if (mounted) {
         setState(() => _scanError = 'NFC no disponible. Use entrada manual.');
+      }
     } on NfcSessionException catch (e) {
       if (mounted) setState(() => _scanError = e.message);
     } finally {
@@ -685,10 +687,12 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     if (_firstNameCtrl.text.trim().isEmpty) missing.add('Nombres');
     if (_firstLastNameCtrl.text.trim().isEmpty) missing.add('Primer apellido');
     if (_dobCtrl.text.trim().isEmpty) missing.add('Fecha de nacimiento');
-    if (_guardianNameCtrl.text.trim().isEmpty)
+    if (_guardianNameCtrl.text.trim().isEmpty) {
       missing.add('Nombre del guardián');
-    if (_guardianPhoneCtrl.text.trim().isEmpty)
+    }
+    if (_guardianPhoneCtrl.text.trim().isEmpty) {
       missing.add('Teléfono del guardián');
+    }
     if (missing.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Campos requeridos: ${missing.join(", ")}')),
@@ -956,12 +960,13 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         await scope.patientRepository.syncPatient(record);
         await scope.localDatabase.markSynced(record.patientId);
       } catch (_) {}
-      if (mounted)
+      if (mounted) {
         setState(() {
           _saved = true;
           _isSaving = false;
           _savedRecord = record;
         });
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);

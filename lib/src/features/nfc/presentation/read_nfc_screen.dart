@@ -56,18 +56,20 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       _uidCtrl.text = uid;
       await _fetchPatient(uid);
     } on NfcNotAvailableException {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _state = _ScanState.error;
           _errorMessage = AppStrings.of(context).nfcNotAvailable;
           _nfcAvailable = false;
         });
+      }
     } on NfcSessionException catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _state = _ScanState.error;
           _errorMessage = e.message;
         });
+      }
     }
   }
 
@@ -80,11 +82,12 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       final patient = await AppScope.of(
         context,
       ).patientRepository.scanDevice(deviceUid, guardianDeviceUid: guardianUid);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _patient = patient;
           _state = _ScanState.success;
         });
+      }
     } on ApiException catch (e) {
       if (mounted) {
         if (e.statusCode == 403 &&
@@ -98,11 +101,12 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         }
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _state = _ScanState.error;
           _errorMessage = e.toString();
         });
+      }
     }
   }
 
@@ -112,17 +116,19 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       final guardianUid = await NfcService.readDeviceUid();
       await _fetchPatient(_lastDeviceUid!, guardianUid: guardianUid);
     } on NfcNotAvailableException {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _state = _ScanState.error;
           _errorMessage = AppStrings.of(context).nfcNotAvailable;
         });
+      }
     } on NfcSessionException catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _state = _ScanState.error;
           _errorMessage = e.message;
         });
+      }
     }
   }
 

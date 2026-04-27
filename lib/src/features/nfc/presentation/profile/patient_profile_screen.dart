@@ -54,7 +54,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   late PatientFullRecord _draft;
   late PatientFullRecord _original; // for change detection
   bool _isSyncing = false;
-  String? _syncError;
 
   @override
   void initState() {
@@ -129,10 +128,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     });
   }
 
-  void _updateBackground({
-    String? chronicConditions,
-    String? personalHistory,
-  }) {
+  void _updateBackground({String? chronicConditions, String? personalHistory}) {
     final old = _draft.backgroundHistory ?? BackgroundHistory();
     setState(() {
       _draft = _replaceBackground(
@@ -238,17 +234,16 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  PatientFullRecord _replacePatientInfo(PatientInfo info) =>
-      PatientFullRecord(
-        patientId: _draft.patientId,
-        deviceUid: _draft.deviceUid,
-        patientInfo: info,
-        guardianInfo: _draft.guardianInfo,
-        backgroundHistory: _draft.backgroundHistory,
-        allergies: _draft.allergies,
-        medicalHistory: _draft.medicalHistory,
-        vaccinationRecord: _draft.vaccinationRecord,
-      );
+  PatientFullRecord _replacePatientInfo(PatientInfo info) => PatientFullRecord(
+    patientId: _draft.patientId,
+    deviceUid: _draft.deviceUid,
+    patientInfo: info,
+    guardianInfo: _draft.guardianInfo,
+    backgroundHistory: _draft.backgroundHistory,
+    allergies: _draft.allergies,
+    medicalHistory: _draft.medicalHistory,
+    vaccinationRecord: _draft.vaccinationRecord,
+  );
 
   PatientFullRecord _replaceBackground(BackgroundHistory bg) =>
       PatientFullRecord(
@@ -268,7 +263,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (_isSyncing) return;
     setState(() {
       _isSyncing = true;
-      _syncError = null;
     });
     try {
       final scope = AppScope.of(context);
@@ -296,15 +290,14 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       if (!mounted) return;
       setState(() {
         _isSyncing = false;
-        _syncError = e.message;
       });
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isSyncing = false;
-        _syncError = e.toString();
       });
     }
   }
@@ -316,17 +309,16 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'No autorizado: solo doctores pueden agregar consultas.'),
+            'No autorizado: solo doctores pueden agregar consultas.',
+          ),
         ),
       );
       return;
     }
     final result = await Navigator.of(context).push<MedicalHistoryItem>(
       MaterialPageRoute(
-        builder: (_) => AddConsultationScreen(
-          patient: _draft,
-          returnToProfile: true,
-        ),
+        builder: (_) =>
+            AddConsultationScreen(patient: _draft, returnToProfile: true),
       ),
     );
     if (result != null) {
@@ -337,10 +329,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   Future<void> _navigateAddVaccine() async {
     final result = await Navigator.of(context).push<VaccinationRecordItem>(
       MaterialPageRoute(
-        builder: (_) => AddVaccineScreen(
-          patient: _draft,
-          returnToProfile: true,
-        ),
+        builder: (_) =>
+            AddVaccineScreen(patient: _draft, returnToProfile: true),
       ),
     );
     if (result != null) {
@@ -379,15 +369,12 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   Future<void> _openGuardianSheet() async {
     final current = _draft.guardianInfo;
-    if (current == null) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => EditGuardianSheet(
-        guardian: current,
-        onConfirm: _updateGuardian,
-      ),
+      builder: (_) =>
+          EditGuardianSheet(guardian: current, onConfirm: _updateGuardian),
     );
   }
 
@@ -399,8 +386,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       backgroundColor: Colors.transparent,
       builder: (_) => EditChronicPersonalSheet(
         title: chronic ? 'Condiciones crónicas' : 'Historial personal',
-        currentValue:
-            chronic ? bg.chronicConditions : bg.personalHistory,
+        currentValue: chronic ? bg.chronicConditions : bg.personalHistory,
         onConfirm: (text) {
           if (chronic) {
             _updateBackground(chronicConditions: text);
@@ -511,7 +497,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       builder: (ctx) => AlertDialog(
         title: const Text('Cambios sin sincronizar'),
         content: const Text(
-            'Tienes cambios pendientes. ¿Salir sin sincronizar?'),
+          'Tienes cambios pendientes. ¿Salir sin sincronizar?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -519,8 +506,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Salir',
-                style: TextStyle(color: AppColors.error)),
+            child: const Text(
+              'Salir',
+              style: TextStyle(color: AppColors.error),
+            ),
           ),
         ],
       ),
@@ -557,7 +546,10 @@ class _ProfileHeader extends StatelessWidget {
       final parts = patient.patientInfo.dob.split('-');
       if (parts.length != 3) return null;
       final dob = DateTime(
-          int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+        int.parse(parts[0]),
+        int.parse(parts[1]),
+        int.parse(parts[2]),
+      );
       final now = DateTime.now();
       var age = now.year - dob.year;
       if (now.month < dob.month ||
@@ -643,9 +635,7 @@ class _ProfileHeader extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
               children: [
-                _Avatar(
-                  initials: _initials(patient.patientInfo.fullName),
-                ),
+                _Avatar(initials: _initials(patient.patientInfo.fullName)),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -705,12 +695,9 @@ class _ProfileHeader extends StatelessWidget {
                   hasUnsyncedChanges
                       ? 'Cambios sin sincronizar'
                       : (lastSyncedAt != null
-                          ? 'Sincronizado · $lastSyncedAt'
-                          : 'Sincronizado'),
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontSize: 12,
-                  ),
+                            ? 'Sincronizado · $lastSyncedAt'
+                            : 'Sincronizado'),
+                  style: const TextStyle(color: AppColors.white, fontSize: 12),
                 ),
                 const Spacer(),
                 if (hasUnsyncedChanges)
@@ -718,12 +705,14 @@ class _ProfileHeader extends StatelessWidget {
                     onPressed: isSyncing ? null : onSync,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF9800),
-                      disabledBackgroundColor:
-                          const Color(0xFFFFB74D),
+                      disabledBackgroundColor: const Color(0xFFFFB74D),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20)),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                     ),
                     icon: isSyncing
                         ? const SizedBox(
@@ -734,14 +723,18 @@ class _ProfileHeader extends StatelessWidget {
                               color: AppColors.white,
                             ),
                           )
-                        : const Icon(Icons.sync,
-                            size: 16, color: AppColors.white),
+                        : const Icon(
+                            Icons.sync,
+                            size: 16,
+                            color: AppColors.white,
+                          ),
                     label: Text(
                       isSyncing ? 'Sincronizando...' : 'Sincronizar',
                       style: const TextStyle(
-                          color: AppColors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600),
+                        color: AppColors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
               ],
@@ -770,9 +763,10 @@ class _Avatar extends StatelessWidget {
         child: Text(
           initials,
           style: const TextStyle(
-              color: AppColors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w700),
+            color: AppColors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
@@ -795,8 +789,10 @@ class _PillChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
-      child: Text(label,
-          style: const TextStyle(color: AppColors.white, fontSize: 11)),
+      child: Text(
+        label,
+        style: const TextStyle(color: AppColors.white, fontSize: 11),
+      ),
     );
   }
 }
@@ -836,8 +832,7 @@ class _LangDot extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color:
-            selected ? AppColors.white : Colors.white.withValues(alpha: 0),
+        color: selected ? AppColors.white : Colors.white.withValues(alpha: 0),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -873,24 +868,39 @@ class _ProfileTabsBar extends StatelessWidget {
           color: AppColors.white,
           borderRadius: BorderRadius.circular(20),
         ),
-        indicatorPadding:
-            const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        indicatorPadding: const EdgeInsets.symmetric(
+          horizontal: 4,
+          vertical: 8,
+        ),
         labelColor: AppColors.primary,
         unselectedLabelColor: AppColors.white,
-        labelStyle: const TextStyle(
-            fontSize: 13, fontWeight: FontWeight.w600),
-        unselectedLabelStyle:
-            const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        unselectedLabelStyle: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
         dividerColor: Colors.transparent,
         tabs: [
           const Tab(text: '  Resumen  '),
           const Tab(text: '  Antecedentes  '),
-          Tab(child: _TabLabelWithBadge(
-              text: 'Consultas', count: draft.medicalHistory.length)),
-          Tab(child: _TabLabelWithBadge(
-              text: 'Vacunas', count: draft.vaccinationRecord.length)),
-          Tab(child: _TabLabelWithBadge(
-              text: 'Alergias', count: draft.allergies.length)),
+          Tab(
+            child: _TabLabelWithBadge(
+              text: 'Consultas',
+              count: draft.medicalHistory.length,
+            ),
+          ),
+          Tab(
+            child: _TabLabelWithBadge(
+              text: 'Vacunas',
+              count: draft.vaccinationRecord.length,
+            ),
+          ),
+          Tab(
+            child: _TabLabelWithBadge(
+              text: 'Alergias',
+              count: draft.allergies.length,
+            ),
+          ),
         ],
       ),
     );
@@ -919,9 +929,10 @@ class _TabLabelWithBadge extends StatelessWidget {
             child: Text(
               '$count',
               style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
             ),
           ),
         ],

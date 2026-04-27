@@ -67,8 +67,9 @@ class ProfileTabSummary extends StatelessWidget {
               Text(
                 'Solo peso y talla son editables — cambian en el tiempo',
                 style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary.withValues(alpha: 0.7)),
+                  fontSize: 11,
+                  color: AppColors.textSecondary.withValues(alpha: 0.7),
+                ),
               ),
             ],
           ),
@@ -99,10 +100,7 @@ class ProfileTabSummary extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               _IdRow(
-                left: _IdCell(
-                  label: 'F. NACIMIENTO',
-                  value: _formatDob(p.dob),
-                ),
+                left: _IdCell(label: 'F. NACIMIENTO', value: _formatDob(p.dob)),
                 right: _IdCell(
                   label: 'SEXO BIOLÓGICO',
                   value: _sexLabel(p.biologicalSex),
@@ -112,7 +110,8 @@ class ProfileTabSummary extends StatelessWidget {
               _IdRow(
                 left: _IdCell(
                   label: 'IDENTIDAD GÉNERO',
-                  value: _genderLabel(p.genderIdentity) ??
+                  value:
+                      _genderLabel(p.genderIdentity) ??
                       _sexLabel(p.biologicalSex),
                 ),
                 right: _IdCell(
@@ -128,8 +127,7 @@ class ProfileTabSummary extends StatelessWidget {
                 ),
                 right: _IdCell(
                   label: 'DISCAPACIDAD',
-                  value: _disabilityLabel(p.disabilityCategory) ??
-                      'Ninguna',
+                  value: _disabilityLabel(p.disabilityCategory) ?? 'Ninguna',
                 ),
               ),
             ],
@@ -167,7 +165,7 @@ class ProfileTabSummary extends StatelessWidget {
                   label: 'MUNICIPIO',
                   value: p.address.city.isNotEmpty
                       ? '${p.address.city}'
-                          '${p.address.cityCode != null ? ' (${p.address.cityCode})' : ''}'
+                            '${p.address.cityCode != null ? ' (${p.address.cityCode})' : ''}'
                       : '—',
                 ),
                 right: _IdCell(
@@ -182,18 +180,14 @@ class ProfileTabSummary extends StatelessWidget {
         const SizedBox(height: 18),
 
         // ── Guardian (editable) ───────────────────────────────────
-        if (draft.guardianInfo != null) ...[
-          ProfileSectionHeader(
-            icon: Icons.family_restroom,
-            title: 'GUARDIÁN',
-            actionLabel: 'Editar',
-            onAction: onEditGuardian,
-          ),
-          const SizedBox(height: 8),
-          ProfileCard(
-            child: _GuardianCard(guardian: draft.guardianInfo!),
-          ),
-        ],
+        ProfileSectionHeader(
+          icon: Icons.family_restroom,
+          title: 'GUARDIÁN',
+          actionLabel: 'Editar',
+          onAction: onEditGuardian,
+        ),
+        const SizedBox(height: 8),
+        ProfileCard(child: _GuardianCard(guardian: draft.guardianInfo)),
       ],
     );
   }
@@ -297,8 +291,18 @@ class ProfileTabSummary extends StatelessWidget {
     final p = dob.split('-');
     if (p.length != 3) return dob;
     final months = [
-      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+      'enero',
+      'febrero',
+      'marzo',
+      'abril',
+      'mayo',
+      'junio',
+      'julio',
+      'agosto',
+      'septiembre',
+      'octubre',
+      'noviembre',
+      'diciembre',
     ];
     final m = int.tryParse(p[1]);
     if (m == null || m < 1 || m > 12) return dob;
@@ -324,25 +328,29 @@ class _VitalCell extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Icon(icon, size: 12, color: AppColors.textSecondary),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: const TextStyle(
+          Row(
+            children: [
+              Icon(icon, size: 12, color: AppColors.textSecondary),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textSecondary,
-                  letterSpacing: 0.5),
-            ),
-          ]),
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 6),
           Text(
             value,
             style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary),
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
           ),
         ],
       ),
@@ -364,12 +372,14 @@ class _IdRow extends StatelessWidget {
   final Widget right;
 
   @override
-  Widget build(BuildContext context) =>
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(child: left),
-        const SizedBox(width: 12),
-        Expanded(child: right),
-      ]);
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(child: left),
+      const SizedBox(width: 12),
+      Expanded(child: right),
+    ],
+  );
 }
 
 class _IdCell extends StatelessWidget {
@@ -378,23 +388,25 @@ class _IdCell extends StatelessWidget {
   final String value;
 
   @override
-  Widget build(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(
-          label,
-          style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
-              letterSpacing: 0.5),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textSecondary,
+          letterSpacing: 0.5,
         ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-              fontSize: 14, color: AppColors.textPrimary),
-        ),
-      ]);
+      ),
+      const SizedBox(height: 4),
+      Text(
+        value,
+        style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+      ),
+    ],
+  );
 }
 
 // ── Guardian sub-card ───────────────────────────────────────────────────────
@@ -428,8 +440,9 @@ class _GuardianCard extends StatelessWidget {
                 child: Text(
                   _initials,
                   style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary),
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
             ),
@@ -438,15 +451,20 @@ class _GuardianCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(guardian.name,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600)),
+                  Text(
+                    guardian.name,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: 2),
                   Text(
-                    '${_relationshipLabel(guardian.relationship)} · ${guardian.phone ?? '—'}',
+                    '${_relationshipLabel(guardian.relationship)} · ${guardian.phone}',
                     style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary),
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -464,31 +482,31 @@ class _GuardianCard extends StatelessWidget {
                     ? 'NFC: ${guardian.deviceUid!}'
                     : 'NFC: no asignada',
                 style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary),
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 6),
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: guardian.deviceUid != null &&
-                        guardian.deviceUid!.isNotEmpty
+                color:
+                    guardian.deviceUid != null && guardian.deviceUid!.isNotEmpty
                     ? AppColors.success.withValues(alpha: 0.15)
                     : AppColors.disabled.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                guardian.deviceUid != null &&
-                        guardian.deviceUid!.isNotEmpty
+                guardian.deviceUid != null && guardian.deviceUid!.isNotEmpty
                     ? 'Registrada'
                     : 'No registrada',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: guardian.deviceUid != null &&
+                  color:
+                      guardian.deviceUid != null &&
                           guardian.deviceUid!.isNotEmpty
                       ? AppColors.success
                       : AppColors.textSecondary,

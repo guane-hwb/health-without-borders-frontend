@@ -75,6 +75,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _logout() async {
     final s = AppStrings.of(context);
+    // Capture before any awaits
+    final scope = AppScope.of(context);
+    final navigator = Navigator.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -100,9 +103,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (confirmed != true) {
       return;
     }
-    // Capture before awaits
-    final scope = AppScope.of(context);
-    final navigator = Navigator.of(context);
     scope.syncEngine.stop();
     await scope.authRepository.clearSession();
     if (!mounted) {

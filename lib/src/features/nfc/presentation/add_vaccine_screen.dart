@@ -165,11 +165,12 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
       } catch (_) {
         // Sync will retry — local save is enough
       }
-      if (mounted)
+      if (mounted) {
         setState(() {
           _saved = true;
           _isSaving = false;
         });
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);

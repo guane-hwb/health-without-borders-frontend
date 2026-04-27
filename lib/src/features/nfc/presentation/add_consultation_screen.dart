@@ -126,11 +126,10 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       _scanning = true;
       _scanError = null;
     });
+    final repo = AppScope.of(context).patientRepository;
     try {
       final uid = await NfcService.readDeviceUid();
-      final patient = await AppScope.of(
-        context,
-      ).patientRepository.scanDevice(uid);
+      final patient = await repo.scanDevice(uid);
       if (mounted) setState(() => _patient = patient);
     } on NfcNotAvailableException {
       if (mounted) setState(() => _scanError = 'NFC no disponible.');
@@ -376,11 +375,12 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                 AppScope.of(context).patientRepository
                     .scanDevice(uidCtrl.text.trim())
                     .then((p) {
-                      if (mounted)
+                      if (mounted) {
                         setState(() {
                           _patient = p;
                           _scanning = false;
                         });
+                      }
                     })
                     .catchError((Object e) {
                       if (mounted) {

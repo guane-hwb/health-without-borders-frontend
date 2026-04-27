@@ -38,10 +38,8 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.guardian.name);
-    _phoneCtrl =
-        TextEditingController(text: widget.guardian.phone ?? '');
-    _uidCtrl = TextEditingController(
-        text: widget.guardian.deviceUid ?? '');
+    _phoneCtrl = TextEditingController(text: widget.guardian.phone);
+    _uidCtrl = TextEditingController(text: widget.guardian.deviceUid ?? '');
     _relationship = widget.guardian.relationship;
   }
 
@@ -68,15 +66,16 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
         setState(() => _scanning = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text(
-                  'NFC no disponible. Ingrese el UID manualmente.')),
+            content: Text('NFC no disponible. Ingrese el UID manualmente.'),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _scanning = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -86,25 +85,27 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     return SheetScaffold(
       title: 'Editar guardián',
       onConfirm: () {
-        widget.onConfirm(GuardianInfo(
-          name: _nameCtrl.text.trim(),
-          relationship: _relationship,
-          phone: _phoneCtrl.text.trim().isEmpty
-              ? null
-              : _phoneCtrl.text.trim(),
-          deviceUid: _uidCtrl.text.trim().isEmpty
-              ? null
-              : _uidCtrl.text.trim(),
-        ));
+        widget.onConfirm(
+          GuardianInfo(
+            name: _nameCtrl.text.trim(),
+            relationship: _relationship,
+            phone: _phoneCtrl.text.trim(),
+            deviceUid: _uidCtrl.text.trim().isEmpty
+                ? null
+                : _uidCtrl.text.trim(),
+          ),
+        );
         Navigator.of(context).pop();
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _label('Nombre completo'),
-          _input(_nameCtrl,
-              hint: 'ej: Carmen Vargas Pinto',
-              icon: Icons.person_outline),
+          _input(
+            _nameCtrl,
+            hint: 'ej: Carmen Vargas Pinto',
+            icon: Icons.person_outline,
+          ),
           const SizedBox(height: 14),
           _label('Parentesco'),
           Wrap(
@@ -116,23 +117,23 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
                 onTap: () => setState(() => _relationship = e.key),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: sel ? AppColors.primary : AppColors.white,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: sel
-                            ? AppColors.primary
-                            : AppColors.divider),
+                      color: sel ? AppColors.primary : AppColors.divider,
+                    ),
                   ),
                   child: Text(
                     e.value,
                     style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: sel
-                            ? AppColors.white
-                            : AppColors.textPrimary),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: sel ? AppColors.white : AppColors.textPrimary,
+                    ),
                   ),
                 ),
               );
@@ -140,10 +141,12 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
           ),
           const SizedBox(height: 14),
           _label('Teléfono'),
-          _input(_phoneCtrl,
-              hint: 'ej: +57 310 482 9914',
-              icon: Icons.phone_outlined,
-              keyboard: TextInputType.phone),
+          _input(
+            _phoneCtrl,
+            hint: 'ej: +57 310 482 9914',
+            icon: Icons.phone_outlined,
+            keyboard: TextInputType.phone,
+          ),
           const SizedBox(height: 14),
           _label('Manilla NFC del guardián'),
           Row(
@@ -163,7 +166,9 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
                           : AppColors.primary,
                     ),
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 12),
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -177,21 +182,20 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
                     backgroundColor: AppColors.primary,
                     disabledBackgroundColor: AppColors.disabled,
                     shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
                   child: _scanning
                       ? const SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.white),
+                            strokeWidth: 2,
+                            color: AppColors.white,
+                          ),
                         )
-                      : const Icon(Icons.nfc,
-                          size: 22, color: AppColors.white),
+                      : const Icon(Icons.nfc, size: 22, color: AppColors.white),
                 ),
               ),
             ],
@@ -202,30 +206,31 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   }
 
   Widget _label(String t) => Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Text(
-          t,
-          style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary),
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(
+      t,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: AppColors.textPrimary,
+      ),
+    ),
+  );
 
-  Widget _input(TextEditingController c,
-          {required String hint,
-          required IconData icon,
-          TextInputType keyboard = TextInputType.text}) =>
-      TextField(
-        controller: c,
-        keyboardType: keyboard,
-        style: const TextStyle(fontSize: 14),
-        decoration: InputDecoration(
-          isDense: true,
-          hintText: hint,
-          prefixIcon: Icon(icon, size: 18, color: AppColors.primary),
-          contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12, vertical: 12),
-        ),
-      );
+  Widget _input(
+    TextEditingController c, {
+    required String hint,
+    required IconData icon,
+    TextInputType keyboard = TextInputType.text,
+  }) => TextField(
+    controller: c,
+    keyboardType: keyboard,
+    style: const TextStyle(fontSize: 14),
+    decoration: InputDecoration(
+      isDense: true,
+      hintText: hint,
+      prefixIcon: Icon(icon, size: 18, color: AppColors.primary),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    ),
+  );
 }
