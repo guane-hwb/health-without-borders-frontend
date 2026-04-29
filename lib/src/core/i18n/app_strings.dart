@@ -256,6 +256,75 @@ class AppStrings {
   String get allergenInsect => _get('allergenInsect');
   String get allergenOther => _get('allergenOther');
 
+  // ── Login screen v2 / Home v2 ──
+  String get appSubtitleShort => _get('appSubtitleShort');
+  String get emailLabel => _get('emailLabel');
+  String get passwordLabel => _get('passwordLabel');
+  String get rememberSession => _get('rememberSession');
+  String get sessionEncryptedFooter => _get('sessionEncryptedFooter');
+  String get goodMorning => _get('goodMorning');
+  String get goodAfternoon => _get('goodAfternoon');
+  String get goodEvening => _get('goodEvening');
+  String get logout => _get('logout');
+  String get logoutTitle => _get('logoutTitle');
+  String logoutConfirm(String name) =>
+      _get('logoutConfirm').replaceAll('{name}', name);
+  String get roleDoctor => _get('roleDoctor');
+  String get roleNurse => _get('roleNurse');
+  String get roleOrgAdmin => _get('roleOrgAdmin');
+  String get roleSuperadmin => _get('roleSuperadmin');
+  String get offline => _get('offline');
+  // Home actions v2
+  String get actionReadNfc => _get('actionReadNfc');
+  String get actionReadNfcSub => _get('actionReadNfcSub');
+  String get actionNewPatient => _get('actionNewPatient');
+  String get actionNewPatientSub => _get('actionNewPatientSub');
+  String get actionSearchPatient => _get('actionSearchPatient');
+  String get actionSearchPatientSub => _get('actionSearchPatientSub');
+  String get actionPendingSync => _get('actionPendingSync');
+  String get actionPendingSyncEmpty => _get('actionPendingSyncEmpty');
+  String actionPendingSyncCount(int n) =>
+      _get('actionPendingSyncCount').replaceAll('{n}', '$n');
+  // Admin v2
+  String get kpiUsers => _get('kpiUsers');
+  String get kpiSyncedOk => _get('kpiSyncedOk');
+  String get adminManageUsers => _get('adminManageUsers');
+  String get adminManageUsersSub => _get('adminManageUsersSub');
+  String get adminViewPatients => _get('adminViewPatients');
+  String get adminViewPatientsSub => _get('adminViewPatientsSub');
+  String adminBrigadeHistorySub(int n) =>
+      _get('adminBrigadeHistorySub').replaceAll('{n}', '$n');
+  // Read NFC v2
+  String get readWristbandTitle => _get('readWristbandTitle');
+  String get scanGuardianTitle => _get('scanGuardianTitle');
+  String get scanPatientHeadline => _get('scanPatientHeadline');
+  String get scanPatientHint => _get('scanPatientHint');
+  String get scanGuardianHeadline => _get('scanGuardianHeadline');
+  String get scanGuardianHint => _get('scanGuardianHint');
+  String get patientWristbandReady => _get('patientWristbandReady');
+  String get nfcNotAvailableHint => _get('nfcNotAvailableHint');
+  String get manualPatientUidLabel => _get('manualPatientUidLabel');
+  String get manualPatientUidHint => _get('manualPatientUidHint');
+  String get manualGuardianUidLabel => _get('manualGuardianUidLabel');
+  String get manualGuardianUidHint => _get('manualGuardianUidHint');
+  String get useManualUid => _get('useManualUid');
+  // Search v2
+  String get searchPatientTitle => _get('searchPatientTitle');
+  String get searchSubtitle => _get('searchSubtitle');
+  String get searchPrivacyNotice => _get('searchPrivacyNotice');
+  String get documentTypeLabel => _get('documentTypeLabel');
+  String get documentNumberLabel => _get('documentNumberLabel');
+  String get firstNameLabel => _get('firstNameLabel');
+  String get lastNameLabel => _get('lastNameLabel');
+  String get firstOrSecondLastName => _get('firstOrSecondLastName');
+  String get dobLabel => _get('dobLabel');
+  String get guardianNameOptionalLabel => _get('guardianNameOptionalLabel');
+  String get guardianHelper => _get('guardianHelper');
+  String get minThreeChars => _get('minThreeChars');
+  String get searchPatientButton => _get('searchPatientButton');
+  String get searchFooterNote => _get('searchFooterNote');
+  String get searchNoMatch => _get('searchNoMatch');
+
   // ══════════════════════════════════════════════════════════════════════════
   // TRANSLATIONS
   // ══════════════════════════════════════════════════════════════════════════
@@ -362,7 +431,8 @@ class AppStrings {
     'scanSuccess': '¡Datos leídos correctamente!',
     'scanFailed': 'Lectura fallida',
     'guardianRequired': 'Verificación de guardián requerida',
-    'guardianRequiredSub': 'Este paciente es menor de edad. Escanee la manilla del guardián para acceder al registro.',
+    'guardianRequiredSub':
+        'Este paciente es menor de edad. Escanee la manilla del guardián para acceder al registro.',
     'scanGuardianWristband': 'Escanear manilla del guardián',
     'continueToRead': 'Continuar a Leer NFC',
     'readyToScan': 'Listo para escanear',
@@ -384,7 +454,8 @@ class AppStrings {
     // Edit screens
     'editUpdate': 'Editar / actualizar',
     'patientInfoReadOnly': 'Información del paciente (solo lectura)',
-    'fieldsProtected': 'Nombre, fecha de nacimiento, sexo, tipo de sangre y documento están protegidos por el backend.',
+    'fieldsProtected':
+        'Nombre, fecha de nacimiento, sexo, tipo de sangre y documento están protegidos por el backend.',
     'editableInfo': 'Información editable',
     'address': 'Dirección',
     'street': 'Dirección',
@@ -423,7 +494,8 @@ class AppStrings {
     // Loss of wristband
     'searchPatient': 'Buscar paciente',
     'searchRequiredFields': 'Los cuatro campos son requeridos para buscar.',
-    'searchFieldsRequired': 'Número de documento, fecha de nacimiento, nombre y apellido son requeridos.',
+    'searchFieldsRequired':
+        'Número de documento, fecha de nacimiento, nombre y apellido son requeridos.',
 
     // Sync
     'syncTitle': 'Cola de sincronización',
@@ -435,7 +507,8 @@ class AppStrings {
     'allSynced': 'Todo sincronizado',
     'noRecordsPending': 'No hay registros pendientes.',
     'deleteRecord': '¿Eliminar registro?',
-    'deleteRecordConfirm': 'Esto eliminará permanentemente el registro local. Si no ha sido sincronizado, los datos se perderán.',
+    'deleteRecordConfirm':
+        'Esto eliminará permanentemente el registro local. Si no ha sido sincronizado, los datos se perderán.',
     'pending': 'Pendiente',
 
     // Brigade
@@ -470,8 +543,77 @@ class AppStrings {
     'allergenSkin': 'Sustancia en piel',
     'allergenInsect': 'Picadura insectos',
     'allergenOther': 'Otra',
+    // ── Login v2 / Home v2 ──
+    'appSubtitleShort': 'Historia clínica móvil para brigadas',
+    'emailLabel': 'CORREO ELECTRÓNICO',
+    'passwordLabel': 'CONTRASEÑA',
+    'rememberSession': 'Recordar sesión',
+    'sessionEncryptedFooter': 'Sesión cifrada · Cumple Ley 1581/2012',
+    'goodMorning': 'Buenos días',
+    'goodAfternoon': 'Buenas tardes',
+    'goodEvening': 'Buenas noches',
+    'logout': 'Cerrar sesión',
+    'logoutTitle': 'Cerrar sesión',
+    'logoutConfirm': '¿Seguro que deseas cerrar la sesión, {name}?',
+    'roleDoctor': 'Médico',
+    'roleNurse': 'Enfermero/a',
+    'roleOrgAdmin': 'Administrador',
+    'roleSuperadmin': 'Superadmin',
+    'offline': 'Sin conexión',
+    // Home actions v2
+    'actionReadNfc': 'Leer NFC',
+    'actionReadNfcSub': 'Escanear manilla del paciente',
+    'actionNewPatient': 'Nuevo paciente',
+    'actionNewPatientSub': 'Primer ingreso del paciente',
+    'actionSearchPatient': 'Buscar paciente',
+    'actionSearchPatientSub': 'Manilla perdida o dañada',
+    'actionPendingSync': 'Pendientes por sincronizar',
+    'actionPendingSyncEmpty': 'Todos los registros sincronizados',
+    'actionPendingSyncCount': '{n} registros sin enviar',
+    // Admin v2
+    'kpiUsers': 'Usuarios',
+    'kpiSyncedOk': 'Sync OK',
+    'adminManageUsers': 'Gestionar usuarios',
+    'adminManageUsersSub': 'Doctores y enfermeros',
+    'adminViewPatients': 'Ver pacientes',
+    'adminViewPatientsSub': 'Solo lectura',
+    'adminBrigadeHistorySub': '{n} pacientes sincronizados',
+    // Read NFC v2
+    'readWristbandTitle': 'Leer manilla',
+    'scanGuardianTitle': 'Leer manilla del guardián',
+    'scanPatientHeadline': 'Acerque la manilla',
+    'scanPatientHint':
+        'Sostenga el dispositivo cerca de la manilla NFC del paciente',
+    'scanGuardianHeadline': 'Acerque la manilla del guardián',
+    'scanGuardianHint':
+        'Para acceder al historial de menores se requiere autenticación 2FA',
+    'patientWristbandReady': 'Manilla del paciente leída',
+    'nfcNotAvailableHint': 'NFC no disponible. Use el campo manual debajo.',
+    'manualPatientUidLabel': 'UID manual del paciente (testing)',
+    'manualPatientUidHint': 'Ej. HWB-04:1A:2C:DE',
+    'manualGuardianUidLabel': 'UID manual del guardián (testing)',
+    'manualGuardianUidHint': 'Ej. HWB-04:8E:7F:11',
+    'useManualUid': 'Usar UID manual',
+    // Search v2
+    'searchPatientTitle': 'Buscar paciente',
+    'searchSubtitle': 'Identificación estricta · Ley 1581/2012',
+    'searchPrivacyNotice':
+        'Use esta búsqueda solo cuando el paciente no tiene su manilla. Todos los campos son obligatorios.',
+    'documentTypeLabel': 'TIPO DOC.',
+    'documentNumberLabel': 'NÚMERO DE DOCUMENTO',
+    'firstNameLabel': 'PRIMER NOMBRE',
+    'lastNameLabel': 'APELLIDO',
+    'firstOrSecondLastName': 'Primer o segundo apellido',
+    'dobLabel': 'FECHA DE NACIMIENTO',
+    'guardianNameOptionalLabel': 'NOMBRE DEL GUARDIÁN (si es menor)',
+    'guardianHelper': 'Verificación adicional · coincidencia parcial permitida',
+    'minThreeChars': 'Mínimo 3 caracteres',
+    'searchPatientButton': 'Buscar paciente',
+    'searchFooterNote':
+        'Se devolverá exactamente un registro o ninguno.\nPor privacidad, no se exponen listas.',
+    'searchNoMatch':
+        'No se encontró ningún paciente con esos datos. Verifique los campos.',
   };
-
   static const Map<String, String> _en = {
     // Auth
     'appName': 'Health Without Borders',
@@ -574,7 +716,8 @@ class AppStrings {
     'scanSuccess': 'Data read successfully!',
     'scanFailed': 'Scan failed',
     'guardianRequired': 'Guardian verification required',
-    'guardianRequiredSub': "This patient is a minor. Please scan the guardian's wristband to access the record.",
+    'guardianRequiredSub':
+        "This patient is a minor. Please scan the guardian's wristband to access the record.",
     'scanGuardianWristband': 'Scan guardian wristband',
     'continueToRead': 'Continue to Read NFC',
     'readyToScan': 'Ready to scan',
@@ -596,7 +739,8 @@ class AppStrings {
     // Edit screens
     'editUpdate': 'Edit / update',
     'patientInfoReadOnly': 'Patient information (read-only)',
-    'fieldsProtected': 'Name, DOB, sex, blood type and document are protected by the backend.',
+    'fieldsProtected':
+        'Name, DOB, sex, blood type and document are protected by the backend.',
     'editableInfo': 'Editable information',
     'address': 'Address',
     'street': 'Street',
@@ -635,7 +779,8 @@ class AppStrings {
     // Loss of wristband
     'searchPatient': 'Search patient',
     'searchRequiredFields': 'All four fields are required to find the patient.',
-    'searchFieldsRequired': 'Document number, DOB, first name, and last name are required.',
+    'searchFieldsRequired':
+        'Document number, DOB, first name, and last name are required.',
 
     // Sync
     'syncTitle': 'Sync Queue',
@@ -647,7 +792,8 @@ class AppStrings {
     'allSynced': 'All records synced',
     'noRecordsPending': 'No pending records to upload.',
     'deleteRecord': 'Delete record?',
-    'deleteRecordConfirm': 'This will permanently delete the local record. If it hasn\'t been synced, the data will be lost.',
+    'deleteRecordConfirm':
+        'This will permanently delete the local record. If it hasn\'t been synced, the data will be lost.',
     'pending': 'Pending',
 
     // Brigade
@@ -682,5 +828,74 @@ class AppStrings {
     'allergenSkin': 'Skin substance',
     'allergenInsect': 'Insect sting',
     'allergenOther': 'Other',
+    // ── Login v2 / Home v2 ──
+    'appSubtitleShort': 'Mobile clinical history for brigades',
+    'emailLabel': 'EMAIL',
+    'passwordLabel': 'PASSWORD',
+    'rememberSession': 'Remember me',
+    'sessionEncryptedFooter': 'Encrypted session · Complies Law 1581/2012',
+    'goodMorning': 'Good morning',
+    'goodAfternoon': 'Good afternoon',
+    'goodEvening': 'Good evening',
+    'logout': 'Sign out',
+    'logoutTitle': 'Sign out',
+    'logoutConfirm': 'Are you sure you want to sign out, {name}?',
+    'roleDoctor': 'Doctor',
+    'roleNurse': 'Nurse',
+    'roleOrgAdmin': 'Administrator',
+    'roleSuperadmin': 'Superadmin',
+    'offline': 'Offline',
+    // Home actions v2
+    'actionReadNfc': 'Read NFC',
+    'actionReadNfcSub': "Scan patient's wristband",
+    'actionNewPatient': 'New patient',
+    'actionNewPatientSub': 'First patient registration',
+    'actionSearchPatient': 'Search patient',
+    'actionSearchPatientSub': 'Lost or damaged wristband',
+    'actionPendingSync': 'Pending sync',
+    'actionPendingSyncEmpty': 'All records synced',
+    'actionPendingSyncCount': '{n} records not sent',
+    // Admin v2
+    'kpiUsers': 'Users',
+    'kpiSyncedOk': 'Sync OK',
+    'adminManageUsers': 'Manage users',
+    'adminManageUsersSub': 'Doctors and nurses',
+    'adminViewPatients': 'View patients',
+    'adminViewPatientsSub': 'Read-only',
+    'adminBrigadeHistorySub': '{n} synced patients',
+    // Read NFC v2
+    'readWristbandTitle': 'Read wristband',
+    'scanGuardianTitle': "Read guardian's wristband",
+    'scanPatientHeadline': 'Tap to scan the wristband',
+    'scanPatientHint': "Hold the device close to the patient's NFC wristband",
+    'scanGuardianHeadline': "Tap to scan the guardian's wristband",
+    'scanGuardianHint':
+        '2FA authentication is required to access minors records',
+    'patientWristbandReady': 'Patient wristband ready',
+    'nfcNotAvailableHint': 'NFC unavailable. Use manual entry below.',
+    'manualPatientUidLabel': 'Manual patient UID (testing)',
+    'manualPatientUidHint': 'E.g. HWB-04:1A:2C:DE',
+    'manualGuardianUidLabel': 'Manual guardian UID (testing)',
+    'manualGuardianUidHint': 'E.g. HWB-04:8E:7F:11',
+    'useManualUid': 'Use manual UID',
+    // Search v2
+    'searchPatientTitle': 'Search patient',
+    'searchSubtitle': 'Strict identification · Law 1581/2012',
+    'searchPrivacyNotice':
+        'Use this search only when the patient does not have their wristband. All fields are required.',
+    'documentTypeLabel': 'DOC. TYPE',
+    'documentNumberLabel': 'DOCUMENT NUMBER',
+    'firstNameLabel': 'FIRST NAME',
+    'lastNameLabel': 'LAST NAME',
+    'firstOrSecondLastName': 'First or second last name',
+    'dobLabel': 'DATE OF BIRTH',
+    'guardianNameOptionalLabel': "GUARDIAN'S NAME (if minor)",
+    'guardianHelper': 'Extra verification · partial match allowed',
+    'minThreeChars': '3 characters minimum',
+    'searchPatientButton': 'Search patient',
+    'searchFooterNote':
+        'Exactly one record or none will be returned.\nFor privacy, no list is exposed.',
+    'searchNoMatch':
+        'No patient found with these details. Please check the fields.',
   };
 }
