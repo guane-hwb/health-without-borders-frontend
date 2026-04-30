@@ -8,15 +8,10 @@ import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
-import 'read_nfc_screen.dart';
 import 'shared_read_nfc_header.dart';
 
-/// Screen for adding a vaccine to an existing patient.
-///
-/// Flow:
-///   1. If [patient] is null → first scan the patient's wristband.
-///   2. Fill vaccine form.
-///   3. Calls POST /sync with the full updated PatientFullRecord.
+/// Screen for adding a VaccinationRecordItem to an existing patient.
+/// Covers every field of VaccinationRecordItem from patient.py.
 class AddVaccineScreen extends StatefulWidget {
   const AddVaccineScreen({
     super.key,
@@ -24,11 +19,7 @@ class AddVaccineScreen extends StatefulWidget {
     this.returnToProfile = false,
   });
 
-  /// Pre-loaded patient. When null the screen starts at the NFC scan step.
   final PatientFullRecord? patient;
-
-  /// When true, instead of saving locally + syncing, this screen will
-  /// `Navigator.pop()` with the newly-built `VaccinationRecordItem`.
   final bool returnToProfile;
 
   @override
@@ -36,28 +27,45 @@ class AddVaccineScreen extends StatefulWidget {
 }
 
 class _AddVaccineScreenState extends State<AddVaccineScreen> {
-  // ── State ─────────────────────────────────────────────────────────────────
   PatientFullRecord? _patient;
   bool _scanning = false;
   String? _scanError;
   bool _isSaving = false;
   bool _saved = false;
 
-  // ── Form controllers ──────────────────────────────────────────────────────
-  final _vaccineNameCtrl = TextEditingController();
-  final _cvxCodeCtrl = TextEditingController();
-  final _doseCtrl = TextEditingController(text: '1');
-  final _byCtrl = TextEditingController();
-  final _atCtrl = TextEditingController();
-  DateTime _selectedDate = DateTime.now();
-  String _reaction = 'Sin reacción';
+  // ── Form fields (mirror VaccinationRecordItem exactly) ────────────────────
+  final _vaccineNameCtrl = TextEditingController(); // vaccineName: str
+  final _cvxCodeCtrl = TextEditingController();     // vaccineCode: str (CVX)
+  int _dose = 1;                                    // dose: int
+  DateTime _date = DateTime.now();                  // date: date (YYYY-MM-DD)
+  final _byCtrl = TextEditingController();          // administratedBy: str
+  final _atCtrl = TextEditingController();          // administratedAt: str
+  String _status = 'completed';                     // status: str
 
-  static const List<String> _reactionOptions = [
-    'Sin reacción',
-    'Eritema leve',
-    'Fiebre 24h',
-    'Dolor local',
+  // ── Common vaccines catalog ───────────────────────────────────────────────
+  static const List<Map<String, String>> _commonVaccines = [
+    {'name': 'BCG (Tuberculosis)', 'code': '19'},
+    {'name': 'Hepatitis B', 'code': '08'},
+    {'name': 'Pentavalente (DPT+HB+Hib)', 'code': '01'},
+    {'name': 'Polio oral (VOP)', 'code': '02'},
+    {'name': 'Polio inactivada (VIP)', 'code': '10'},
+    {'name': 'Triple Viral (SRP)', 'code': '03'},
+    {'name': 'Varicela', 'code': '21'},
+    {'name': 'Influenza pediátrica', 'code': '141'},
+    {'name': 'Influenza adulto', 'code': '140'},
+    {'name': 'Neumococo (PCV13)', 'code': '133'},
+    {'name': 'Rotavirus', 'code': '116'},
+    {'name': 'Meningococo', 'code': '108'},
+    {'name': 'Fiebre amarilla', 'code': '37'},
+    {'name': 'COVID-19', 'code': '213'},
+    {'name': 'Otra (especificar)', 'code': ''},
   ];
+
+  static const Map<String, String> _statusOpts = {
+    'completed': 'Administrada',
+    'refused': 'Rehusada por paciente',
+    'not_given': 'No administrada (justificar)',
+  };
 
   @override
   void initState() {
@@ -69,7 +77,6 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   void dispose() {
     _vaccineNameCtrl.dispose();
     _cvxCodeCtrl.dispose();
-    _doseCtrl.dispose();
     _byCtrl.dispose();
     _atCtrl.dispose();
     super.dispose();
@@ -78,18 +85,13 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   String get _formattedDate =>
-      '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+      '${_date.year}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}';
 
-  Future<void> _pickDate() async {
-    if (!mounted) return;
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null && mounted) setState(() => _selectedDate = picked);
-  }
+  bool get _isFormValid =>
+      _vaccineNameCtrl.text.trim().isNotEmpty &&
+      _cvxCodeCtrl.text.trim().isNotEmpty &&
+      _byCtrl.text.trim().isNotEmpty &&
+      _atCtrl.text.trim().isNotEmpty;
 
   // ── NFC scan ──────────────────────────────────────────────────────────────
 
@@ -114,13 +116,6 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
     }
   }
 
-  // ── Validation ────────────────────────────────────────────────────────────
-
-  bool get _isFormValid =>
-      _vaccineNameCtrl.text.trim().isNotEmpty &&
-      _cvxCodeCtrl.text.trim().isNotEmpty &&
-      _byCtrl.text.trim().isNotEmpty;
-
   // ── Save ──────────────────────────────────────────────────────────────────
 
   Future<void> _save() async {
@@ -131,15 +126,15 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
       date: _formattedDate,
       vaccineName: _vaccineNameCtrl.text.trim(),
       vaccineCode: _cvxCodeCtrl.text.trim(),
-      dose: int.tryParse(_doseCtrl.text) ?? 1,
+      dose: _dose,
       administratedBy: _byCtrl.text.trim(),
       administratedAt: _atCtrl.text.trim(),
-      status: 'completed',
+      status: _status,
     );
 
-    // When called from PatientProfileScreen, just return the new item.
+    // When called from PatientProfileScreen, return item to caller.
     if (widget.returnToProfile) {
-      Navigator.of(context).pop(newVaccine);
+      if (mounted) Navigator.of(context).pop(newVaccine);
       return;
     }
 
@@ -156,27 +151,32 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
 
     try {
       final scope = AppScope.of(context);
-      // Save locally first (offline-first)
+      // 1. Save locally — instant, never blocks
       await scope.localDatabase.savePatient(updatedRecord);
-      // Try cloud sync
-      try {
-        await scope.patientRepository.syncPatient(updatedRecord);
-        await scope.localDatabase.markSynced(updatedRecord.patientId);
-      } catch (_) {
-        // Sync will retry — local save is enough
-      }
+
       if (mounted) {
         setState(() {
           _saved = true;
           _isSaving = false;
         });
+
+        // 2. Fire-and-forget sync
+        scope.syncEngine.syncAll().ignore();
+
+        // 3. Success snackbar
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Vacuna guardada exitosamente ✓'),
+            backgroundColor: AppColors.success,
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
       }
     }
   }
@@ -187,7 +187,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFEBF2F8),
+      backgroundColor: AppColors.backgroundLight,
       body: SafeArea(
         child: Stack(
           children: [
@@ -199,10 +199,10 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                 ),
                 Expanded(
                   child: _patient == null
-                      ? _buildScanStep(s)
+                      ? _buildScanStep()
                       : _saved
-                      ? _buildSuccessStep(s)
-                      : _buildFormStep(s),
+                      ? _buildSuccessStep()
+                      : _buildFormStep(),
                 ),
               ],
             ),
@@ -218,9 +218,9 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
     );
   }
 
-  // ── Step A: Scan patient ──────────────────────────────────────────────────
+  // ── Step A: Scan ──────────────────────────────────────────────────────────
 
-  Widget _buildScanStep(AppStrings s) {
+  Widget _buildScanStep() {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -228,22 +228,19 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
         children: [
           const Icon(Icons.vaccines, size: 64, color: AppColors.secondary),
           const SizedBox(height: 16),
-          Text(
+          const Text(
             'Escanear paciente',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w600,
               color: AppColors.secondary,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'Acerque la manilla del paciente para registrar la vacuna.',
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 32),
           GestureDetector(
@@ -254,17 +251,11 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.primary, width: 3),
-                color: const Color(0x0A1CABE2),
+                color: AppColors.primary.withValues(alpha: 0.06),
               ),
               child: _scanning
-                  ? const Center(
-                      child: CircularProgressIndicator(strokeWidth: 3),
-                    )
-                  : const Icon(
-                      Icons.nfc_rounded,
-                      size: 80,
-                      color: AppColors.primary,
-                    ),
+                  ? const Center(child: CircularProgressIndicator(strokeWidth: 3))
+                  : const Icon(Icons.nfc_rounded, size: 80, color: AppColors.primary),
             ),
           ),
           if (_scanError != null) ...[
@@ -276,37 +267,21 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
             ),
           ],
           const SizedBox(height: 24),
-          Text(
-            'o',
-            style: TextStyle(
-              color: AppColors.textSecondary.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(height: 12),
           SizedBox(
             width: 200,
             height: 40,
-            child: ElevatedButton.icon(
-              onPressed: () async {
-                // Navigate to full ReadNFC flow and wait for a patient
-                final result = await Navigator.of(context)
-                    .push<PatientFullRecord>(
-                      MaterialPageRoute(builder: (_) => const ReadNfcScreen()),
-                    );
-                if (result != null && mounted) {
-                  setState(() => _patient = result);
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.secondary,
+            child: OutlinedButton.icon(
+              onPressed: _showManualSearchDialog,
+              style: OutlinedButton.styleFrom(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
+                side: const BorderSide(color: AppColors.primary),
               ),
-              icon: const Icon(Icons.search, size: 18, color: AppColors.white),
-              label: Text(
-                s.readNfc,
-                style: const TextStyle(color: AppColors.white, fontSize: 14),
+              icon: const Icon(Icons.search, size: 18, color: AppColors.primary),
+              label: const Text(
+                'Buscar paciente',
+                style: TextStyle(fontSize: 14, color: AppColors.primary),
               ),
             ),
           ),
@@ -315,26 +290,78 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
     );
   }
 
-  // ── Step B: Vaccine form ──────────────────────────────────────────────────
+  void _showManualSearchDialog() {
+    final uidCtrl = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Buscar por UID'),
+        content: TextField(
+          controller: uidCtrl,
+          decoration: const InputDecoration(hintText: 'Ingrese UID de la manilla'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (uidCtrl.text.trim().isNotEmpty) {
+                setState(() {
+                  _scanning = true;
+                  _scanError = null;
+                });
+                AppScope.of(context).patientRepository
+                    .scanDevice(uidCtrl.text.trim())
+                    .then((p) {
+                      if (mounted) {
+                        setState(() {
+                          _patient = p;
+                          _scanning = false;
+                        });
+                      }
+                    })
+                    .catchError((Object e) {
+                      if (mounted) {
+                        setState(() {
+                          _scanError = e.toString();
+                          _scanning = false;
+                        });
+                      }
+                    });
+              }
+            },
+            child: const Text('Buscar'),
+          ),
+        ],
+      ),
+    );
+  }
 
-  Widget _buildFormStep(AppStrings s) {
+  // ── Step B: Form ──────────────────────────────────────────────────────────
+
+  Widget _buildFormStep() {
     final p = _patient!;
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 60),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 80),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Patient badge
+          // ── Patient badge ────────────────────────────────────────────────
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFE3F2FD),
-              borderRadius: BorderRadius.circular(10),
+              color: AppColors.secondary.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: AppColors.secondary.withValues(alpha: 0.2)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.person, size: 20, color: AppColors.primary),
-                const SizedBox(width: 8),
+                const Icon(Icons.person, size: 22, color: AppColors.secondary),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -344,7 +371,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
+                          color: AppColors.secondary,
                         ),
                       ),
                       Text(
@@ -357,135 +384,262 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                     ],
                   ),
                 ),
-                // Allergy warning if any drug allergies
-                if (p.allergies.any((a) => a.category == '01'))
-                  const Tooltip(
-                    message: 'Tiene alergia a medicamentos',
-                    child: Icon(
-                      Icons.warning_amber,
-                      size: 20,
-                      color: AppColors.error,
-                    ),
-                  ),
               ],
             ),
           ),
-
-          const SizedBox(height: 20),
-          _sectionTitle('Vacuna'),
-          const SizedBox(height: 12),
-          _textField(
-            s.vaccineName,
-            _vaccineNameCtrl,
-            hint: 'ej: Triple Viral (SRP)',
-          ),
-          const SizedBox(height: 12),
-          _textField(s.cvxCode, _cvxCodeCtrl, hint: 'ej: 03'),
-          const SizedBox(height: 12),
-
-          // Dose picker
-          _label(s.dose),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: List.generate(5, (i) {
-              final dose = '${i + 1}';
-              final selected = _doseCtrl.text == dose;
-              return GestureDetector(
-                onTap: () => setState(() => _doseCtrl.text = dose),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: selected ? AppColors.secondary : AppColors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: selected ? AppColors.secondary : AppColors.divider,
-                    ),
-                  ),
-                  child: Text(
-                    i == 4 ? 'Refuerzo' : '${i + 1}ª dosis',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: selected ? AppColors.white : AppColors.textPrimary,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-
           const SizedBox(height: 16),
-          _sectionTitle('Administración'),
+
+          // ── Vaccine selection ────────────────────────────────────────────
+          _SectionCard(
+            icon: Icons.vaccines_outlined,
+            title: 'Vacuna *',
+            children: [
+              const Text(
+                'Seleccione una vacuna frecuente',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 7,
+                runSpacing: 6,
+                children: _commonVaccines.map((v) {
+                  final sel = _vaccineNameCtrl.text == v['name'] &&
+                      _cvxCodeCtrl.text == v['code'];
+                  return GestureDetector(
+                    onTap: () => setState(() {
+                      _vaccineNameCtrl.text = v['name']!;
+                      _cvxCodeCtrl.text = v['code']!;
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: sel ? AppColors.secondary : AppColors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: sel
+                              ? AppColors.secondary
+                              : AppColors.divider,
+                        ),
+                      ),
+                      child: Text(
+                        v['name']!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: sel
+                              ? AppColors.white
+                              : AppColors.textPrimary,
+                          fontWeight:
+                              sel ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 12),
+              _labeledField(
+                'Nombre de la vacuna *',
+                _vaccineNameCtrl,
+                hint: 'Ej: Triple Viral (SRP)',
+              ),
+              const SizedBox(height: 10),
+              _labeledField(
+                'Código CVX *',
+                _cvxCodeCtrl,
+                hint: 'Ej: 03',
+                keyboard: TextInputType.number,
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
 
-          // Date
-          GestureDetector(
-            onTap: _pickDate,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.divider, width: 1.5),
+          // ── Dose ─────────────────────────────────────────────────────────
+          _SectionCard(
+            icon: Icons.numbers_outlined,
+            title: 'Dosis',
+            children: [
+              const Text(
+                'Número de dosis',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
-              child: Row(
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
                 children: [
-                  const Icon(
-                    Icons.calendar_today,
-                    size: 18,
-                    color: AppColors.secondary,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(_formattedDate, style: const TextStyle(fontSize: 14)),
-                  const Spacer(),
-                  const Icon(Icons.edit, size: 14, color: AppColors.disabled),
+                  for (int i = 1; i <= 5; i++)
+                    GestureDetector(
+                      onTap: () => setState(() => _dose = i),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _dose == i
+                              ? AppColors.secondary
+                              : AppColors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: _dose == i
+                                ? AppColors.secondary
+                                : AppColors.divider,
+                          ),
+                        ),
+                        child: Text(
+                          i == 5 ? 'Refuerzo' : '${i}ª',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: _dose == i
+                                ? AppColors.white
+                                : AppColors.textPrimary,
+                            fontWeight: _dose == i
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
-            ),
+            ],
           ),
-
           const SizedBox(height: 12),
-          _textField(s.administeredBy, _byCtrl, hint: 'ej: Enf. Ana Ruiz'),
-          const SizedBox(height: 12),
-          _textField(s.administeredAt, _atCtrl, hint: 'ej: Brigada Frontera'),
 
-          const SizedBox(height: 16),
-          _sectionTitle('Reacciones / notas'),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: _reactionOptions.map((opt) {
-              final sel = _reaction == opt;
-              return FilterChip(
-                label: Text(
-                  opt,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: sel ? AppColors.white : AppColors.textPrimary,
+          // ── Administration ────────────────────────────────────────────────
+          _SectionCard(
+            icon: Icons.event_available_outlined,
+            title: 'Administración',
+            children: [
+              // Date picker
+              const Text(
+                'Fecha de administración *',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 4),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _date,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null && mounted) {
+                    setState(() => _date = picked);
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 11),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: AppColors.divider, width: 1.4),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today,
+                          size: 16, color: AppColors.secondary),
+                      const SizedBox(width: 8),
+                      Text(
+                        _formattedDate,
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.edit,
+                          size: 14, color: AppColors.disabled),
+                    ],
                   ),
                 ),
-                selected: sel,
-                onSelected: (_) => setState(() => _reaction = opt),
-                selectedColor: AppColors.secondary,
-                checkmarkColor: AppColors.white,
-                backgroundColor: AppColors.white,
-                side: BorderSide(
-                  color: sel ? AppColors.secondary : AppColors.divider,
-                ),
-              );
-            }).toList(),
+              ),
+              const SizedBox(height: 10),
+              _labeledField(
+                'Administrado por *',
+                _byCtrl,
+                hint: 'Ej: Enf. Ana Ruiz',
+              ),
+              const SizedBox(height: 10),
+              _labeledField(
+                'Lugar de administración *',
+                _atCtrl,
+                hint: 'Ej: Brigada Frontera Cúcuta',
+              ),
+            ],
           ),
+          const SizedBox(height: 12),
 
-          const SizedBox(height: 30),
+          // ── Status ────────────────────────────────────────────────────────
+          _SectionCard(
+            icon: Icons.check_circle_outline,
+            title: 'Estado de la vacuna',
+            children: [
+              const Text(
+                'Estado',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 8),
+              Column(
+                children: _statusOpts.entries.map((e) {
+                  final sel = _status == e.key;
+                  return GestureDetector(
+                    onTap: () => setState(() => _status = e.key),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: sel
+                            ? AppColors.secondary.withValues(alpha: 0.08)
+                            : AppColors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: sel
+                              ? AppColors.secondary
+                              : AppColors.divider,
+                          width: sel ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            sel
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_off,
+                            size: 18,
+                            color: sel
+                                ? AppColors.secondary
+                                : AppColors.disabled,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              e.value,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: sel
+                                    ? AppColors.secondary
+                                    : AppColors.textPrimary,
+                                fontWeight: sel
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 28),
+
+          // ── Save button ──────────────────────────────────────────────────
           SizedBox(
             width: double.infinity,
-            height: 48,
+            height: 50,
             child: ElevatedButton.icon(
               onPressed: (!_isFormValid || _isSaving) ? null : _save,
               style: ElevatedButton.styleFrom(
@@ -504,11 +658,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                         color: AppColors.white,
                       ),
                     )
-                  : const Icon(
-                      Icons.vaccines,
-                      size: 22,
-                      color: AppColors.white,
-                    ),
+                  : const Icon(Icons.vaccines, size: 22, color: AppColors.white),
               label: Text(
                 _isSaving ? 'Guardando...' : 'Guardar vacuna',
                 style: const TextStyle(color: AppColors.white, fontSize: 16),
@@ -522,8 +672,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
 
   // ── Step C: Success ───────────────────────────────────────────────────────
 
-  Widget _buildSuccessStep(AppStrings s) {
-    final p = _patient!;
+  Widget _buildSuccessStep() {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -534,45 +683,47 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
             height: 80,
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
-              color: Color(0xFF00A396),
+              color: AppColors.success,
             ),
             child: const Icon(Icons.check, size: 48, color: AppColors.white),
           ),
           const SizedBox(height: 20),
           const Text(
-            'Vacuna registrada',
+            'Vacuna guardada exitosamente',
             style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-              color: AppColors.secondary,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
             ),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 6),
           Text(
-            '${p.patientInfo.firstName} · ${_vaccineNameCtrl.text}',
+            '${_patient?.patientInfo.fullName ?? ''} · ${_vaccineNameCtrl.text}',
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 13,
               color: AppColors.textSecondary,
             ),
+            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 32),
-          _confirmRow(
-            Icons.check_circle,
-            AppColors.success,
-            'Guardado:',
-            'Localmente',
+          const SizedBox(height: 24),
+          _StatusRow(
+            icon: Icons.storage_outlined,
+            color: AppColors.success,
+            label: 'Guardado local',
+            value: 'Exitoso',
           ),
           const SizedBox(height: 8),
-          _confirmRow(
-            Icons.cloud_upload,
-            const Color(0xFFE6A817),
-            'Sync:',
-            'Pendiente',
+          _StatusRow(
+            icon: Icons.cloud_upload_outlined,
+            color: const Color(0xFFFB8C00),
+            label: 'Sincronización',
+            value: 'En cola (segundo plano)',
           ),
           const SizedBox(height: 40),
           SizedBox(
             width: double.infinity,
-            height: 48,
+            height: 50,
             child: ElevatedButton.icon(
               onPressed: () {
                 setState(() {
@@ -580,10 +731,11 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                   _patient = null;
                   _vaccineNameCtrl.clear();
                   _cvxCodeCtrl.clear();
-                  _doseCtrl.text = '1';
+                  _dose = 1;
+                  _date = DateTime.now();
                   _byCtrl.clear();
                   _atCtrl.clear();
-                  _reaction = 'Sin reacción';
+                  _status = 'completed';
                 });
               },
               style: ElevatedButton.styleFrom(
@@ -592,11 +744,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              icon: const Icon(
-                Icons.vaccines,
-                size: 20,
-                color: AppColors.white,
-              ),
+              icon: const Icon(Icons.vaccines, size: 20, color: AppColors.white),
               label: const Text(
                 'Registrar otra vacuna',
                 style: TextStyle(color: AppColors.white, fontSize: 15),
@@ -606,14 +754,14 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            height: 44,
+            height: 46,
             child: OutlinedButton(
               onPressed: () => Navigator.of(context).pop(),
               style: OutlinedButton.styleFrom(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                side: const BorderSide(color: AppColors.textSecondary),
+                side: const BorderSide(color: AppColors.divider),
               ),
               child: const Text('Volver', style: TextStyle(fontSize: 14)),
             ),
@@ -623,13 +771,120 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
     );
   }
 
-  Widget _confirmRow(IconData icon, Color color, String label, String value) {
+  // ── Widget helpers ────────────────────────────────────────────────────────
+
+  Widget _labeledField(
+    String label,
+    TextEditingController ctrl, {
+    String? hint,
+    TextInputType keyboard = TextInputType.text,
+  }) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          TextField(
+            controller: ctrl,
+            keyboardType: keyboard,
+            style: const TextStyle(fontSize: 14),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: hint,
+              hintStyle: const TextStyle(
+                fontSize: 12,
+                color: AppColors.disabled,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 11,
+              ),
+            ),
+          ),
+        ],
+      );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Sub-widgets
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.icon,
+    required this.title,
+    required this.children,
+  });
+  final IconData icon;
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: AppColors.secondary),
+              const SizedBox(width: 7),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.secondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusRow extends StatelessWidget {
+  const _StatusRow({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+  });
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
       children: [
         Icon(icon, size: 20, color: color),
         const SizedBox(width: 10),
         Text(
-          label,
+          '$label:',
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
         const SizedBox(width: 6),
@@ -640,45 +895,4 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
       ],
     );
   }
-
-  // ── Widget helpers ────────────────────────────────────────────────────────
-
-  Widget _sectionTitle(String t) => Text(
-    t,
-    style: const TextStyle(
-      fontSize: 17,
-      fontWeight: FontWeight.w700,
-      color: AppColors.primary,
-    ),
-  );
-
-  Widget _label(String t) => Text(
-    t,
-    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-  );
-
-  Widget _textField(String label, TextEditingController ctrl, {String? hint}) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _label(label),
-          const SizedBox(height: 4),
-          TextField(
-            controller: ctrl,
-            style: const TextStyle(fontSize: 14),
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: hint,
-              hintStyle: const TextStyle(
-                fontSize: 13,
-                color: AppColors.disabled,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 12,
-              ),
-            ),
-          ),
-        ],
-      );
 }
