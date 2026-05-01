@@ -35,12 +35,12 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
 
   // ── Form fields (mirror VaccinationRecordItem exactly) ────────────────────
   final _vaccineNameCtrl = TextEditingController(); // vaccineName: str
-  final _cvxCodeCtrl = TextEditingController();     // vaccineCode: str (CVX)
-  int _dose = 1;                                    // dose: int
-  DateTime _date = DateTime.now();                  // date: date (YYYY-MM-DD)
-  final _byCtrl = TextEditingController();          // administratedBy: str
-  final _atCtrl = TextEditingController();          // administratedAt: str
-  String _status = 'completed';                     // status: str
+  final _cvxCodeCtrl = TextEditingController(); // vaccineCode: str (CVX)
+  int _dose = 1; // dose: int
+  DateTime _date = DateTime.now(); // date: date (YYYY-MM-DD)
+  final _byCtrl = TextEditingController(); // administratedBy: str
+  final _atCtrl = TextEditingController(); // administratedAt: str
+  String _status = 'completed'; // status: str
 
   // ── Common vaccines catalog ───────────────────────────────────────────────
   static const List<Map<String, String>> _commonVaccines = [
@@ -175,8 +175,9 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
       }
     }
   }
@@ -254,8 +255,14 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                 color: AppColors.primary.withValues(alpha: 0.06),
               ),
               child: _scanning
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 3))
-                  : const Icon(Icons.nfc_rounded, size: 80, color: AppColors.primary),
+                  ? const Center(
+                      child: CircularProgressIndicator(strokeWidth: 3),
+                    )
+                  : const Icon(
+                      Icons.nfc_rounded,
+                      size: 80,
+                      color: AppColors.primary,
+                    ),
             ),
           ),
           if (_scanError != null) ...[
@@ -278,7 +285,11 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                 ),
                 side: const BorderSide(color: AppColors.primary),
               ),
-              icon: const Icon(Icons.search, size: 18, color: AppColors.primary),
+              icon: const Icon(
+                Icons.search,
+                size: 18,
+                color: AppColors.primary,
+              ),
               label: const Text(
                 'Buscar paciente',
                 style: TextStyle(fontSize: 14, color: AppColors.primary),
@@ -298,7 +309,9 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
         title: const Text('Buscar por UID'),
         content: TextField(
           controller: uidCtrl,
-          decoration: const InputDecoration(hintText: 'Ingrese UID de la manilla'),
+          decoration: const InputDecoration(
+            hintText: 'Ingrese UID de la manilla',
+          ),
         ),
         actions: [
           TextButton(
@@ -356,7 +369,8 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
               color: AppColors.secondary.withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: AppColors.secondary.withValues(alpha: 0.2)),
+                color: AppColors.secondary.withValues(alpha: 0.2),
+              ),
             ),
             child: Row(
               children: [
@@ -403,7 +417,8 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                 spacing: 7,
                 runSpacing: 6,
                 children: _commonVaccines.map((v) {
-                  final sel = _vaccineNameCtrl.text == v['name'] &&
+                  final sel =
+                      _vaccineNameCtrl.text == v['name'] &&
                       _cvxCodeCtrl.text == v['code'];
                   return GestureDetector(
                     onTap: () => setState(() {
@@ -412,25 +427,22 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                     }),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: sel ? AppColors.secondary : AppColors.white,
                         borderRadius: BorderRadius.circular(18),
                         border: Border.all(
-                          color: sel
-                              ? AppColors.secondary
-                              : AppColors.divider,
+                          color: sel ? AppColors.secondary : AppColors.divider,
                         ),
                       ),
                       child: Text(
                         v['name']!,
                         style: TextStyle(
                           fontSize: 12,
-                          color: sel
-                              ? AppColors.white
-                              : AppColors.textPrimary,
-                          fontWeight:
-                              sel ? FontWeight.w600 : FontWeight.w400,
+                          color: sel ? AppColors.white : AppColors.textPrimary,
+                          fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
                         ),
                       ),
                     ),
@@ -473,7 +485,9 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                       onTap: () => setState(() => _dose = i),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 18, vertical: 8),
+                          horizontal: 18,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: _dose == i
                               ? AppColors.secondary
@@ -530,25 +544,32 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 11),
+                    horizontal: 12,
+                    vertical: 11,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.white,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: AppColors.divider, width: 1.4),
+                    border: Border.all(color: AppColors.divider, width: 1.4),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_today,
-                          size: 16, color: AppColors.secondary),
+                      const Icon(
+                        Icons.calendar_today,
+                        size: 16,
+                        color: AppColors.secondary,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         _formattedDate,
                         style: const TextStyle(fontSize: 14),
                       ),
                       const Spacer(),
-                      const Icon(Icons.edit,
-                          size: 14, color: AppColors.disabled),
+                      const Icon(
+                        Icons.edit,
+                        size: 14,
+                        color: AppColors.disabled,
+                      ),
                     ],
                   ),
                 ),
@@ -587,16 +608,16 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 6),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: sel
                             ? AppColors.secondary.withValues(alpha: 0.08)
                             : AppColors.white,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: sel
-                              ? AppColors.secondary
-                              : AppColors.divider,
+                          color: sel ? AppColors.secondary : AppColors.divider,
                           width: sel ? 1.5 : 1,
                         ),
                       ),
@@ -658,7 +679,11 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                         color: AppColors.white,
                       ),
                     )
-                  : const Icon(Icons.vaccines, size: 22, color: AppColors.white),
+                  : const Icon(
+                      Icons.vaccines,
+                      size: 22,
+                      color: AppColors.white,
+                    ),
               label: Text(
                 _isSaving ? 'Guardando...' : 'Guardar vacuna',
                 style: const TextStyle(color: AppColors.white, fontSize: 16),
@@ -744,7 +769,11 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              icon: const Icon(Icons.vaccines, size: 20, color: AppColors.white),
+              icon: const Icon(
+                Icons.vaccines,
+                size: 20,
+                color: AppColors.white,
+              ),
               label: const Text(
                 'Registrar otra vacuna',
                 style: TextStyle(color: AppColors.white, fontSize: 15),
@@ -778,37 +807,30 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
     TextEditingController ctrl, {
     String? hint,
     TextInputType keyboard = TextInputType.text,
-  }) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-            ),
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
+      const SizedBox(height: 4),
+      TextField(
+        controller: ctrl,
+        keyboardType: keyboard,
+        style: const TextStyle(fontSize: 14),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: hint,
+          hintStyle: const TextStyle(fontSize: 12, color: AppColors.disabled),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 11,
           ),
-          const SizedBox(height: 4),
-          TextField(
-            controller: ctrl,
-            keyboardType: keyboard,
-            style: const TextStyle(fontSize: 14),
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: hint,
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: AppColors.disabled,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 11,
-              ),
-            ),
-          ),
-        ],
-      );
+        ),
+      ),
+    ],
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

@@ -59,7 +59,8 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
   // ── Clinical evaluation ───────────────────────────────────────────────────
   final _historyCtrl = TextEditingController(); // historyOfCurrentIllness
-  final _physicalExamCtrl = TextEditingController(); // generalPhysicalExamination
+  final _physicalExamCtrl =
+      TextEditingController(); // generalPhysicalExamination
   final _systemsCtrl = TextEditingController(); // systemsExamination
   final _treatmentCtrl = TextEditingController(); // treatmentPlanObservations
 
@@ -196,8 +197,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
     // Build PayerInfo
     final payerName = _payerNameCtrl.text.trim();
-    final PayerInfo? payer =
-        payerName.isNotEmpty ? PayerInfo(name: payerName) : null;
+    final PayerInfo? payer = payerName.isNotEmpty
+        ? PayerInfo(name: payerName)
+        : null;
 
     final newConsultation = MedicalHistoryItem(
       type: 'Consultation',
@@ -242,8 +244,10 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       patientId: _patient!.patientId,
       deviceUid: _patient!.deviceUid,
       patientInfo: _patient!.patientInfo.copyWith(
-        weight: double.tryParse(_weightCtrl.text) ?? _patient!.patientInfo.weight,
-        height: double.tryParse(_heightCtrl.text) ?? _patient!.patientInfo.height,
+        weight:
+            double.tryParse(_weightCtrl.text) ?? _patient!.patientInfo.weight,
+        height:
+            double.tryParse(_heightCtrl.text) ?? _patient!.patientInfo.height,
       ),
       guardianInfo: _patient!.guardianInfo,
       backgroundHistory: _patient!.backgroundHistory,
@@ -278,8 +282,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
       }
     }
   }
@@ -329,7 +334,11 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.medical_services, size: 64, color: AppColors.secondary),
+          const Icon(
+            Icons.medical_services,
+            size: 64,
+            color: AppColors.secondary,
+          ),
           const SizedBox(height: 16),
           const Text(
             'Escanear paciente',
@@ -357,8 +366,14 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                 color: AppColors.primary.withValues(alpha: 0.06),
               ),
               child: _scanning
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 3))
-                  : const Icon(Icons.nfc_rounded, size: 80, color: AppColors.primary),
+                  ? const Center(
+                      child: CircularProgressIndicator(strokeWidth: 3),
+                    )
+                  : const Icon(
+                      Icons.nfc_rounded,
+                      size: 80,
+                      color: AppColors.primary,
+                    ),
             ),
           ),
           if (_scanError != null) ...[
@@ -381,7 +396,11 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                 ),
                 side: const BorderSide(color: AppColors.primary),
               ),
-              icon: const Icon(Icons.search, size: 18, color: AppColors.primary),
+              icon: const Icon(
+                Icons.search,
+                size: 18,
+                color: AppColors.primary,
+              ),
               label: const Text(
                 'Buscar paciente',
                 style: TextStyle(fontSize: 14, color: AppColors.primary),
@@ -401,7 +420,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
         title: const Text('Buscar por UID'),
         content: TextField(
           controller: uidCtrl,
-          decoration: const InputDecoration(hintText: 'Ingrese UID de la manilla'),
+          decoration: const InputDecoration(
+            hintText: 'Ingrese UID de la manilla',
+          ),
         ),
         actions: [
           TextButton(
@@ -464,7 +485,11 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: _vitalField('Peso (kg)', _weightCtrl, Icons.monitor_weight_outlined),
+                    child: _vitalField(
+                      'Peso (kg)',
+                      _weightCtrl,
+                      Icons.monitor_weight_outlined,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -507,21 +532,27 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                 'Modalidad de atención (Elem. 18.1)',
                 _careModality,
                 _careModalityOpts,
-                (v) { if (v != null) setState(() => _careModality = v); },
+                (v) {
+                  if (v != null) setState(() => _careModality = v);
+                },
               ),
               const SizedBox(height: 10),
               _dropdownField(
                 'Grupo de servicios (Elem. 18.2)',
                 _serviceGroup,
                 _serviceGroupOpts,
-                (v) { if (v != null) setState(() => _serviceGroup = v); },
+                (v) {
+                  if (v != null) setState(() => _serviceGroup = v);
+                },
               ),
               const SizedBox(height: 10),
               _dropdownField(
                 'Entorno de atención (Elem. 19)',
                 _careEnvironment,
                 _careEnvOpts,
-                (v) { if (v != null) setState(() => _careEnvironment = v); },
+                (v) {
+                  if (v != null) setState(() => _careEnvironment = v);
+                },
               ),
             ],
           ),
@@ -540,17 +571,27 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                       'Tipo doc.',
                       _practitionerDocType,
                       _docTypeOpts,
-                      (v) { if (v != null) setState(() => _practitionerDocType = v); },
+                      (v) {
+                        if (v != null) setState(() => _practitionerDocType = v);
+                      },
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _textField('Nº documento', _practitionerDocCtrl, Icons.badge),
+                    child: _textField(
+                      'Nº documento',
+                      _practitionerDocCtrl,
+                      Icons.badge,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
-              _textField('Nombre del profesional', _practitionerNameCtrl, Icons.person_outline),
+              _textField(
+                'Nombre del profesional',
+                _practitionerNameCtrl,
+                Icons.person_outline,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -560,9 +601,17 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             icon: Icons.apartment_outlined,
             title: 'Prestador de servicios (Elem. 16)',
             children: [
-              _textField('Código REPS del prestador', _providerRepsCtrl, Icons.tag),
+              _textField(
+                'Código REPS del prestador',
+                _providerRepsCtrl,
+                Icons.tag,
+              ),
               const SizedBox(height: 10),
-              _textField('Nombre del prestador / brigada', _providerNameCtrl, Icons.business_outlined),
+              _textField(
+                'Nombre del prestador / brigada',
+                _providerNameCtrl,
+                Icons.business_outlined,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -572,7 +621,11 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             icon: Icons.health_and_safety_outlined,
             title: 'Entidad pagadora (Elem. 15)',
             children: [
-              _textField('Nombre de la EAPB / aseguradora', _payerNameCtrl, Icons.shield_outlined),
+              _textField(
+                'Nombre de la EAPB / aseguradora',
+                _payerNameCtrl,
+                Icons.shield_outlined,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -598,7 +651,8 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
               _textArea(
                 'Revisión por sistemas',
                 _systemsCtrl,
-                hint: 'Pulmones: murmullo vesicular conservado sin agregados...',
+                hint:
+                    'Pulmones: murmullo vesicular conservado sin agregados...',
               ),
               const SizedBox(height: 10),
               _textArea(
@@ -619,7 +673,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                 'Tipo de diagnóstico (Elem. 37.3)',
                 _diagnosisType,
                 _diagnosisTypeOpts,
-                (v) { if (v != null) setState(() => _diagnosisType = v); },
+                (v) {
+                  if (v != null) setState(() => _diagnosisType = v);
+                },
               ),
               const SizedBox(height: 6),
               Container(
@@ -630,12 +686,19 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.auto_awesome, size: 14, color: AppColors.primary),
+                    Icon(
+                      Icons.auto_awesome,
+                      size: 14,
+                      color: AppColors.primary,
+                    ),
                     SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         'Los códigos CIE-10/11 se completan automáticamente por el LLM del backend a partir de la evaluación clínica.',
-                        style: TextStyle(fontSize: 11, color: AppColors.primary),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.primary,
+                        ),
                       ),
                     ),
                   ],
@@ -646,7 +709,12 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                 'Condición al egreso (Elem. 41)',
                 _dischargeDisposition ?? '',
                 _dischargeOpts,
-                (v) { setState(() => _dischargeDisposition = (v?.isEmpty ?? true) ? null : v); },
+                (v) {
+                  setState(
+                    () =>
+                        _dischargeDisposition = (v?.isEmpty ?? true) ? null : v,
+                  );
+                },
               ),
             ],
           ),
@@ -716,7 +784,10 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           const SizedBox(height: 6),
           Text(
             _patient?.patientInfo.fullName ?? '',
-            style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 24),
           _StatusRow(
@@ -739,7 +810,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
               decoration: BoxDecoration(
                 color: AppColors.error.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                border: Border.all(
+                  color: AppColors.error.withValues(alpha: 0.3),
+                ),
               ),
               child: const Row(
                 children: [
@@ -777,17 +850,16 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
   // ── Widget helpers ────────────────────────────────────────────────────────
 
-  Widget _vitalField(
-    String label,
-    TextEditingController ctrl,
-    IconData icon,
-  ) =>
+  Widget _vitalField(String label, TextEditingController ctrl, IconData icon) =>
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 4),
           TextField(
@@ -806,17 +878,16 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
         ],
       );
 
-  Widget _textField(
-    String label,
-    TextEditingController ctrl,
-    IconData icon,
-  ) =>
+  Widget _textField(String label, TextEditingController ctrl, IconData icon) =>
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 4),
           TextField(
@@ -839,87 +910,82 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     TextEditingController ctrl, {
     String? hint,
     bool required = false,
-  }) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
         children: [
-          Row(
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              if (required)
-                const Text(
-                  ' *',
-                  style: TextStyle(fontSize: 12, color: AppColors.error),
-                ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          TextField(
-            controller: ctrl,
-            maxLines: 3,
-            style: const TextStyle(fontSize: 13),
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: hint,
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: AppColors.disabled,
-              ),
-              contentPadding: const EdgeInsets.all(12),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
             ),
           ),
+          if (required)
+            const Text(
+              ' *',
+              style: TextStyle(fontSize: 12, color: AppColors.error),
+            ),
         ],
-      );
+      ),
+      const SizedBox(height: 4),
+      TextField(
+        controller: ctrl,
+        maxLines: 3,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: hint,
+          hintStyle: const TextStyle(fontSize: 12, color: AppColors.disabled),
+          contentPadding: const EdgeInsets.all(12),
+        ),
+      ),
+    ],
+  );
 
   Widget _dropdownField(
     String label,
     String value,
     Map<String, String> opts,
     ValueChanged<String?> cb,
-  ) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
+      const SizedBox(height: 4),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.divider, width: 1.4),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            isExpanded: true,
+            value: value,
+            items: opts.entries
+                .map(
+                  (e) => DropdownMenuItem(
+                    value: e.key,
+                    child: Text(
+                      e.value,
+                      style: const TextStyle(fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: cb,
           ),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: AppColors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.divider, width: 1.4),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                isExpanded: true,
-                value: value,
-                items: opts.entries
-                    .map(
-                      (e) => DropdownMenuItem(
-                        value: e.key,
-                        child: Text(
-                          e.value,
-                          style: const TextStyle(fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: cb,
-              ),
-            ),
-          ),
-        ],
-      );
+        ),
+      ),
+    ],
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -975,7 +1041,11 @@ class _PatientBadge extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.warning_amber, size: 14, color: AppColors.error),
+                  const Icon(
+                    Icons.warning_amber,
+                    size: 14,
+                    color: AppColors.error,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '${patient.allergies.length} alergia(s)',
@@ -1059,8 +1129,10 @@ class _DateTimeRow extends StatelessWidget {
   final VoidCallback? onClear;
 
   String _format(DateTime dt) {
-    final d = '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
-    final t = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    final d =
+        '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    final t =
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     return '$d $t';
   }
 
@@ -1092,13 +1164,15 @@ class _DateTimeRow extends StatelessWidget {
                       initialTime: TimeOfDay.fromDateTime(value ?? now),
                     );
                     if (context.mounted) {
-                      onPick(DateTime(
-                        date.year,
-                        date.month,
-                        date.day,
-                        time?.hour ?? (value?.hour ?? now.hour),
-                        time?.minute ?? (value?.minute ?? now.minute),
-                      ));
+                      onPick(
+                        DateTime(
+                          date.year,
+                          date.month,
+                          date.day,
+                          time?.hour ?? (value?.hour ?? now.hour),
+                          time?.minute ?? (value?.minute ?? now.minute),
+                        ),
+                      );
                     }
                   }
                 },

@@ -130,30 +130,14 @@ class LocalDatabase {
   // ── Sync lifecycle ────────────────────────────────────────────────────────
 
   Future<void> markSynced(String patientId) async {
+    // After successful cloud sync, delete the local record entirely.
+    // The authoritative copy now lives in the backend.
     if (_isWeb) {
-      if (_webStore.containsKey(patientId)) {
-        _webStore[patientId] = {
-          ..._webStore[patientId]!,
-          'is_synced': 1,
-          'sync_error': null,
-          'synced_at': DateTime.now().toIso8601String(),
-          'record_json': '{}',
-        };
-      }
+      _webStore.remove(patientId);
       return;
     }
     final db = await _database;
-    await db!.update(
-      _table,
-      {
-        'is_synced': 1,
-        'sync_error': null,
-        'synced_at': DateTime.now().toIso8601String(),
-        'record_json': '{}',
-      },
-      where: 'patient_id = ?',
-      whereArgs: [patientId],
-    );
+    await db!.delete(_table, where: 'patient_id = ?', whereArgs: [patientId]);
   }
 
   Future<void> markSyncError(String patientId, String error) async {
