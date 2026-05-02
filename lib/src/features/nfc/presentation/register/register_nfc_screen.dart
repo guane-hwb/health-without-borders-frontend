@@ -161,12 +161,6 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   @override
   Widget build(BuildContext context) {
     final onSuccess = _step == 5;
-    final headerTitle = onSuccess
-        ? '${_savedRecord!.patientInfo.fullName}'
-        : 'Nuevo paciente';
-    final headerSubDoc = onSuccess
-        ? '${_savedRecord!.patientInfo.identification.documentType} ${_savedRecord!.patientInfo.identification.documentNumber}'
-        : null;
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FB),
       body: SafeArea(
@@ -175,8 +169,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
             Column(
               children: [
                 _WizardHeader(
-                  title: headerTitle,
-                  subtitle: headerSubDoc,
+                  title: 'Nuevo paciente',
                   onBack: onSuccess ? null : _back,
                   stepText: onSuccess ? null : '${_step + 1}/5',
                 ),
