@@ -2,8 +2,7 @@
 
 /// Local representation of the authenticated user.
 ///
-/// Populated after login by calling GET /api/v1/users/me (once that endpoint
-/// exists in the backend). Until then, only [email] is guaranteed from the JWT.
+/// Populated after login by calling GET /api/v1/users/me.
 class UserSession {
   UserSession({
     required this.id,
@@ -16,10 +15,17 @@ class UserSession {
   });
 
   factory UserSession.fromJson(Map<String, dynamic> json) {
+    final email = json['email']?.toString() ?? '';
+    final rawName = json['full_name']?.toString();
+    // Use full_name if available; otherwise build a readable name from email
+    final displayName = (rawName != null && rawName.trim().isNotEmpty)
+        ? rawName.trim()
+        : _humanizeEmail(email);
+
     return UserSession(
       id: json['id']?.toString() ?? '',
-      email: json['email']?.toString() ?? '',
-      fullName: json['full_name']?.toString() ?? json['email']?.toString() ?? '',
+      email: email,
+      fullName: displayName,
       role: _parseRole(json['role']?.toString()),
       organizationId: json['organization_id']?.toString() ?? '',
       organizationName: json['organization_name']?.toString(),
@@ -33,7 +39,7 @@ class UserSession {
     return UserSession(
       id: '',
       email: email,
-      fullName: email.split('@').first,
+      fullName: _humanizeEmail(email),
       role: UserRole.doctor, // safe default — UI adapts once role is confirmed
       organizationId: '',
     );
@@ -47,18 +53,39 @@ class UserSession {
   final String? organizationName;
   final bool isActive;
 
-  /// Greeting name: "Dr. Juan Pérez" → "Dr. Juan"
+  /// Greeting name: takes first two words of fullName.
+  /// "Juan Carlos Pérez" → "Juan Carlos"
+  /// "doctor.juan" → "Doctor Juan" (already humanized by factory)
   String get shortName {
     final parts = fullName.split(' ');
-    return parts.length >= 2 ? '${parts[0]} ${parts[1]}' : fullName;
+    if (parts.length >= 2) return '${parts[0]} ${parts[1]}';
+    return fullName;
+  }
+
+  /// Converts "doctor.juan@org.com" → "Doctor Juan"
+  static String _humanizeEmail(String email) {
+    final local = email.split('@').first;
+    // Replace dots, underscores, hyphens with spaces then capitalize each word
+    final words = local
+        .replaceAll(RegExp(r'[._\-]'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+        .toList();
+    return words.join(' ');
   }
 
   static UserRole _parseRole(String? raw) {
     switch (raw) {
-      case 'superadmin': return UserRole.superadmin;
-      case 'org_admin': return UserRole.orgAdmin;
-      case 'nurse': return UserRole.nurse;
-      case 'doctor': default: return UserRole.doctor;
+      case 'superadmin':
+        return UserRole.superadmin;
+      case 'org_admin':
+        return UserRole.orgAdmin;
+      case 'nurse':
+        return UserRole.nurse;
+      case 'doctor':
+      default:
+        return UserRole.doctor;
     }
   }
 }
@@ -70,10 +97,34 @@ enum UserRole {
   nurse;
 
   bool get isAdmin => this == orgAdmin || this == superadmin;
-  bool get canAddConsultation => this == doctor || this == superadmin;
-  bool get canAddVaccine => this == doctor || this == nurse || this == superadmin;
-  bool get canRegisterPatient => this != orgAdmin;
+  bool get isSuperadmin => this == superadmin;
+
+  /// Clinical access — can read patient records via NFC/search
+  bool get canReadPatients =>
+      this == doctor || this == nurse || this == orgAdmin;
+
+  /// Can register new patients (step-by-step wizard)
+  bool get canRegisterPatient => this == doctor || this == nurse;
+
+  /// Can add medical consultations (medicalHistory entries)
+  bool get canAddConsultation => this == doctor;
+
+  /// Can add vaccination records
+  bool get canAddVaccine => this == doctor || this == nurse;
+
+  /// Can sync patient data to the cloud
   bool get canSyncPatient => this == doctor || this == nurse;
+
+  /// Can manage users (create/list)
   bool get canManageUsers => isAdmin;
+
+  /// Can view analytics/KPIs
   bool get canViewAnalytics => isAdmin;
+
+  /// Can scan NFC wristbands
+  bool get canScanNfc => this == doctor || this == nurse;
+
+  /// Can search patients (loss of wristband)
+  bool get canSearchPatient =>
+      this == doctor || this == nurse || this == orgAdmin;
 }

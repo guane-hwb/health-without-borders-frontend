@@ -27,14 +27,32 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final users = await AppScope.of(context).userRepository.listUsers();
-      if (mounted) setState(() { _users = users; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _users = users;
+          _loading = false;
+        });
+      }
     } on ApiException catch (e) {
-      if (mounted) setState(() { _error = e.message; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _loading = false;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -42,10 +60,14 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     if (_filter == 'all') return _users;
     return _users.where((u) {
       switch (_filter) {
-        case 'doctor': return u.role == UserRole.doctor;
-        case 'nurse': return u.role == UserRole.nurse;
-        case 'org_admin': return u.role == UserRole.orgAdmin;
-        default: return true;
+        case 'doctor':
+          return u.role == UserRole.doctor;
+        case 'nurse':
+          return u.role == UserRole.nurse;
+        case 'org_admin':
+          return u.role == UserRole.orgAdmin;
+        default:
+          return true;
       }
     }).toList();
   }
@@ -60,33 +82,70 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
         child: const Icon(Icons.person_add, color: AppColors.white),
       ),
       body: SafeArea(
-        child: Stack(children: [
-          Column(children: [
-            SharedReadNfcHeader(
-              title: 'Gestionar usuarios',
-              onBack: () => Navigator.of(context).pop(),
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                SharedReadNfcHeader(
+                  title: 'Gestionar usuarios',
+                  onBack: () => Navigator.of(context).pop(),
+                ),
+                // Filter tabs
+                Container(
+                  color: AppColors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _FilterChip(
+                          label: 'Todos (${_users.length})',
+                          value: 'all',
+                          current: _filter,
+                          onTap: (v) => setState(() => _filter = v),
+                        ),
+                        const SizedBox(width: 8),
+                        _FilterChip(
+                          label:
+                              'Doctores (${_users.where((u) => u.role == UserRole.doctor).length})',
+                          value: 'doctor',
+                          current: _filter,
+                          onTap: (v) => setState(() => _filter = v),
+                        ),
+                        const SizedBox(width: 8),
+                        _FilterChip(
+                          label:
+                              'Enfermería (${_users.where((u) => u.role == UserRole.nurse).length})',
+                          value: 'nurse',
+                          current: _filter,
+                          onTap: (v) => setState(() => _filter = v),
+                        ),
+                        const SizedBox(width: 8),
+                        _FilterChip(
+                          label:
+                              'Admin (${_users.where((u) => u.role == UserRole.orgAdmin).length})',
+                          value: 'org_admin',
+                          current: _filter,
+                          onTap: (v) => setState(() => _filter = v),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(child: _buildContent()),
+              ],
             ),
-            // Filter tabs
-            Container(
-              color: AppColors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(children: [
-                  _FilterChip(label: 'Todos (${_users.length})', value: 'all', current: _filter, onTap: (v) => setState(() => _filter = v)),
-                  const SizedBox(width: 8),
-                  _FilterChip(label: 'Doctores (${_users.where((u) => u.role == UserRole.doctor).length})', value: 'doctor', current: _filter, onTap: (v) => setState(() => _filter = v)),
-                  const SizedBox(width: 8),
-                  _FilterChip(label: 'Enfermería (${_users.where((u) => u.role == UserRole.nurse).length})', value: 'nurse', current: _filter, onTap: (v) => setState(() => _filter = v)),
-                  const SizedBox(width: 8),
-                  _FilterChip(label: 'Admin (${_users.where((u) => u.role == UserRole.orgAdmin).length})', value: 'org_admin', current: _filter, onTap: (v) => setState(() => _filter = v)),
-                ]),
-              ),
+            const Positioned(
+              left: 116,
+              right: 116,
+              bottom: 14,
+              child: ScreenBottomHandle(),
             ),
-            Expanded(child: _buildContent()),
-          ]),
-          const Positioned(left: 116, right: 116, bottom: 14, child: ScreenBottomHandle()),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -94,18 +153,35 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   Widget _buildContent() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
-      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-        const SizedBox(height: 12),
-        Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.error)),
-        const SizedBox(height: 16),
-        ElevatedButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('Reintentar')),
-      ]));
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.error),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      );
     }
 
     if (_filtered.isEmpty) {
-      return const Center(child: Text('No hay usuarios en este filtro.',
-          style: TextStyle(color: AppColors.textSecondary)));
+      return const Center(
+        child: Text(
+          'No hay usuarios en este filtro.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+      );
     }
 
     return RefreshIndicator(
@@ -125,18 +201,29 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   // ── Create user sheet ─────────────────────────────────────────────────────
 
   void _showCreateUserSheet() {
+    final currentRole =
+        AppScope.of(context).authRepository.currentUser?.role ??
+        UserRole.orgAdmin;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (_) => _UserFormSheet(
         title: 'Crear usuario',
+        creatorRole: currentRole,
         onSubmit: (email, name, role, password) async {
           await AppScope.of(context).userRepository.createUser(
-            email: email, fullName: name, role: role, password: password,
+            email: email,
+            fullName: name,
+            role: role,
+            password: password,
           );
-          if (mounted) { Navigator.of(context).pop(); _load(); }
+          if (mounted) {
+            Navigator.of(context).pop();
+            _load();
+          }
         },
       ),
     );
@@ -149,7 +236,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (_) => _UserDetailSheet(user: user),
     );
   }
@@ -164,9 +252,12 @@ class _UserCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initials = user.fullName.split(' ')
-        .where((p) => p.isNotEmpty).take(2)
-        .map((p) => p[0].toUpperCase()).join();
+    final initials = user.fullName
+        .split(' ')
+        .where((p) => p.isNotEmpty)
+        .take(2)
+        .map((p) => p[0].toUpperCase())
+        .join();
 
     return InkWell(
       onTap: onTap,
@@ -176,48 +267,88 @@ class _UserCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 2))],
-        ),
-        child: Row(children: [
-          // Avatar with initials
-          Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(
-              color: _roleColor(user.role).withValues(alpha: 0.15),
-              shape: BoxShape.circle,
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 6,
+              offset: Offset(0, 2),
             ),
-            child: Center(child: Text(initials,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
-                    color: _roleColor(user.role)))),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(user.fullName,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-            Text(user.email,
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-          ])),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            _RoleBadge(role: user.role),
-            const SizedBox(height: 4),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Avatar with initials
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                color: user.isActive
-                    ? const Color(0xFFE8F5E9)
-                    : const Color(0xFFFCE4EC),
-                borderRadius: BorderRadius.circular(6),
+                color: _roleColor(user.role).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
               ),
-              child: Text(
-                user.isActive ? 'Activo' : 'Suspendido',
-                style: TextStyle(
-                  fontSize: 10, fontWeight: FontWeight.w600,
-                  color: user.isActive ? const Color(0xFF2E7D32) : AppColors.error,
+              child: Center(
+                child: Text(
+                  initials,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _roleColor(user.role),
+                  ),
                 ),
               ),
             ),
-          ]),
-        ]),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user.fullName,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    user.email,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _RoleBadge(role: user.role),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: user.isActive
+                        ? const Color(0xFFE8F5E9)
+                        : const Color(0xFFFCE4EC),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    user.isActive ? 'Activo' : 'Suspendido',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: user.isActive
+                          ? const Color(0xFF2E7D32)
+                          : AppColors.error,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -249,8 +380,14 @@ class _RoleBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
-      child: Text(label,
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
     );
   }
 }
@@ -258,7 +395,12 @@ class _RoleBadge extends StatelessWidget {
 // ── Filter chip ───────────────────────────────────────────────────────────
 
 class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.label, required this.value, required this.current, required this.onTap});
+  const _FilterChip({
+    required this.label,
+    required this.value,
+    required this.current,
+    required this.onTap,
+  });
   final String label, value, current;
   final ValueChanged<String> onTap;
 
@@ -272,11 +414,18 @@ class _FilterChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: sel ? AppColors.primary : AppColors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: sel ? AppColors.primary : AppColors.divider),
+          border: Border.all(
+            color: sel ? AppColors.primary : AppColors.divider,
+          ),
         ),
-        child: Text(label,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-                color: sel ? AppColors.white : AppColors.textPrimary)),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: sel ? AppColors.white : AppColors.textPrimary,
+          ),
+        ),
       ),
     );
   }
@@ -292,44 +441,88 @@ class _UserDetailSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Center(child: Container(width: 60, height: 5,
-            decoration: BoxDecoration(color: AppColors.disabled, borderRadius: BorderRadius.circular(3)))),
-        const SizedBox(height: 20),
-        Text(user.fullName,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 4),
-        Text(user.email,
-            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-        const SizedBox(height: 12),
-        _RoleBadge(role: user.role),
-        const SizedBox(height: 20),
-        _row(Icons.business, 'Organización', user.organizationId),
-        const SizedBox(height: 8),
-        _row(Icons.check_circle_outline, 'Estado', user.isActive ? 'Activo' : 'Suspendido'),
-        const SizedBox(height: 24),
-        Text('Para editar permisos, use el panel web de administración.',
-            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-            textAlign: TextAlign.center),
-      ]),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              width: 60,
+              height: 5,
+              decoration: BoxDecoration(
+                color: AppColors.disabled,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            user.fullName,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            user.email,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _RoleBadge(role: user.role),
+          const SizedBox(height: 20),
+          _row(Icons.business, 'Organización', user.organizationId),
+          const SizedBox(height: 8),
+          _row(
+            Icons.check_circle_outline,
+            'Estado',
+            user.isActive ? 'Activo' : 'Suspendido',
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Para editar permisos, use el panel web de administración.',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 
   Widget _row(IconData icon, String label, String value) {
-    return Row(children: [
-      Icon(icon, size: 18, color: AppColors.secondary), const SizedBox(width: 8),
-      Text('$label: ', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-      Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
-    ]);
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: AppColors.secondary),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+        Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
+      ],
+    );
   }
 }
 
 // ── Create user form sheet ────────────────────────────────────────────────
 
 class _UserFormSheet extends StatefulWidget {
-  const _UserFormSheet({required this.title, required this.onSubmit});
+  const _UserFormSheet({
+    required this.title,
+    required this.creatorRole,
+    required this.onSubmit,
+  });
   final String title;
-  final Future<void> Function(String email, String name, String role, String password) onSubmit;
+  final UserRole creatorRole;
+  final Future<void> Function(
+    String email,
+    String name,
+    String role,
+    String password,
+  )
+  onSubmit;
 
   @override
   State<_UserFormSheet> createState() => _UserFormSheetState();
@@ -339,9 +532,28 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   final _emailCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
-  String _role = 'doctor';
+  late String _role;
   bool _saving = false;
   String? _error;
+
+  /// Role options depend on who is creating:
+  /// - superadmin → can only create org_admin
+  /// - org_admin → can only create doctor or nurse
+  List<MapEntry<String, String>> get _roleOptions {
+    if (widget.creatorRole == UserRole.superadmin) {
+      return const [MapEntry('org_admin', 'Administrador')];
+    }
+    return const [
+      MapEntry('doctor', 'Doctor'),
+      MapEntry('nurse', 'Enfermería'),
+    ];
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _role = _roleOptions.first.key;
+  }
 
   @override
   void dispose() {
@@ -355,86 +567,167 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
-        left: 24, right: 24, top: 16,
+        left: 24,
+        right: 24,
+        top: 16,
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       child: SingleChildScrollView(
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Center(child: Container(width: 60, height: 5,
-              decoration: BoxDecoration(color: AppColors.disabled, borderRadius: BorderRadius.circular(3)))),
-          const SizedBox(height: 16),
-          Text(widget.title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.primary)),
-          const SizedBox(height: 16),
-          _tf('Nombre completo *', _nameCtrl, icon: Icons.person),
-          const SizedBox(height: 12),
-          _tf('Correo electrónico *', _emailCtrl, icon: Icons.email, keyboard: TextInputType.emailAddress),
-          const SizedBox(height: 12),
-          _tf('Contraseña temporal *', _passCtrl, icon: Icons.lock, obscure: true),
-          const SizedBox(height: 12),
-          const Text('Rol *', style: TextStyle(fontSize: 13)),
-          const SizedBox(height: 6),
-          Row(children: [
-            _roleOption('Doctor', 'doctor'),
-            const SizedBox(width: 10),
-            _roleOption('Enfermería', 'nurse'),
-          ]),
-          if (_error != null) ...[
-            const SizedBox(height: 10),
-            Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 13)),
-          ],
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity, height: 44,
-            child: ElevatedButton.icon(
-              onPressed: _saving ? null : _submit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary, disabledBackgroundColor: AppColors.disabled,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 60,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppColors.disabled,
+                  borderRadius: BorderRadius.circular(3),
+                ),
               ),
-              icon: _saving
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white))
-                  : const Icon(Icons.person_add, size: 20, color: AppColors.white),
-              label: Text(_saving ? 'Creando...' : 'Crear usuario',
-                  style: const TextStyle(color: AppColors.white, fontSize: 15)),
             ),
-          ),
-        ]),
+            const SizedBox(height: 16),
+            Text(
+              widget.title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _tf('Nombre completo *', _nameCtrl, icon: Icons.person),
+            const SizedBox(height: 12),
+            _tf(
+              'Correo electrónico *',
+              _emailCtrl,
+              icon: Icons.email,
+              keyboard: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 12),
+            _tf(
+              'Contraseña temporal *',
+              _passCtrl,
+              icon: Icons.lock,
+              obscure: true,
+            ),
+            const SizedBox(height: 12),
+            const Text('Rol *', style: TextStyle(fontSize: 13)),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                for (var i = 0; i < _roleOptions.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 10),
+                  _roleOption(_roleOptions[i].value, _roleOptions[i].key),
+                ],
+              ],
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _error!,
+                style: const TextStyle(color: AppColors.error, fontSize: 13),
+              ),
+            ],
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: ElevatedButton.icon(
+                onPressed: _saving ? null : _submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  disabledBackgroundColor: AppColors.disabled,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.white,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.person_add,
+                        size: 20,
+                        color: AppColors.white,
+                      ),
+                label: Text(
+                  _saving ? 'Creando...' : 'Crear usuario',
+                  style: const TextStyle(color: AppColors.white, fontSize: 15),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _tf(String label, TextEditingController ctrl,
-      {IconData? icon, TextInputType keyboard = TextInputType.text, bool obscure = false}) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: const TextStyle(fontSize: 13)),
-      const SizedBox(height: 4),
-      TextField(
-        controller: ctrl, keyboardType: keyboard, obscureText: obscure,
-        style: const TextStyle(fontSize: 14),
-        decoration: InputDecoration(isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          prefixIcon: icon != null ? Icon(icon, size: 18, color: AppColors.secondary) : null),
-      ),
-    ]);
+  Widget _tf(
+    String label,
+    TextEditingController ctrl, {
+    IconData? icon,
+    TextInputType keyboard = TextInputType.text,
+    bool obscure = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13)),
+        const SizedBox(height: 4),
+        TextField(
+          controller: ctrl,
+          keyboardType: keyboard,
+          obscureText: obscure,
+          style: const TextStyle(fontSize: 14),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+            prefixIcon: icon != null
+                ? Icon(icon, size: 18, color: AppColors.secondary)
+                : null,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _roleOption(String label, String value) {
     final sel = _role == value;
-    return Expanded(child: GestureDetector(
-      onTap: () => setState(() => _role = value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: sel ? AppColors.primary : AppColors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: sel ? AppColors.primary : AppColors.divider),
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _role = value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: sel ? AppColors.primary : AppColors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: sel ? AppColors.primary : AppColors.divider,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: sel ? AppColors.white : AppColors.textPrimary,
+              ),
+            ),
+          ),
         ),
-        child: Center(child: Text(label,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                color: sel ? AppColors.white : AppColors.textPrimary))),
       ),
-    ));
+    );
   }
 
   Future<void> _submit() async {
@@ -445,13 +738,26 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       setState(() => _error = 'Completa todos los campos requeridos.');
       return;
     }
-    setState(() { _saving = true; _error = null; });
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await widget.onSubmit(email, name, _role, pass);
     } on ApiException catch (e) {
-      if (mounted) setState(() { _error = e.message; _saving = false; });
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _saving = false;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _saving = false; });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _saving = false;
+        });
+      }
     }
   }
 }

@@ -16,8 +16,6 @@ import 'sheets/edit_address_sheet.dart';
 import 'sheets/edit_chronic_personal_sheet.dart';
 import 'sheets/edit_guardian_sheet.dart';
 import 'sheets/edit_vital_signs_sheet.dart';
-import 'tabs/profile_tab_allergies.dart';
-import 'tabs/profile_tab_background.dart';
 import 'tabs/profile_tab_consultations.dart';
 import 'tabs/profile_tab_summary.dart';
 import 'tabs/profile_tab_vaccines.dart';
@@ -58,7 +56,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _draft = widget.patient;
     _original = widget.patient;
   }
@@ -266,15 +264,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     });
     try {
       final scope = AppScope.of(context);
-      // Save locally first (offline-first)
+      // Save locally (offline-first)
       await scope.localDatabase.savePatient(_draft);
-      // Try cloud sync
-      try {
-        await scope.patientRepository.syncPatient(_draft);
-        await scope.localDatabase.markSynced(_draft.patientId);
-      } catch (_) {
-        // Will be retried by the SyncEngine
-      }
+      // Fire-and-forget sync — user doesn't wait
+      scope.syncEngine.syncAll().ignore();
       if (!mounted) return;
       setState(() {
         _original = _draft; // baseline reset → no more diff
@@ -282,20 +275,18 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Cambios sincronizados'),
+          content: Text('Cambios guardados. Se sincronizarán automáticamente.'),
           backgroundColor: AppColors.success,
         ),
       );
-    } on ApiException catch (e) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _isSyncing = false;
       });
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
-    } catch (e) {
-      if (!mounted) return;
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
       setState(() {
         _isSyncing = false;
       });
@@ -416,6 +407,54 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     );
   }
 
+  /// Opens a full bottom sheet for viewing/editing allergies list.
+  void _openAllergiesSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AllergiesManageSheet(
+        allergies: _draft.allergies,
+        onAdd: () async {
+          Navigator.of(context).pop();
+          await _openAddAllergySheet();
+        },
+        onRemove: (i) {
+          _removeAllergy(i);
+          Navigator.of(context).pop();
+        },
+      ),
+    );
+  }
+
+  /// Opens a full bottom sheet for viewing/editing background (chronic, personal, family).
+  void _openBackgroundSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _BackgroundManageSheet(
+        draft: _draft,
+        onEditChronic: () {
+          Navigator.of(context).pop();
+          _openChronicPersonalSheet(chronic: true);
+        },
+        onEditPersonal: () {
+          Navigator.of(context).pop();
+          _openChronicPersonalSheet(chronic: false);
+        },
+        onAddFamily: () {
+          Navigator.of(context).pop();
+          _openAddFamilyHistorySheet();
+        },
+        onRemoveFamily: (i) {
+          _removeFamilyHistory(i);
+          Navigator.of(context).pop();
+        },
+      ),
+    );
+  }
+
   // ── Build ────────────────────────────────────────────────────────────────
 
   @override
@@ -443,18 +482,15 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                     children: [
                       ProfileTabSummary(
                         draft: _draft,
+                        original: _original,
+                        canEdit:
+                            _currentRole.canAddConsultation ||
+                            _currentRole.canAddVaccine,
                         onEditVitalSigns: _openVitalSignsSheet,
                         onEditAddress: _openAddressSheet,
                         onEditGuardian: _openGuardianSheet,
-                      ),
-                      ProfileTabBackground(
-                        draft: _draft,
-                        onEditChronic: () =>
-                            _openChronicPersonalSheet(chronic: true),
-                        onEditPersonal: () =>
-                            _openChronicPersonalSheet(chronic: false),
-                        onAddFamilyHistory: _openAddFamilyHistorySheet,
-                        onRemoveFamilyHistory: _removeFamilyHistory,
+                        onOpenAllergies: _openAllergiesSheet,
+                        onOpenBackground: _openBackgroundSheet,
                       ),
                       ProfileTabConsultations(
                         draft: _draft,
@@ -464,11 +500,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                       ProfileTabVaccines(
                         draft: _draft,
                         onAdd: _navigateAddVaccine,
-                      ),
-                      ProfileTabAllergies(
-                        draft: _draft,
-                        onAdd: _openAddAllergySheet,
-                        onRemove: _removeAllergy,
                       ),
                     ],
                   ),
@@ -882,7 +913,6 @@ class _ProfileTabsBar extends StatelessWidget {
         dividerColor: Colors.transparent,
         tabs: [
           const Tab(text: '  Resumen  '),
-          const Tab(text: '  Antecedentes  '),
           Tab(
             child: _TabLabelWithBadge(
               text: 'Consultas',
@@ -893,12 +923,6 @@ class _ProfileTabsBar extends StatelessWidget {
             child: _TabLabelWithBadge(
               text: 'Vacunas',
               count: draft.vaccinationRecord.length,
-            ),
-          ),
-          Tab(
-            child: _TabLabelWithBadge(
-              text: 'Alergias',
-              count: draft.allergies.length,
             ),
           ),
         ],
@@ -937,6 +961,438 @@ class _TabLabelWithBadge extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Manage sheets (opened from Summary clickable sections)
+// ═════════════════════════════════════════════════════════════════════════════
+
+class _AllergiesManageSheet extends StatelessWidget {
+  const _AllergiesManageSheet({
+    required this.allergies,
+    required this.onAdd,
+    required this.onRemove,
+  });
+  final List<AllergyInfo> allergies;
+  final VoidCallback onAdd;
+  final void Function(int) onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (_, sc) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 8),
+            Center(
+              child: Container(
+                width: 50,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.disabled,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    size: 18,
+                    color: AppColors.error,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Alergias · ${allergies.length}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(
+                      Icons.close,
+                      size: 22,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: allergies.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Sin alergias registradas.',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: sc,
+                      padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
+                      itemCount: allergies.length,
+                      itemBuilder: (_, i) {
+                        final a = allergies[i];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7F8FA),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE3E5EA)),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      a.allergen,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _catLabel(a.category),
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.error,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    if (a.reaction != null &&
+                                        a.reaction!.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Reacción: ${a.reaction}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  size: 18,
+                                  color: AppColors.error,
+                                ),
+                                onPressed: () => onRemove(i),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 8, 18, 14),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton.icon(
+                    onPressed: onAdd,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(
+                      Icons.add,
+                      size: 18,
+                      color: AppColors.white,
+                    ),
+                    label: const Text(
+                      'Agregar alergia',
+                      style: TextStyle(
+                        color: AppColors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _catLabel(String c) =>
+      const {
+        '01': 'Medicamento',
+        '02': 'Alimento',
+        '03': 'Ambiente',
+        '04': 'Piel',
+        '05': 'Picadura',
+        '06': 'Otra',
+      }[c] ??
+      c;
+}
+
+class _BackgroundManageSheet extends StatelessWidget {
+  const _BackgroundManageSheet({
+    required this.draft,
+    required this.onEditChronic,
+    required this.onEditPersonal,
+    required this.onAddFamily,
+    required this.onRemoveFamily,
+  });
+  final PatientFullRecord draft;
+  final VoidCallback onEditChronic;
+  final VoidCallback onEditPersonal;
+  final VoidCallback onAddFamily;
+  final void Function(int) onRemoveFamily;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = draft.backgroundHistory;
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (_, sc) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 8),
+            Center(
+              child: Container(
+                width: 50,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.disabled,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.history_edu_outlined,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Antecedentes',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(
+                      Icons.close,
+                      size: 22,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                controller: sc,
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
+                children: [
+                  // Chronic
+                  _BgSection(
+                    title: 'Condiciones crónicas',
+                    value: bg?.chronicConditions,
+                    onEdit: onEditChronic,
+                  ),
+                  const SizedBox(height: 12),
+                  // Personal
+                  _BgSection(
+                    title: 'Historial personal',
+                    value: bg?.personalHistory,
+                    onEdit: onEditPersonal,
+                  ),
+                  const SizedBox(height: 12),
+                  // Family history
+                  Row(
+                    children: [
+                      const Text(
+                        'Antecedentes familiares',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: onAddFamily,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Agregar'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (bg == null || bg.familyHistory.isEmpty)
+                    const Text(
+                      'Sin antecedentes familiares.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    )
+                  else
+                    for (var i = 0; i < bg.familyHistory.length; i++)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF7F8FA),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE3E5EA)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    bg.familyHistory[i].conditionDescription,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    _relLabel(bg.familyHistory[i].relationship),
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                size: 18,
+                                color: AppColors.error,
+                              ),
+                              onPressed: () => onRemoveFamily(i),
+                            ),
+                          ],
+                        ),
+                      ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _relLabel(String r) =>
+      const {
+        '01': 'Padres',
+        '02': 'Hermanos',
+        '03': 'Tíos',
+        '04': 'Abuelos',
+      }[r] ??
+      r;
+}
+
+class _BgSection extends StatelessWidget {
+  const _BgSection({
+    required this.title,
+    required this.value,
+    required this.onEdit,
+  });
+  final String title;
+  final String? value;
+  final VoidCallback onEdit;
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onEdit,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F8FA),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFE3E5EA)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value != null && value!.isNotEmpty ? value! : '—',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: value != null && value!.isNotEmpty
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.edit_outlined, size: 16, color: AppColors.primary),
+          ],
+        ),
+      ),
     );
   }
 }

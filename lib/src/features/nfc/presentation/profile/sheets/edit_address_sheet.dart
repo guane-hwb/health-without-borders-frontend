@@ -28,8 +28,7 @@ class _EditAddressSheetState extends State<EditAddressSheet> {
   @override
   void initState() {
     super.initState();
-    _streetCtrl =
-        TextEditingController(text: widget.address.street ?? '');
+    _streetCtrl = TextEditingController(text: widget.address.street ?? '');
     _cityCtrl = TextEditingController(text: widget.address.city);
     _stateCtrl = TextEditingController(text: widget.address.state);
     _zone = widget.address.zone ?? 'U';
@@ -69,16 +68,17 @@ class _EditAddressSheetState extends State<EditAddressSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _label('Dirección'),
-          _input(_streetCtrl,
-              hint: 'ej: Cra. 18 #27-43', icon: Icons.home_outlined),
+          _input(
+            _streetCtrl,
+            hint: 'ej: Cra. 18 #27-43',
+            icon: Icons.home_outlined,
+          ),
           const SizedBox(height: 14),
           _label('Municipio'),
-          _input(_cityCtrl,
-              hint: 'ej: Riohacha', icon: Icons.location_city),
+          _input(_cityCtrl, hint: 'ej: Riohacha', icon: Icons.location_city),
           const SizedBox(height: 14),
           _label('Departamento'),
-          _input(_stateCtrl,
-              hint: 'ej: La Guajira', icon: Icons.map_outlined),
+          _input(_stateCtrl, hint: 'ej: La Guajira', icon: Icons.map_outlined),
           const SizedBox(height: 14),
           _label('Zona'),
           Row(
@@ -102,36 +102,39 @@ class _EditAddressSheetState extends State<EditAddressSheet> {
   }
 
   Widget _label(String t) => Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Text(
-          t,
-          style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary),
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(
+      t,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: AppColors.textPrimary,
+      ),
+    ),
+  );
 
-  Widget _input(TextEditingController c,
-          {required String hint, required IconData icon}) =>
-      TextField(
-        controller: c,
-        style: const TextStyle(fontSize: 14),
-        decoration: InputDecoration(
-          isDense: true,
-          hintText: hint,
-          prefixIcon: Icon(icon, size: 18, color: AppColors.primary),
-          contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12, vertical: 12),
-        ),
-      );
+  Widget _input(
+    TextEditingController c, {
+    required String hint,
+    required IconData icon,
+  }) => TextField(
+    controller: c,
+    style: const TextStyle(fontSize: 14),
+    decoration: InputDecoration(
+      isDense: true,
+      hintText: hint,
+      prefixIcon: Icon(icon, size: 18, color: AppColors.primary),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    ),
+  );
 }
 
 class _ZoneChip extends StatelessWidget {
-  const _ZoneChip(
-      {required this.label,
-      required this.selected,
-      required this.onTap});
+  const _ZoneChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -147,18 +150,17 @@ class _ZoneChip extends StatelessWidget {
             color: selected ? AppColors.primary : AppColors.white,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-                color: selected
-                    ? AppColors.primary
-                    : AppColors.divider),
+              color: selected ? AppColors.primary : AppColors.divider,
+            ),
           ),
           child: Center(
             child: Text(
               label,
               style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color:
-                      selected ? AppColors.white : AppColors.textPrimary),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: selected ? AppColors.white : AppColors.textPrimary,
+              ),
             ),
           ),
         ),

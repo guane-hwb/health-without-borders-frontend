@@ -45,13 +45,11 @@ class ProfileSectionHeader extends StatelessWidget {
             onTap: onAction,
             borderRadius: BorderRadius.circular(6),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(actionIcon,
-                      size: 14, color: AppColors.primary),
+                  Icon(actionIcon, size: 14, color: AppColors.primary),
                   const SizedBox(width: 3),
                   Text(
                     actionLabel!,

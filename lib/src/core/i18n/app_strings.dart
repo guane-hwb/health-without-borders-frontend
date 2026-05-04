@@ -281,6 +281,7 @@ class AppStrings {
   String get actionNewPatientSub => _get('actionNewPatientSub');
   String get actionSearchPatient => _get('actionSearchPatient');
   String get actionSearchPatientSub => _get('actionSearchPatientSub');
+  String get actionSearchPatientSubAdmin => _get('actionSearchPatientSubAdmin');
   String get actionPendingSync => _get('actionPendingSync');
   String get actionPendingSyncEmpty => _get('actionPendingSyncEmpty');
   String actionPendingSyncCount(int n) =>
@@ -567,6 +568,7 @@ class AppStrings {
     'actionNewPatientSub': 'Primer ingreso del paciente',
     'actionSearchPatient': 'Buscar paciente',
     'actionSearchPatientSub': 'Manilla perdida o dañada',
+    'actionSearchPatientSubAdmin': 'Solo lectura',
     'actionPendingSync': 'Pendientes por sincronizar',
     'actionPendingSyncEmpty': 'Todos los registros sincronizados',
     'actionPendingSyncCount': '{n} registros sin enviar',
@@ -852,6 +854,7 @@ class AppStrings {
     'actionNewPatientSub': 'First patient registration',
     'actionSearchPatient': 'Search patient',
     'actionSearchPatientSub': 'Lost or damaged wristband',
+    'actionSearchPatientSubAdmin': 'Read-only access',
     'actionPendingSync': 'Pending sync',
     'actionPendingSyncEmpty': 'All records synced',
     'actionPendingSyncCount': '{n} records not sent',

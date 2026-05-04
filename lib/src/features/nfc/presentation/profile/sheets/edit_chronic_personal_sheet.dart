@@ -21,8 +21,7 @@ class EditChronicPersonalSheet extends StatefulWidget {
       _EditChronicPersonalSheetState();
 }
 
-class _EditChronicPersonalSheetState
-    extends State<EditChronicPersonalSheet> {
+class _EditChronicPersonalSheetState extends State<EditChronicPersonalSheet> {
   late TextEditingController _ctrl;
 
   @override
@@ -53,13 +52,11 @@ class _EditChronicPersonalSheetState
         style: const TextStyle(fontSize: 14, height: 1.4),
         decoration: InputDecoration(
           hintText: 'Describa la información en texto libre...',
-          hintStyle: const TextStyle(
-              fontSize: 13, color: AppColors.disabled),
+          hintStyle: const TextStyle(fontSize: 13, color: AppColors.disabled),
           contentPadding: const EdgeInsets.all(12),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide:
-                const BorderSide(color: AppColors.divider),
+            borderSide: const BorderSide(color: AppColors.divider),
           ),
         ),
       ),

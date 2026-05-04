@@ -215,6 +215,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           onConfirm: _confirmRegistration,
         );
       case 5:
+        final role = AppScope.of(context).authRepository.currentUser?.role;
         return Step6Success(
           patient: _savedRecord!,
           onAddConsultation: _addConsultation,
@@ -222,6 +223,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           onFinish: _finalize,
           lastConsultationTime: _lastConsultationTime,
           lastVaccineTime: _lastVaccineTime,
+          canAddConsultation: role?.canAddConsultation ?? true,
         );
       default:
         return const SizedBox.shrink();

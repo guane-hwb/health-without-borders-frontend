@@ -21,117 +21,164 @@ class EditVitalSignsSheet extends StatefulWidget {
   final void Function({double? weight, double? height}) onConfirm;
 
   @override
-  State<EditVitalSignsSheet> createState() =>
-      _EditVitalSignsSheetState();
+  State<EditVitalSignsSheet> createState() => _EditVitalSignsSheetState();
 }
 
 class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
-  late double _weight;
-  late double _height;
+  late final TextEditingController _weightCtrl;
+  late final TextEditingController _heightCtrl;
 
   @override
   void initState() {
     super.initState();
-    _weight = widget.weight ?? 0;
-    _height = widget.height ?? 0;
+    _weightCtrl = TextEditingController(
+      text: widget.weight != null ? widget.weight!.toStringAsFixed(1) : '',
+    );
+    _heightCtrl = TextEditingController(
+      text: widget.height != null ? widget.height!.toStringAsFixed(0) : '',
+    );
   }
 
-  String _diff(double current, double? previous, String unit) {
-    if (previous == null) return '';
-    final delta = current - previous;
-    if (delta == 0) return '';
-    final sign = delta > 0 ? '+' : '';
-    return ' $sign${delta.toStringAsFixed(unit == 'kg' ? 1 : 0)} $unit';
+  @override
+  void dispose() {
+    _weightCtrl.dispose();
+    _heightCtrl.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return SheetScaffold(
-      title: 'Editar signos',
-      subtitle: 'Última toma: ${_lastTaken()}',
+      title: 'Editar mediciones',
       onConfirm: () {
-        widget.onConfirm(weight: _weight, height: _height);
+        final w = double.tryParse(_weightCtrl.text.trim());
+        final h = double.tryParse(_heightCtrl.text.trim());
+        widget.onConfirm(weight: w, height: h);
         Navigator.of(context).pop();
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Weight ─────────────────────────────────
-          const Text('PESO (KG)',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
-                  letterSpacing: 0.5)),
-          const SizedBox(height: 8),
-          _Stepper(
-            value: _weight.toStringAsFixed(1),
-            onMinus: () => setState(() {
-              if (_weight > 0.5) _weight -= 0.5;
-            }),
-            onPlus: () => setState(() => _weight += 0.5),
+          // Weight
+          _FieldLabel(label: 'PESO (KG)'),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _weightCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+            textAlign: TextAlign.center,
+            decoration: InputDecoration(
+              hintText: '0.0',
+              hintStyle: TextStyle(
+                color: AppColors.disabled,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+              filled: true,
+              fillColor: const Color(0xFFF7F8FA),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE3E5EA)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: AppColors.primary,
+                  width: 1.5,
+                ),
+              ),
+            ),
           ),
           if (widget.previousWeight != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
-              'Anterior: ${widget.previousWeight!.toStringAsFixed(1)} kg'
-              '${_diff(_weight, widget.previousWeight, 'kg')}',
+              'Anterior: ${widget.previousWeight!.toStringAsFixed(1)} kg',
               style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textSecondary),
+                fontSize: 11,
+                color: AppColors.textSecondary,
+              ),
             ),
           ],
 
-          const SizedBox(height: 22),
+          const SizedBox(height: 20),
 
-          // ── Height ─────────────────────────────────
-          const Text('TALLA (CM)',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
-                  letterSpacing: 0.5)),
-          const SizedBox(height: 8),
-          _Stepper(
-            value: _height.toStringAsFixed(0),
-            onMinus: () => setState(() {
-              if (_height > 1) _height -= 1;
-            }),
-            onPlus: () => setState(() => _height += 1),
+          // Height
+          _FieldLabel(label: 'ALTURA (CM)'),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _heightCtrl,
+            keyboardType: TextInputType.number,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+            textAlign: TextAlign.center,
+            decoration: InputDecoration(
+              hintText: '0',
+              hintStyle: TextStyle(
+                color: AppColors.disabled,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+              filled: true,
+              fillColor: const Color(0xFFF7F8FA),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE3E5EA)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: AppColors.primary,
+                  width: 1.5,
+                ),
+              ),
+            ),
           ),
           if (widget.previousHeight != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
-              'Anterior: ${widget.previousHeight!.toStringAsFixed(0)} cm'
-              '${_diff(_height, widget.previousHeight, 'cm')}',
+              'Anterior: ${widget.previousHeight!.toStringAsFixed(0)} cm',
               style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textSecondary),
+                fontSize: 11,
+                color: AppColors.textSecondary,
+              ),
             ),
           ],
 
           const SizedBox(height: 18),
 
-          // ── Info block: blood type not editable ────
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: const Color(0xFFE3F2FD),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Row(
+            child: const Row(
               children: [
-                const Icon(Icons.info_outline,
-                    size: 16, color: AppColors.primary),
-                const SizedBox(width: 8),
-                const Expanded(
+                Icon(Icons.info_outline, size: 16, color: AppColors.primary),
+                SizedBox(width: 8),
+                Expanded(
                   child: Text(
-                    'El tipo de sangre no se edita aquí — es un dato '
-                    'biológico permanente. Para corregirlo, contacte al admin.',
+                    'El tipo de sangre no se edita aquí — es un dato biológico permanente.',
                     style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textPrimary,
-                        height: 1.4),
+                      fontSize: 11,
+                      color: AppColors.textPrimary,
+                      height: 1.4,
+                    ),
                   ),
                 ),
               ],
@@ -141,76 +188,20 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
       ),
     );
   }
-
-  String _lastTaken() {
-    final now = DateTime.now();
-    const months = [
-      'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-      'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
-    ];
-    return '${now.day} ${months[now.month - 1]} ${now.year}';
-  }
 }
 
-class _Stepper extends StatelessWidget {
-  const _Stepper({
-    required this.value,
-    required this.onMinus,
-    required this.onPlus,
-  });
-
-  final String value;
-  final VoidCallback onMinus;
-  final VoidCallback onPlus;
-
+class _FieldLabel extends StatelessWidget {
+  const _FieldLabel({required this.label});
+  final String label;
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          _StepperBtn(icon: Icons.remove, onTap: onMinus),
-          Expanded(
-            child: Center(
-              child: Text(
-                value,
-                style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary),
-              ),
-            ),
-          ),
-          _StepperBtn(icon: Icons.add, onTap: onPlus),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepperBtn extends StatelessWidget {
-  const _StepperBtn({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 64,
-      height: 64,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Center(
-            child: Icon(icon, size: 24, color: AppColors.primary),
-          ),
-        ),
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: AppColors.textSecondary,
+        letterSpacing: 0.5,
       ),
     );
   }

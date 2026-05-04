@@ -181,9 +181,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBody(UserRole role) {
-    if (role.isAdmin) {
-      return _AdminHome(user: _user);
-    }
+    // _ClinicalHome now handles all roles — it shows/hides actions
+    // based on the role's permissions. Admins see manage users + search.
+    // Superadmin sees only manage users (zero clinical access via canScanNfc etc).
     return _ClinicalHome(
       role: role,
       unsyncedCount: _unsyncedCount,
@@ -410,49 +410,80 @@ class _ClinicalHome extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 80),
       children: [
-        _ActionCardWide(
-          icon: Icons.nfc_rounded,
-          iconColor: AppColors.primary,
-          title: s.actionReadNfc,
-          subtitle: s.actionReadNfcSub,
-          onTap: () => _push(context, const ReadNfcScreen()),
-        ),
-        const SizedBox(height: 12),
-        _ActionCardWide(
-          icon: Icons.person_add_alt_1_rounded,
-          iconColor: const Color(0xFF37474F),
-          title: s.actionNewPatient,
-          subtitle: s.actionNewPatientSub,
-          onTap: () async {
-            await _push(context, const RegisterNfcScreen());
-            onRefresh();
-          },
-        ),
-        const SizedBox(height: 12),
-        _ActionCardWide(
-          icon: Icons.search_rounded,
-          iconColor: const Color(0xFFE6A817),
-          title: s.actionSearchPatient,
-          subtitle: s.actionSearchPatientSub,
-          onTap: () => _push(context, const LossOfWristbandScreen()),
-        ),
-        const SizedBox(height: 12),
-        _ActionCardWide(
-          icon: Icons.cloud_upload_outlined,
-          iconColor: unsyncedCount > 0
-              ? const Color(0xFFFB8C00)
-              : AppColors.success,
-          title: s.actionPendingSync,
-          subtitle: unsyncedCount == 0
-              ? s.actionPendingSyncEmpty
-              : s.actionPendingSyncCount(unsyncedCount),
-          badgeCount: unsyncedCount,
-          onTap: () async {
-            await _push(context, const SyncQueueScreen());
-            onRefresh();
-          },
-        ),
-        const SizedBox(height: 16),
+        // Leer NFC — doctor, nurse only
+        if (role.canScanNfc) ...[
+          _ActionCardWide(
+            icon: Icons.nfc_rounded,
+            iconColor: AppColors.primary,
+            title: s.actionReadNfc,
+            subtitle: s.actionReadNfcSub,
+            onTap: () => _push(context, const ReadNfcScreen()),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // Nuevo paciente — doctor, nurse only
+        if (role.canRegisterPatient) ...[
+          _ActionCardWide(
+            icon: Icons.person_add_alt_1_rounded,
+            iconColor: const Color(0xFF37474F),
+            title: s.actionNewPatient,
+            subtitle: s.actionNewPatientSub,
+            onTap: () async {
+              await _push(context, const RegisterNfcScreen());
+              onRefresh();
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // Buscar paciente — doctor, nurse, org_admin
+        if (role.canSearchPatient) ...[
+          _ActionCardWide(
+            icon: Icons.search_rounded,
+            iconColor: const Color(0xFFE6A817),
+            title: s.actionSearchPatient,
+            subtitle: role == UserRole.orgAdmin
+                ? s.actionSearchPatientSubAdmin
+                : s.actionSearchPatientSub,
+            onTap: () => _push(context, const LossOfWristbandScreen()),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // Pendientes por sincronizar — doctor, nurse only
+        if (role.canSyncPatient) ...[
+          _ActionCardWide(
+            icon: Icons.cloud_upload_outlined,
+            iconColor: unsyncedCount > 0
+                ? const Color(0xFFFB8C00)
+                : AppColors.success,
+            title: s.actionPendingSync,
+            subtitle: unsyncedCount == 0
+                ? s.actionPendingSyncEmpty
+                : s.actionPendingSyncCount(unsyncedCount),
+            badgeCount: unsyncedCount,
+            onTap: () async {
+              await _push(context, const SyncQueueScreen());
+              onRefresh();
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // Admin: manage users
+        if (role.canManageUsers) ...[
+          _ActionCardWide(
+            icon: Icons.group_outlined,
+            iconColor: AppColors.secondary,
+            title: s.adminManageUsers,
+            subtitle: s.adminManageUsersSub,
+            onTap: () => _push(context, const ManageUsersScreen()),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        const SizedBox(height: 4),
         // Brigade history → secondary row, low emphasis
         Center(
           child: TextButton.icon(

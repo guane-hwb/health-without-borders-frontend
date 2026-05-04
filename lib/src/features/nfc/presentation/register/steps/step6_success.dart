@@ -13,6 +13,7 @@ class Step6Success extends StatelessWidget {
     required this.onFinish,
     this.lastConsultationTime,
     this.lastVaccineTime,
+    this.canAddConsultation = true,
   });
 
   final PatientFullRecord patient;
@@ -21,6 +22,7 @@ class Step6Success extends StatelessWidget {
   final VoidCallback onFinish;
   final String? lastConsultationTime;
   final String? lastVaccineTime;
+  final bool canAddConsultation;
 
   @override
   Widget build(BuildContext context) {
@@ -114,34 +116,36 @@ class Step6Success extends StatelessWidget {
         const SizedBox(height: 28),
 
         // ── Action buttons ──
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton.icon(
-            onPressed: onAddConsultation,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        if (canAddConsultation) ...[
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: onAddConsultation,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
               ),
-              elevation: 0,
-            ),
-            icon: const Icon(
-              Icons.medical_services_outlined,
-              color: AppColors.white,
-              size: 22,
-            ),
-            label: Text(
-              hasConsultations ? 'Añadir otra consulta' : 'Añadir consulta',
-              style: const TextStyle(
+              icon: const Icon(
+                Icons.medical_services_outlined,
                 color: AppColors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+                size: 22,
+              ),
+              label: Text(
+                hasConsultations ? 'Añadir otra consulta' : 'Añadir consulta',
+                style: const TextStyle(
+                  color: AppColors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 10),
+          const SizedBox(height: 10),
+        ],
         SizedBox(
           width: double.infinity,
           height: 50,

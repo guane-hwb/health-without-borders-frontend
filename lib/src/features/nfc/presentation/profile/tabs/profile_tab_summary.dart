@@ -10,28 +10,150 @@ class ProfileTabSummary extends StatelessWidget {
   const ProfileTabSummary({
     super.key,
     required this.draft,
+    required this.original,
+    required this.canEdit,
     required this.onEditVitalSigns,
     required this.onEditAddress,
     required this.onEditGuardian,
+    required this.onOpenAllergies,
+    required this.onOpenBackground,
   });
 
   final PatientFullRecord draft;
+  final PatientFullRecord original;
+  final bool canEdit;
   final VoidCallback onEditVitalSigns;
   final VoidCallback onEditAddress;
   final VoidCallback onEditGuardian;
+  final VoidCallback onOpenAllergies;
+  final VoidCallback onOpenBackground;
+
+  bool get _allergiesChanged =>
+      draft.allergies.length != original.allergies.length;
+  bool get _backgroundChanged {
+    final db = draft.backgroundHistory;
+    final ob = original.backgroundHistory;
+    if (db == null && ob == null) return false;
+    if (db == null || ob == null) return true;
+    return db.chronicConditions != ob.chronicConditions ||
+        db.personalHistory != ob.personalHistory ||
+        db.familyHistory.length != ob.familyHistory.length;
+  }
+
+  bool get _weightChanged =>
+      draft.patientInfo.weight != original.patientInfo.weight;
+  bool get _heightChanged =>
+      draft.patientInfo.height != original.patientInfo.height;
+  bool get _addressChanged {
+    final da = draft.patientInfo.address;
+    final oa = original.patientInfo.address;
+    return da.street != oa.street ||
+        da.city != oa.city ||
+        da.state != oa.state ||
+        da.zone != oa.zone;
+  }
+
+  bool get _guardianChanged {
+    final dg = draft.guardianInfo;
+    final og = original.guardianInfo;
+    if (dg == null && og == null) return false;
+    if (dg == null || og == null) return true;
+    return dg.name != og.name ||
+        dg.phone != og.phone ||
+        dg.relationship != og.relationship ||
+        dg.deviceUid != og.deviceUid;
+  }
 
   @override
   Widget build(BuildContext context) {
     final p = draft.patientInfo;
+    final bg = draft.backgroundHistory;
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 60),
       children: [
-        // ── Vital signs (editable) ─────────────────────────────────
+        // ══ ALERGIAS (clickable) ══════════════════════════════════
+        _ClickableSection(
+          icon: Icons.warning_amber_rounded,
+          iconColor: AppColors.error,
+          title: 'ALERGIAS',
+          badge: draft.allergies.length,
+          hasChanges: _allergiesChanged,
+          onTap: onOpenAllergies,
+          child: draft.allergies.isEmpty
+              ? const Text(
+                  'Sin alergias registradas.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                )
+              : Column(
+                  children: draft.allergies
+                      .map(
+                        (a) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                size: 14,
+                                color: AppColors.error.withValues(alpha: 0.7),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                a.allergen,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '(${_catLabel(a.category)})',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // ══ ANTECEDENTES (clickable) ═════════════════════════════
+        _ClickableSection(
+          icon: Icons.history_edu_outlined,
+          title: 'ANTECEDENTES',
+          hasChanges: _backgroundChanged,
+          onTap: onOpenBackground,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _MiniRow(label: 'Crónicas', value: bg?.chronicConditions ?? '—'),
+              _MiniRow(label: 'Personal', value: bg?.personalHistory ?? '—'),
+              _MiniRow(
+                label: 'Familiares',
+                value: bg == null || bg.familyHistory.isEmpty
+                    ? '—'
+                    : '${bg.familyHistory.length} registros',
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 18),
+
+        // ══ MEDICIONES ══════════════════════════════════════════
         ProfileSectionHeader(
           icon: Icons.monitor_heart_outlined,
-          title: 'SIGNOS · ACTUALIZABLES',
-          actionLabel: 'Editar',
-          onAction: onEditVitalSigns,
+          title: 'MEDICIONES',
+          actionLabel: canEdit ? 'Editar' : null,
+          onAction: canEdit ? onEditVitalSigns : null,
         ),
         const SizedBox(height: 8),
         ProfileCard(
@@ -46,30 +168,25 @@ class ProfileTabSummary extends StatelessWidget {
                     value: p.weight != null
                         ? '${p.weight!.toStringAsFixed(1)} kg'
                         : '—',
+                    changed: _weightChanged,
                   ),
                   _VitalDivider(),
                   _VitalCell(
                     icon: Icons.straighten,
-                    label: 'TALLA',
+                    label: 'ALTURA',
                     value: p.height != null
                         ? '${p.height!.toStringAsFixed(0)} cm'
                         : '—',
+                    changed: _heightChanged,
                   ),
                   _VitalDivider(),
                   _VitalCell(
                     icon: Icons.bloodtype_outlined,
                     label: 'SANGRE',
                     value: p.bloodType ?? '—',
+                    changed: false,
                   ),
                 ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Solo peso y talla son editables — cambian en el tiempo',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textSecondary.withValues(alpha: 0.7),
-                ),
               ),
             ],
           ),
@@ -77,7 +194,7 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 18),
 
-        // ── Identity (read-only) ──────────────────────────────────
+        // ══ IDENTIDAD (read-only) ═══════════════════════════════
         const ProfileSectionHeader(
           icon: Icons.person_outline,
           title: 'IDENTIDAD',
@@ -136,37 +253,41 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 18),
 
-        // ── Residence (editable) ──────────────────────────────────
+        // ══ RESIDENCIA (editable) ═══════════════════════════════
         ProfileSectionHeader(
           icon: Icons.location_on_outlined,
           title: 'RESIDENCIA',
-          actionLabel: 'Editar',
-          onAction: onEditAddress,
+          actionLabel: canEdit ? 'Editar' : null,
+          onAction: canEdit ? onEditAddress : null,
         ),
         const SizedBox(height: 8),
         ProfileCard(
           child: Column(
             children: [
-              _IdRow(
-                left: _IdCell(
-                  label: 'DIRECCIÓN',
-                  value: p.address.street?.isNotEmpty == true
-                      ? p.address.street!
-                      : '—',
-                ),
-                right: _IdCell(
-                  label: 'ZONA',
-                  value: p.address.zone == 'R' ? 'Rural' : 'Urbana',
-                ),
+              Row(
+                children: [
+                  if (_addressChanged) _OrangeDot(),
+                  Expanded(
+                    child: _IdRow(
+                      left: _IdCell(
+                        label: 'DIRECCIÓN',
+                        value: p.address.street?.isNotEmpty == true
+                            ? p.address.street!
+                            : '—',
+                      ),
+                      right: _IdCell(
+                        label: 'ZONA',
+                        value: p.address.zone == 'R' ? 'Rural' : 'Urbana',
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
               _IdRow(
                 left: _IdCell(
                   label: 'MUNICIPIO',
-                  value: p.address.city.isNotEmpty
-                      ? '${p.address.city}'
-                            '${p.address.cityCode != null ? ' (${p.address.cityCode})' : ''}'
-                      : '—',
+                  value: p.address.city.isNotEmpty ? p.address.city : '—',
                 ),
                 right: _IdCell(
                   label: 'DEPARTAMENTO',
@@ -179,118 +300,90 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 18),
 
-        // ── Guardian (editable) ───────────────────────────────────
-        ProfileSectionHeader(
-          icon: Icons.family_restroom,
-          title: 'GUARDIÁN',
-          actionLabel: 'Editar',
-          onAction: onEditGuardian,
-        ),
-        const SizedBox(height: 8),
-        ProfileCard(child: _GuardianCard(guardian: draft.guardianInfo)),
+        // ══ GUARDIÁN (editable) ═════════════════════════════════
+        if (draft.guardianInfo != null) ...[
+          ProfileSectionHeader(
+            icon: Icons.family_restroom,
+            title: 'GUARDIÁN',
+            actionLabel: canEdit ? 'Editar' : null,
+            onAction: canEdit ? onEditGuardian : null,
+          ),
+          const SizedBox(height: 8),
+          ProfileCard(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_guardianChanged) _OrangeDot(),
+                Expanded(
+                  child: _GuardianContent(guardian: draft.guardianInfo!),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  static String _docTypeLabel(String c) {
-    switch (c) {
-      case 'RC':
-        return 'Registro civil';
-      case 'TI':
-        return 'Tarjeta identidad';
-      case 'CC':
-        return 'Cédula';
-      case 'CE':
-        return 'Céd. extranjería';
-      case 'PA':
-        return 'Pasaporte';
-      case 'PE':
-        return 'Permiso esp.';
-      case 'PT':
-        return 'PPT';
-      case 'MS':
-        return 'Menor s/ID';
-      case 'AS':
-        return 'Adulto s/ID';
-      default:
-        return c;
-    }
-  }
-
-  static String _sexLabel(String c) {
-    switch (c) {
-      case 'M':
-        return 'Masculino';
-      case 'F':
-        return 'Femenino';
-      default:
-        return 'Indeterminado';
-    }
-  }
-
-  static String? _genderLabel(String? c) {
-    if (c == null) return null;
-    switch (c) {
-      case '01':
-        return 'Masculino';
-      case '02':
-        return 'Femenino';
-      case '03':
-        return 'No binario';
-      case '04':
-        return 'Otro';
-      default:
-        return null;
-    }
-  }
-
-  static String? _ethnicityLabel(String? c) {
-    if (c == null) return null;
-    switch (c) {
-      case '01':
-        return 'Indígena';
-      case '02':
-        return 'ROM';
-      case '03':
-        return 'Raizal';
-      case '04':
-        return 'Palenquero';
-      case '05':
-        return 'Negro/Afro';
-      case '06':
-        return 'Otro';
-      default:
-        return null;
-    }
-  }
-
-  static String? _disabilityLabel(String? c) {
-    if (c == null || c == '00') return 'Ninguna';
-    switch (c) {
-      case '01':
-        return 'Física';
-      case '02':
-        return 'Auditiva';
-      case '03':
-        return 'Visual';
-      case '04':
-        return 'Sordoceguera';
-      case '05':
-        return 'Mental';
-      case '06':
-        return 'Intelectual';
-      case '07':
-        return 'Múltiple';
-      default:
-        return c;
-    }
-  }
-
+  static String _catLabel(String c) =>
+      const {
+        '01': 'Medicamento',
+        '02': 'Alimento',
+        '03': 'Ambiente',
+        '04': 'Piel',
+        '05': 'Picadura',
+        '06': 'Otra',
+      }[c] ??
+      c;
+  static String _docTypeLabel(String c) =>
+      const {
+        'RC': 'Registro civil',
+        'TI': 'Tarjeta identidad',
+        'CC': 'Cédula',
+        'CE': 'Céd. extranjería',
+        'PA': 'Pasaporte',
+        'PE': 'Permiso esp.',
+        'PT': 'PPT',
+        'MS': 'Menor s/ID',
+        'AS': 'Adulto s/ID',
+      }[c] ??
+      c;
+  static String _sexLabel(String c) =>
+      const {'M': 'Masculino', 'F': 'Femenino', 'I': 'Indeterminado'}[c] ?? c;
+  static String? _genderLabel(String? c) => c == null
+      ? null
+      : const {
+          '01': 'Masculino',
+          '02': 'Femenino',
+          '03': 'Transgénero',
+          '04': 'No binario',
+        }[c];
+  static String? _ethnicityLabel(String? c) => c == null
+      ? null
+      : const {
+          '01': 'Indígena',
+          '02': 'ROM',
+          '03': 'Raizal',
+          '04': 'Palenquero',
+          '05': 'Negro/Afro',
+          '06': 'Ninguno',
+        }[c];
+  static String? _disabilityLabel(String? c) => (c == null || c == '00')
+      ? 'Ninguna'
+      : const {
+          '01': 'Física',
+          '02': 'Auditiva',
+          '03': 'Visual',
+          '04': 'Sordoceguera',
+          '05': 'Mental',
+          '06': 'Intelectual',
+          '07': 'Múltiple',
+        }[c];
   static String _formatDob(String dob) {
     if (dob.isEmpty || !dob.contains('-')) return dob;
     final p = dob.split('-');
     if (p.length != 3) return dob;
-    final months = [
+    const m = [
       'enero',
       'febrero',
       'marzo',
@@ -304,23 +397,160 @@ class ProfileTabSummary extends StatelessWidget {
       'noviembre',
       'diciembre',
     ];
-    final m = int.tryParse(p[1]);
-    if (m == null || m < 1 || m > 12) return dob;
-    return '${int.parse(p[2])} de ${months[m - 1]} de ${p[0]}';
+    final mi = int.tryParse(p[1]);
+    if (mi == null || mi < 1 || mi > 12) return dob;
+    return '${int.parse(p[2])} de ${m[mi - 1]} de ${p[0]}';
   }
 }
 
-// ── Vital cell ──────────────────────────────────────────────────────────────
+// ── Clickable section card (Alergias, Antecedentes) ──────────────────────
+
+class _ClickableSection extends StatelessWidget {
+  const _ClickableSection({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    required this.child,
+    this.badge = 0,
+    this.hasChanges = false,
+    this.iconColor = AppColors.primary,
+  });
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final int badge;
+  final bool hasChanges;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: ProfileCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 16, color: iconColor),
+                const SizedBox(width: 6),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: iconColor,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                if (badge > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: iconColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '$badge',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: iconColor,
+                      ),
+                    ),
+                  ),
+                ],
+                if (hasChanges) ...[const SizedBox(width: 6), _OrangeDot()],
+                const Spacer(),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 14,
+                  color: AppColors.disabled,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniRow extends StatelessWidget {
+  const _MiniRow({required this.label, required this.value});
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textPrimary,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Orange change indicator dot ──────────────────────────────────────────
+
+class _OrangeDot extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 8,
+      height: 8,
+      margin: const EdgeInsets.only(right: 6),
+      decoration: const BoxDecoration(
+        color: Color(0xFFFF9800),
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+// ── Vital cell ──────────────────────────────────────────────────────────
 
 class _VitalCell extends StatelessWidget {
   const _VitalCell({
     required this.icon,
     required this.label,
     required this.value,
+    this.changed = false,
   });
   final IconData icon;
   final String label;
   final String value;
+  final bool changed;
 
   @override
   Widget build(BuildContext context) {
@@ -341,6 +571,7 @@ class _VitalCell extends StatelessWidget {
                   letterSpacing: 0.5,
                 ),
               ),
+              if (changed) ...[const SizedBox(width: 4), _OrangeDot()],
             ],
           ),
           const SizedBox(height: 6),
@@ -364,13 +595,10 @@ class _VitalDivider extends StatelessWidget {
       Container(width: 1, height: 32, color: AppColors.divider);
 }
 
-// ── Identity / address row helpers ──────────────────────────────────────────
-
 class _IdRow extends StatelessWidget {
   const _IdRow({required this.left, required this.right});
   final Widget left;
   final Widget right;
-
   @override
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,7 +614,6 @@ class _IdCell extends StatelessWidget {
   const _IdCell({required this.label, required this.value});
   final String label;
   final String value;
-
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,17 +636,14 @@ class _IdCell extends StatelessWidget {
   );
 }
 
-// ── Guardian sub-card ───────────────────────────────────────────────────────
-
-class _GuardianCard extends StatelessWidget {
-  const _GuardianCard({required this.guardian});
+class _GuardianContent extends StatelessWidget {
+  const _GuardianContent({required this.guardian});
   final GuardianInfo guardian;
-
   String get _initials {
-    final parts = guardian.name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
+    final p = guardian.name.trim().split(RegExp(r'\s+'));
+    return p.length >= 2
+        ? '${p[0][0]}${p[1][0]}'.toUpperCase()
+        : (p.isNotEmpty ? p[0][0].toUpperCase() : '?');
   }
 
   @override
@@ -460,7 +684,7 @@ class _GuardianCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${_relationshipLabel(guardian.relationship)} · ${guardian.phone}',
+                    '${_relLabel(guardian.relationship)} · ${guardian.phone ?? '—'}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,
@@ -471,66 +695,16 @@ class _GuardianCard extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            const Icon(Icons.nfc, size: 14, color: AppColors.primary),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                guardian.deviceUid != null && guardian.deviceUid!.isNotEmpty
-                    ? 'NFC: ${guardian.deviceUid!}'
-                    : 'NFC: no asignada',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textSecondary,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color:
-                    guardian.deviceUid != null && guardian.deviceUid!.isNotEmpty
-                    ? AppColors.success.withValues(alpha: 0.15)
-                    : AppColors.disabled.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                guardian.deviceUid != null && guardian.deviceUid!.isNotEmpty
-                    ? 'Registrada'
-                    : 'No registrada',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color:
-                      guardian.deviceUid != null &&
-                          guardian.deviceUid!.isNotEmpty
-                      ? AppColors.success
-                      : AppColors.textSecondary,
-                ),
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }
 
-  static String _relationshipLabel(String r) {
-    switch (r) {
-      case '01':
-        return 'Padres';
-      case '02':
-        return 'Hermanos';
-      case '03':
-        return 'Tíos';
-      case '04':
-        return 'Abuelos';
-      default:
-        return r;
-    }
-  }
+  static String _relLabel(String r) =>
+      const {
+        '01': 'Padres',
+        '02': 'Hermanos',
+        '03': 'Tíos',
+        '04': 'Abuelos',
+      }[r] ??
+      r;
 }

@@ -28,7 +28,8 @@ class SheetScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.7,
@@ -37,8 +38,7 @@ class SheetScaffold extends StatelessWidget {
         builder: (_, scrollController) => Container(
           decoration: const BoxDecoration(
             color: AppColors.white,
-            borderRadius: BorderRadius.vertical(
-                top: Radius.circular(20)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
             children: [
@@ -55,40 +55,41 @@ class SheetScaffold extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18),
+                padding: const EdgeInsets.symmetric(horizontal: 18),
                 child: Row(
                   children: [
                     Expanded(
                       child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             title,
                             style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary),
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
                           ),
                           if (subtitle != null)
                             Padding(
-                              padding:
-                                  const EdgeInsets.only(top: 2),
+                              padding: const EdgeInsets.only(top: 2),
                               child: Text(
                                 subtitle!,
                                 style: const TextStyle(
-                                    fontSize: 12,
-                                    color:
-                                        AppColors.textSecondary),
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
                               ),
                             ),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close,
-                          size: 22, color: AppColors.textSecondary),
+                      icon: const Icon(
+                        Icons.close,
+                        size: 22,
+                        color: AppColors.textSecondary,
+                      ),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
@@ -99,7 +100,9 @@ class SheetScaffold extends StatelessWidget {
                 child: SingleChildScrollView(
                   controller: scrollController,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 18, vertical: 12),
+                    horizontal: 18,
+                    vertical: 12,
+                  ),
                   child: child,
                 ),
               ),
@@ -114,20 +117,19 @@ class SheetScaffold extends StatelessWidget {
                       onPressed: canConfirm ? onConfirm : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
-                        disabledBackgroundColor:
-                            AppColors.disabled,
+                        disabledBackgroundColor: AppColors.disabled,
                         shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      icon: Icon(confirmIcon,
-                          size: 20, color: AppColors.white),
+                      icon: Icon(confirmIcon, size: 20, color: AppColors.white),
                       label: Text(
                         confirmLabel,
                         style: const TextStyle(
-                            color: AppColors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600),
+                          color: AppColors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
