@@ -148,7 +148,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
             keyboard: TextInputType.phone,
           ),
           const SizedBox(height: 14),
-          _label('Manilla NFC del guardián'),
+          _label('Dispositivo NFC del guardián'),
           Row(
             children: [
               Expanded(
@@ -157,7 +157,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
                   style: const TextStyle(fontSize: 13),
                   decoration: InputDecoration(
                     isDense: true,
-                    hintText: 'UID de la manilla',
+                    hintText: 'UID del dispositivo NFC',
                     prefixIcon: Icon(
                       Icons.family_restroom,
                       size: 18,

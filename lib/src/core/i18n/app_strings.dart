@@ -351,13 +351,13 @@ class AppStrings {
     // Home
     'home': 'Inicio',
     'readNfc': 'Leer NFC',
-    'readNfcSub': 'Escanear manilla del paciente',
+    'readNfcSub': 'Escanear dispositivo NFC',
     'registerNfc': 'Registrar NFC',
     'registerNfcSub': 'Registrar nuevo paciente',
     'syncQueue': 'Sincronización',
     'allRecordsSynced': 'Todo sincronizado',
-    'lossOfWristband': 'Pérdida de manilla',
-    'lossOfWristbandSub': 'El paciente perdió la manilla.',
+    'lossOfWristband': 'Pérdida de dispositivo NFC',
+    'lossOfWristbandSub': 'El paciente perdió el dispositivo NFC.',
     'brigadeHistory': 'Historial de brigadas',
     'brigadeHistorySub': 'Ver el estado de los pacientes.',
     'pendingSync': '{n} registro(s) pendiente(s)',
@@ -379,12 +379,13 @@ class AppStrings {
 
     // Register NFC
     'registerTitle': 'Registrar NFC',
-    'scanNewWristband': 'Acerque una manilla nueva',
+    'scanNewWristband': 'Acerque un dispositivo NFC nuevo',
     'scanNewWristbandSub': 'El sistema verificará que no esté asignada',
     'wristbandReady': 'lista — nueva',
     'nfcNotAvailable': 'NFC no disponible. Use entrada manual.',
     'manualUidHint': 'UID manual (testing)',
-    'validWristbands': 'Manillas válidas: NTAG213/215 con prefijo HWB- *',
+    'validWristbands':
+        'dispositivo NFCs válidas: NTAG213/215 con prefijo HWB- *',
     'patientData': 'Datos del paciente',
     'registrationComplete': 'Registro completo',
     'patientRegistered': 'Paciente registrado',
@@ -426,15 +427,15 @@ class AppStrings {
     'guardianPin': 'PIN de 4 dígitos del guardián *',
 
     // Read NFC
-    'scanWristband': 'Acerque la manilla al dispositivo',
+    'scanWristband': 'Acerque el dispositivo NFC',
     'holdWristband': 'Mantenga contacto 2 segundos',
     'scanning': 'Buscando señal NFC...',
     'scanSuccess': '¡Datos leídos correctamente!',
     'scanFailed': 'Lectura fallida',
     'guardianRequired': 'Verificación de guardián requerida',
     'guardianRequiredSub':
-        'Este paciente es menor de edad. Escanee la manilla del guardián para acceder al registro.',
-    'scanGuardianWristband': 'Escanear manilla del guardián',
+        'Este paciente es menor de edad. Escanee el dispositivo NFC del guardián para acceder al registro.',
+    'scanGuardianWristband': 'Escanear el dispositivo NFC del guardián',
     'continueToRead': 'Continuar a Leer NFC',
     'readyToScan': 'Listo para escanear',
 
@@ -519,8 +520,8 @@ class AppStrings {
     'synchronizing': 'Sincronizando',
 
     // NFC Save Flow
-    'putOnWristband': 'Coloque la manilla',
-    'placeWristband': 'Acerque la manilla para cargar la información.',
+    'putOnWristband': 'Coloque el dispositivo NFC',
+    'placeWristband': 'Acerque el dispositivo NFC para cargar la información.',
     'startWriting': 'Iniciar escritura',
     'syncingServer': 'Sincronizando con el servidor...',
     'pleaseWait': 'Espere un momento mientras se carga la información.',
@@ -563,11 +564,11 @@ class AppStrings {
     'offline': 'Sin conexión',
     // Home actions v2
     'actionReadNfc': 'Leer NFC',
-    'actionReadNfcSub': 'Escanear manilla del paciente',
+    'actionReadNfcSub': 'Escanear dispositivo NFC',
     'actionNewPatient': 'Nuevo paciente',
     'actionNewPatientSub': 'Primer ingreso del paciente',
     'actionSearchPatient': 'Buscar paciente',
-    'actionSearchPatientSub': 'Manilla perdida o dañada',
+    'actionSearchPatientSub': 'dispositivo NFC perdido o dañado',
     'actionSearchPatientSubAdmin': 'Solo lectura',
     'actionPendingSync': 'Pendientes por sincronizar',
     'actionPendingSyncEmpty': 'Todos los registros sincronizados',
@@ -581,15 +582,14 @@ class AppStrings {
     'adminViewPatientsSub': 'Solo lectura',
     'adminBrigadeHistorySub': '{n} pacientes sincronizados',
     // Read NFC v2
-    'readWristbandTitle': 'Leer manilla',
-    'scanGuardianTitle': 'Leer manilla del guardián',
-    'scanPatientHeadline': 'Acerque la manilla',
-    'scanPatientHint':
-        'Sostenga el dispositivo cerca de la manilla NFC del paciente',
-    'scanGuardianHeadline': 'Acerque la manilla del guardián',
+    'readWristbandTitle': 'Leer dispositivo NFC',
+    'scanGuardianTitle': 'Leer dispositivo NFC del guardián',
+    'scanPatientHeadline': 'Acerque el dispositivo NFC',
+    'scanPatientHint': 'Acerque el dispositivo NFC del paciente',
+    'scanGuardianHeadline': 'Acerque el dispositivo NFC del guardián',
     'scanGuardianHint':
         'Para acceder al historial de menores se requiere autenticación 2FA',
-    'patientWristbandReady': 'Manilla del paciente leída',
+    'patientWristbandReady': 'dispositivo NFC del paciente leída',
     'nfcNotAvailableHint': 'NFC no disponible. Use el campo manual debajo.',
     'manualPatientUidLabel': 'UID manual del paciente (testing)',
     'manualPatientUidHint': 'Ej. HWB-04:1A:2C:DE',
@@ -600,7 +600,7 @@ class AppStrings {
     'searchPatientTitle': 'Buscar paciente',
     'searchSubtitle': 'Identificación estricta · Ley 1581/2012',
     'searchPrivacyNotice':
-        'Use esta búsqueda solo cuando el paciente no tiene su manilla. Todos los campos son obligatorios.',
+        'Use esta búsqueda solo cuando el paciente no tiene su dispositivo NFC. Todos los campos son obligatorios.',
     'documentTypeLabel': 'TIPO DOC.',
     'documentNumberLabel': 'NÚMERO DE DOCUMENTO',
     'firstNameLabel': 'PRIMER NOMBRE',

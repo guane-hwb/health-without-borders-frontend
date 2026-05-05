@@ -350,7 +350,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Acerque la manilla del paciente para registrar la consulta.',
+            'Acerque el dispositivo NFC del paciente para registrar la consulta.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
@@ -421,7 +421,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
         content: TextField(
           controller: uidCtrl,
           decoration: const InputDecoration(
-            hintText: 'Ingrese UID de la manilla',
+            hintText: 'Ingrese UID del dispositivo NFC',
           ),
         ),
         actions: [

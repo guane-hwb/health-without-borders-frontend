@@ -75,7 +75,7 @@ class Step6Success extends StatelessWidget {
           icon: Icons.nfc,
           iconColor: AppColors.primary,
           bgColor: AppColors.primary.withValues(alpha: 0.1),
-          title: 'Datos de emergencia sellados en la manilla',
+          title: 'Datos de emergencia sellados en el dispositivo NFC',
           subtitle: 'Cifrado AES-256-GCM · Solo legible por la app',
         ),
         const SizedBox(height: 10),

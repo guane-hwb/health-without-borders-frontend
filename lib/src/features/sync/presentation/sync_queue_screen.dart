@@ -606,10 +606,10 @@ class _ReviewSummaryScreen extends StatelessWidget {
 
                   const SizedBox(height: 16),
 
-                  // ── Manilla ──
+                  // ── Dispositivo NFC ──
                   _SummaryCard(
                     icon: Icons.nfc,
-                    title: 'Manilla',
+                    title: 'Dispositivo NFC',
                     rows: [MapEntry('UID', patient.deviceUid)],
                   ),
                   const SizedBox(height: 10),

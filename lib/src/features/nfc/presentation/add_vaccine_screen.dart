@@ -239,7 +239,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Acerque la manilla del paciente para registrar la vacuna.',
+            'Acerque el dispositivo NFC del paciente para registrar la vacuna.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
@@ -310,7 +310,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
         content: TextField(
           controller: uidCtrl,
           decoration: const InputDecoration(
-            hintText: 'Ingrese UID de la manilla',
+            hintText: 'Ingrese UID del dispositivo NFC',
           ),
         ),
         actions: [
