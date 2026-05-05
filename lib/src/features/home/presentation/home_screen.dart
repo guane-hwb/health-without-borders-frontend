@@ -329,7 +329,7 @@ class _HeaderLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const HwbLogo(size: 36);
+    return const HwbLogo(size: 36, onDark: true);
   }
 }
 

@@ -134,7 +134,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const HwbLogo(size: 28),
+                      const HwbLogo(size: 28, onDark: true),
                       const Expanded(
                         child: Center(
                           child: Text(
@@ -527,7 +527,7 @@ class _ReviewSummaryScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const HwbLogo(size: 28),
+                  const HwbLogo(size: 28, onDark: true),
                   const Expanded(
                     child: Center(
                       child: Text(

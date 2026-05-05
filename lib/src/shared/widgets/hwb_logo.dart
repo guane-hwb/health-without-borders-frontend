@@ -3,19 +3,27 @@ import 'package:flutter/material.dart';
 
 import '../../design/tokens/app_colors.dart';
 
-/// Health Without Borders logo — rounded blue square with a white medical
-/// cross (top-left) and a white heart with pulse (bottom-right).
+/// Health Without Borders logo — renders the brand icon from the PNG asset.
 ///
-/// Uses a Stack with standard Flutter Icons for the cross and heart, and a
-/// tiny CustomPaint only for the ECG pulse line. This approach renders
-/// reliably on web (CanvasKit & HTML), iOS, and Android.
+/// Set [onDark] = true when placing the logo on a dark/blue background
+/// (e.g. headers) so it gets a white border that makes it visible.
 class HwbLogo extends StatelessWidget {
-  const HwbLogo({super.key, this.size = 48, this.elevated = false});
+  const HwbLogo({
+    super.key,
+    this.size = 48,
+    this.elevated = false,
+    this.onDark = false,
+  });
 
   final double size;
   final bool elevated;
 
-  factory HwbLogo.small({Key? key}) => HwbLogo(key: key, size: 32);
+  /// When true, a white rounded border is drawn around the logo so it
+  /// stands out against the blue header background.
+  final bool onDark;
+
+  factory HwbLogo.small({Key? key}) =>
+      HwbLogo(key: key, size: 32, onDark: true);
   factory HwbLogo.medium({Key? key}) => HwbLogo(key: key, size: 60);
   factory HwbLogo.large({Key? key}) =>
       HwbLogo(key: key, size: 120, elevated: true);
@@ -23,16 +31,14 @@ class HwbLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = size * 0.22;
-    final crossSize = size * 0.30;
-    final heartSize = size * 0.40;
-    final pulseW = heartSize * 0.75;
-    final pulseH = heartSize * 0.35;
+    final pad = onDark ? size * 0.001 : 0.0;
+    final imgSize = size - pad * 2;
 
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        color: onDark ? Colors.white : null,
         borderRadius: BorderRadius.circular(radius),
         boxShadow: elevated
             ? [
@@ -44,76 +50,16 @@ class HwbLogo extends StatelessWidget {
               ]
             : null,
       ),
-      child: Stack(
-        children: [
-          // ── White medical cross (top-left) ──
-          Positioned(
-            left: size * 0.10,
-            top: size * 0.08,
-            child: Icon(
-              Icons.add_rounded,
-              size: crossSize,
-              color: AppColors.white,
-            ),
-          ),
-
-          // ── White heart (bottom-right) ──
-          Positioned(
-            right: size * 0.10,
-            bottom: size * 0.10,
-            child: Icon(
-              Icons.favorite,
-              size: heartSize,
-              color: AppColors.white,
-            ),
-          ),
-
-          // ── Pulse ECG line (centered over the heart) ──
-          Positioned(
-            right: size * 0.10 + (heartSize - pulseW) / 2,
-            bottom: size * 0.10 + (heartSize - pulseH) / 2,
-            child: SizedBox(
-              width: pulseW,
-              height: pulseH,
-              child: CustomPaint(
-                size: Size(pulseW, pulseH),
-                painter: _PulsePainter(),
-              ),
-            ),
-          ),
-        ],
+      padding: EdgeInsets.all(pad),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius * 0.2),
+        child: Image.asset(
+          'assets/images/app-icon.png',
+          width: imgSize,
+          height: imgSize,
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }
-}
-
-/// Draws the ECG/pulse waveform line inside the heart.
-class _PulsePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final midY = h * 0.50;
-
-    final paint = Paint()
-      ..color = AppColors.primary
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = (w * 0.07).clamp(1.5, 4.0)
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final path = Path()
-      ..moveTo(0, midY)
-      ..lineTo(w * 0.20, midY)
-      ..lineTo(w * 0.32, midY - h * 0.40)
-      ..lineTo(w * 0.48, midY + h * 0.42)
-      ..lineTo(w * 0.60, midY - h * 0.32)
-      ..lineTo(w * 0.72, midY)
-      ..lineTo(w, midY);
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
