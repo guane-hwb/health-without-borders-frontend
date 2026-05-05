@@ -39,18 +39,6 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
     'AS': 'AS',
   };
 
-  static const Map<String, String> _docTypeFullNames = {
-    'TI': 'Tarjeta de Identidad',
-    'CC': 'Cédula de Ciudadanía',
-    'RC': 'Registro Civil',
-    'CE': 'Cédula de Extranjería',
-    'PA': 'Pasaporte',
-    'PE': 'Permiso Especial',
-    'PT': 'Permiso por Protección',
-    'MS': 'Menor sin ID',
-    'AS': 'Adulto sin ID',
-  };
-
   @override
   void dispose() {
     _docCtrl.dispose();

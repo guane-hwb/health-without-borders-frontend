@@ -38,11 +38,12 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
     final entries = await AppScope.of(
       context,
     ).localDatabase.getUnsyncedRecords();
-    if (mounted)
+    if (mounted) {
       setState(() {
         _entries = entries;
         _isLoading = false;
       });
+    }
   }
 
   Future<void> _deleteRecord(LocalPatientEntry entry) async {
@@ -134,7 +135,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const HwbLogo(size: 28, onDark: true),
+                      const HwbLogo(size: 28),
                       const Expanded(
                         child: Center(
                           child: Text(
@@ -527,7 +528,7 @@ class _ReviewSummaryScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const HwbLogo(size: 28, onDark: true),
+                  const HwbLogo(size: 28),
                   const Expanded(
                     child: Center(
                       child: Text(
@@ -648,12 +649,12 @@ class _ReviewSummaryScreen extends StatelessWidget {
                   _SummaryCard(
                     icon: Icons.family_restroom,
                     title: 'Guardián',
-                    rows: (g == null || g.name.isEmpty)
+                    rows: g.name.isEmpty
                         ? [const MapEntry('—', 'Sin guardián')]
                         : [
                             MapEntry('Nombre', g.name),
                             MapEntry('Parentesco', _relLabel(g.relationship)),
-                            MapEntry('Teléfono', g.phone ?? '—'),
+                            MapEntry('Teléfono', g.phone.isEmpty ? '—' : g.phone),
                             MapEntry('NFC', g.deviceUid ?? 'No registrada'),
                           ],
                   ),

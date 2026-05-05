@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/di/app_scope.dart';
 import '../../../../core/i18n/app_strings.dart';
-import '../../../../core/network/api_client.dart';
 import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/screen_bottom_handle.dart';
 import '../../../auth/domain/user_session.dart';

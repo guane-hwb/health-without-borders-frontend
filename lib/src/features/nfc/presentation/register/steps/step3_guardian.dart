@@ -53,11 +53,12 @@ class _Step3State extends State<Step3Guardian> {
     setState(() => _scanning = true);
     try {
       final uid = await NfcService.readDeviceUid();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _uid.text = uid;
           _scanning = false;
         });
+      }
     } on NfcNotAvailableException {
       if (mounted) {
         setState(() => _scanning = false);

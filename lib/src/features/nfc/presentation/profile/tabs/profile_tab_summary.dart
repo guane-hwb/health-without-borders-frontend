@@ -56,8 +56,6 @@ class ProfileTabSummary extends StatelessWidget {
   bool get _guardianChanged {
     final dg = draft.guardianInfo;
     final og = original.guardianInfo;
-    if (dg == null && og == null) return false;
-    if (dg == null || og == null) return true;
     return dg.name != og.name ||
         dg.phone != og.phone ||
         dg.relationship != og.relationship ||
@@ -301,7 +299,7 @@ class ProfileTabSummary extends StatelessWidget {
         const SizedBox(height: 18),
 
         // ══ GUARDIÁN (editable) ═════════════════════════════════
-        if (draft.guardianInfo != null) ...[
+        if (draft.guardianInfo.name.isNotEmpty) ...[
           ProfileSectionHeader(
             icon: Icons.family_restroom,
             title: 'GUARDIÁN',
@@ -684,7 +682,7 @@ class _GuardianContent extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${_relLabel(guardian.relationship)} · ${guardian.phone ?? '—'}',
+                    '${_relLabel(guardian.relationship)} · ${guardian.phone.isEmpty ? '—' : guardian.phone}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,

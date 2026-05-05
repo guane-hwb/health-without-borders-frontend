@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/di/app_scope.dart';
-import '../../../../core/i18n/app_strings.dart';
 import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/hwb_logo.dart';
 import '../../../../shared/widgets/screen_bottom_handle.dart';
@@ -37,8 +36,9 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final today = DateTime.now();
     var age = today.year - dob.year;
     if (today.month < dob.month ||
-        (today.month == dob.month && today.day < dob.day))
+        (today.month == dob.month && today.day < dob.day)) {
       age--;
+    }
     return age < 18;
   }
 
@@ -235,12 +235,10 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 class _WizardHeader extends StatelessWidget {
   const _WizardHeader({
     required this.title,
-    this.subtitle,
     this.onBack,
     this.stepText,
   });
   final String title;
-  final String? subtitle;
   final VoidCallback? onBack;
   final String? stepText;
   @override
@@ -251,86 +249,52 @@ class _WizardHeader extends StatelessWidget {
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
       ),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          Row(
-            children: [
-              if (onBack != null)
-                Material(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(10),
-                  child: InkWell(
-                    onTap: onBack,
-                    borderRadius: BorderRadius.circular(10),
-                    child: const SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: Icon(
-                        Icons.arrow_back,
-                        color: AppColors.white,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                )
-              else
-                const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: HwbLogo(size: 32, onDark: true),
-                ),
-              const SizedBox(width: 8),
-              if (onBack != null) const HwbLogo(size: 28, onDark: true),
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: AppColors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (subtitle != null)
-                        Text(
-                          subtitle!,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.7),
-                            fontSize: 11,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
-                  ),
+          if (onBack != null)
+            Material(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                onTap: onBack,
+                borderRadius: BorderRadius.circular(10),
+                child: const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Icon(Icons.arrow_back, color: AppColors.white, size: 20),
                 ),
               ),
-              if (stepText != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    stepText!,
-                    style: const TextStyle(
-                      color: AppColors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              if (stepText == null && onBack == null) const SizedBox(width: 40),
-              const SizedBox(width: 4),
-            ],
+            )
+          else
+            const Padding(
+              padding: EdgeInsets.all(4),
+              child: HwbLogo(size: 32, onDark: true),
+            ),
+          const SizedBox(width: 8),
+          if (onBack != null) const HwbLogo(size: 28, onDark: true),
+          Expanded(
+            child: Center(
+              child: Text(
+                title,
+                style: const TextStyle(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ),
+          if (stepText != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                stepText!,
+                style: const TextStyle(color: AppColors.white, fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ),
+          if (stepText == null && onBack == null) const SizedBox(width: 40),
+          const SizedBox(width: 4),
         ],
       ),
     );

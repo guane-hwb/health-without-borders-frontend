@@ -98,11 +98,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (confirmed != true) return;
     final scope = AppScope.of(context);
-    final navigator = Navigator.of(context);
+    final nav = Navigator.of(context);
     scope.syncEngine.stop();
     await scope.authRepository.clearSession();
     if (!mounted) return;
-    navigator.pushAndRemoveUntil(
+    nav.pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
       (route) => false,
     );
@@ -329,7 +329,7 @@ class _HeaderLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const HwbLogo(size: 36, onDark: true);
+    return const HwbLogo(size: 36);
   }
 }
 
@@ -510,114 +510,6 @@ class _ClinicalHome extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════
 // ADMIN HOME — kept simple, 3 KPIs + admin actions
 // ═══════════════════════════════════════════════════════════════════
-
-class _AdminHome extends StatefulWidget {
-  const _AdminHome({this.user});
-  final UserSession? user;
-  @override
-  State<_AdminHome> createState() => _AdminHomeState();
-}
-
-class _AdminHomeState extends State<_AdminHome> {
-  int _userCount = 0;
-  int _syncedCount = 0;
-  bool _kpiLoaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadKpis());
-  }
-
-  Future<void> _loadKpis() async {
-    try {
-      final scope = AppScope.of(context);
-      final users = await scope.userRepository.listUsers();
-      final localRecords = await scope.localDatabase.getAllRecords();
-      final synced = localRecords.where((r) => r.isSynced).length;
-      if (mounted) {
-        setState(() {
-          _userCount = users.length;
-          _syncedCount = synced;
-          _kpiLoaded = true;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _kpiLoaded = true);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppStrings.of(context);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 80),
-      children: [
-        Row(
-          children: [
-            _KpiCard(
-              label: s.kpiUsers,
-              value: _kpiLoaded ? '$_userCount' : '…',
-              color: AppColors.primary,
-            ),
-            const SizedBox(width: 10),
-            _KpiCard(
-              label: s.kpiSyncedOk,
-              value: _kpiLoaded ? '$_syncedCount' : '…',
-              color: const Color(0xFF2E7D32),
-            ),
-            const SizedBox(width: 10),
-            _KpiCard(
-              label: 'Org',
-              value: widget.user?.organizationName?.split(' ').first ?? '—',
-              color: AppColors.secondary,
-            ),
-          ],
-        ),
-        const SizedBox(height: 22),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x14000000),
-                blurRadius: 8,
-                offset: Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              _AdminRow(
-                icon: Icons.group_outlined,
-                title: s.adminManageUsers,
-                subtitle: s.adminManageUsersSub,
-                onTap: () => _push(context, const ManageUsersScreen()),
-              ),
-              const _AdminDivider(),
-              _AdminRow(
-                icon: Icons.person_search_outlined,
-                title: s.adminViewPatients,
-                subtitle: s.adminViewPatientsSub,
-                onTap: () => _push(context, const LossOfWristbandScreen()),
-              ),
-              const _AdminDivider(),
-              _AdminRow(
-                icon: Icons.favorite_border,
-                title: s.brigadeHistory,
-                subtitle: s.adminBrigadeHistorySub(_syncedCount),
-                onTap: () => _push(context, const BrigadeHistoryScreen()),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════
 // SHARED WIDGETS

@@ -38,19 +38,23 @@ class _Step1WristbandState extends State<Step1Wristband> {
       final uid = await NfcService.readDeviceUid();
       _ctrl.text = uid;
       widget.draft.deviceUid = uid;
-      if (mounted) setState(() => _scanning = false);
+      if (mounted) {
+        setState(() => _scanning = false);
+      }
     } on NfcNotAvailableException {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _scanning = false;
           _error = 'NFC no disponible. Use el campo manual.';
         });
+      }
     } on NfcSessionException catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _scanning = false;
           _error = e.message;
         });
+      }
     }
   }
 

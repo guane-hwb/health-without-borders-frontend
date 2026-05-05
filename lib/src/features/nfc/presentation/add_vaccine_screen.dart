@@ -500,7 +500,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                           ),
                         ),
                         child: Text(
-                          i == 5 ? 'Refuerzo' : '${i}ª',
+                          i == 5 ? 'Refuerzo' : '$iª',
                           style: TextStyle(
                             fontSize: 13,
                             color: _dose == i

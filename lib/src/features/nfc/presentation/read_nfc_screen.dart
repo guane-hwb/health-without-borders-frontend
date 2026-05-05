@@ -31,7 +31,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
 
   // ── Stored values across steps ──
   String? _patientDeviceUid;
-  String? _guardianDeviceUid;
 
   // ── Form controllers (manual entry — testing in Chrome) ──
   final _patientUidCtrl = TextEditingController();
@@ -163,7 +162,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         guardianDeviceUid: guardianUid,
       );
       if (!mounted) return;
-      _guardianDeviceUid = guardianUid;
       await _openProfile(patient);
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -192,7 +190,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       setState(() {
         _step2 = false;
         _patientDeviceUid = null;
-        _guardianDeviceUid = null;
         _patientUidCtrl.clear();
         _guardianUidCtrl.clear();
         _errorMessage = null;
@@ -203,7 +200,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   void _backToStep1() {
     setState(() {
       _step2 = false;
-      _guardianDeviceUid = null;
       _guardianUidCtrl.clear();
       _errorMessage = null;
     });
