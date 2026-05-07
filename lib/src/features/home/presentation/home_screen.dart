@@ -1,9 +1,8 @@
 // lib/src/features/home/presentation/home_screen.dart
 //
-// CAMBIOS vs versión anterior:
-//   - _buildSuperadminBody: "Gestionar organizaciones" ya no muestra subtitle
-//   - _logout: reemplaza la llamada de logout con el método correcto del proyecto
-//     ⚠️  Busca el comentario TODO_LOGOUT y reemplaza con el método real de AuthRepository
+// Home screen — restores the original visual design (logo + brand name in header,
+// white action cards with distinct colored icons) while keeping current functionality
+// (logout at bottom, superadmin/org_admin/clinical role-based bodies).
 
 import 'package:flutter/material.dart';
 
@@ -77,7 +76,7 @@ class HomeScreen extends StatelessWidget {
     if (user == null) return const LoginScreen();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFEBF2F8),
+      backgroundColor: AppColors.backgroundLight,
       body: SafeArea(
         child: Stack(
           children: [
@@ -114,32 +113,32 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildSuperadminBody(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 80),
       children: [
-        _AdminNavCard(
+        _ActionCard(
           icon: Icons.business_outlined,
-          iconBg: const Color(0xFFE1F5EE),
-          iconColor: const Color(0xFF0F6E56),
+          iconBg: const Color(0xFFE8F5E9),
+          iconColor: const Color(0xFF2E7D32),
           title: 'Gestionar organizaciones',
-          subtitle: null, // sin descripción
+          subtitle: null,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => const ManageOrganizationsScreen(),
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        _AdminNavCard(
+        const SizedBox(height: 14),
+        _ActionCard(
           icon: Icons.bar_chart_rounded,
-          iconBg: const Color(0xFFE6F1FB),
-          iconColor: const Color(0xFF185FA5),
+          iconBg: const Color(0xFFE3F2FD),
+          iconColor: const Color(0xFF1565C0),
           title: 'Estadísticas de brigadas',
-          subtitle: null, // sin descripción
+          subtitle: null,
           onTap: () => Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const BrigadeStatsScreen())),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 28),
         _LogoutButton(onTap: () => _logout(context)),
       ],
     );
@@ -150,90 +149,94 @@ class HomeScreen extends StatelessWidget {
   Widget _buildOrgAdminBody(BuildContext context) {
     final s = AppStrings.of(context);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 80),
       children: [
-        _AdminNavCard(
+        _ActionCard(
           icon: Icons.people_alt_outlined,
-          iconBg: const Color(0xFFE1F5EE),
-          iconColor: AppColors.primary,
+          iconBg: const Color(0xFFE8F5E9),
+          iconColor: const Color(0xFF2E7D32),
           title: s.adminManageUsers,
           subtitle: s.adminManageUsersSub,
           onTap: () => Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const ManageUsersScreen())),
         ),
-        const SizedBox(height: 12),
-        _AdminNavCard(
-          icon: Icons.manage_search_rounded,
-          iconBg: const Color(0xFFE6F1FB),
-          iconColor: const Color(0xFF185FA5),
-          title: s.adminViewPatients,
-          subtitle: s.adminViewPatientsSub,
+        const SizedBox(height: 14),
+        _ActionCard(
+          icon: Icons.search_rounded,
+          iconBg: const Color(0xFFE3F2FD),
+          iconColor: const Color(0xFF1565C0),
+          title: s.actionSearchPatient,
+          subtitle: s.actionSearchPatientSubAdmin,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const LossOfWristbandScreen()),
           ),
         ),
-        const SizedBox(height: 12),
-        _AdminNavCard(
-          icon: Icons.format_list_bulleted_rounded,
-          iconBg: const Color(0xFFFAEEDA),
-          iconColor: const Color(0xFF633806),
+        const SizedBox(height: 14),
+        _ActionCard(
+          icon: Icons.history_rounded,
+          iconBg: const Color(0xFFFFF3E0),
+          iconColor: const Color(0xFFE65100),
           title: s.brigadeHistory,
           subtitle: s.brigadeHistorySub,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const BrigadeHistoryScreen()),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 28),
         _LogoutButton(onTap: () => _logout(context)),
       ],
     );
   }
 
-  // ── CLINICAL STAFF ────────────────────────────────────────────────────────
+  // ── DOCTOR / NURSE ────────────────────────────────────────────────────────
 
   Widget _buildClinicalBody(BuildContext context, UserSession user) {
     final s = AppStrings.of(context);
-    final canRegister = user.role == UserRole.doctor;
-
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 80),
       children: [
         _ActionCard(
           icon: Icons.nfc_rounded,
+          iconBg: const Color(0xFFE3F2FD),
+          iconColor: const Color(0xFF1565C0),
           title: s.actionReadNfc,
           subtitle: s.actionReadNfcSub,
           onTap: () => Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const ReadNfcScreen())),
         ),
-        const SizedBox(height: 12),
-        if (canRegister) ...[
+        const SizedBox(height: 14),
+        if (user.role.canRegisterPatient) ...[
           _ActionCard(
             icon: Icons.person_add_alt_1_rounded,
+            iconBg: const Color(0xFFE8F5E9),
+            iconColor: const Color(0xFF2E7D32),
             title: s.actionNewPatient,
             subtitle: s.actionNewPatientSub,
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const RegisterNfcScreen()),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
         ],
         _ActionCard(
           icon: Icons.search_rounded,
+          iconBg: const Color(0xFFEDE7F6),
+          iconColor: const Color(0xFF5E35B1),
           title: s.actionSearchPatient,
           subtitle: s.actionSearchPatientSub,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const LossOfWristbandScreen()),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         _SyncCard(
           onTap: () => Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const SyncQueueScreen())),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 28),
         _LogoutButton(onTap: () => _logout(context)),
       ],
     );
@@ -264,21 +267,38 @@ class _Header extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF29B6F6), AppColors.primary],
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Top row: logo + brand name + language switcher ──
           Row(
             children: [
-              const HwbLogo(size: 30, onDark: true),
-              const Spacer(),
+              const HwbLogo(size: 36, onDark: true),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  AppStrings.of(context).appName,
+                  style: const TextStyle(
+                    color: AppColors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
               _LocaleSwitcher(),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
+          // ── Greeting + name ──
           Text(
             '$greeting,',
             style: const TextStyle(color: Colors.white70, fontSize: 14),
@@ -292,11 +312,12 @@ class _Header extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
+          // ── Role badge ──
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
+              color: Colors.white.withValues(alpha: 0.22),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Row(
@@ -329,40 +350,47 @@ class _LocaleSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final locale = AppLocale.of(context).locale;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: ['es', 'en'].map((lang) {
-        final selected = locale == lang;
-        return GestureDetector(
-          onTap: () => AppLocale.of(context).setLocale(lang),
-          child: Container(
-            margin: const EdgeInsets.only(left: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: selected
-                  ? Colors.white.withValues(alpha: 0.9)
-                  : Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              lang.toUpperCase(),
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: selected ? AppColors.primary : AppColors.white,
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: ['es', 'en'].map((lang) {
+          final selected = locale == lang;
+          return GestureDetector(
+            onTap: () => AppLocale.of(context).setLocale(lang),
+            child: Container(
+              margin: const EdgeInsets.only(left: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.95)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                lang.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? AppColors.primary : AppColors.white,
+                ),
               ),
             ),
-          ),
-        );
-      }).toList(),
+          );
+        }).toList(),
+      ),
     );
   }
 }
 
-// ── Admin/superadmin nav card — subtitle es opcional ──────────────────────
+// ── Generic action card (white background, colored icon) ────────────────────
 
-class _AdminNavCard extends StatelessWidget {
-  const _AdminNavCard({
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({
     required this.icon,
     required this.iconBg,
     required this.iconColor,
@@ -382,18 +410,20 @@ class _AdminNavCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.white,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
+      elevation: 0,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE8ECF0), width: 1),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x12000000),
-                blurRadius: 6,
+                color: Color(0x0A000000),
+                blurRadius: 8,
                 offset: Offset(0, 2),
               ),
             ],
@@ -401,11 +431,11 @@ class _AdminNavCard extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 46,
-                height: 46,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   color: iconBg,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(icon, size: 24, color: iconColor),
               ),
@@ -418,16 +448,16 @@ class _AdminNavCard extends StatelessWidget {
                           Text(
                             title,
                             style: const TextStyle(
-                              fontSize: 15,
+                              fontSize: 16,
                               fontWeight: FontWeight.w600,
                               color: AppColors.textPrimary,
                             ),
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 3),
                           Text(
                             subtitle!,
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: 13,
                               color: AppColors.textSecondary,
                             ),
                           ),
@@ -436,16 +466,16 @@ class _AdminNavCard extends StatelessWidget {
                     : Text(
                         title,
                         style: const TextStyle(
-                          fontSize: 15,
+                          fontSize: 16,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textPrimary,
                         ),
                       ),
               ),
               const Icon(
-                Icons.chevron_right,
+                Icons.chevron_right_rounded,
                 color: AppColors.textSecondary,
-                size: 20,
+                size: 22,
               ),
             ],
           ),
@@ -455,86 +485,7 @@ class _AdminNavCard extends StatelessWidget {
   }
 }
 
-class _ActionCard extends StatelessWidget {
-  const _ActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.white,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x12000000),
-                blurRadius: 6,
-                offset: Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE1F5EE),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 24, color: AppColors.primary),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right,
-                color: AppColors.textSecondary,
-                size: 20,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+// ── Sync card (special: shows pending count + amber state) ──────────────────
 
 class _SyncCard extends StatefulWidget {
   const _SyncCard({required this.onTap});
@@ -567,20 +518,34 @@ class _SyncCardState extends State<_SyncCard> {
         ? s.actionPendingSyncEmpty
         : s.actionPendingSyncCount(_pending);
 
+    final hasPending = _pending > 0;
+    final cardBg = hasPending ? const Color(0xFFFFFDE7) : AppColors.white;
+    final iBg = hasPending ? const Color(0xFFFFF8E1) : const Color(0xFFE8F5E9);
+    final iColor = hasPending
+        ? const Color(0xFFD4A017)
+        : const Color(0xFF2E7D32);
+
     return Material(
-      color: _pending > 0 ? const Color(0xFFFFF8E1) : AppColors.white,
-      borderRadius: BorderRadius.circular(14),
+      color: cardBg,
+      borderRadius: BorderRadius.circular(16),
+      elevation: 0,
       child: InkWell(
         onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: hasPending
+                  ? const Color(0xFFFFE082)
+                  : const Color(0xFFE8ECF0),
+              width: 1,
+            ),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x12000000),
-                blurRadius: 6,
+                color: Color(0x0A000000),
+                blurRadius: 8,
                 offset: Offset(0, 2),
               ),
             ],
@@ -588,22 +553,18 @@ class _SyncCardState extends State<_SyncCard> {
           child: Row(
             children: [
               Container(
-                width: 46,
-                height: 46,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
-                  color: _pending > 0
-                      ? const Color(0xFFFFF3CD)
-                      : const Color(0xFFE1F5EE),
-                  borderRadius: BorderRadius.circular(12),
+                  color: iBg,
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
-                  _pending > 0
+                  hasPending
                       ? Icons.cloud_upload_outlined
                       : Icons.cloud_done_outlined,
                   size: 24,
-                  color: _pending > 0
-                      ? const Color(0xFFD4A017)
-                      : AppColors.primary,
+                  color: iColor,
                 ),
               ),
               const SizedBox(width: 14),
@@ -614,17 +575,17 @@ class _SyncCardState extends State<_SyncCard> {
                     Text(
                       s.actionPendingSync,
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       subtitle,
                       style: TextStyle(
-                        fontSize: 12,
-                        color: _pending > 0
+                        fontSize: 13,
+                        color: hasPending
                             ? const Color(0xFFB8860B)
                             : AppColors.textSecondary,
                       ),
@@ -632,15 +593,15 @@ class _SyncCardState extends State<_SyncCard> {
                   ],
                 ),
               ),
-              if (_pending > 0)
+              if (hasPending)
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
+                    horizontal: 9,
+                    vertical: 4,
                   ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFD4A017),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     '$_pending',
@@ -653,9 +614,9 @@ class _SyncCardState extends State<_SyncCard> {
                 )
               else
                 const Icon(
-                  Icons.chevron_right,
+                  Icons.chevron_right_rounded,
                   color: AppColors.textSecondary,
-                  size: 20,
+                  size: 22,
                 ),
             ],
           ),
@@ -664,6 +625,8 @@ class _SyncCardState extends State<_SyncCard> {
     );
   }
 }
+
+// ── Logout button ───────────────────────────────────────────────────────────
 
 class _LogoutButton extends StatelessWidget {
   const _LogoutButton({required this.onTap});
@@ -675,7 +638,7 @@ class _LogoutButton extends StatelessWidget {
       child: TextButton.icon(
         onPressed: onTap,
         icon: const Icon(
-          Icons.logout,
+          Icons.logout_rounded,
           size: 16,
           color: AppColors.textSecondary,
         ),
