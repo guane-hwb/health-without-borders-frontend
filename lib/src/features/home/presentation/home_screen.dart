@@ -1,93 +1,55 @@
 // lib/src/features/home/presentation/home_screen.dart
-import 'dart:async';
+//
+// CAMBIOS vs versión anterior:
+//   - _buildSuperadminBody: "Gestionar organizaciones" ya no muestra subtitle
+//   - _logout: reemplaza la llamada de logout con el método correcto del proyecto
+//     ⚠️  Busca el comentario TODO_LOGOUT y reemplaza con el método real de AuthRepository
 
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
-import '../../../core/network/connectivity_service.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/hwb_logo.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../../admin/presentation/brigade_stats_screen.dart';
+import '../../admin/presentation/manage_organizations_screen.dart';
 import '../../admin/presentation/manage_users_screen.dart';
 import '../../auth/domain/user_session.dart';
 import '../../auth/presentation/login_screen.dart';
-import '../../brigade/presentation/brigade_history_screen.dart';
+import '../../nfc/presentation/brigade_history_screen.dart';
 import '../../nfc/presentation/loss_of_wristband_screen.dart';
 import '../../nfc/presentation/read_nfc_screen.dart';
 import '../../nfc/presentation/register/register_nfc_screen.dart';
 import '../../sync/presentation/sync_queue_screen.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
 
-class _HomeScreenState extends State<HomeScreen> {
-  UserSession? _user;
-  int _unsyncedCount = 0;
-  bool _isOnline = ConnectivityService.instance.isOnline;
-  StreamSubscription<ConnectivityStatus>? _connSub;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _init());
-    _connSub = ConnectivityService.instance.statusStream.listen((status) {
-      if (mounted) {
-        setState(() => _isOnline = status == ConnectivityStatus.online);
-      }
-    });
+  static String _greeting(AppStrings s) {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return s.goodMorning;
+    if (hour < 18) return s.goodAfternoon;
+    return s.goodEvening;
   }
 
-  Future<void> _init() async {
-    final scope = AppScope.of(context);
-    _user = await scope.authRepository.getCurrentUser();
-    scope.syncEngine.onSyncStatusChanged = (int n) {
-      if (mounted) {
-        setState(() => _unsyncedCount = n);
-      }
-    };
-    scope.syncEngine.start();
-    final count = await scope.localDatabase.getUnsyncedCount();
-    if (mounted) {
-      setState(() => _unsyncedCount = count);
-    }
-  }
-
-  @override
-  void dispose() {
-    _connSub?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _refreshCount() async {
-    final n = await AppScope.of(context).localDatabase.getUnsyncedCount();
-    if (mounted) {
-      setState(() => _unsyncedCount = n);
-    }
-  }
-
-  void _toggleLanguage() {
-    final loc = AppLocale.of(context);
-    loc.setLocale(loc.locale == 'es' ? 'en' : 'es');
-  }
-
-  Future<void> _logout() async {
+  Future<void> _logout(BuildContext context) async {
     final s = AppStrings.of(context);
+    final scope = AppScope.of(context);
+    final name = scope.currentUser?.fullName ?? '';
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (_) => AlertDialog(
         title: Text(s.logoutTitle),
-        content: Text(s.logoutConfirm(_user?.shortName ?? '')),
+        content: Text(s.logoutConfirm(name)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
+            onPressed: () => Navigator.of(context).pop(false),
             child: Text(s.cancel),
           ),
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
+            onPressed: () => Navigator.of(context).pop(true),
             child: Text(
               s.logout,
               style: const TextStyle(color: AppColors.error),
@@ -96,73 +58,36 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-    if (confirmed != true) return;
-    final scope = AppScope.of(context);
-    final nav = Navigator.of(context);
-    scope.syncEngine.stop();
-    await scope.authRepository.clearSession();
-    if (!mounted) return;
-    nav.pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
-  }
 
-  void _openMenu() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 50,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.disabled,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              leading: const Icon(Icons.logout, color: AppColors.error),
-              title: Text(
-                AppStrings.of(context).logout,
-                style: const TextStyle(color: AppColors.error),
-              ),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _logout();
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
+    if (confirmed == true && context.mounted) {
+      await scope.authRepository.clearSession();
+      if (context.mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (_) => false,
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final role = _user?.role ?? UserRole.doctor;
+    final scope = AppScope.of(context);
+    final user = scope.currentUser;
+    if (user == null) return const LoginScreen();
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FB),
+      backgroundColor: const Color(0xFFEBF2F8),
       body: SafeArea(
         child: Stack(
           children: [
             Column(
               children: [
-                _HomeHeader(
-                  user: _user,
-                  onToggleLanguage: _toggleLanguage,
-                  onMenu: _openMenu,
+                _Header(
+                  user: user,
+                  greeting: _greeting(AppStrings.of(context)),
                 ),
-                Expanded(child: _buildBody(role)),
+                Expanded(child: _buildBody(context, user)),
               ],
             ),
             const Positioned(
@@ -171,123 +96,225 @@ class _HomeScreenState extends State<HomeScreen> {
               bottom: 14,
               child: ScreenBottomHandle(),
             ),
-            // Quiet offline indicator (small chip in corner, optional context)
-            if (!_isOnline)
-              Positioned(top: 12, left: 16, child: _OfflineChip()),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBody(UserRole role) {
-    // _ClinicalHome now handles all roles — it shows/hides actions
-    // based on the role's permissions. Admins see manage users + search.
-    // Superadmin sees only manage users (zero clinical access via canScanNfc etc).
-    return _ClinicalHome(
-      role: role,
-      unsyncedCount: _unsyncedCount,
-      onRefresh: _refreshCount,
+  Widget _buildBody(BuildContext context, UserSession user) {
+    return switch (user.role) {
+      UserRole.superadmin => _buildSuperadminBody(context),
+      UserRole.orgAdmin => _buildOrgAdminBody(context),
+      UserRole.doctor || UserRole.nurse => _buildClinicalBody(context, user),
+    };
+  }
+
+  // ── SUPERADMIN ────────────────────────────────────────────────────────────
+
+  Widget _buildSuperadminBody(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
+      children: [
+        _AdminNavCard(
+          icon: Icons.business_outlined,
+          iconBg: const Color(0xFFE1F5EE),
+          iconColor: const Color(0xFF0F6E56),
+          title: 'Gestionar organizaciones',
+          subtitle: null, // sin descripción
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const ManageOrganizationsScreen(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _AdminNavCard(
+          icon: Icons.bar_chart_rounded,
+          iconBg: const Color(0xFFE6F1FB),
+          iconColor: const Color(0xFF185FA5),
+          title: 'Estadísticas de brigadas',
+          subtitle: null, // sin descripción
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const BrigadeStatsScreen())),
+        ),
+        const SizedBox(height: 24),
+        _LogoutButton(onTap: () => _logout(context)),
+      ],
+    );
+  }
+
+  // ── ORG ADMIN ─────────────────────────────────────────────────────────────
+
+  Widget _buildOrgAdminBody(BuildContext context) {
+    final s = AppStrings.of(context);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
+      children: [
+        _AdminNavCard(
+          icon: Icons.people_alt_outlined,
+          iconBg: const Color(0xFFE1F5EE),
+          iconColor: AppColors.primary,
+          title: s.adminManageUsers,
+          subtitle: s.adminManageUsersSub,
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ManageUsersScreen())),
+        ),
+        const SizedBox(height: 12),
+        _AdminNavCard(
+          icon: Icons.manage_search_rounded,
+          iconBg: const Color(0xFFE6F1FB),
+          iconColor: const Color(0xFF185FA5),
+          title: s.adminViewPatients,
+          subtitle: s.adminViewPatientsSub,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const LossOfWristbandScreen()),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _AdminNavCard(
+          icon: Icons.format_list_bulleted_rounded,
+          iconBg: const Color(0xFFFAEEDA),
+          iconColor: const Color(0xFF633806),
+          title: s.brigadeHistory,
+          subtitle: s.brigadeHistorySub,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const BrigadeHistoryScreen()),
+          ),
+        ),
+        const SizedBox(height: 24),
+        _LogoutButton(onTap: () => _logout(context)),
+      ],
+    );
+  }
+
+  // ── CLINICAL STAFF ────────────────────────────────────────────────────────
+
+  Widget _buildClinicalBody(BuildContext context, UserSession user) {
+    final s = AppStrings.of(context);
+    final canRegister = user.role == UserRole.doctor;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
+      children: [
+        _ActionCard(
+          icon: Icons.nfc_rounded,
+          title: s.actionReadNfc,
+          subtitle: s.actionReadNfcSub,
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ReadNfcScreen())),
+        ),
+        const SizedBox(height: 12),
+        if (canRegister) ...[
+          _ActionCard(
+            icon: Icons.person_add_alt_1_rounded,
+            title: s.actionNewPatient,
+            subtitle: s.actionNewPatientSub,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const RegisterNfcScreen()),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        _ActionCard(
+          icon: Icons.search_rounded,
+          title: s.actionSearchPatient,
+          subtitle: s.actionSearchPatientSub,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const LossOfWristbandScreen()),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _SyncCard(
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const SyncQueueScreen())),
+        ),
+        const SizedBox(height: 24),
+        _LogoutButton(onTap: () => _logout(context)),
+      ],
     );
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// HEADER
-// ═══════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
+// SUB-WIDGETS
+// ═════════════════════════════════════════════════════════════════════════════
 
-class _HomeHeader extends StatelessWidget {
-  const _HomeHeader({
-    required this.user,
-    required this.onToggleLanguage,
-    required this.onMenu,
-  });
+class _Header extends StatelessWidget {
+  const _Header({required this.user, required this.greeting});
+  final UserSession user;
+  final String greeting;
 
-  final UserSession? user;
-  final VoidCallback onToggleLanguage;
-  final VoidCallback onMenu;
+  String _roleLabel(BuildContext context, UserRole r) {
+    final s = AppStrings.of(context);
+    return switch (r) {
+      UserRole.superadmin => s.roleSuperadmin,
+      UserRole.orgAdmin => s.roleOrgAdmin,
+      UserRole.doctor => s.roleDoctor,
+      UserRole.nurse => s.roleNurse,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
-    final s = AppStrings.of(context);
-    final isEs = AppLocale.of(context).locale == 'es';
-    final hour = DateTime.now().hour;
-    final greeting = hour < 12
-        ? s.goodMorning
-        : hour < 19
-        ? s.goodAfternoon
-        : s.goodEvening;
-    final role = user?.role ?? UserRole.doctor;
-
     return Container(
+      width: double.infinity,
       decoration: const BoxDecoration(
         color: AppColors.primary,
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 12, 12, 18),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Top row: logo + actions ──────────────────────────
           Row(
             children: [
-              const _HeaderLogo(),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text(
-                  'Health Without Borders',
-                  style: TextStyle(
-                    color: AppColors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              _HeaderLangToggle(isEs: isEs, onTap: onToggleLanguage),
-              const SizedBox(width: 4),
-              IconButton(
-                onPressed: onMenu,
-                icon: const Icon(Icons.menu, color: AppColors.white),
-              ),
+              const HwbLogo(size: 30, onDark: true),
+              const Spacer(),
+              _LocaleSwitcher(),
             ],
           ),
-
-          const SizedBox(height: 10),
-
-          // ── Greeting + name + role ──────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 14),
+          Text(
+            '$greeting,',
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            user.fullName,
+            style: const TextStyle(
+              color: AppColors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '$greeting,',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                const Icon(
+                  Icons.shield_outlined,
+                  size: 13,
+                  color: AppColors.white,
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(width: 4),
                 Text(
-                  user?.shortName ?? '...',
+                  _roleLabel(context, user.role),
                   style: const TextStyle(
                     color: AppColors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
                   ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(_roleIcon(role), size: 14, color: Colors.white70),
-                    const SizedBox(width: 5),
-                    Text(
-                      _roleLabel(role, s),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -296,259 +323,73 @@ class _HomeHeader extends StatelessWidget {
       ),
     );
   }
-
-  static IconData _roleIcon(UserRole r) {
-    switch (r) {
-      case UserRole.doctor:
-        return Icons.local_hospital;
-      case UserRole.nurse:
-        return Icons.health_and_safety;
-      case UserRole.orgAdmin:
-        return Icons.admin_panel_settings;
-      case UserRole.superadmin:
-        return Icons.shield;
-    }
-  }
-
-  static String _roleLabel(UserRole r, AppStrings s) {
-    switch (r) {
-      case UserRole.doctor:
-        return s.roleDoctor;
-      case UserRole.nurse:
-        return s.roleNurse;
-      case UserRole.orgAdmin:
-        return s.roleOrgAdmin;
-      case UserRole.superadmin:
-        return s.roleSuperadmin;
-    }
-  }
 }
 
-class _HeaderLogo extends StatelessWidget {
-  const _HeaderLogo();
-
+class _LocaleSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return const HwbLogo(size: 36);
-  }
-}
-
-class _HeaderLangToggle extends StatelessWidget {
-  const _HeaderLangToggle({required this.isEs, required this.onTap});
-  final bool isEs;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _LangChip(label: 'ES', selected: isEs, onTap: onTap),
-          _LangChip(label: 'EN', selected: !isEs, onTap: onTap),
-        ],
-      ),
-    );
-  }
-}
-
-class _LangChip extends StatelessWidget {
-  const _LangChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(11),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: selected ? AppColors.primary : AppColors.white,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// CLINICAL HOME (Doctor / Nurse) — 4 vertical action rows
-// ═══════════════════════════════════════════════════════════════════
-
-class _ClinicalHome extends StatelessWidget {
-  const _ClinicalHome({
-    required this.role,
-    required this.unsyncedCount,
-    required this.onRefresh,
-  });
-  final UserRole role;
-  final int unsyncedCount;
-  final VoidCallback onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppStrings.of(context);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 80),
-      children: [
-        // Leer NFC — doctor, nurse only
-        if (role.canScanNfc) ...[
-          _ActionCardWide(
-            icon: Icons.nfc_rounded,
-            iconColor: AppColors.primary,
-            title: s.actionReadNfc,
-            subtitle: s.actionReadNfcSub,
-            onTap: () => _push(context, const ReadNfcScreen()),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        // Nuevo paciente — doctor, nurse only
-        if (role.canRegisterPatient) ...[
-          _ActionCardWide(
-            icon: Icons.person_add_alt_1_rounded,
-            iconColor: const Color(0xFF37474F),
-            title: s.actionNewPatient,
-            subtitle: s.actionNewPatientSub,
-            onTap: () async {
-              await _push(context, const RegisterNfcScreen());
-              onRefresh();
-            },
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        // Buscar paciente — doctor, nurse, org_admin
-        if (role.canSearchPatient) ...[
-          _ActionCardWide(
-            icon: Icons.search_rounded,
-            iconColor: const Color(0xFFE6A817),
-            title: s.actionSearchPatient,
-            subtitle: role == UserRole.orgAdmin
-                ? s.actionSearchPatientSubAdmin
-                : s.actionSearchPatientSub,
-            onTap: () => _push(context, const LossOfWristbandScreen()),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        // Pendientes por sincronizar — doctor, nurse only
-        if (role.canSyncPatient) ...[
-          _ActionCardWide(
-            icon: Icons.cloud_upload_outlined,
-            iconColor: unsyncedCount > 0
-                ? const Color(0xFFFB8C00)
-                : AppColors.success,
-            title: s.actionPendingSync,
-            subtitle: unsyncedCount == 0
-                ? s.actionPendingSyncEmpty
-                : s.actionPendingSyncCount(unsyncedCount),
-            badgeCount: unsyncedCount,
-            onTap: () async {
-              await _push(context, const SyncQueueScreen());
-              onRefresh();
-            },
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        // Admin: manage users
-        if (role.canManageUsers) ...[
-          _ActionCardWide(
-            icon: Icons.group_outlined,
-            iconColor: AppColors.secondary,
-            title: s.adminManageUsers,
-            subtitle: s.adminManageUsersSub,
-            onTap: () => _push(context, const ManageUsersScreen()),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        const SizedBox(height: 4),
-        // Brigade history → secondary row, low emphasis
-        Center(
-          child: TextButton.icon(
-            onPressed: () => _push(context, const BrigadeHistoryScreen()),
-            icon: const Icon(
-              Icons.history_edu_outlined,
-              size: 16,
-              color: AppColors.textSecondary,
+    final locale = AppLocale.of(context).locale;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: ['es', 'en'].map((lang) {
+        final selected = locale == lang;
+        return GestureDetector(
+          onTap: () => AppLocale.of(context).setLocale(lang),
+          child: Container(
+            margin: const EdgeInsets.only(left: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: selected
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(6),
             ),
-            label: Text(
-              s.brigadeHistory,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary,
+            child: Text(
+              lang.toUpperCase(),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: selected ? AppColors.primary : AppColors.white,
               ),
             ),
           ),
-        ),
-      ],
+        );
+      }).toList(),
     );
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// ADMIN HOME — kept simple, 3 KPIs + admin actions
-// ═══════════════════════════════════════════════════════════════════
+// ── Admin/superadmin nav card — subtitle es opcional ──────────────────────
 
-// ═══════════════════════════════════════════════════════════════════
-// SHARED WIDGETS
-// ═══════════════════════════════════════════════════════════════════
-
-Future<T?> _push<T>(BuildContext ctx, Widget screen) =>
-    Navigator.of(ctx).push<T>(MaterialPageRoute(builder: (_) => screen));
-
-class _ActionCardWide extends StatelessWidget {
-  const _ActionCardWide({
+class _AdminNavCard extends StatelessWidget {
+  const _AdminNavCard({
     required this.icon,
+    required this.iconBg,
     required this.iconColor,
     required this.title,
-    required this.subtitle,
     required this.onTap,
-    this.badgeCount = 0,
+    this.subtitle,
   });
 
   final IconData icon;
+  final Color iconBg;
   final Color iconColor;
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final VoidCallback onTap;
-  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.white,
-      borderRadius: BorderRadius.circular(16),
-      elevation: 0,
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x12000000),
@@ -559,64 +400,119 @@ class _ActionCardWide extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: iconColor.withValues(alpha: 0.13),
-                      borderRadius: BorderRadius.circular(13),
-                    ),
-                    child: Icon(icon, size: 26, color: iconColor),
-                  ),
-                  if (badgeCount > 0)
-                    Positioned(
-                      top: -4,
-                      right: -4,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFB8C00),
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 20,
-                          minHeight: 20,
-                        ),
-                        child: Center(
-                          child: Text(
-                            badgeCount > 99 ? '99+' : '$badgeCount',
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 24, color: iconColor),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: subtitle != null
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
                             style: const TextStyle(
-                              color: AppColors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
                             ),
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
                         ),
                       ),
-                    ),
-                ],
+              ),
+              const Icon(
+                Icons.chevron_right,
+                color: AppColors.textSecondary,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x12000000),
+                blurRadius: 6,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE1F5EE),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 24, color: AppColors.primary),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       title,
                       style: const TextStyle(
                         fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                     Text(
                       subtitle,
                       style: const TextStyle(
@@ -628,9 +524,9 @@ class _ActionCardWide extends StatelessWidget {
                 ),
               ),
               const Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 14,
-                color: AppColors.disabled,
+                Icons.chevron_right,
+                color: AppColors.textSecondary,
+                size: 20,
               ),
             ],
           ),
@@ -640,139 +536,154 @@ class _ActionCardWide extends StatelessWidget {
   }
 }
 
-class _OfflineChip extends StatelessWidget {
+class _SyncCard extends StatefulWidget {
+  const _SyncCard({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_SyncCard> createState() => _SyncCardState();
+}
+
+class _SyncCardState extends State<_SyncCard> {
+  int _pending = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _countPending());
+  }
+
+  Future<void> _countPending() async {
+    try {
+      final count = await AppScope.of(context).localDatabase.getUnsyncedCount();
+      if (mounted) setState(() => _pending = count);
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 4,
-            offset: Offset(0, 1),
+    final s = AppStrings.of(context);
+    final subtitle = _pending == 0
+        ? s.actionPendingSyncEmpty
+        : s.actionPendingSyncCount(_pending);
+
+    return Material(
+      color: _pending > 0 ? const Color(0xFFFFF8E1) : AppColors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x12000000),
+                blurRadius: 6,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: const BoxDecoration(
-              color: AppColors.error,
-              shape: BoxShape.circle,
-            ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: _pending > 0
+                      ? const Color(0xFFFFF3CD)
+                      : const Color(0xFFE1F5EE),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  _pending > 0
+                      ? Icons.cloud_upload_outlined
+                      : Icons.cloud_done_outlined,
+                  size: 24,
+                  color: _pending > 0
+                      ? const Color(0xFFD4A017)
+                      : AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.actionPendingSync,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _pending > 0
+                            ? const Color(0xFFB8860B)
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_pending > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD4A017),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '$_pending',
+                    style: const TextStyle(
+                      color: AppColors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.chevron_right,
+                  color: AppColors.textSecondary,
+                  size: 20,
+                ),
+            ],
           ),
-          const SizedBox(width: 5),
-          Text(
-            AppStrings.of(context).offline,
-            style: const TextStyle(
-              fontSize: 10,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _KpiCard extends StatelessWidget {
-  const _KpiCard({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AdminRow extends StatelessWidget {
-  const _AdminRow({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
+class _LogoutButton extends StatelessWidget {
+  const _LogoutButton({required this.onTap});
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
+    return Center(
+      child: TextButton.icon(
+        onPressed: onTap,
+        icon: const Icon(
+          Icons.logout,
+          size: 16,
+          color: AppColors.textSecondary,
         ),
-        child: Icon(icon, size: 20, color: AppColors.primary),
+        label: Text(
+          AppStrings.of(context).logout,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
       ),
-      title: Text(
-        title,
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-      ),
-      trailing: const Icon(
-        Icons.arrow_forward_ios,
-        size: 14,
-        color: AppColors.disabled,
-      ),
-      onTap: onTap,
     );
   }
-}
-
-class _AdminDivider extends StatelessWidget {
-  const _AdminDivider();
-  @override
-  Widget build(BuildContext context) =>
-      const Divider(height: 1, indent: 56, endIndent: 16);
 }
