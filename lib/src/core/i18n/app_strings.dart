@@ -54,11 +54,17 @@ class AppStrings {
   String get welcomeSub => _get('welcomeSub');
   String get email => _get('email');
   String get emailHint => _get('emailHint');
+  String get emailRequired => _get('emailRequired');
+  String get emailInvalid => _get('emailInvalid');
   String get password => _get('password');
+  String get passwordRequired => _get('passwordRequired');
+  String get passwordTooShort => _get('passwordTooShort');
   String get login => _get('login');
   String get loginFailed => _get('loginFailed');
   String get enterEmailPassword => _get('enterEmailPassword');
   String get forgotPassword => _get('forgotPassword');
+  String get forgotPasswordMessage => _get('forgotPasswordMessage');
+  String get ok => _get('ok');
   String get noAccount => _get('noAccount');
   String get contactAdmin => _get('contactAdmin');
   String get sessionExpired => _get('sessionExpired');
@@ -339,11 +345,18 @@ class AppStrings {
     'welcomeSub': 'Accede con tu cuenta institucional',
     'email': 'Correo electrónico',
     'emailHint': 'Ingresa tu correo',
+    'emailRequired': 'Ingresa tu correo electrónico',
+    'emailInvalid': 'Correo electrónico no válido',
     'password': 'Contraseña',
+    'passwordRequired': 'Ingresa tu contraseña',
+    'passwordTooShort': 'La contraseña debe tener al menos 6 caracteres',
     'login': 'Iniciar sesión',
     'loginFailed': 'Error al iniciar sesión',
     'enterEmailPassword': 'Ingresa correo y contraseña.',
     'forgotPassword': '¿Olvidó su contraseña?',
+    'forgotPasswordMessage':
+        'Contacta al administrador del sistema para restablecer tu contraseña.',
+    'ok': 'Entendido',
     'noAccount': '¿No tiene cuenta?',
     'contactAdmin': 'Contacte a su administrador',
     'sessionExpired': 'Sesión expirada. Inicie sesión nuevamente.',
@@ -625,7 +638,11 @@ class AppStrings {
     'welcomeSub': 'Access with your institutional account',
     'email': 'Email',
     'emailHint': 'Enter your email',
+    'emailRequired': 'Enter your email address',
+    'emailInvalid': 'Invalid email address',
     'password': 'Password',
+    'passwordRequired': 'Enter your password',
+    'passwordTooShort': 'Password must be at least 6 characters long',
     'login': 'Login',
     'loginFailed': 'Login failed',
     'enterEmailPassword': 'Please enter email and password.',
