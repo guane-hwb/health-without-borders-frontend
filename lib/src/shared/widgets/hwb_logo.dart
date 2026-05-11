@@ -18,8 +18,8 @@ class HwbLogo extends StatelessWidget {
   final double size;
   final bool elevated;
 
-  /// When true, a white rounded border is drawn around the logo so it
-  /// stands out against the blue header background.
+  /// When true, a small white rounded background is drawn behind the logo
+  /// so it stands out against the blue header background.
   final bool onDark;
 
   factory HwbLogo.small({Key? key}) =>
@@ -31,34 +31,41 @@ class HwbLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = size * 0.22;
-    final pad = onDark ? size * 0.001 : 0.0;
-    final imgSize = size - pad * 2;
 
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        color: onDark ? Colors.white : null,
-        borderRadius: BorderRadius.circular(radius),
-        boxShadow: elevated
-            ? [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                  blurRadius: size * 0.16,
-                  offset: Offset(0, size * 0.06),
-                ),
-              ]
-            : null,
-      ),
-      padding: EdgeInsets.all(pad),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(radius * 0.2),
-        child: Image.asset(
-          'assets/images/app-icon.png',
-          width: imgSize,
-          height: imgSize,
-          fit: BoxFit.cover,
-        ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (onDark)
+            Container(
+              width: size * 0.75,
+              height: size * 0.75,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(radius * 0.8),
+                boxShadow: elevated
+                    ? [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.3),
+                          blurRadius: size * 0.16,
+                          offset: Offset(0, size * 0.06),
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(radius),
+            child: Image.asset(
+              'assets/images/app-icon.png',
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ],
       ),
     );
   }

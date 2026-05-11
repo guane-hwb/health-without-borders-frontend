@@ -47,7 +47,7 @@ class SharedReadNfcHeader extends StatelessWidget {
           else
             const Padding(padding: EdgeInsets.all(4), child: HwbLogo(size: 32, onDark: true)),
           const SizedBox(width: 8),
-          if (onBack != null) const HwbLogo(size: 28, onDark: true),
+          if (onBack != null) const HwbLogo(size: 38, onDark: true),
           Expanded(
             child: Center(
               child: Text(
