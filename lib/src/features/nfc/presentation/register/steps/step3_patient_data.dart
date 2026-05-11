@@ -4,13 +4,13 @@ import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../shared/widgets/form_widgets.dart';
 import '../register_nfc_screen.dart';
 
-class Step2PatientData extends StatefulWidget {
-  const Step2PatientData({super.key, required this.draft, required this.onBack, required this.onContinue});
+class Step3PatientData extends StatefulWidget {
+  const Step3PatientData({super.key, required this.draft, required this.onBack, required this.onContinue});
   final RegisterDraft draft; final VoidCallback onBack; final VoidCallback onContinue;
-  @override State<Step2PatientData> createState() => _Step2State();
+  @override State<Step3PatientData> createState() => _Step2State();
 }
 
-class _Step2State extends State<Step2PatientData> {
+class _Step2State extends State<Step3PatientData> {
   late final _docNum = TextEditingController(text: widget.draft.documentNumber);
   late final _firstName = TextEditingController(text: widget.draft.firstName);
   late final _secondName = TextEditingController(text: widget.draft.secondName ?? '');
