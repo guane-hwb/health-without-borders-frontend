@@ -16,6 +16,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+    final _formKey = GlobalKey<FormState>();
+
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _emailFocus = FocusNode();
@@ -38,6 +40,44 @@ class _LoginScreenState extends State<LoginScreen> {
     loc.setLocale(loc.locale == 'es' ? 'en' : 'es');
   }
 
+  void _showForgotPasswordDialog() {
+    final s = AppStrings.of(context);
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Text(
+          s.forgotPassword,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: Text(
+          s.forgotPasswordMessage,
+          style: const TextStyle(
+            fontSize: 14,
+            color: AppColors.textSecondary,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              s.ok,
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
@@ -45,122 +85,146 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: AppColors.white,
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Column(
-          children: [
-            // ── Top bar with language toggle ──────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [_LanguageToggle(onTap: _toggleLanguage)],
-              ),
-            ),
-
-            // ── Centered content ──────────────────────────────────
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(28, 8, 28, 16),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 8),
-                    HwbLogo.large(),
-                    const SizedBox(height: 18),
-                    Text(
-                      s.appName,
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      s.appSubtitleShort,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-
-                    // ── Email ──────────────────────────────────────
-                    _LabeledField(
-                      label: s.emailLabel,
-                      controller: _emailCtrl,
-                      focusNode: _emailFocus,
-                      hint: s.emailHint,
-                      icon: Icons.mail_outline,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      onSubmitted: (_) => _passwordFocus.requestFocus(),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // ── Password ───────────────────────────────────
-                    _LabeledField(
-                      label: s.passwordLabel,
-                      controller: _passwordCtrl,
-                      focusNode: _passwordFocus,
-                      hint: '',
-                      icon: Icons.lock_outline,
-                      obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _login(),
-                      suffix: IconButton(
-                        onPressed: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                          size: 20,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // ── Remember + forgot ──────────────────────────
-                    Row(
-                      children: [
-                        _RememberCheckbox(
-                          value: _rememberSession,
-                          onChanged: (v) =>
-                              setState(() => _rememberSession = v ?? true),
-                          label: s.rememberSession,
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () {},
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(0, 0),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: Text(
-                            s.forgotPassword,
-                            style: const TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(28, 0, 28, 14),
+          child: Column(
+            children: [
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: _LanguageToggle(onTap: _toggleLanguage),
                 ),
               ),
-            ),
 
-            // ── Login button + footer (sticky) ─────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(28, 0, 28, 14),
-              child: Column(
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: 24),
+                      HwbLogo.large(),
+                      const SizedBox(height: 18),
+                      Text(
+                        s.appName,
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        s.appSubtitleShort,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 36),
+
+                      Form(
+                        key: _formKey,
+                        child: Column(
+                          children: [
+                            _LabeledField(
+                              label: s.emailLabel,
+                              controller: _emailCtrl,
+                              focusNode: _emailFocus,
+                              hint: s.emailHint,
+                              icon: Icons.mail_outline,
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              onSubmitted: (_) =>
+                                  _passwordFocus.requestFocus(),
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) {
+                                  return s.emailRequired;
+                                }
+                                final emailRegex = RegExp(
+                                  r'^[\w\-.]+@[\w\-]+\.[a-zA-Z]{2,}$',
+                                );
+                                if (!emailRegex.hasMatch(v.trim())) {
+                                  return s.emailInvalid;
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+
+                            _LabeledField(
+                              label: s.passwordLabel,
+                              controller: _passwordCtrl,
+                              focusNode: _passwordFocus,
+                              hint: '••••••••',
+                              icon: Icons.lock_outline,
+                              obscureText: _obscurePassword,
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _login(),
+                              suffix: IconButton(
+                                onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  size: 20,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              validator: (v) {
+                                if (v == null || v.isEmpty) {
+                                  return s.passwordRequired;
+                                }
+                                if (v.length < 6) {
+                                  return s.passwordTooShort;
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      Row(
+                        children: [
+                          _RememberCheckbox(
+                            value: _rememberSession,
+                            onChanged: (v) =>
+                                setState(() => _rememberSession = v ?? true),
+                            label: s.rememberSession,
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: _showForgotPasswordDialog,
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 0),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(
+                              s.forgotPassword,
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ),
+
+              Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
@@ -216,8 +280,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ],
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -227,34 +291,45 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailFocus.unfocus();
     _passwordFocus.unfocus();
     final s = AppStrings.of(context);
-    final email = _emailCtrl.text.trim();
-    final password = _passwordCtrl.text;
 
-    if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(s.enterEmailPassword)));
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
+
     setState(() => _isLoading = true);
     try {
-      await AppScope.of(
-        context,
-      ).authRepository.login(email: email, password: password);
+      await AppScope.of(context).authRepository.login(
+            email: _emailCtrl.text.trim(),
+            password: _passwordCtrl.text,
+          );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
-    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        ),
+      );
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('${s.loginFailed}: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(s.loginFailed),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -277,6 +352,7 @@ class _LabeledField extends StatelessWidget {
     this.textInputAction = TextInputAction.next,
     this.onSubmitted,
     this.suffix,
+    this.validator,
   });
 
   final String label;
@@ -289,6 +365,7 @@ class _LabeledField extends StatelessWidget {
   final TextInputAction textInputAction;
   final ValueChanged<String>? onSubmitted;
   final Widget? suffix;
+  final FormFieldValidator<String>? validator; 
 
   @override
   Widget build(BuildContext context) {
@@ -305,13 +382,15 @@ class _LabeledField extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        TextField(
+        TextFormField(
           controller: controller,
           focusNode: focusNode,
           keyboardType: keyboardType,
           obscureText: obscureText,
           textInputAction: textInputAction,
-          onSubmitted: onSubmitted,
+          onFieldSubmitted: onSubmitted,
+          validator: validator,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
           decoration: InputDecoration(
             hintText: hint,
@@ -340,6 +419,25 @@ class _LabeledField extends StatelessWidget {
                 color: AppColors.primary,
                 width: 1.5,
               ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: Colors.red.shade400,
+                width: 1.2,
+              ),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: Colors.red.shade600,
+                width: 1.5,
+              ),
+            ),
+            errorStyle: TextStyle(
+              fontSize: 11,
+              color: Colors.red.shade600,
+              height: 1.3,
             ),
           ),
         ),
@@ -440,19 +538,22 @@ class _LangPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: selected ? AppColors.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Text(
-          label,
+        child: AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 200),
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
             color: selected ? AppColors.white : AppColors.textSecondary,
           ),
+          child: Text(label),
         ),
       ),
     );

@@ -711,23 +711,37 @@ class _ProfileHeader extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 8,
-                  height: 8,
+                  width: 11,
+                  height: 11,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: hasUnsyncedChanges
                         ? const Color(0xFFFFB300)
-                        : const Color(0xFF66BB6A),
+                        : const Color(0xFF00E676), // brighter green — visible on primary bg
+                    boxShadow: [
+                      BoxShadow(
+                        color: (hasUnsyncedChanges
+                                ? const Color(0xFFFFB300)
+                                : const Color(0xFF00E676))
+                            .withValues(alpha: 0.55),
+                        blurRadius: 5,
+                        spreadRadius: 1,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Text(
                   hasUnsyncedChanges
                       ? 'Cambios sin sincronizar'
                       : (lastSyncedAt != null
                             ? 'Sincronizado · $lastSyncedAt'
                             : 'Sincronizado'),
-                  style: const TextStyle(color: AppColors.white, fontSize: 12),
+                  style: const TextStyle(
+                    color: AppColors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 const Spacer(),
                 if (hasUnsyncedChanges)
@@ -780,13 +794,31 @@ class _Avatar extends StatelessWidget {
   const _Avatar({required this.initials});
   final String initials;
 
+  static Color _avatarColor(String initials) {
+    const colors = [
+      Color(0xFFE6A817),
+      Color(0xFF2563EB),
+      Color(0xFF16A34A),
+      Color(0xFFDC2626),
+      Color(0xFF9333EA),
+      Color(0xFF0891B2),
+      Color(0xFFEA580C),
+      Color(0xFF0F766E),
+    ];
+    var hash = 0;
+    for (var i = 0; i < initials.length; i++) {
+      hash = hash * 31 + initials.codeUnitAt(i);
+    }
+    return colors[hash.abs() % colors.length];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
       width: 54,
       height: 54,
       decoration: BoxDecoration(
-        color: const Color(0xFFE6A817),
+        color: _avatarColor(initials),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Center(
@@ -814,14 +846,18 @@ class _PillChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: filled
-            ? Colors.white.withValues(alpha: 0.2)
-            : Colors.white.withValues(alpha: 0.08),
+            ? Colors.white.withValues(alpha: 0.28)
+            : Colors.white.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
       ),
       child: Text(
         label,
-        style: const TextStyle(color: AppColors.white, fontSize: 11),
+        style: const TextStyle(
+          color: AppColors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }
@@ -835,9 +871,9 @@ class _LanguageToggle extends StatelessWidget {
     return GestureDetector(
       onTap: () => loc.setLocale(isEs ? 'en' : 'es'),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.18),
+          color: Colors.white.withValues(alpha: 0.25), 
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -869,7 +905,7 @@ class _LangDot extends StatelessWidget {
         label,
         style: TextStyle(
           color: selected ? AppColors.primary : AppColors.white,
-          fontSize: 11,
+          fontSize: 12, 
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -952,7 +988,7 @@ class _TabLabelWithBadge extends StatelessWidget {
             child: Text(
               '$count',
               style: const TextStyle(
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
               ),
@@ -1072,7 +1108,7 @@ class _AllergiesManageSheet extends StatelessWidget {
                                     Text(
                                       _catLabel(a.category),
                                       style: const TextStyle(
-                                        fontSize: 11,
+                                        fontSize: 12,
                                         color: AppColors.error,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -1271,7 +1307,7 @@ class _BackgroundManageSheet extends StatelessWidget {
                     const Text(
                       'Sin antecedentes familiares.',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         color: AppColors.textSecondary,
                       ),
                     )
@@ -1301,7 +1337,7 @@ class _BackgroundManageSheet extends StatelessWidget {
                                   Text(
                                     _relLabel(bg.familyHistory[i].relationship),
                                     style: const TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 12,
                                       color: AppColors.textSecondary,
                                     ),
                                   ),
@@ -1377,7 +1413,7 @@ class _BgSection extends StatelessWidget {
                   Text(
                     value != null && value!.isNotEmpty ? value! : '—',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       color: value != null && value!.isNotEmpty
                           ? AppColors.textPrimary
                           : AppColors.textSecondary,
