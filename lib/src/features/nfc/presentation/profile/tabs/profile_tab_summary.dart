@@ -589,8 +589,12 @@ class _VitalCell extends StatelessWidget {
 
 class _VitalDivider extends StatelessWidget {
   @override
-  Widget build(BuildContext context) =>
-      Container(width: 1, height: 32, color: AppColors.divider);
+  Widget build(BuildContext context) => Container(
+        width: 1,
+        height: 32,
+        margin: const EdgeInsets.symmetric(horizontal: 30),
+        color: AppColors.divider,
+      );
 }
 
 class _IdRow extends StatelessWidget {
