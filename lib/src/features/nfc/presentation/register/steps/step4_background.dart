@@ -40,10 +40,12 @@ class _Step4State extends State<Step4Background> {
     return Column(children: [
       Expanded(child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 16), children: [
         FormSectionHeader(icon: Icons.favorite_border, title: 'Condiciones crónicas', subtitle: 'Texto libre. El backend codifica automáticamente.'),
-        LabeledTextField(label: 'CONDICIONES CRÓNICAS', controller: _chronic, hint: 'Ej. Asma leve diagnosticada en 2022...', maxLines: 3),
+        const SizedBox(height: 12),
+        _StyledTextArea(label: 'Condiciones crónicas', controller: _chronic, hint: 'Ej. Asma leve diagnosticada en 2022...', maxLines: 3),
         const SizedBox(height: 22),
         FormSectionHeader(icon: Icons.history_edu_outlined, title: 'Historial personal', subtitle: 'Antecedentes quirúrgicos, hospitalizaciones, etc.'),
-        LabeledTextField(label: 'HISTORIAL PERSONAL', controller: _personal, hint: 'Ej. Cirugía de adenoides 2021...', maxLines: 3),
+        const SizedBox(height: 12),
+        _StyledTextArea(label: 'Historial personal', controller: _personal, hint: 'Ej. Cirugía de adenoides 2021...', maxLines: 3),
         const SizedBox(height: 22),
         // Family history
         Row(children: [
@@ -70,19 +72,99 @@ class _Step4State extends State<Step4Background> {
         })),
       ])),
       Container(
-        decoration: const BoxDecoration(color: AppColors.white, boxShadow: [BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, -2))]),
+        decoration: const BoxDecoration(
+          color: AppColors.white,
+          boxShadow: [BoxShadow(color: Color(0x18000000), blurRadius: 10, offset: Offset(0, -3))],
+        ),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 22),
         child: Row(children: [
-          Expanded(child: SizedBox(height: 46, child: OutlinedButton.icon(onPressed: widget.onBack,
-            style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.divider), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-            icon: const Icon(Icons.arrow_back, size: 16, color: AppColors.textSecondary), label: const Text('Atrás', style: TextStyle(fontSize: 14, color: AppColors.textSecondary))))),
+          Expanded(child: SizedBox(height: 48, child: OutlinedButton.icon(onPressed: widget.onBack,
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.arrow_back, size: 18, color: AppColors.textSecondary),
+            label: const Text('Atrás', style: TextStyle(fontSize: 15, color: AppColors.textSecondary, fontWeight: FontWeight.w500))))),
           const SizedBox(width: 10),
-          Expanded(flex: 2, child: SizedBox(height: 46, child: ElevatedButton.icon(onPressed: _save,
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
-            icon: const Icon(Icons.arrow_forward, size: 18, color: AppColors.white), label: const Text('Continuar', style: TextStyle(color: AppColors.white, fontSize: 15, fontWeight: FontWeight.w600))))),
+          Expanded(flex: 2, child: SizedBox(height: 48, child: ElevatedButton.icon(onPressed: _save,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+            icon: const Icon(Icons.arrow_forward, size: 18, color: AppColors.white),
+            label: const Text('Continuar', style: TextStyle(color: AppColors.white, fontSize: 15, fontWeight: FontWeight.w600))))),
         ]),
       ),
     ]);
+  }
+}
+
+// ── Styled text area — mirrors Step2's _StyledTextField ──────────────────────
+class _StyledTextArea extends StatelessWidget {
+  const _StyledTextArea({
+    required this.label,
+    required this.controller,
+    required this.hint,
+    this.maxLines = 3,
+  });
+  final String label;
+  final TextEditingController controller;
+  final String hint;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          maxLines: maxLines,
+          style: const TextStyle(
+            fontSize: 15,
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w500,
+          ),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+            ),
+            filled: true,
+            fillColor: AppColors.white,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: Color(0xFFB0B8C4),
+                width: 1.5,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: AppColors.primary,
+                width: 2,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -102,7 +184,7 @@ class _ItemCard extends StatelessWidget {
   final IconData icon; final Color iconColor; final String title; final String subtitle; final VoidCallback onRemove;
   @override Widget build(BuildContext context) => Container(
     margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    decoration: BoxDecoration(color: AppColors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFE3E5EA))),
+    decoration: BoxDecoration(color: AppColors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5)),
     child: Row(children: [
       Container(width: 34, height: 34, decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(9)), child: Icon(icon, size: 18, color: iconColor)),
       const SizedBox(width: 10),

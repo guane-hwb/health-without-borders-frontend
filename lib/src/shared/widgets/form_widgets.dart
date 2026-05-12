@@ -43,7 +43,7 @@ class LabeledTextField extends StatelessWidget {
           prefixIcon: prefixIcon != null ? Icon(prefixIcon, size: 18, color: AppColors.textSecondary) : null,
           suffixIcon: suffix, filled: true, fillColor: AppColors.white, isDense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE3E5EA), width: 1.2)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5)),
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
         ),
       ),
@@ -113,7 +113,7 @@ class ChipSelector<T> extends StatelessWidget {
         final sel = e.key == value;
         return GestureDetector(onTap: () => onChanged(e.key), child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(color: sel ? AppColors.primary : AppColors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: sel ? AppColors.primary : const Color(0xFFE3E5EA))),
+          decoration: BoxDecoration(color: sel ? AppColors.primary : AppColors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: sel ? AppColors.primary : const Color(0xFFB0B8C4), width: 1.5)),
           child: Text(e.value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: sel ? AppColors.white : AppColors.textPrimary)),
         ));
       }).toList()),
