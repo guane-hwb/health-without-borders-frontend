@@ -145,6 +145,10 @@ class AppStrings {
   String get relationship => _get('relationship');
   String get guardianPhone => _get('guardianPhone');
   String get guardianPin => _get('guardianPin');
+  String get guardianDocType => _get('guardianDocType');
+  String get guardianDocNumber => _get('guardianDocNumber');
+  String get guardianAuthAccepted => _get('guardianAuthAccepted');
+  String get guardianEmail => _get('guardianEmail');
 
   // ── Read NFC ────────────────────────────────────────────────────────────
   String get scanWristband => _get('scanWristband');

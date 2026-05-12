@@ -148,15 +148,19 @@ class _Step5State extends State<Step5Review> {
               Container(
                 padding: const EdgeInsets.all(11),
                 decoration: BoxDecoration(
-                  color: AppColors.accent.withValues(alpha: 0.18),
+                  color: const Color(0xFFFFF3CD),
                   borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFFD4A017),
+                    width: 1.5,
+                  ),
                 ),
                 child: const Row(
                   children: [
                     Icon(
                       Icons.cloud_upload_outlined,
                       size: 16,
-                      color: Color(0xFFB8800F),
+                      color: Color(0xFF8B6914),
                     ),
                     SizedBox(width: 8),
                     Expanded(
@@ -164,14 +168,15 @@ class _Step5State extends State<Step5Review> {
                         'El registro se guarda en el dispositivo. Si hay internet se sincroniza ahora; si no, queda en la cola y se enviará automáticamente.',
                         style: TextStyle(
                           fontSize: 11.5,
-                          color: Color(0xFF7A5500),
+                          color: Color(0xFF8B6914),
+                          fontWeight: FontWeight.w500,
                           height: 1.4,
                         ),
                       ),
                     ),
                   ],
                 ),
-              ),
+              )
             ],
           ),
         ),
@@ -278,7 +283,7 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE3E5EA)),
+        border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
