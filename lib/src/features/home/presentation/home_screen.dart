@@ -198,8 +198,8 @@ class HomeScreen extends StatelessWidget {
       children: [
         _ActionCard(
           icon: Icons.nfc_rounded,
-          iconBg: const Color(0xFFE3F2FD),
-          iconColor: const Color(0xFF1565C0),
+          iconBg: const Color(0xFFE2F4FB), 
+          iconColor: const Color(0xFF1CABE2),
           title: s.actionReadNfc,
           subtitle: s.actionReadNfcSub,
           onTap: () => Navigator.of(
@@ -210,8 +210,8 @@ class HomeScreen extends StatelessWidget {
         if (user.role.canRegisterPatient) ...[
           _ActionCard(
             icon: Icons.person_add_alt_1_rounded,
-            iconBg: const Color(0xFFE8F5E9),
-            iconColor: const Color(0xFF2E7D32),
+            iconBg: const Color(0xFFE5E7E8),  
+            iconColor: const Color(0xFF37474F),
             title: s.actionNewPatient,
             subtitle: s.actionNewPatientSub,
             onTap: () => Navigator.of(context).push(
@@ -222,8 +222,8 @@ class HomeScreen extends StatelessWidget {
         ],
         _ActionCard(
           icon: Icons.search_rounded,
-          iconBg: const Color(0xFFEDE7F6),
-          iconColor: const Color(0xFF5E35B1),
+          iconBg: const Color(0xFFFCF4E1),
+          iconColor: const Color(0xFFE6A817),
           title: s.actionSearchPatient,
           subtitle: s.actionSearchPatientSub,
           onTap: () => Navigator.of(context).push(
@@ -418,6 +418,7 @@ class _ActionCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           decoration: BoxDecoration(
+            color: AppColors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: const Color(0xFFE8ECF0), width: 1),
             boxShadow: const [
@@ -519,11 +520,9 @@ class _SyncCardState extends State<_SyncCard> {
         : s.actionPendingSyncCount(_pending);
 
     final hasPending = _pending > 0;
-    final cardBg = hasPending ? const Color(0xFFFFFDE7) : AppColors.white;
-    final iBg = hasPending ? const Color(0xFFFFF8E1) : const Color(0xFFE8F5E9);
-    final iColor = hasPending
-        ? const Color(0xFFD4A017)
-        : const Color(0xFF2E7D32);
+    const cardBg   = AppColors.white; 
+    const iBg      = Color(0xFFE8F5E8);
+    const iColor   = Color(0xFF4CAF50); 
 
     return Material(
       color: cardBg,
@@ -535,11 +534,10 @@ class _SyncCardState extends State<_SyncCard> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           decoration: BoxDecoration(
+            color: AppColors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: hasPending
-                  ? const Color(0xFFFFE082)
-                  : const Color(0xFFE8ECF0),
+              color: const Color(0xFFE8ECF0),
               width: 1,
             ),
             boxShadow: const [
