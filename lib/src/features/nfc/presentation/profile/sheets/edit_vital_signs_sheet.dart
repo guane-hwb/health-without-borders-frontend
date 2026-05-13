@@ -86,7 +86,7 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFE3E5EA)),
+                borderSide: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -137,7 +137,7 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFE3E5EA)),
+                borderSide: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
