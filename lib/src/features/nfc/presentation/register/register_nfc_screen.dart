@@ -361,6 +361,11 @@ class RegisterDraft {
   String? guardianDocNumber;
   bool? guardianAuthAccepted;
   String? guardianEmail;
+  String? guardian2Name;
+  String? guardian2Relationship;
+  String? guardian2Phone;
+  String? guardian2DocType;
+  String? guardian2DocNumber;
   String? chronicConditions;
   String? personalHistory;
   List<FamilyHistoryItem> familyHistory = [];
