@@ -34,20 +34,28 @@ class Step2Guardian extends StatefulWidget {
 }
 
 class _Step2State extends State<Step2Guardian> {
-  // ── Controllers — initialized in initState ─
+  // ── Controllers guardian 1 — initialized in initState ─
   late final TextEditingController _name;
   late final TextEditingController _phone;
   late final TextEditingController _uid;
   late final TextEditingController _docNumber;
   late final TextEditingController _email;
 
-  // ── State — safe default values ───────
-  String _selectedDocType = 'CC';   
-  bool _authAccepted = false; 
+  // ── Guardian 1 State ─────────────────
+  String _selectedDocType = 'CC';
+  bool _authAccepted = false;
   final List<List<Offset>> _signatureStrokes = [];
   List<Offset>? _currentStroke;
   bool _scanning = false;
   String? _err;
+
+  // ── Guardian 2 ───────────────────
+  bool _hasGuardian2 = false;
+  late final TextEditingController _name2;
+  late final TextEditingController _phone2;
+  late final TextEditingController _docNumber2;
+  String _selectedDocType2 = 'CC';
+  String _guardian2Relationship = '01';
 
   static const _rels = {
     '01': 'Padres',
@@ -67,6 +75,14 @@ class _Step2State extends State<Step2Guardian> {
     _email       = TextEditingController(text: d.guardianEmail ?? '');
     _selectedDocType = d.guardianDocType ?? 'CC';
     _authAccepted    = d.guardianAuthAccepted ?? false;
+
+    // Guardian 2
+    _name2      = TextEditingController(text: d.guardian2Name ?? '');
+    _phone2     = TextEditingController(text: d.guardian2Phone ?? '');
+    _docNumber2 = TextEditingController(text: d.guardian2DocNumber ?? '');
+    _selectedDocType2    = d.guardian2DocType ?? 'CC';
+    _guardian2Relationship = d.guardian2Relationship ?? '01';
+    _hasGuardian2 = d.guardian2Name != null && d.guardian2Name!.isNotEmpty;
   }
 
   @override
@@ -76,6 +92,9 @@ class _Step2State extends State<Step2Guardian> {
     _uid.dispose();
     _docNumber.dispose();
     _email.dispose();
+    _name2.dispose();
+    _phone2.dispose();
+    _docNumber2.dispose();
     super.dispose();
   }
 
@@ -156,6 +175,21 @@ class _Step2State extends State<Step2Guardian> {
     d.guardianAuthAccepted = _authAccepted;
     d.guardianEmail =
         _email.text.trim().isEmpty ? null : _email.text.trim();
+
+    // Save guardian 2 if it was added
+    if (_hasGuardian2) {
+      d.guardian2Name = _name2.text.trim().isEmpty ? null : _name2.text.trim();
+      d.guardian2Phone = _phone2.text.trim().isEmpty ? null : _phone2.text.trim();
+      d.guardian2DocType = _selectedDocType2;
+      d.guardian2DocNumber = _docNumber2.text.trim().isEmpty ? null : _docNumber2.text.trim();
+      d.guardian2Relationship = _guardian2Relationship;
+    } else {
+      d.guardian2Name = null;
+      d.guardian2Phone = null;
+      d.guardian2DocNumber = null;
+      d.guardian2Relationship = null;
+    }
+
     widget.onContinue();
   }
 
@@ -261,6 +295,40 @@ class _Step2State extends State<Step2Guardian> {
                 onScan: _scanNfc,
                 onChanged: () => setState(() {}),
               ),
+              const SizedBox(height: 26),
+
+              // ── Button + Add guardian 2 (only if it doesn't already exist) ────────
+              if (!_hasGuardian2)
+                _AddGuardianButton(
+                  onTap: () => setState(() => _hasGuardian2 = true),
+                ),
+
+              // ── Section guardian 2 ────────────────────────────────────────
+              if (_hasGuardian2) ...[
+                const SizedBox(height: 4),
+                _Guardian2Section(
+                  nameCtrl: _name2,
+                  phoneCtrl: _phone2,
+                  docNumberCtrl: _docNumber2,
+                  selectedDocType: _selectedDocType2,
+                  relationship: _guardian2Relationship,
+                  requiredForMinor: widget.requiredForMinor,
+                  onDocTypeChanged: (v) => setState(() => _selectedDocType2 = v),
+                  onRelationshipChanged: (v) => setState(() => _guardian2Relationship = v),
+                  onRemove: () {
+                    setState(() {
+                      _hasGuardian2 = false;
+                      _name2.clear();
+                      _phone2.clear();
+                      _docNumber2.clear();
+                      _selectedDocType2 = 'CC';
+                      _guardian2Relationship = '01';
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
+
               const SizedBox(height: 26),
 
               // ── Authorization and privacy ─
@@ -1371,6 +1439,204 @@ class _NfcField extends StatelessWidget {
   }
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  Button + Add guardian 2
+// ═════════════════════════════════════════════════════════════════════════════
+class _AddGuardianButton extends StatelessWidget {
+  const _AddGuardianButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(
+            Icons.family_restroom,
+            size: 18,
+            color: AppColors.primary,
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Text(
+          'Guardián 2',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const Spacer(),
+        TextButton.icon(
+          onPressed: onTap,
+          icon: const Icon(Icons.add, size: 16, color: AppColors.primary),
+          label: const Text(
+            'Agregar',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primary,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Section guardian 2
+// ═════════════════════════════════════════════════════════════════════════════
+class _Guardian2Section extends StatelessWidget {
+  const _Guardian2Section({
+    required this.nameCtrl,
+    required this.phoneCtrl,
+    required this.docNumberCtrl,
+    required this.selectedDocType,
+    required this.relationship,
+    required this.requiredForMinor,
+    required this.onDocTypeChanged,
+    required this.onRelationshipChanged,
+    required this.onRemove,
+  });
+
+  final TextEditingController nameCtrl;
+  final TextEditingController phoneCtrl;
+  final TextEditingController docNumberCtrl;
+  final String selectedDocType;
+  final String relationship;
+  final bool requiredForMinor;
+  final ValueChanged<String> onDocTypeChanged;
+  final ValueChanged<String> onRelationshipChanged;
+  final VoidCallback onRemove;
+
+  static const _rels = {
+    '01': 'Padres',
+    '02': 'Hermanos',
+    '03': 'Tíos',
+    '04': 'Abuelos',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFFB0B8C4),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 0),
+            child: Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Text(
+                      '2',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'Información del guardián 2',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: onRemove,
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 20,
+                    color: AppColors.error,
+                  ),
+                  tooltip: 'Eliminar guardián 2',
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 16, thickness: 1, color: Color(0xFFF0F0F0)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _StyledTextField(
+                  label: 'Nombre completo',
+                  controller: nameCtrl,
+                  hint: 'Ej. Roberto Martínez',
+                  icon: Icons.person_outline,
+                  keyboardType: TextInputType.name,
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 12),
+                _RelChipSelector(
+                  label: 'Parentesco',
+                  value: relationship,
+                  options: _rels,
+                  onChanged: onRelationshipChanged,
+                ),
+                const SizedBox(height: 12),
+                _StyledTextField(
+                  label: 'Teléfono',
+                  controller: phoneCtrl,
+                  hint: '+57 310 000 0000',
+                  icon: Icons.phone_outlined,
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 12),
+                _DocTypeSelector(
+                  label: 'Tipo de documento',
+                  value: selectedDocType,
+                  options: _docTypes,
+                  onChanged: onDocTypeChanged,
+                ),
+                const SizedBox(height: 12),
+                _StyledTextField(
+                  label: 'Número de documento',
+                  controller: docNumberCtrl,
+                  hint: 'Ej. 1234567890',
+                  icon: Icons.badge_outlined,
+                  keyboardType: TextInputType.number,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _NavButtons extends StatelessWidget {
   const _NavButtons({required this.onBack, required this.onContinue});
 
@@ -1454,6 +1720,7 @@ class _NavButtons extends StatelessWidget {
             ),
           ),
         ],
+        
       ),
     );
   }
