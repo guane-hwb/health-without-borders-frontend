@@ -1,5 +1,6 @@
 // lib/src/features/nfc/presentation/register/steps/step4_background.dart
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../shared/widgets/form_widgets.dart';
 import '../../../domain/patient_record.dart';
@@ -100,70 +101,272 @@ class _Step4State extends State<Step4Background> {
   }
 }
 
-// ── Styled text area — mirrors Step2's _StyledTextField ──────────────────────
-class _StyledTextArea extends StatelessWidget {
+// ── Styled text area with voice dictation ─────────────────────────────────────
+class _StyledTextArea extends StatefulWidget {
   const _StyledTextArea({
     required this.label,
     required this.controller,
     required this.hint,
     this.maxLines = 3,
+    this.required = false,
+    this.onChanged,
   });
   final String label;
   final TextEditingController controller;
   final String hint;
   final int maxLines;
+  final bool required;
+  final VoidCallback? onChanged;
+
+  @override
+  State<_StyledTextArea> createState() => _StyledTextAreaState();
+}
+
+class _StyledTextAreaState extends State<_StyledTextArea> {
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isListening = false;
+  bool _speechAvailable = false;
+  String _baseText = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _initSpeech();
+  }
+
+  Future<void> _initSpeech() async {
+    final available = await _speech.initialize(
+      onError: (_) => setState(() => _isListening = false),
+      onStatus: (status) {
+        if (status == stt.SpeechToText.doneStatus ||
+            status == stt.SpeechToText.notListeningStatus) {
+          if (mounted) setState(() => _isListening = false);
+        }
+      },
+    );
+    if (mounted) setState(() => _speechAvailable = available);
+  }
+
+  Future<void> _toggleListening() async {
+    if (_isListening) {
+      await _speech.stop();
+      setState(() => _isListening = false);
+      return;
+    }
+
+    if (!_speechAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Microfono no disponible en este dispositivo'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // Save the existing text to accumulate
+    _baseText = widget.controller.text;
+    if (_baseText.isNotEmpty && !_baseText.endsWith(' ')) {
+      _baseText += ' ';
+    }
+
+    setState(() => _isListening = true);
+
+    await _speech.listen(
+      localeId: 'es_CO',
+      onResult: (result) {
+        final recognized = result.recognizedWords;
+        setState(() {
+          widget.controller.text = _baseText + recognized;
+          widget.controller.selection = TextSelection.fromPosition(
+            TextPosition(offset: widget.controller.text.length),
+          );
+        });
+        widget.onChanged?.call();
+        if (result.finalResult) {
+          _baseText = widget.controller.text;
+          if (mounted) setState(() => _isListening = false);
+        }
+      },
+      cancelOnError: true,
+      partialResults: true,
+    );
+  }
+
+  @override
+  void dispose() {
+    _speech.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
+        // ── Label ──────────────────────────────────────────────────────────
+        Row(
+          children: [
+            Text(
+              widget.label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            if (widget.required)
+              const Text(
+                ' *',
+                style: TextStyle(
+                  color: AppColors.error,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          maxLines: maxLines,
-          style: const TextStyle(
-            fontSize: 15,
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w500,
-          ),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-            ),
-            filled: true,
-            fillColor: AppColors.white,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 14,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: Color(0xFFB0B8C4),
-                width: 1.5,
+        // ── Stack: TextField + overlaid microphone button ─────────────────
+        Stack(
+          children: [
+            TextField(
+              controller: widget.controller,
+              maxLines: widget.maxLines,
+              onChanged: widget.onChanged != null ? (_) => widget.onChanged!() : null,
+              style: const TextStyle(
+                fontSize: 15,
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w500,
+              ),
+              decoration: InputDecoration(
+                hintText: widget.hint,
+                hintStyle: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
+                filled: true,
+                fillColor: AppColors.white,
+                contentPadding: const EdgeInsets.only(
+                  left: 14,
+                  right: 14,
+                  top: 14,
+                  bottom: 44,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: _isListening
+                        ? AppColors.primary
+                        : const Color(0xFFB0B8C4),
+                    width: _isListening ? 2 : 1.5,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 2,
+                  ),
+                ),
               ),
             ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: AppColors.primary,
-                width: 2,
+            Positioned(
+              right: 8,
+              bottom: 8,
+              child: _MicButton(
+                isListening: _isListening,
+                onTap: _toggleListening,
               ),
             ),
-          ),
+          ],
         ),
+        // ── "Listening..." indicator ───────────────────────────────────────
+        if (_isListening)
+          Padding(
+            padding: const EdgeInsets.only(top: 5, left: 4),
+            child: Row(
+              children: [
+                _PulsingDot(),
+                const SizedBox(width: 6),
+                const Text(
+                  'Escuchando... toque el microfono para detener',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
+    );
+  }
+}
+
+// ── Microphone button ────────────────────────────────────────────────────────
+class _MicButton extends StatelessWidget {
+  const _MicButton({required this.isListening, required this.onTap});
+  final bool isListening;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: isListening
+              ? AppColors.primary
+              : AppColors.primary.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          isListening ? Icons.stop_rounded : Icons.mic_none_rounded,
+          size: 18,
+          color: isListening ? AppColors.white : AppColors.primary,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Pulsing dot while listening ──────────────────────────────────────────
+class _PulsingDot extends StatefulWidget {
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 700))
+        ..repeat(reverse: true);
+  late final Animation<double> _anim =
+      Tween<double>(begin: 0.4, end: 1.0).animate(_ctrl);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _anim,
+      child: Container(
+        width: 7,
+        height: 7,
+        decoration: const BoxDecoration(
+          color: AppColors.primary,
+          shape: BoxShape.circle,
+        ),
+      ),
     );
   }
 }
