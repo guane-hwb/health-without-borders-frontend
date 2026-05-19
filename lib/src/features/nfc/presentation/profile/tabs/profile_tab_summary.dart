@@ -132,7 +132,7 @@ class ProfileTabSummary extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _MiniRow(label: 'Crónicas', value: bg?.chronicConditions ?? '—'),
+              _MiniRow(label: 'Crónicos', value: bg?.chronicConditions ?? '—'),
               _MiniRow(label: 'Personal', value: bg?.personalHistory ?? '—'),
               _MiniRow(
                 label: 'Familiares',
