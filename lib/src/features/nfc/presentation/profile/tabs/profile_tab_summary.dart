@@ -30,6 +30,9 @@ class ProfileTabSummary extends StatelessWidget {
 
   bool get _allergiesChanged =>
       draft.allergies.length != original.allergies.length;
+  @visibleForTesting
+  bool get allergiesChanged => _allergiesChanged;
+
   bool get _backgroundChanged {
     final db = draft.backgroundHistory;
     final ob = original.backgroundHistory;
@@ -39,11 +42,19 @@ class ProfileTabSummary extends StatelessWidget {
         db.personalHistory != ob.personalHistory ||
         db.familyHistory.length != ob.familyHistory.length;
   }
+  @visibleForTesting
+  bool get backgroundChanged => _backgroundChanged;
 
   bool get _weightChanged =>
       draft.patientInfo.weight != original.patientInfo.weight;
+  @visibleForTesting
+  bool get weightChanged => _weightChanged;
+
   bool get _heightChanged =>
       draft.patientInfo.height != original.patientInfo.height;
+  @visibleForTesting
+  bool get heightChanged => _heightChanged;
+
   bool get _addressChanged {
     final da = draft.patientInfo.address;
     final oa = original.patientInfo.address;
@@ -52,6 +63,8 @@ class ProfileTabSummary extends StatelessWidget {
         da.state != oa.state ||
         da.zone != oa.zone;
   }
+  @visibleForTesting
+  bool get addressChanged => _addressChanged;
 
   bool get _guardianChanged {
     final dg = draft.guardianInfo;
@@ -61,6 +74,8 @@ class ProfileTabSummary extends StatelessWidget {
         dg.relationship != og.relationship ||
         dg.deviceUid != og.deviceUid;
   }
+  @visibleForTesting
+  bool get guardianChanged => _guardianChanged;
 
   @override
   Widget build(BuildContext context) {
