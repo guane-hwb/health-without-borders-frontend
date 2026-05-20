@@ -872,7 +872,23 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                 horizontal: 10,
                 vertical: 10,
               ),
+              filled: true,
+              fillColor: AppColors.white,
               prefixIcon: Icon(icon, size: 16, color: AppColors.secondary),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(
+                  color: Color(0xFFB0B8C4),
+                  width: 1.5,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(
+                  color: AppColors.primary,
+                  width: 2,
+                ),
+              ),
             ),
           ),
         ],
@@ -899,7 +915,23 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                 horizontal: 12,
                 vertical: 11,
               ),
+              filled: true,
+              fillColor: AppColors.white,
               prefixIcon: Icon(icon, size: 17, color: AppColors.secondary),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(
+                  color: Color(0xFFB0B8C4),
+                  width: 1.5,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(
+                  color: AppColors.primary,
+                  width: 2,
+                ),
+              ),
             ),
           ),
         ],
@@ -939,6 +971,22 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           hintText: hint,
           hintStyle: const TextStyle(fontSize: 12, color: AppColors.disabled),
           contentPadding: const EdgeInsets.all(12),
+          filled: true,
+          fillColor: AppColors.white,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(
+              color: Color(0xFFB0B8C4),
+              width: 1.5,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(
+              color: AppColors.primary,
+              width: 2,
+            ),
+          ),
         ),
       ),
     ],
@@ -962,7 +1010,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
         decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.divider, width: 1.4),
+          border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
         ),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
@@ -1184,7 +1232,7 @@ class _DateTimeRow extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: AppColors.white,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.divider, width: 1.4),
+                    border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
                   ),
                   child: Row(
                     children: [

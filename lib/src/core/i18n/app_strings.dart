@@ -54,11 +54,17 @@ class AppStrings {
   String get welcomeSub => _get('welcomeSub');
   String get email => _get('email');
   String get emailHint => _get('emailHint');
+  String get emailRequired => _get('emailRequired');
+  String get emailInvalid => _get('emailInvalid');
   String get password => _get('password');
+  String get passwordRequired => _get('passwordRequired');
+  String get passwordTooShort => _get('passwordTooShort');
   String get login => _get('login');
   String get loginFailed => _get('loginFailed');
   String get enterEmailPassword => _get('enterEmailPassword');
   String get forgotPassword => _get('forgotPassword');
+  String get forgotPasswordMessage => _get('forgotPasswordMessage');
+  String get ok => _get('ok');
   String get noAccount => _get('noAccount');
   String get contactAdmin => _get('contactAdmin');
   String get sessionExpired => _get('sessionExpired');
@@ -139,6 +145,10 @@ class AppStrings {
   String get relationship => _get('relationship');
   String get guardianPhone => _get('guardianPhone');
   String get guardianPin => _get('guardianPin');
+  String get guardianDocType => _get('guardianDocType');
+  String get guardianDocNumber => _get('guardianDocNumber');
+  String get guardianAuthAccepted => _get('guardianAuthAccepted');
+  String get guardianEmail => _get('guardianEmail');
 
   // ── Read NFC ────────────────────────────────────────────────────────────
   String get scanWristband => _get('scanWristband');
@@ -339,11 +349,18 @@ class AppStrings {
     'welcomeSub': 'Accede con tu cuenta institucional',
     'email': 'Correo electrónico',
     'emailHint': 'Ingresa tu correo',
+    'emailRequired': 'Ingresa tu correo electrónico',
+    'emailInvalid': 'Correo electrónico no válido',
     'password': 'Contraseña',
+    'passwordRequired': 'Ingresa tu contraseña',
+    'passwordTooShort': 'La contraseña debe tener al menos 6 caracteres',
     'login': 'Iniciar sesión',
     'loginFailed': 'Error al iniciar sesión',
     'enterEmailPassword': 'Ingresa correo y contraseña.',
     'forgotPassword': '¿Olvidó su contraseña?',
+    'forgotPasswordMessage':
+        'Contacta al administrador del sistema para restablecer tu contraseña.',
+    'ok': 'Entendido',
     'noAccount': '¿No tiene cuenta?',
     'contactAdmin': 'Contacte a su administrador',
     'sessionExpired': 'Sesión expirada. Inicie sesión nuevamente.',
@@ -568,7 +585,7 @@ class AppStrings {
     'actionNewPatient': 'Nuevo paciente',
     'actionNewPatientSub': 'Primer ingreso del paciente',
     'actionSearchPatient': 'Buscar paciente',
-    'actionSearchPatientSub': 'dispositivo NFC perdido o dañado',
+    'actionSearchPatientSub': 'Dispositivo NFC perdido o dañado',
     'actionSearchPatientSubAdmin': 'Solo lectura',
     'actionPendingSync': 'Pendientes por sincronizar',
     'actionPendingSyncEmpty': 'Todos los registros sincronizados',
@@ -625,7 +642,11 @@ class AppStrings {
     'welcomeSub': 'Access with your institutional account',
     'email': 'Email',
     'emailHint': 'Enter your email',
+    'emailRequired': 'Enter your email address',
+    'emailInvalid': 'Invalid email address',
     'password': 'Password',
+    'passwordRequired': 'Enter your password',
+    'passwordTooShort': 'Password must be at least 6 characters long',
     'login': 'Login',
     'loginFailed': 'Login failed',
     'enterEmailPassword': 'Please enter email and password.',
@@ -637,13 +658,13 @@ class AppStrings {
     // Home
     'home': 'Home',
     'readNfc': 'Read NFC',
-    'readNfcSub': 'Scan patient wristband',
+    'readNfcSub': 'Scan patient device',
     'registerNfc': 'Register NFC',
     'registerNfcSub': 'Register new patient',
     'syncQueue': 'Sync Queue',
     'allRecordsSynced': 'All records synced',
-    'lossOfWristband': 'Loss of wristband',
-    'lossOfWristbandSub': 'The patient lost the wristband.',
+    'lossOfWristband': 'Loss of device',
+    'lossOfWristbandSub': 'The patient lost the device.',
     'brigadeHistory': 'Brigade History',
     'brigadeHistorySub': "View the patients' status.",
     'pendingSync': '{n} record(s) pending sync',
@@ -665,7 +686,7 @@ class AppStrings {
 
     // Register NFC
     'registerTitle': 'Register NFC',
-    'scanNewWristband': 'Bring a new wristband close',
+    'scanNewWristband': 'Bring a new device close',
     'scanNewWristbandSub': 'The system will verify it is not assigned',
     'wristbandReady': 'ready — new',
     'nfcNotAvailable': 'NFC not available. Use manual entry.',
@@ -712,15 +733,15 @@ class AppStrings {
     'guardianPin': "Guardian's 4-digit PIN *",
 
     // Read NFC
-    'scanWristband': 'Bring the wristband close',
+    'scanWristband': 'Bring the device close',
     'holdWristband': 'Hold contact for 2 seconds',
     'scanning': 'Searching NFC signal...',
     'scanSuccess': 'Data read successfully!',
     'scanFailed': 'Scan failed',
     'guardianRequired': 'Guardian verification required',
     'guardianRequiredSub':
-        "This patient is a minor. Please scan the guardian's wristband to access the record.",
-    'scanGuardianWristband': 'Scan guardian wristband',
+        "This patient is a minor. Please scan the guardian's device to access the record.",
+    'scanGuardianWristband': 'Scan guardian device',
     'continueToRead': 'Continue to Read NFC',
     'readyToScan': 'Ready to scan',
 
@@ -805,8 +826,8 @@ class AppStrings {
     'synchronizing': 'Synchronizing',
 
     // NFC Save Flow
-    'putOnWristband': 'Put on the wristband',
-    'placeWristband': 'Please place the wristband to load the information.',
+    'putOnWristband': 'Put on the device',
+    'placeWristband': 'Please place the device to load the information.',
     'startWriting': 'Start writing',
     'syncingServer': 'Syncing with server...',
     'pleaseWait': 'Please wait a moment while the information loads.',
@@ -849,11 +870,11 @@ class AppStrings {
     'offline': 'Offline',
     // Home actions v2
     'actionReadNfc': 'Read NFC',
-    'actionReadNfcSub': "Scan patient's wristband",
+    'actionReadNfcSub': "Scan patient's device",
     'actionNewPatient': 'New patient',
     'actionNewPatientSub': 'First patient registration',
     'actionSearchPatient': 'Search patient',
-    'actionSearchPatientSub': 'Lost or damaged wristband',
+    'actionSearchPatientSub': 'Lost or damaged device',
     'actionSearchPatientSubAdmin': 'Read-only access',
     'actionPendingSync': 'Pending sync',
     'actionPendingSyncEmpty': 'All records synced',
@@ -867,14 +888,14 @@ class AppStrings {
     'adminViewPatientsSub': 'Read-only',
     'adminBrigadeHistorySub': '{n} synced patients',
     // Read NFC v2
-    'readWristbandTitle': 'Read wristband',
-    'scanGuardianTitle': "Read guardian's wristband",
-    'scanPatientHeadline': 'Tap to scan the wristband',
-    'scanPatientHint': "Hold the device close to the patient's NFC wristband",
-    'scanGuardianHeadline': "Tap to scan the guardian's wristband",
+    'readWristbandTitle': 'Read device',
+    'scanGuardianTitle': "Read guardian's device",
+    'scanPatientHeadline': 'Tap to scan the device',
+    'scanPatientHint': "Hold the device close to the patient's NFC device",
+    'scanGuardianHeadline': "Tap to scan the guardian's device",
     'scanGuardianHint':
         '2FA authentication is required to access minors records',
-    'patientWristbandReady': 'Patient wristband ready',
+    'patientWristbandReady': 'Patient device ready',
     'nfcNotAvailableHint': 'NFC unavailable. Use manual entry below.',
     'manualPatientUidLabel': 'Manual patient UID (testing)',
     'manualPatientUidHint': 'E.g. HWB-04:1A:2C:DE',
@@ -885,7 +906,7 @@ class AppStrings {
     'searchPatientTitle': 'Search patient',
     'searchSubtitle': 'Strict identification · Law 1581/2012',
     'searchPrivacyNotice':
-        'Use this search only when the patient does not have their wristband. All fields are required.',
+        'Use this search only when the patient does not have their device. All fields are required.',
     'documentTypeLabel': 'DOC. TYPE',
     'documentNumberLabel': 'DOCUMENT NUMBER',
     'firstNameLabel': 'FIRST NAME',

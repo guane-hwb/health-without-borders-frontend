@@ -46,12 +46,18 @@ class ProfileTabConsultations extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             if (items.isEmpty)
-              ProfileCard(
-                child: const Text(
-                  'Sin consultas registradas.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
+                ),
+                child: ProfileCard(
+                  child: const Text(
+                    'Sin consultas registradas.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
               )
@@ -167,7 +173,12 @@ class _ConsultationCard extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
-      child: ProfileCard(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
+        ),
+        child: ProfileCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -279,6 +290,7 @@ class _ConsultationCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -517,7 +529,7 @@ class _Section extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE3E5EA)),
+        border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

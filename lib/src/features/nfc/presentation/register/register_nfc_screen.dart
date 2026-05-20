@@ -11,8 +11,8 @@ import '../../domain/patient_record.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
 import 'steps/step1_wristband.dart';
-import 'steps/step2_patient_data.dart';
-import 'steps/step3_guardian.dart';
+import 'steps/step2_guardian.dart';
+import 'steps/step3_patient_data.dart';
 import 'steps/step4_background.dart';
 import 'steps/step5_review.dart';
 import 'steps/step6_success.dart';
@@ -194,15 +194,15 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       case 0:
         return Step1Wristband(draft: _draft, onContinue: _next);
       case 1:
-        return Step2PatientData(
+        return Step2Guardian(
           draft: _draft,
+          requiredForMinor: _isMinor,
           onBack: _back,
           onContinue: _next,
         );
       case 2:
-        return Step3Guardian(
+          return Step3PatientData(
           draft: _draft,
-          requiredForMinor: _isMinor,
           onBack: _back,
           onContinue: _next,
         );
@@ -271,7 +271,7 @@ class _WizardHeader extends StatelessWidget {
               child: HwbLogo(size: 32, onDark: true),
             ),
           const SizedBox(width: 8),
-          if (onBack != null) const HwbLogo(size: 28, onDark: true),
+          if (onBack != null) const HwbLogo(size: 38, onDark: true),
           Expanded(
             child: Center(
               child: Text(
@@ -357,6 +357,15 @@ class RegisterDraft {
   String? guardianRelationship;
   String? guardianPhone;
   String? guardianDeviceUid;
+  String? guardianDocType;
+  String? guardianDocNumber;
+  bool? guardianAuthAccepted;
+  String? guardianEmail;
+  String? guardian2Name;
+  String? guardian2Relationship;
+  String? guardian2Phone;
+  String? guardian2DocType;
+  String? guardian2DocNumber;
   String? chronicConditions;
   String? personalHistory;
   List<FamilyHistoryItem> familyHistory = [];
