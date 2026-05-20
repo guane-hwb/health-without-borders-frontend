@@ -1,5 +1,5 @@
 site_name: Health Without Borders — Frontend
-site_description: Documentación del cliente multiplataforma (Flutter) para la iniciativa Health Without Borders.
+site_description: Multi-platform client documentation (Flutter) for the Health Without Borders initiative.
 site_url: https://guanes.github.io/health-without-borders-frontend/
 repo_url: https://github.com/guanes/health-without-borders-frontend
 repo_name: guanes/health-without-borders-frontend
@@ -14,13 +14,13 @@ theme:
       accent: cyan
       toggle:
         icon: material/brightness-7
-        name: Cambiar a modo oscuro
+        name: Switch to dark mode
     - scheme: slate
       primary: teal
       accent: cyan
       toggle:
         icon: material/brightness-4
-        name: Cambiar a modo claro
+        name: Switch to light mode
   features:
     - navigation.tabs
     - navigation.sections
