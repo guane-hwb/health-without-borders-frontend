@@ -276,19 +276,96 @@ class FamilyHistoryItem {
 }
 
 // ---------------------------------------------------------------------------
+// ChronicConditionItem — IG RDA v0.8.1 ConditionStatementRDA
+//
+// Frontend sends: chronicDescription (free text)
+// Backend LLM resolves: chronicCie10Code + chronicCie11Code
+// ---------------------------------------------------------------------------
+class ChronicConditionItem {
+  ChronicConditionItem({
+    required this.chronicDescription,
+    this.chronicCie10Code,
+    this.chronicCie11Code,
+  });
+
+  factory ChronicConditionItem.fromJson(Map<String, dynamic> json) {
+    return ChronicConditionItem(
+      chronicDescription: json['chronicDescription']?.toString() ?? '',
+      chronicCie10Code: json['chronicCie10Code']?.toString(),
+      chronicCie11Code: json['chronicCie11Code']?.toString(),
+    );
+  }
+
+  final String chronicDescription; // Free text from frontend
+  final String? chronicCie10Code; // Resolved by LLM
+  final String? chronicCie11Code; // Resolved by LLM
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'chronicDescription': chronicDescription,
+    if (chronicCie10Code != null) 'chronicCie10Code': chronicCie10Code,
+    if (chronicCie11Code != null) 'chronicCie11Code': chronicCie11Code,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// MedicationStatementItem — MedicationStatementRDA
+// ---------------------------------------------------------------------------
+class MedicationStatementItem {
+  MedicationStatementItem({
+    required this.medicationName,
+    this.dciCode,
+    this.status = 'active',
+    this.dosage,
+    this.notes,
+  });
+
+  factory MedicationStatementItem.fromJson(Map<String, dynamic> json) {
+    return MedicationStatementItem(
+      medicationName: json['medicationName']?.toString() ?? '',
+      dciCode: json['dciCode']?.toString(),
+      status: json['status']?.toString() ?? 'active',
+      dosage: json['dosage']?.toString(),
+      notes: json['notes']?.toString(),
+    );
+  }
+
+  final String medicationName;
+  final String? dciCode; // Código DCI — MIPRES
+  final String status; // "active", "completed", "stopped", "unknown"
+  final String? dosage; // Free text
+  final String? notes;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'medicationName': medicationName,
+    if (dciCode != null) 'dciCode': dciCode,
+    'status': status,
+    if (dosage != null) 'dosage': dosage,
+    if (notes != null) 'notes': notes,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // BackgroundHistory
 // ---------------------------------------------------------------------------
 class BackgroundHistory {
   BackgroundHistory({
-    this.chronicConditions,
+    this.chronicConditions = const <ChronicConditionItem>[],
     this.personalHistory,
     this.familyHistory = const <FamilyHistoryItem>[],
     this.familyHistoryNotes,
+    this.medications = const <MedicationStatementItem>[],
   });
 
   factory BackgroundHistory.fromJson(Map<String, dynamic> json) {
     return BackgroundHistory(
-      chronicConditions: json['chronicConditions']?.toString(),
+      chronicConditions:
+          (json['chronicConditions'] as List<dynamic>?)
+              ?.map(
+                (dynamic e) =>
+                    ChronicConditionItem.fromJson(e as Map<String, dynamic>),
+              )
+              .toList() ??
+          <ChronicConditionItem>[],
       personalHistory: json['personalHistory']?.toString(),
       familyHistory:
           (json['familyHistory'] as List<dynamic>?)
@@ -299,21 +376,35 @@ class BackgroundHistory {
               .toList() ??
           <FamilyHistoryItem>[],
       familyHistoryNotes: json['familyHistoryNotes']?.toString(),
+      medications:
+          (json['medications'] as List<dynamic>?)
+              ?.map(
+                (dynamic e) =>
+                    MedicationStatementItem.fromJson(e as Map<String, dynamic>),
+              )
+              .toList() ??
+          <MedicationStatementItem>[],
     );
   }
 
-  final String? chronicConditions;
+  final List<ChronicConditionItem> chronicConditions;
   final String? personalHistory;
   final List<FamilyHistoryItem> familyHistory;
   final String? familyHistoryNotes;
+  final List<MedicationStatementItem> medications;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    if (chronicConditions != null) 'chronicConditions': chronicConditions,
+    'chronicConditions': chronicConditions
+        .map((ChronicConditionItem c) => c.toJson())
+        .toList(),
     if (personalHistory != null) 'personalHistory': personalHistory,
     'familyHistory': familyHistory
         .map((FamilyHistoryItem f) => f.toJson())
         .toList(),
     if (familyHistoryNotes != null) 'familyHistoryNotes': familyHistoryNotes,
+    'medications': medications
+        .map((MedicationStatementItem m) => m.toJson())
+        .toList(),
   };
 }
 
@@ -523,6 +614,10 @@ class PractitionerInfo {
     required this.documentType,
     required this.documentNumber,
     required this.name,
+    this.firstName,
+    this.secondName,
+    this.firstLastName,
+    this.secondLastName,
   });
 
   factory PractitionerInfo.fromJson(Map<String, dynamic> json) {
@@ -530,17 +625,29 @@ class PractitionerInfo {
       documentType: json['documentType']?.toString() ?? 'CC',
       documentNumber: json['documentNumber']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
+      firstName: json['firstName']?.toString(),
+      secondName: json['secondName']?.toString(),
+      firstLastName: json['firstLastName']?.toString(),
+      secondLastName: json['secondLastName']?.toString(),
     );
   }
 
   final String documentType; // Same DocumentType enum as patient
   final String documentNumber;
   final String name;
+  final String? firstName;
+  final String? secondName;
+  final String? firstLastName;
+  final String? secondLastName;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'documentType': documentType,
     'documentNumber': documentNumber,
     'name': name,
+    if (firstName != null) 'firstName': firstName,
+    if (secondName != null) 'secondName': secondName,
+    if (firstLastName != null) 'firstLastName': firstLastName,
+    if (secondLastName != null) 'secondLastName': secondLastName,
   };
 }
 
@@ -548,21 +655,32 @@ class PractitionerInfo {
 // ProviderInfo — Res. 866 Elem. 16
 // ---------------------------------------------------------------------------
 class ProviderInfo {
-  ProviderInfo({required this.repsCode, required this.name});
+  ProviderInfo({
+    required this.repsCode,
+    required this.name,
+    this.nitNumber,
+    this.locationSeatCode,
+  });
 
   factory ProviderInfo.fromJson(Map<String, dynamic> json) {
     return ProviderInfo(
       repsCode: json['repsCode']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
+      nitNumber: json['nitNumber']?.toString(),
+      locationSeatCode: json['locationSeatCode']?.toString(),
     );
   }
 
   final String repsCode; // Código REPS del prestador
   final String name;
+  final String? nitNumber; // NIT del prestador
+  final String? locationSeatCode; // Código sede
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'repsCode': repsCode,
     'name': name,
+    if (nitNumber != null) 'nitNumber': nitNumber,
+    if (locationSeatCode != null) 'locationSeatCode': locationSeatCode,
   };
 }
 

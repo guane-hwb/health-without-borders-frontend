@@ -38,9 +38,10 @@ class ProfileTabSummary extends StatelessWidget {
     final ob = original.backgroundHistory;
     if (db == null && ob == null) return false;
     if (db == null || ob == null) return true;
-    return db.chronicConditions != ob.chronicConditions ||
+    return db.chronicConditions.length != ob.chronicConditions.length ||
         db.personalHistory != ob.personalHistory ||
-        db.familyHistory.length != ob.familyHistory.length;
+        db.familyHistory.length != ob.familyHistory.length ||
+        db.medications.length != ob.medications.length;
   }
   @visibleForTesting
   bool get backgroundChanged => _backgroundChanged;
@@ -147,8 +148,19 @@ class ProfileTabSummary extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _MiniRow(label: 'Crónicos', value: bg?.chronicConditions ?? '—'),
+              _MiniRow(
+                label: 'Crónicos',
+                value: bg == null || bg.chronicConditions.isEmpty
+                    ? '—'
+                    : '${bg.chronicConditions.length} registros',
+              ),
               _MiniRow(label: 'Personal', value: bg?.personalHistory ?? '—'),
+              _MiniRow(
+                label: 'Medicam.',
+                value: bg == null || bg.medications.isEmpty
+                    ? '—'
+                    : '${bg.medications.length} registros',
+              ),
               _MiniRow(
                 label: 'Familiares',
                 value: bg == null || bg.familyHistory.isEmpty

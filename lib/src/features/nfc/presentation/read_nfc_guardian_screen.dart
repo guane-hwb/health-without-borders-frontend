@@ -100,7 +100,9 @@ class _PatientProfileCard extends StatelessWidget {
     final info = patient.patientInfo;
     final sexLabels = {'M': s.gender == 'Género *' ? 'Masculino' : 'Male', 'F': s.gender == 'Género *' ? 'Femenino' : 'Female', 'I': 'N/A'};
     final sex = sexLabels[info.biologicalSex] ?? info.biologicalSex;
-    final chronic = patient.backgroundHistory?.chronicConditions ?? 'N/A';
+    final chronic = (patient.backgroundHistory?.chronicConditions.isEmpty ?? true)
+        ? 'N/A'
+        : patient.backgroundHistory!.chronicConditions.map((c) => c.chronicDescription).join(', ');
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(color: AppColors.white, borderRadius: BorderRadius.circular(16),

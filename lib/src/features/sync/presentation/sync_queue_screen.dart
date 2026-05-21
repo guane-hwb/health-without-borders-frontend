@@ -665,8 +665,16 @@ class _ReviewSummaryScreen extends StatelessWidget {
                     icon: Icons.history_edu_outlined,
                     title: 'Antecedentes',
                     rows: [
-                      MapEntry('Crónicas', bg?.chronicConditions ?? '—'),
+                      MapEntry('Crónicas', bg == null || bg.chronicConditions.isEmpty
+                          ? '—'
+                          : '${bg.chronicConditions.length} ítems'),
                       MapEntry('Personal', bg?.personalHistory ?? '—'),
+                      MapEntry(
+                        'Medicam.',
+                        bg == null || bg.medications.isEmpty
+                            ? '—'
+                            : '${bg.medications.length} ítems',
+                      ),
                       MapEntry(
                         'Familiares',
                         bg == null || bg.familyHistory.isEmpty

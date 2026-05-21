@@ -368,12 +368,6 @@
 //   });
 // }
 
-
-
-
-
-
-
 // test/widget/features/nfc/presentation/profile/tabs/profile_tab_summary_widget_test.dart
 //
 // Pruebas de WIDGET para ProfileTabSummary.
@@ -414,20 +408,21 @@ PatientFullRecord _baseRecord({
       ),
       firstLastName: 'García',
       firstName: 'María',
-      dob: '2018-06-15', // Menor de edad garantizado para los árboles de renderizado
+      dob:
+          '2018-06-15', // Menor de edad garantizado para los árboles de renderizado
       biologicalSex: 'F',
-      address: Address(
-        street: street,
-        city: city,
-        state: state,
-        zone: zone,
-      ),
+      address: Address(street: street, city: city, state: state, zone: zone),
       bloodType: bloodType,
       weight: weight,
       height: height,
     ),
-    guardianInfo: guardian ??
-        GuardianInfo(name: 'Carlos Díaz', phone: '3001112233', relationship: '01'),
+    guardianInfo:
+        guardian ??
+        GuardianInfo(
+          name: 'Carlos Díaz',
+          phone: '3001112233',
+          relationship: '01',
+        ),
     allergies: allergies,
     backgroundHistory: backgroundHistory,
   );
@@ -488,18 +483,24 @@ void main() {
 
   // ── Sección de allergies ────────────────────────────────────────────────
   group('Sección ALERGIAS', () {
-    testWidgets('muestra "Sin allergies registradas." cuando la lista está vacía',
-        (tester) async {
-      final emptyRecord = _baseRecord(allergies: []);
-      await tester.pumpWidget(_wrap(_buildWidget(draft: emptyRecord, original: emptyRecord)));
-      expect(find.textContaining('registradas'), findsWidgets);
-    });
+    testWidgets(
+      'muestra "Sin allergies registradas." cuando la lista está vacía',
+      (tester) async {
+        final emptyRecord = _baseRecord(allergies: []);
+        await tester.pumpWidget(
+          _wrap(_buildWidget(draft: emptyRecord, original: emptyRecord)),
+        );
+        expect(find.textContaining('registradas'), findsWidgets);
+      },
+    );
 
     testWidgets('muestra el alérgeno cuando hay allergies', (tester) async {
       final record = _baseRecord(
         allergies: [AllergyInfo(allergen: 'Penicilina', category: '01')],
       );
-      await tester.pumpWidget(_wrap(_buildWidget(draft: record, original: record)));
+      await tester.pumpWidget(
+        _wrap(_buildWidget(draft: record, original: record)),
+      );
       expect(find.text('Penicilina'), findsOneWidget);
     });
 
@@ -507,26 +508,33 @@ void main() {
       final record = _baseRecord(
         allergies: [AllergyInfo(allergen: 'Penicilina', category: '01')],
       );
-      await tester.pumpWidget(_wrap(_buildWidget(draft: record, original: record)));
+      await tester.pumpWidget(
+        _wrap(_buildWidget(draft: record, original: record)),
+      );
       expect(find.textContaining('Medicamento'), findsOneWidget);
     });
 
-    testWidgets('muestra el badge con la cantidad de allergies', (tester) async {
+    testWidgets('muestra el badge con la cantidad de allergies', (
+      tester,
+    ) async {
       final record = _baseRecord(
         allergies: [
           AllergyInfo(allergen: 'Polen', category: '03'),
           AllergyInfo(allergen: 'Maní', category: '02'),
         ],
       );
-      await tester.pumpWidget(_wrap(_buildWidget(draft: record, original: record)));
+      await tester.pumpWidget(
+        _wrap(_buildWidget(draft: record, original: record)),
+      );
       expect(find.text('2'), findsOneWidget);
     });
   });
 
   // ── Callbacks de secciones clickeables ────────────────────────────────────
   group('Callbacks', () {
-    testWidgets('onOpenAllergies se invoca al tocar la sección de allergies',
-        (tester) async {
+    testWidgets('onOpenAllergies se invoca al tocar la sección de allergies', (
+      tester,
+    ) async {
       bool called = false;
       await tester.pumpWidget(
         _wrap(_buildWidget(onOpenAllergies: () => called = true)),
@@ -535,32 +543,39 @@ void main() {
       expect(called, isTrue);
     });
 
-    testWidgets('onOpenBackground se invoca al tocar la sección de antecedentes',
-        (tester) async {
-      bool called = false;
-      await tester.pumpWidget(
-        _wrap(_buildWidget(onOpenBackground: () => called = true)),
-      );
-      await tester.tap(find.textContaining('ANTECEDENTES'));
-      expect(called, isTrue);
-    });
+    testWidgets(
+      'onOpenBackground se invoca al tocar la sección de antecedentes',
+      (tester) async {
+        bool called = false;
+        await tester.pumpWidget(
+          _wrap(_buildWidget(onOpenBackground: () => called = true)),
+        );
+        await tester.tap(find.textContaining('ANTECEDENTES'));
+        expect(called, isTrue);
+      },
+    );
 
-    testWidgets('onEditVitalSigns se invoca cuando canEdit es true',
-        (tester) async {
+    testWidgets('onEditVitalSigns se invoca cuando canEdit es true', (
+      tester,
+    ) async {
       bool called = false;
       await tester.pumpWidget(
-        _wrap(_buildWidget(canEdit: true, onEditVitalSigns: () => called = true)),
+        _wrap(
+          _buildWidget(canEdit: true, onEditVitalSigns: () => called = true),
+        ),
       );
       final editButtons = find.textContaining('Editar');
       await tester.tap(editButtons.first);
       expect(called, isTrue);
     });
 
-    testWidgets('no muestra botón Editar en MEDICIONES cuando canEdit es false',
-        (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget(canEdit: false)));
-      expect(find.text('Editar'), findsNothing);
-    });
+    testWidgets(
+      'no muestra botón Editar en MEDICIONES cuando canEdit es false',
+      (tester) async {
+        await tester.pumpWidget(_wrap(_buildWidget(canEdit: false)));
+        expect(find.text('Editar'), findsNothing);
+      },
+    );
   });
 
   // ── Signos vitales ─────────────────────────────────────────────────────
@@ -582,7 +597,9 @@ void main() {
 
     testWidgets('muestra "—" cuando el peso es nulo', (tester) async {
       final record = _baseRecord(weight: null);
-      await tester.pumpWidget(_wrap(_buildWidget(draft: record, original: record)));
+      await tester.pumpWidget(
+        _wrap(_buildWidget(draft: record, original: record)),
+      );
       expect(find.text('—'), findsWidgets);
     });
   });
@@ -602,7 +619,9 @@ void main() {
 
     testWidgets('muestra "Rural" cuando zone es "R"', (tester) async {
       final record = _baseRecord(zone: 'R');
-      await tester.pumpWidget(_wrap(_buildWidget(draft: record, original: record)));
+      await tester.pumpWidget(
+        _wrap(_buildWidget(draft: record, original: record)),
+      );
       expect(find.byType(ProfileTabSummary), findsOneWidget);
     });
 
@@ -614,15 +633,20 @@ void main() {
 
   // ── Sección GUARDIÁN ──────────────────────────────────────────────────────
   group('Sección GUARDIÁN', () {
-    testWidgets('no muestra la sección cuando el guardián no tiene nombre',
-        (tester) async {
+    testWidgets('no muestra la sección cuando el guardián no tiene nombre', (
+      tester,
+    ) async {
       final emptyGuardian = GuardianInfo(name: '', phone: '', relationship: '');
       final record = _baseRecord(guardian: emptyGuardian);
-      await tester.pumpWidget(_wrap(_buildWidget(draft: record, original: record)));
+      await tester.pumpWidget(
+        _wrap(_buildWidget(draft: record, original: record)),
+      );
       expect(find.text('Carlos Díaz'), findsNothing);
     });
 
-    testWidgets('muestra la sección cuando el guardián tiene nombre', (tester) async {
+    testWidgets('muestra la sección cuando el guardián tiene nombre', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap(_buildWidget()));
       expect(find.byType(ProfileTabSummary), findsOneWidget);
     });
@@ -640,14 +664,20 @@ void main() {
 
   // ── Indicador de cambios (punto naranja) ──────────────────────────────────
   group('Indicador de cambios (_OrangeDot)', () {
-    testWidgets('no aparece ningún punto naranja cuando draft == original',
-        (tester) async {
+    testWidgets('no aparece ningún punto naranja cuando draft == original', (
+      tester,
+    ) async {
       final record = _baseRecord();
-      await tester.pumpWidget(_wrap(_buildWidget(draft: record, original: record)));
-      final orangeDots = tester.widgetList<Container>(find.byType(Container)).where(
+      await tester.pumpWidget(
+        _wrap(_buildWidget(draft: record, original: record)),
+      );
+      final orangeDots = tester
+          .widgetList<Container>(find.byType(Container))
+          .where(
             (c) =>
                 c.decoration is BoxDecoration &&
-                (c.decoration as BoxDecoration).color == const Color(0xFFFF9800),
+                (c.decoration as BoxDecoration).color ==
+                    const Color(0xFFFF9800),
           );
       expect(orangeDots, isEmpty);
     });
@@ -655,7 +685,9 @@ void main() {
     testWidgets('aparece punto naranja cuando el peso cambia', (tester) async {
       final draft = _baseRecord(weight: 80.0);
       final original = _baseRecord(weight: 70.0);
-      await tester.pumpWidget(_wrap(_buildWidget(draft: draft, original: original)));
+      await tester.pumpWidget(
+        _wrap(_buildWidget(draft: draft, original: original)),
+      );
       expect(find.byType(ProfileTabSummary), findsOneWidget);
     });
   });
@@ -670,19 +702,23 @@ void main() {
     testWidgets('muestra condiciones crónicas cuando existen', (tester) async {
       final record = _baseRecord(
         backgroundHistory: BackgroundHistory(
-          chronicConditions: 'Diabetes tipo 2',
+          chronicConditions: [
+            ChronicConditionItem(chronicDescription: 'Diabetes tipo 2'),
+          ],
           personalHistory: '',
           familyHistory: [],
         ),
       );
-      await tester.pumpWidget(_wrap(_buildWidget(draft: record, original: record)));
+      await tester.pumpWidget(
+        _wrap(_buildWidget(draft: record, original: record)),
+      );
       expect(find.text('Diabetes tipo 2'), findsOneWidget);
     });
 
     testWidgets('muestra el conteo de antecedentes familiares', (tester) async {
       final record = _baseRecord(
         backgroundHistory: BackgroundHistory(
-          chronicConditions: '',
+          chronicConditions: [],
           personalHistory: '',
           familyHistory: [
             FamilyHistoryItem(
@@ -696,7 +732,9 @@ void main() {
           ],
         ),
       );
-      await tester.pumpWidget(_wrap(_buildWidget(draft: record, original: record)));
+      await tester.pumpWidget(
+        _wrap(_buildWidget(draft: record, original: record)),
+      );
       expect(find.textContaining('2 registros'), findsOneWidget);
     });
   });
