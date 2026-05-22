@@ -366,9 +366,10 @@ class RegisterDraft {
   String? guardian2Phone;
   String? guardian2DocType;
   String? guardian2DocNumber;
-  String? chronicConditions;
+  List<ChronicConditionItem> chronicConditions = [];
   String? personalHistory;
   List<FamilyHistoryItem> familyHistory = [];
+  List<MedicationStatementItem> medications = [];
   List<AllergyInfo> allergies = [];
 
   PatientFullRecord toRecord() {
@@ -418,6 +419,7 @@ class RegisterDraft {
         chronicConditions: chronicConditions,
         personalHistory: personalHistory,
         familyHistory: familyHistory,
+        medications: medications,
       ),
       allergies: allergies,
       medicalHistory: const [],

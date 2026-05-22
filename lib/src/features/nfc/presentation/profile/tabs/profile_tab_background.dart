@@ -10,17 +10,23 @@ class ProfileTabBackground extends StatelessWidget {
   const ProfileTabBackground({
     super.key,
     required this.draft,
-    required this.onEditChronic,
+    required this.onAddChronic,
+    required this.onRemoveChronic,
     required this.onEditPersonal,
     required this.onAddFamilyHistory,
     required this.onRemoveFamilyHistory,
+    required this.onAddMedication,
+    required this.onRemoveMedication,
   });
 
   final PatientFullRecord draft;
-  final VoidCallback onEditChronic;
+  final VoidCallback onAddChronic;
+  final void Function(int index) onRemoveChronic;
   final VoidCallback onEditPersonal;
   final VoidCallback onAddFamilyHistory;
   final void Function(int index) onRemoveFamilyHistory;
+  final VoidCallback onAddMedication;
+  final void Function(int index) onRemoveMedication;
 
   @override
   Widget build(BuildContext context) {
@@ -28,30 +34,32 @@ class ProfileTabBackground extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 60),
       children: [
-        // ── Chronic conditions ─────────────────────────────────────
+        // ── Chronic conditions (list) ──────────────────────────────
         ProfileSectionHeader(
           icon: Icons.favorite_border,
           title: 'CONDICIONES CRÓNICAS',
-          actionLabel: 'Editar',
-          onAction: onEditChronic,
+          actionLabel: 'Agregar',
+          actionIcon: Icons.add,
+          onAction: onAddChronic,
         ),
         const SizedBox(height: 8),
-        ProfileCard(
-          child: Text(
-            (bg.chronicConditions == null ||
-                    bg.chronicConditions!.isEmpty)
-                ? 'Sin condiciones crónicas registradas.'
-                : bg.chronicConditions!,
-            style: TextStyle(
-              fontSize: 13,
-              color: bg.chronicConditions == null ||
-                      bg.chronicConditions!.isEmpty
-                  ? AppColors.textSecondary
-                  : AppColors.textPrimary,
-              height: 1.4,
+        if (bg.chronicConditions.isEmpty)
+          ProfileCard(
+            child: const Text(
+              'Sin condiciones crónicas registradas.',
+              style: TextStyle(
+                  fontSize: 13, color: AppColors.textSecondary),
             ),
-          ),
-        ),
+          )
+        else
+          for (var i = 0; i < bg.chronicConditions.length; i++) ...[
+            _ChronicConditionCard(
+              item: bg.chronicConditions[i],
+              onRemove: () => onRemoveChronic(i),
+            ),
+            if (i < bg.chronicConditions.length - 1)
+              const SizedBox(height: 8),
+          ],
 
         const SizedBox(height: 18),
 
@@ -78,6 +86,35 @@ class ProfileTabBackground extends StatelessWidget {
             ),
           ),
         ),
+
+        const SizedBox(height: 18),
+
+        // ── Medications (list) ─────────────────────────────────────
+        ProfileSectionHeader(
+          icon: Icons.medication_outlined,
+          title: 'MEDICAMENTOS',
+          actionLabel: 'Agregar',
+          actionIcon: Icons.add,
+          onAction: onAddMedication,
+        ),
+        const SizedBox(height: 8),
+        if (bg.medications.isEmpty)
+          ProfileCard(
+            child: const Text(
+              'Sin medicamentos registrados.',
+              style: TextStyle(
+                  fontSize: 13, color: AppColors.textSecondary),
+            ),
+          )
+        else
+          for (var i = 0; i < bg.medications.length; i++) ...[
+            _MedicationCard(
+              item: bg.medications[i],
+              onRemove: () => onRemoveMedication(i),
+            ),
+            if (i < bg.medications.length - 1)
+              const SizedBox(height: 8),
+          ],
 
         const SizedBox(height: 18),
 
@@ -110,6 +147,121 @@ class ProfileTabBackground extends StatelessWidget {
       ],
     );
   }
+}
+
+class _ChronicConditionCard extends StatelessWidget {
+  const _ChronicConditionCard({required this.item, required this.onRemove});
+  final ChronicConditionItem item;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProfileCard(
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.favorite_border,
+                size: 18, color: AppColors.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.chronicDescription,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                if (item.chronicCie10Code != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'CIE-10: ${item.chronicCie10Code}'
+                    '${item.chronicCie11Code != null ? ' · CIE-11: ${item.chronicCie11Code}' : ''}',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline,
+                size: 18, color: AppColors.error),
+            onPressed: onRemove,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MedicationCard extends StatelessWidget {
+  const _MedicationCard({required this.item, required this.onRemove});
+  final MedicationStatementItem item;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProfileCard(
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.medication_outlined,
+                size: 18, color: AppColors.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.medicationName,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _statusLabel(item.status) +
+                      (item.dosage != null ? ' · ${item.dosage}' : ''),
+                  style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline,
+                size: 18, color: AppColors.error),
+            onPressed: onRemove,
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _statusLabel(String s) =>
+      const {
+        'active': 'Activo',
+        'completed': 'Completado',
+        'stopped': 'Suspendido',
+        'unknown': 'Desconocido',
+      }[s] ??
+      s;
 }
 
 class _FamilyHistoryCard extends StatelessWidget {

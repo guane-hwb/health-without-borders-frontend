@@ -9,7 +9,6 @@
 // NO se llama a build() ni se usa flutter_test pump().
 // ---------------------------------------------------------------------------
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
@@ -38,7 +37,8 @@ PatientFullRecord _makeRecord({
       firstName: 'Juan',
       dob: '2000-01-15',
       biologicalSex: 'M',
-      address: address ??
+      address:
+          address ??
           Address(
             street: 'Calle 1',
             city: 'Bogotá',
@@ -49,8 +49,8 @@ PatientFullRecord _makeRecord({
       weight: weight,
       height: height,
     ),
-    guardianInfo: guardian ??
-        GuardianInfo(name: '', phone: '', relationship: ''),
+    guardianInfo:
+        guardian ?? GuardianInfo(name: '', phone: '', relationship: ''),
     allergies: allergies,
     backgroundHistory: backgroundHistory,
   );
@@ -95,13 +95,16 @@ void main() {
   group('_allergiesChanged', () {
     final allergy = AllergyInfo(allergen: 'Polen', category: '03');
 
-    test('devuelve false cuando draft y original tienen las mismas alergias', () {
-      final record = _makeRecord(allergies: [allergy]);
-      final w = _makeWidget(draft: record, original: record);
-      expect(w.testAllergiesChanged, isFalse);
-    });
+    test(
+      'devuelve false cuando draft y original tienen las mismas alergias',
+      () {
+        final record = _makeRecord(allergies: [allergy]);
+        final w = _makeWidget(draft: record, original: record);
+        expect(w.testAllergiesChanged, isFalse);
+      },
+    );
 
-  test('devuelve true cuando draft tiene más alergias que original', () {
+    test('devuelve true cuando draft tiene más alergias que original', () {
       final draft = _makeRecord(allergies: [allergy]);
       final original = _makeRecord();
       final w = _makeWidget(draft: draft, original: original);
@@ -127,7 +130,9 @@ void main() {
     test('devuelve true cuando draft tiene background y original no', () {
       final draft = _makeRecord(
         backgroundHistory: BackgroundHistory(
-          chronicConditions: 'Diabetes',
+          chronicConditions: [
+            ChronicConditionItem(chronicDescription: 'Diabetes'),
+          ],
           personalHistory: '',
           familyHistory: const <FamilyHistoryItem>[],
         ),
@@ -141,7 +146,7 @@ void main() {
       final draft = _makeRecord();
       final original = _makeRecord(
         backgroundHistory: BackgroundHistory(
-          chronicConditions: 'HTA',
+          chronicConditions: [ChronicConditionItem(chronicDescription: 'HTA')],
           personalHistory: '',
           familyHistory: const <FamilyHistoryItem>[],
         ),
@@ -152,9 +157,17 @@ void main() {
 
     test('devuelve true cuando chronicConditions difiere', () {
       final bg1 = BackgroundHistory(
-          chronicConditions: 'Diabetes', personalHistory: '', familyHistory: const <FamilyHistoryItem>[]);
+        chronicConditions: [
+          ChronicConditionItem(chronicDescription: 'Diabetes'),
+        ],
+        personalHistory: '',
+        familyHistory: const <FamilyHistoryItem>[],
+      );
       final bg2 = BackgroundHistory(
-          chronicConditions: 'HTA', personalHistory: '', familyHistory: const <FamilyHistoryItem>[]);
+        chronicConditions: [ChronicConditionItem(chronicDescription: 'HTA')],
+        personalHistory: '',
+        familyHistory: const <FamilyHistoryItem>[],
+      );
       final w = _makeWidget(
         draft: _makeRecord(backgroundHistory: bg1),
         original: _makeRecord(backgroundHistory: bg2),
@@ -164,11 +177,17 @@ void main() {
 
     test('devuelve true cuando familyHistory tiene distinta longitud', () {
       final bg1 = BackgroundHistory(
-          chronicConditions: '', personalHistory: '', familyHistory: <FamilyHistoryItem>[
-            FamilyHistoryItem(conditionDescription: 'Cancer', relationship: '01'),
-          ]);
+        chronicConditions: [],
+        personalHistory: '',
+        familyHistory: <FamilyHistoryItem>[
+          FamilyHistoryItem(conditionDescription: 'Cancer', relationship: '01'),
+        ],
+      );
       final bg2 = BackgroundHistory(
-          chronicConditions: '', personalHistory: '', familyHistory: const <FamilyHistoryItem>[]);
+        chronicConditions: [],
+        personalHistory: '',
+        familyHistory: const <FamilyHistoryItem>[],
+      );
       final w = _makeWidget(
         draft: _makeRecord(backgroundHistory: bg1),
         original: _makeRecord(backgroundHistory: bg2),
@@ -178,9 +197,12 @@ void main() {
 
     test('devuelve false cuando ambos backgrounds son iguales', () {
       final bg = BackgroundHistory(
-          chronicConditions: 'Diabetes',
-          personalHistory: 'Ninguno',
-          familyHistory: const <FamilyHistoryItem>[]);
+        chronicConditions: [
+          ChronicConditionItem(chronicDescription: 'Diabetes'),
+        ],
+        personalHistory: 'Ninguno',
+        familyHistory: const <FamilyHistoryItem>[],
+      );
       final record = _makeRecord(backgroundHistory: bg);
       final w = _makeWidget(draft: record, original: record);
       expect(w.testBackgroundChanged, isFalse);
@@ -401,8 +423,18 @@ void main() {
       final p = dob.split('-');
       if (p.length != 3) return dob;
       const m = [
-        'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-        'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+        'enero',
+        'febrero',
+        'marzo',
+        'abril',
+        'mayo',
+        'junio',
+        'julio',
+        'agosto',
+        'septiembre',
+        'octubre',
+        'noviembre',
+        'diciembre',
       ];
       final mi = int.tryParse(p[1]);
       if (mi == null || mi < 1 || mi > 12) return dob;

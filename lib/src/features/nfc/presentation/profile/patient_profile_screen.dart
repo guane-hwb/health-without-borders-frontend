@@ -10,7 +10,9 @@ import '../../domain/patient_record.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
 import 'sheets/add_allergy_sheet.dart';
+import 'sheets/add_chronic_condition_sheet.dart';
 import 'sheets/add_family_history_sheet.dart';
+import 'sheets/add_medication_sheet.dart';
 import 'sheets/edit_address_sheet.dart';
 import 'sheets/edit_chronic_personal_sheet.dart';
 import 'sheets/edit_guardian_sheet.dart';
@@ -125,7 +127,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     });
   }
 
-  void _updateBackground({String? chronicConditions, String? personalHistory}) {
+  void _updateBackground({List<ChronicConditionItem>? chronicConditions, String? personalHistory}) {
     final old = _draft.backgroundHistory ?? BackgroundHistory();
     setState(() {
       _draft = _replaceBackground(
@@ -134,6 +136,69 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
           personalHistory: personalHistory ?? old.personalHistory,
           familyHistory: old.familyHistory,
           familyHistoryNotes: old.familyHistoryNotes,
+          medications: old.medications,
+        ),
+      );
+    });
+  }
+
+  void _addChronicCondition(ChronicConditionItem item) {
+    final old = _draft.backgroundHistory ?? BackgroundHistory();
+    setState(() {
+      _draft = _replaceBackground(
+        BackgroundHistory(
+          chronicConditions: [...old.chronicConditions, item],
+          personalHistory: old.personalHistory,
+          familyHistory: old.familyHistory,
+          familyHistoryNotes: old.familyHistoryNotes,
+          medications: old.medications,
+        ),
+      );
+    });
+  }
+
+  void _removeChronicCondition(int index) {
+    final old = _draft.backgroundHistory ?? BackgroundHistory();
+    final updated = [...old.chronicConditions]..removeAt(index);
+    setState(() {
+      _draft = _replaceBackground(
+        BackgroundHistory(
+          chronicConditions: updated,
+          personalHistory: old.personalHistory,
+          familyHistory: old.familyHistory,
+          familyHistoryNotes: old.familyHistoryNotes,
+          medications: old.medications,
+        ),
+      );
+    });
+  }
+
+  void _addMedication(MedicationStatementItem item) {
+    final old = _draft.backgroundHistory ?? BackgroundHistory();
+    setState(() {
+      _draft = _replaceBackground(
+        BackgroundHistory(
+          chronicConditions: old.chronicConditions,
+          personalHistory: old.personalHistory,
+          familyHistory: old.familyHistory,
+          familyHistoryNotes: old.familyHistoryNotes,
+          medications: [...old.medications, item],
+        ),
+      );
+    });
+  }
+
+  void _removeMedication(int index) {
+    final old = _draft.backgroundHistory ?? BackgroundHistory();
+    final updated = [...old.medications]..removeAt(index);
+    setState(() {
+      _draft = _replaceBackground(
+        BackgroundHistory(
+          chronicConditions: old.chronicConditions,
+          personalHistory: old.personalHistory,
+          familyHistory: old.familyHistory,
+          familyHistoryNotes: old.familyHistoryNotes,
+          medications: updated,
         ),
       );
     });
@@ -148,6 +213,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
           personalHistory: old.personalHistory,
           familyHistory: [...old.familyHistory, item],
           familyHistoryNotes: old.familyHistoryNotes,
+          medications: old.medications,
         ),
       );
     });
@@ -163,6 +229,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
           personalHistory: old.personalHistory,
           familyHistory: updated,
           familyHistoryNotes: old.familyHistoryNotes,
+          medications: old.medications,
         ),
       );
     });
@@ -368,23 +435,37 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     );
   }
 
-  Future<void> _openChronicPersonalSheet({required bool chronic}) async {
+  Future<void> _openEditPersonalSheet() async {
     final bg = _draft.backgroundHistory ?? BackgroundHistory();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => EditChronicPersonalSheet(
-        title: chronic ? 'Condiciones crónicas' : 'Historial personal',
-        currentValue: chronic ? bg.chronicConditions : bg.personalHistory,
+        title: 'Historial personal',
+        currentValue: bg.personalHistory,
         onConfirm: (text) {
-          if (chronic) {
-            _updateBackground(chronicConditions: text);
-          } else {
-            _updateBackground(personalHistory: text);
-          }
+          _updateBackground(personalHistory: text);
         },
       ),
+    );
+  }
+
+  Future<void> _openAddChronicConditionSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AddChronicConditionSheet(onAdd: _addChronicCondition),
+    );
+  }
+
+  Future<void> _openAddMedicationSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AddMedicationSheet(onAdd: _addMedication),
     );
   }
 
@@ -434,13 +515,17 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       backgroundColor: Colors.transparent,
       builder: (_) => _BackgroundManageSheet(
         draft: _draft,
-        onEditChronic: () {
+        onAddChronic: () {
           Navigator.of(context).pop();
-          _openChronicPersonalSheet(chronic: true);
+          _openAddChronicConditionSheet();
+        },
+        onRemoveChronic: (i) {
+          _removeChronicCondition(i);
+          Navigator.of(context).pop();
         },
         onEditPersonal: () {
           Navigator.of(context).pop();
-          _openChronicPersonalSheet(chronic: false);
+          _openEditPersonalSheet();
         },
         onAddFamily: () {
           Navigator.of(context).pop();
@@ -448,6 +533,14 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         },
         onRemoveFamily: (i) {
           _removeFamilyHistory(i);
+          Navigator.of(context).pop();
+        },
+        onAddMedication: () {
+          Navigator.of(context).pop();
+          _openAddMedicationSheet();
+        },
+        onRemoveMedication: (i) {
+          _removeMedication(i);
           Navigator.of(context).pop();
         },
       ),
@@ -1195,16 +1288,22 @@ class _AllergiesManageSheet extends StatelessWidget {
 class _BackgroundManageSheet extends StatelessWidget {
   const _BackgroundManageSheet({
     required this.draft,
-    required this.onEditChronic,
+    required this.onAddChronic,
+    required this.onRemoveChronic,
     required this.onEditPersonal,
     required this.onAddFamily,
     required this.onRemoveFamily,
+    required this.onAddMedication,
+    required this.onRemoveMedication,
   });
   final PatientFullRecord draft;
-  final VoidCallback onEditChronic;
+  final VoidCallback onAddChronic;
+  final void Function(int) onRemoveChronic;
   final VoidCallback onEditPersonal;
   final VoidCallback onAddFamily;
   final void Function(int) onRemoveFamily;
+  final VoidCallback onAddMedication;
+  final void Function(int) onRemoveMedication;
 
   @override
   Widget build(BuildContext context) {
@@ -1267,12 +1366,81 @@ class _BackgroundManageSheet extends StatelessWidget {
                 controller: sc,
                 padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
                 children: [
-                  // Chronic
-                  _BgSection(
-                    title: 'Condiciones crónicas',
-                    value: bg?.chronicConditions,
-                    onEdit: onEditChronic,
+                  // Chronic conditions (list)
+                  Row(
+                    children: [
+                      const Text(
+                        'Condiciones crónicas',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: onAddChronic,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Agregar'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                        ),
+                      ),
+                    ],
                   ),
+                  if (bg == null || bg.chronicConditions.isEmpty)
+                    const Text(
+                      'Sin condiciones crónicas.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    )
+                  else
+                    for (var i = 0; i < bg.chronicConditions.length; i++)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF7F8FA),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE3E5EA)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    bg.chronicConditions[i].chronicDescription,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  if (bg.chronicConditions[i].chronicCie10Code != null)
+                                    Text(
+                                      'CIE-10: ${bg.chronicConditions[i].chronicCie10Code}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                size: 18,
+                                color: AppColors.error,
+                              ),
+                              onPressed: () => onRemoveChronic(i),
+                            ),
+                          ],
+                        ),
+                      ),
                   const SizedBox(height: 12),
                   // Personal
                   _BgSection(
@@ -1280,6 +1448,82 @@ class _BackgroundManageSheet extends StatelessWidget {
                     value: bg?.personalHistory,
                     onEdit: onEditPersonal,
                   ),
+                  const SizedBox(height: 12),
+                  // Medications (list)
+                  Row(
+                    children: [
+                      const Text(
+                        'Medicamentos',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: onAddMedication,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Agregar'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (bg == null || bg.medications.isEmpty)
+                    const Text(
+                      'Sin medicamentos registrados.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    )
+                  else
+                    for (var i = 0; i < bg.medications.length; i++)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF7F8FA),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE3E5EA)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    bg.medications[i].medicationName,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    _medStatusLabel(bg.medications[i].status) +
+                                        (bg.medications[i].dosage != null ? ' · ${bg.medications[i].dosage}' : ''),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                size: 18,
+                                color: AppColors.error,
+                              ),
+                              onPressed: () => onRemoveMedication(i),
+                            ),
+                          ],
+                        ),
+                      ),
                   const SizedBox(height: 12),
                   // Family history
                   Row(
@@ -1372,6 +1616,15 @@ class _BackgroundManageSheet extends StatelessWidget {
         '04': 'Abuelos',
       }[r] ??
       r;
+
+  static String _medStatusLabel(String c) =>
+      const {
+        'active': 'Activo',
+        'completed': 'Completado',
+        'stopped': 'Suspendido',
+        'unknown': 'Desconocido',
+      }[c] ??
+      c;
 }
 
 class _BgSection extends StatelessWidget {
