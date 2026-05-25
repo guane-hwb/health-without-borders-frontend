@@ -144,7 +144,7 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
         itemCount: _orgs.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (_, i) => _OrgCard(org: _orgs[i]),
       ),
     );

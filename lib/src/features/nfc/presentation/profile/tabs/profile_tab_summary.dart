@@ -340,7 +340,7 @@ class ProfileTabSummary extends StatelessWidget {
               children: [
                 if (_guardianChanged) _OrangeDot(),
                 Expanded(
-                  child: _GuardianContent(guardian: draft.guardianInfo!),
+                  child: _GuardianContent(guardian: draft.guardianInfo),
                 ),
               ],
             ),

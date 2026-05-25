@@ -213,7 +213,7 @@ class _Step3State extends State<Step3PatientData> {
               const SizedBox(height: 12),
               _ChipSelector(
                 label: 'SEXO BIOLÓGICO',
-                value: d.biologicalSex ?? 'F',
+                value: d.biologicalSex,
                 options: _sex,
                 required: true,
                 onChanged: (v) => setState(() => d.biologicalSex = v),
@@ -438,7 +438,7 @@ class _StyledDropdown<T> extends StatelessWidget {
           ]),
           const SizedBox(height: 6),
           DropdownButtonFormField<T>(
-            value: value,
+            initialValue: value,
             isExpanded: true,
             style: _kInputStyle,
             icon: const Icon(Icons.expand_more, color: AppColors.textSecondary),
