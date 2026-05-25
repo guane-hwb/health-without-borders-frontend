@@ -31,7 +31,7 @@ class _EditAddressSheetState extends State<EditAddressSheet> {
     _streetCtrl = TextEditingController(text: widget.address.street ?? '');
     _cityCtrl = TextEditingController(text: widget.address.city);
     _stateCtrl = TextEditingController(text: widget.address.state);
-    _zone = widget.address.zone ?? 'U';
+    _zone = widget.address.zone ?? '01';
   }
 
   @override
@@ -85,14 +85,14 @@ class _EditAddressSheetState extends State<EditAddressSheet> {
             children: [
               _ZoneChip(
                 label: 'Urbana',
-                selected: _zone == 'U',
-                onTap: () => setState(() => _zone = 'U'),
+                selected: _zone == '01',
+                onTap: () => setState(() => _zone = '01'),
               ),
               const SizedBox(width: 10),
               _ZoneChip(
                 label: 'Rural',
-                selected: _zone == 'R',
-                onTap: () => setState(() => _zone = 'R'),
+                selected: _zone == '02',
+                onTap: () => setState(() => _zone = '02'),
               ),
             ],
           ),

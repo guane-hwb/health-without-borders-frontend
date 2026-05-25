@@ -42,7 +42,7 @@ class Address {
   final String? zipCode;
   final String country;
   final String? countryName;
-  final String? zone; // "U" or "R"
+  final String? zone; // "01" (Urbana) or "02" (Rural)
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     if (street != null) 'street': street,
@@ -208,12 +208,51 @@ class PatientInfo {
 // ---------------------------------------------------------------------------
 // GuardianInfo
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// GuardianConsent — Ley 1581/2012 (Habeas Data)
+// ---------------------------------------------------------------------------
+class GuardianConsent {
+  GuardianConsent({
+    required this.accepted,
+    required this.acceptedAt,
+    this.email,
+    this.signatureBase64,
+  });
+
+  factory GuardianConsent.fromJson(Map<String, dynamic> json) {
+    return GuardianConsent(
+      accepted: json['accepted'] == true,
+      acceptedAt: json['acceptedAt']?.toString() ?? '',
+      email: json['email']?.toString(),
+      signatureBase64: json['signatureBase64']?.toString(),
+    );
+  }
+
+  final bool accepted;
+  final String acceptedAt; // ISO 8601
+  final String? email;
+  final String? signatureBase64; // PNG base64
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'accepted': accepted,
+    'acceptedAt': acceptedAt,
+    if (email != null) 'email': email,
+    if (signatureBase64 != null) 'signatureBase64': signatureBase64,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// GuardianInfo
+// ---------------------------------------------------------------------------
 class GuardianInfo {
   GuardianInfo({
     required this.name,
     required this.relationship,
     required this.phone,
     this.deviceUid,
+    this.documentType,
+    this.documentNumber,
+    this.consent,
   });
 
   factory GuardianInfo.fromJson(Map<String, dynamic> json) {
@@ -222,6 +261,11 @@ class GuardianInfo {
       relationship: json['relationship']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
       deviceUid: json['device_uid']?.toString(),
+      documentType: json['documentType']?.toString(),
+      documentNumber: json['documentNumber']?.toString(),
+      consent: json['consent'] is Map<String, dynamic>
+          ? GuardianConsent.fromJson(json['consent'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -229,12 +273,18 @@ class GuardianInfo {
   final String relationship;
   final String phone;
   final String? deviceUid; // NFC UID of the guardian's wristband
+  final String? documentType;
+  final String? documentNumber;
+  final GuardianConsent? consent;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'name': name,
     'relationship': relationship,
     'phone': phone,
     if (deviceUid != null) 'device_uid': deviceUid,
+    if (documentType != null) 'documentType': documentType,
+    if (documentNumber != null) 'documentNumber': documentNumber,
+    if (consent != null) 'consent': consent!.toJson(),
   };
 }
 
@@ -357,15 +407,30 @@ class BackgroundHistory {
   });
 
   factory BackgroundHistory.fromJson(Map<String, dynamic> json) {
+    // Defensive: chronicConditions may be null or a String (old schema)
+    final rawCC = json['chronicConditions'];
+    final chronicConditions = (rawCC is List)
+        ? rawCC
+            .map(
+              (dynamic e) =>
+                  ChronicConditionItem.fromJson(e as Map<String, dynamic>),
+            )
+            .toList()
+        : <ChronicConditionItem>[];
+
+    // Defensive: medications may be absent (old schema)
+    final rawMeds = json['medications'];
+    final medications = (rawMeds is List)
+        ? rawMeds
+            .map(
+              (dynamic e) =>
+                  MedicationStatementItem.fromJson(e as Map<String, dynamic>),
+            )
+            .toList()
+        : <MedicationStatementItem>[];
+
     return BackgroundHistory(
-      chronicConditions:
-          (json['chronicConditions'] as List<dynamic>?)
-              ?.map(
-                (dynamic e) =>
-                    ChronicConditionItem.fromJson(e as Map<String, dynamic>),
-              )
-              .toList() ??
-          <ChronicConditionItem>[],
+      chronicConditions: chronicConditions,
       personalHistory: json['personalHistory']?.toString(),
       familyHistory:
           (json['familyHistory'] as List<dynamic>?)
@@ -376,14 +441,7 @@ class BackgroundHistory {
               .toList() ??
           <FamilyHistoryItem>[],
       familyHistoryNotes: json['familyHistoryNotes']?.toString(),
-      medications:
-          (json['medications'] as List<dynamic>?)
-              ?.map(
-                (dynamic e) =>
-                    MedicationStatementItem.fromJson(e as Map<String, dynamic>),
-              )
-              .toList() ??
-          <MedicationStatementItem>[],
+      medications: medications,
     );
   }
 
@@ -836,6 +894,7 @@ class PatientFullRecord {
     required this.deviceUid,
     required this.patientInfo,
     required this.guardianInfo,
+    this.guardian2Info,
     this.backgroundHistory,
     this.allergies = const <AllergyInfo>[],
     this.medicalHistory = const <MedicalHistoryItem>[],
@@ -862,6 +921,9 @@ class PatientFullRecord {
       guardianInfo: json['guardianInfo'] is Map<String, dynamic>
           ? GuardianInfo.fromJson(json['guardianInfo'] as Map<String, dynamic>)
           : GuardianInfo(name: '', relationship: '', phone: ''),
+      guardian2Info: json['guardian2Info'] is Map<String, dynamic>
+          ? GuardianInfo.fromJson(json['guardian2Info'] as Map<String, dynamic>)
+          : null,
       backgroundHistory: json['backgroundHistory'] is Map<String, dynamic>
           ? BackgroundHistory.fromJson(
               json['backgroundHistory'] as Map<String, dynamic>,
@@ -897,6 +959,7 @@ class PatientFullRecord {
   final String deviceUid; // NFC hardware UID
   final PatientInfo patientInfo;
   final GuardianInfo guardianInfo;
+  final GuardianInfo? guardian2Info;
   final BackgroundHistory? backgroundHistory;
   final List<AllergyInfo> allergies;
   final List<MedicalHistoryItem> medicalHistory;
@@ -907,6 +970,7 @@ class PatientFullRecord {
     'device_uid': deviceUid,
     'patientInfo': patientInfo.toJson(),
     'guardianInfo': guardianInfo.toJson(),
+    if (guardian2Info != null) 'guardian2Info': guardian2Info!.toJson(),
     if (backgroundHistory != null)
       'backgroundHistory': backgroundHistory!.toJson(),
     'allergies': allergies.map((AllergyInfo a) => a.toJson()).toList(),

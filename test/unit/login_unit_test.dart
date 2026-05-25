@@ -14,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   // ── Helpers: replicamos los mismos validadores que usa _LabeledField ────────
 
-  String? _emailValidator(String? v, {String locale = 'es'}) {
+  String? emailValidator(String? v, {String locale = 'es'}) {
     if (v == null || v.trim().isEmpty) {
       return locale == 'es' ? 'El correo es requerido' : 'Email is required';
     }
@@ -25,7 +25,7 @@ void main() {
     return null;
   }
 
-  String? _passwordValidator(String? v, {String locale = 'es'}) {
+  String? passwordValidator(String? v, {String locale = 'es'}) {
     if (v == null || v.isEmpty) {
       return locale == 'es'
           ? 'La contrasena es requerida'
@@ -42,33 +42,33 @@ void main() {
   // ── Grupo 1: Validador de email ─────────────────────────────────────────────
   group('Email validator', () {
     test('retorna error cuando el campo esta vacio', () {
-      expect(_emailValidator(''), isNotNull);
-      expect(_emailValidator(null), isNotNull);
-      expect(_emailValidator('   '), isNotNull);
+      expect(emailValidator(''), isNotNull);
+      expect(emailValidator(null), isNotNull);
+      expect(emailValidator('   '), isNotNull);
     });
 
     test('retorna error para emails con formato invalido', () {
-      expect(_emailValidator('noesuncorreo'), isNotNull);
-      expect(_emailValidator('falta@eldominio'), isNotNull);
-      expect(_emailValidator('@sinusuario.com'), isNotNull);
-      expect(_emailValidator('sin arroba.com'), isNotNull);
-      expect(_emailValidator('doble@@dominio.com'), isNotNull);
+      expect(emailValidator('noesuncorreo'), isNotNull);
+      expect(emailValidator('falta@eldominio'), isNotNull);
+      expect(emailValidator('@sinusuario.com'), isNotNull);
+      expect(emailValidator('sin arroba.com'), isNotNull);
+      expect(emailValidator('doble@@dominio.com'), isNotNull);
     });
 
     test('retorna null para emails validos', () {
-      expect(_emailValidator('usuario@dominio.com'), isNull);
-      expect(_emailValidator('nombre.apellido@empresa.org'), isNull);
-      expect(_emailValidator('user_name@dominio.co'), isNull);
-      expect(_emailValidator('  user@test.io  '), isNull); // trim
+      expect(emailValidator('usuario@dominio.com'), isNull);
+      expect(emailValidator('nombre.apellido@empresa.org'), isNull);
+      expect(emailValidator('user_name@dominio.co'), isNull);
+      expect(emailValidator('  user@test.io  '), isNull); // trim
     });
 
     test('retorna mensaje en ingles cuando locale es en', () {
-      final msg = _emailValidator('', locale: 'en');
+      final msg = emailValidator('', locale: 'en');
       expect(msg, contains('required'));
     });
 
     test('retorna mensaje en espanol cuando locale es es', () {
-      final msg = _emailValidator('', locale: 'es');
+      final msg = emailValidator('', locale: 'es');
       expect(msg, contains('requerido'));
     });
   });
@@ -76,28 +76,28 @@ void main() {
   // ── Grupo 2: Validador de contraseña ────────────────────────────────────────
   group('Password validator', () {
     test('retorna error cuando el campo esta vacio', () {
-      expect(_passwordValidator(''), isNotNull);
-      expect(_passwordValidator(null), isNotNull);
+      expect(passwordValidator(''), isNotNull);
+      expect(passwordValidator(null), isNotNull);
     });
 
     test('retorna error cuando la contrasena tiene menos de 6 caracteres', () {
-      expect(_passwordValidator('abc'), isNotNull);
-      expect(_passwordValidator('12345'), isNotNull);
+      expect(passwordValidator('abc'), isNotNull);
+      expect(passwordValidator('12345'), isNotNull);
     });
 
     test('retorna null para contrasenas validas (>= 6 caracteres)', () {
-      expect(_passwordValidator('123456'), isNull);
-      expect(_passwordValidator('miContrasena123!'), isNull);
-      expect(_passwordValidator('abcdef'), isNull);
+      expect(passwordValidator('123456'), isNull);
+      expect(passwordValidator('miContrasena123!'), isNull);
+      expect(passwordValidator('abcdef'), isNull);
     });
 
     test('retorna mensaje en ingles cuando locale es en', () {
-      final msg = _passwordValidator('', locale: 'en');
+      final msg = passwordValidator('', locale: 'en');
       expect(msg, contains('required'));
     });
 
     test('retorna mensaje en espanol cuando locale es es', () {
-      final msg = _passwordValidator('', locale: 'es');
+      final msg = passwordValidator('', locale: 'es');
       expect(msg, contains('requerida'));
     });
   });
@@ -153,7 +153,7 @@ void main() {
 
     test('trim elimina espacios en email antes de validar', () {
       emailCtrl.text = '  usuario@test.com  ';
-      expect(_emailValidator(emailCtrl.text), isNull);
+      expect(emailValidator(emailCtrl.text), isNull);
     });
   });
 

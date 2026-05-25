@@ -173,6 +173,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
       deviceUid: _patient!.deviceUid,
       patientInfo: _patient!.patientInfo,
       guardianInfo: _patient!.guardianInfo,
+      guardian2Info: _patient!.guardian2Info,
       backgroundHistory: _patient!.backgroundHistory,
       allergies: _patient!.allergies,
       medicalHistory: _patient!.medicalHistory,
@@ -233,7 +234,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final titleText = s.addVaccine ?? 'Agregar vacuna';
+    final titleText = s.addVaccine;
     return Scaffold(
       backgroundColor: AppColors.backgroundLight,
       body: SafeArea(
@@ -373,16 +374,20 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                 AppScope.of(context).patientRepository
                     .scanDevice(uidCtrl.text.trim())
                     .then((p) {
-                      if (mounted) setState(() {
-                        _patient = p;
-                        _scanning = false;
-                      });
+                      if (mounted) {
+                        setState(() {
+                          _patient = p;
+                          _scanning = false;
+                        });
+                      }
                     })
                     .catchError((Object e) {
-                      if (mounted) setState(() {
-                        _scanError = e.toString();
-                        _scanning = false;
-                      });
+                      if (mounted) {
+                        setState(() {
+                          _scanError = e.toString();
+                          _scanning = false;
+                        });
+                      }
                     });
               }
             },
@@ -821,14 +826,14 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
 
 class _VaccineEntryCard extends StatefulWidget {
   const _VaccineEntryCard({
-    Key? key,
+    super.key,
     required this.index,
     required this.total,
     required this.entry,
     required this.commonVaccines,
     required this.onChanged,
     this.onRemove,
-  }) : super(key: key);
+  });
 
   final int index;
   final int total;

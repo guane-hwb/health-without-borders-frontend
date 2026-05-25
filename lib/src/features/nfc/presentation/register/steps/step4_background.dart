@@ -137,15 +137,11 @@ class _StyledTextArea extends StatefulWidget {
     required this.controller,
     required this.hint,
     this.maxLines = 3,
-    this.required = false,
-    this.onChanged,
   });
   final String label;
   final TextEditingController controller;
   final String hint;
   final int maxLines;
-  final bool required;
-  final VoidCallback? onChanged;
 
   @override
   State<_StyledTextArea> createState() => _StyledTextAreaState();
@@ -203,6 +199,10 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
 
     await _speech.listen(
       localeId: 'es_CO',
+      listenOptions: stt.SpeechListenOptions(
+        cancelOnError: true,
+        partialResults: true,
+      ),
       onResult: (result) {
         final recognized = result.recognizedWords;
         setState(() {
@@ -211,14 +211,11 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
             TextPosition(offset: widget.controller.text.length),
           );
         });
-        widget.onChanged?.call();
         if (result.finalResult) {
           _baseText = widget.controller.text;
           if (mounted) setState(() => _isListening = false);
         }
       },
-      cancelOnError: true,
-      partialResults: true,
     );
   }
 
@@ -244,15 +241,6 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
                 color: AppColors.textPrimary,
               ),
             ),
-            if (widget.required)
-              const Text(
-                ' *',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
           ],
         ),
         const SizedBox(height: 6),
@@ -262,7 +250,6 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
             TextField(
               controller: widget.controller,
               maxLines: widget.maxLines,
-              onChanged: widget.onChanged != null ? (_) => widget.onChanged!() : null,
               style: const TextStyle(
                 fontSize: 15,
                 color: AppColors.textPrimary,
