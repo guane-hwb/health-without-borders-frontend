@@ -1,9 +1,14 @@
 class NfcService {
   NfcService._();
 
+  static Future<String> Function()? overrideReadDeviceUid;
+
   static Future<bool> get isAvailable async => false;
 
   static Future<String> readDeviceUid() async {
+    if (overrideReadDeviceUid != null) {
+      return overrideReadDeviceUid!();
+    }
     throw NfcNotAvailableException();
   }
 

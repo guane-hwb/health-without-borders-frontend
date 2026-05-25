@@ -125,10 +125,14 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       _weightCtrl.text = _patient!.patientInfo.weight?.toString() ?? '';
       _heightCtrl.text = _patient!.patientInfo.height?.toString() ?? '';
     }
+    _historyCtrl.addListener(_onHistoryChanged);
   }
+
+  void _onHistoryChanged() => setState(() {});
 
   @override
   void dispose() {
+    _historyCtrl.removeListener(_onHistoryChanged);
     _weightCtrl.dispose();
     _heightCtrl.dispose();
     _practitionerDocCtrl.dispose();
@@ -725,6 +729,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton.icon(
+              key: const ValueKey('guardar_consulta_btn'),
               onPressed: (!_isFormValid || _isSaving) ? null : _save,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
