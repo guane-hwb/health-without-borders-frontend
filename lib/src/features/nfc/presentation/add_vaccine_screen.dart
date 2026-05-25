@@ -173,6 +173,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
       deviceUid: _patient!.deviceUid,
       patientInfo: _patient!.patientInfo,
       guardianInfo: _patient!.guardianInfo,
+      guardian2Info: _patient!.guardian2Info,
       backgroundHistory: _patient!.backgroundHistory,
       allergies: _patient!.allergies,
       medicalHistory: _patient!.medicalHistory,
