@@ -98,7 +98,7 @@ class _Step5State extends State<Step5Review> {
                       d.street,
                       d.addressCity,
                       d.addressState,
-                      d.zone == 'R' ? 'Rural' : 'Urbana',
+                      d.zone == '02' ? 'Rural' : 'Urbana',
                     ].where((s) => s != null && s.isNotEmpty).join(', '),
                   ),
                 ],

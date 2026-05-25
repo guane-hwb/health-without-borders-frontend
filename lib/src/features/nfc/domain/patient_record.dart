@@ -42,7 +42,7 @@ class Address {
   final String? zipCode;
   final String country;
   final String? countryName;
-  final String? zone; // "U" or "R"
+  final String? zone; // "01" (Urbana) or "02" (Rural)
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     if (street != null) 'street': street,
@@ -407,15 +407,30 @@ class BackgroundHistory {
   });
 
   factory BackgroundHistory.fromJson(Map<String, dynamic> json) {
+    // Defensive: chronicConditions may be null or a String (old schema)
+    final rawCC = json['chronicConditions'];
+    final chronicConditions = (rawCC is List)
+        ? rawCC
+            .map(
+              (dynamic e) =>
+                  ChronicConditionItem.fromJson(e as Map<String, dynamic>),
+            )
+            .toList()
+        : <ChronicConditionItem>[];
+
+    // Defensive: medications may be absent (old schema)
+    final rawMeds = json['medications'];
+    final medications = (rawMeds is List)
+        ? rawMeds
+            .map(
+              (dynamic e) =>
+                  MedicationStatementItem.fromJson(e as Map<String, dynamic>),
+            )
+            .toList()
+        : <MedicationStatementItem>[];
+
     return BackgroundHistory(
-      chronicConditions:
-          (json['chronicConditions'] as List<dynamic>?)
-              ?.map(
-                (dynamic e) =>
-                    ChronicConditionItem.fromJson(e as Map<String, dynamic>),
-              )
-              .toList() ??
-          <ChronicConditionItem>[],
+      chronicConditions: chronicConditions,
       personalHistory: json['personalHistory']?.toString(),
       familyHistory:
           (json['familyHistory'] as List<dynamic>?)
@@ -426,14 +441,7 @@ class BackgroundHistory {
               .toList() ??
           <FamilyHistoryItem>[],
       familyHistoryNotes: json['familyHistoryNotes']?.toString(),
-      medications:
-          (json['medications'] as List<dynamic>?)
-              ?.map(
-                (dynamic e) =>
-                    MedicationStatementItem.fromJson(e as Map<String, dynamic>),
-              )
-              .toList() ??
-          <MedicationStatementItem>[],
+      medications: medications,
     );
   }
 

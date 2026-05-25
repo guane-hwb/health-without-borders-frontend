@@ -302,7 +302,7 @@ class ProfileTabSummary extends StatelessWidget {
                       ),
                       right: _IdCell(
                         label: 'ZONA',
-                        value: p.address.zone == 'R' ? 'Rural' : 'Urbana',
+                        value: p.address.zone == '02' ? 'Rural' : 'Urbana',
                       ),
                     ),
                   ),

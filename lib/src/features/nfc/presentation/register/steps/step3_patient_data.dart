@@ -62,7 +62,7 @@ class _Step3State extends State<Step3PatientData> {
   static const _eth    = {'06': 'Ninguno', '01': 'Indígena', '02': 'ROM/Gitano', '03': 'Raizal', '04': 'Palenquero', '05': 'Afrocolombiano'};
   static const _dis    = {'00': 'Ninguna', '01': 'Física', '02': 'Intelectual', '03': 'Auditiva', '04': 'Visual', '05': 'Sordoceguera', '06': 'Psicosocial', '07': 'Múltiple'};
   static const _blood  = {'O+': 'O+', 'O-': 'O-', 'A+': 'A+', 'A-': 'A-', 'B+': 'B+', 'B-': 'B-', 'AB+': 'AB+', 'AB-': 'AB-'};
-  static const _zones  = {'U': 'Urbana', 'R': 'Rural'};
+  static const _zones  = {'01': 'Urbana', '02': 'Rural'};
 
   bool get _hasEthnicity {
     final v = widget.draft.ethnicity;
@@ -304,7 +304,7 @@ class _Step3State extends State<Step3PatientData> {
               const SizedBox(height: 12),
               _ChipSelector(
                 label: 'ZONA',
-                value: d.zone ?? 'U',
+                value: d.zone ?? '01',
                 options: _zones,
                 onChanged: (v) => setState(() => d.zone = v),
               ),
