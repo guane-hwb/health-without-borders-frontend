@@ -13,19 +13,25 @@ import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_
 /// Wraps the widget under test in the minimal boilerplate Flutter needs.
 Widget _buildSubject({
   required PatientFullRecord draft,
-  VoidCallback? onEditChronic,
+  VoidCallback? onAddChronic,
+  void Function(int)? onRemoveChronic,
   VoidCallback? onEditPersonal,
   VoidCallback? onAddFamilyHistory,
   void Function(int)? onRemoveFamilyHistory,
+  VoidCallback? onAddMedication,
+  void Function(int)? onRemoveMedication,
 }) {
   return MaterialApp(
     home: Scaffold(
       body: ProfileTabBackground(
         draft: draft,
-        onEditChronic: onEditChronic ?? () {},
+        onAddChronic: onAddChronic ?? () {},
+        onRemoveChronic: onRemoveChronic ?? (_) {},
         onEditPersonal: onEditPersonal ?? () {},
         onAddFamilyHistory: onAddFamilyHistory ?? () {},
         onRemoveFamilyHistory: onRemoveFamilyHistory ?? (_) {},
+        onAddMedication: onAddMedication ?? () {},
+        onRemoveMedication: onRemoveMedication ?? (_) {},
       ),
     ),
   );
@@ -78,282 +84,245 @@ void main() {
   group('_relationshipLabel (unit)', () {
     // Because the method is private we verify it via the rendered widget text.
     for (final entry in _relationshipCases.entries) {
-      testWidgets(
-        'code "${entry.key}" renders label "${entry.value}"',
-        (tester) async {
-          final record = _record(
-            backgroundHistory: BackgroundHistory(
-              familyHistory: [
-                FamilyHistoryItem(
-                  relationship: entry.key,
-                  conditionDescription: 'Test condition',
-                  conditionCie10Code: null,
-                ),
-              ],
-            ),
-          );
+      testWidgets('code "${entry.key}" renders label "${entry.value}"', (
+        tester,
+      ) async {
+        final record = _record(
+          backgroundHistory: BackgroundHistory(
+            familyHistory: [
+              FamilyHistoryItem(
+                relationship: entry.key,
+                conditionDescription: 'Test condition',
+                conditionCie10Code: null,
+              ),
+            ],
+          ),
+        );
 
-          await tester.pumpWidget(_buildSubject(draft: record));
+        await tester.pumpWidget(_buildSubject(draft: record));
 
-          expect(find.textContaining(entry.value), findsOneWidget);
-        },
-      );
+        expect(find.textContaining(entry.value), findsOneWidget);
+      });
     }
   });
 
   // ── Widget: empty states ──────────────────────────────────────────────────
 
   group('Empty state messages', () {
-    testWidgets(
-      'shows placeholder when chronicConditions is null',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(draft: _record(backgroundHistory: BackgroundHistory())),
-        );
+    testWidgets('shows placeholder when chronicConditions is null', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSubject(draft: _record(backgroundHistory: BackgroundHistory())),
+      );
 
-        expect(
-          find.text('Sin condiciones crónicas registradas.'),
-          findsOneWidget,
-        );
-      },
-    );
+      expect(
+        find.text('Sin condiciones crónicas registradas.'),
+        findsOneWidget,
+      );
+    });
 
-    testWidgets(
-      'shows placeholder when chronicConditions is empty string',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(
-            draft: _record(
-              backgroundHistory: BackgroundHistory(chronicConditions: ''),
-            ),
+    testWidgets('shows placeholder when chronicConditions list is empty', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(chronicConditions: const []),
           ),
-        );
+        ),
+      );
 
-        expect(
-          find.text('Sin condiciones crónicas registradas.'),
-          findsOneWidget,
-        );
-      },
-    );
+      expect(
+        find.text('Sin condiciones crónicas registradas.'),
+        findsOneWidget,
+      );
+    });
 
-    testWidgets(
-      'shows placeholder when personalHistory is null',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(draft: _record(backgroundHistory: BackgroundHistory())),
-        );
+    testWidgets('shows placeholder when personalHistory is null', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSubject(draft: _record(backgroundHistory: BackgroundHistory())),
+      );
 
-        expect(
-          find.text('Sin historial personal registrado.'),
-          findsOneWidget,
-        );
-      },
-    );
+      expect(find.text('Sin historial personal registrado.'), findsOneWidget);
+    });
 
-    testWidgets(
-      'shows placeholder when personalHistory is empty string',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(
-            draft: _record(
-              backgroundHistory: BackgroundHistory(personalHistory: ''),
-            ),
+    testWidgets('shows placeholder when personalHistory is empty string', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(personalHistory: ''),
           ),
-        );
+        ),
+      );
 
-        expect(
-          find.text('Sin historial personal registrado.'),
-          findsOneWidget,
-        );
-      },
-    );
+      expect(find.text('Sin historial personal registrado.'), findsOneWidget);
+    });
 
-    testWidgets(
-      'shows placeholder when familyHistory list is empty',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(
-            draft: _record(
-              backgroundHistory: BackgroundHistory(familyHistory: []),
-            ),
+    testWidgets('shows placeholder when familyHistory list is empty', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(familyHistory: []),
           ),
-        );
+        ),
+      );
 
-        expect(
-          find.text('Sin antecedentes familiares registrados.'),
-          findsOneWidget,
-        );
-      },
-    );
+      expect(
+        find.text('Sin antecedentes familiares registrados.'),
+        findsOneWidget,
+      );
+    });
 
-    testWidgets(
-      'shows placeholder when backgroundHistory is null',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(draft: _record()),
-        );
+    testWidgets('shows placeholder when backgroundHistory is null', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildSubject(draft: _record()));
 
-        expect(
-          find.text('Sin condiciones crónicas registradas.'),
-          findsOneWidget,
-        );
-        expect(
-          find.text('Sin historial personal registrado.'),
-          findsOneWidget,
-        );
-        expect(
-          find.text('Sin antecedentes familiares registrados.'),
-          findsOneWidget,
-        );
-      },
-    );
+      expect(
+        find.text('Sin condiciones crónicas registradas.'),
+        findsOneWidget,
+      );
+      expect(find.text('Sin historial personal registrado.'), findsOneWidget);
+      expect(
+        find.text('Sin antecedentes familiares registrados.'),
+        findsOneWidget,
+      );
+    });
   });
 
   // ── Widget: populated states ──────────────────────────────────────────────
 
   group('Populated state', () {
-    testWidgets(
-      'renders chronicConditions text when present',
-      (tester) async {
-        const value = 'Diabetes tipo 2, Hipertensión';
-        await tester.pumpWidget(
-          _buildSubject(
-            draft: _record(
-              backgroundHistory:
-                  BackgroundHistory(chronicConditions: value),
+    testWidgets('renders chronicConditions text when present', (tester) async {
+      const value = 'Diabetes tipo 2, Hipertensión';
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(
+              chronicConditions: [
+                ChronicConditionItem(chronicDescription: value),
+              ],
             ),
           ),
-        );
+        ),
+      );
 
-        expect(find.text(value), findsOneWidget);
-        expect(
-          find.text('Sin condiciones crónicas registradas.'),
-          findsNothing,
-        );
-      },
-    );
+      expect(find.text(value), findsOneWidget);
+      expect(find.text('Sin condiciones crónicas registradas.'), findsNothing);
+    });
 
-    testWidgets(
-      'renders personalHistory text when present',
-      (tester) async {
-        const value = 'Apendicectomía 2010';
-        await tester.pumpWidget(
-          _buildSubject(
-            draft: _record(
-              backgroundHistory: BackgroundHistory(personalHistory: value),
+    testWidgets('renders personalHistory text when present', (tester) async {
+      const value = 'Apendicectomía 2010';
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(personalHistory: value),
+          ),
+        ),
+      );
+
+      expect(find.text(value), findsOneWidget);
+      expect(find.text('Sin historial personal registrado.'), findsNothing);
+    });
+
+    testWidgets('renders one card per family-history item', (tester) async {
+      final items = [
+        FamilyHistoryItem(
+          relationship: '01',
+          conditionDescription: 'Hipertensión',
+          conditionCie10Code: 'I10',
+        ),
+        FamilyHistoryItem(
+          relationship: '02',
+          conditionDescription: 'Asma',
+          conditionCie10Code: null,
+        ),
+      ];
+
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(familyHistory: items),
+          ),
+        ),
+      );
+
+      expect(find.text('Hipertensión'), findsOneWidget);
+      expect(find.text('Asma'), findsOneWidget);
+      // Empty-state placeholder must NOT appear.
+      expect(
+        find.text('Sin antecedentes familiares registrados.'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('shows CIE-10 code inline when provided', (tester) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(
+              familyHistory: [
+                FamilyHistoryItem(
+                  relationship: '04',
+                  conditionDescription: 'Cáncer de colon',
+                  conditionCie10Code: 'C18',
+                ),
+              ],
             ),
           ),
-        );
+        ),
+      );
 
-        expect(find.text(value), findsOneWidget);
-        expect(
-          find.text('Sin historial personal registrado.'),
-          findsNothing,
-        );
-      },
-    );
+      expect(find.textContaining('CIE-10 C18'), findsOneWidget);
+    });
 
-    testWidgets(
-      'renders one card per family-history item',
-      (tester) async {
-        final items = [
-          FamilyHistoryItem(
-            relationship: '01',
-            conditionDescription: 'Hipertensión',
-            conditionCie10Code: 'I10',
-          ),
-          FamilyHistoryItem(
-            relationship: '02',
-            conditionDescription: 'Asma',
-            conditionCie10Code: null,
-          ),
-        ];
-
-        await tester.pumpWidget(
-          _buildSubject(
-            draft: _record(
-              backgroundHistory: BackgroundHistory(familyHistory: items),
+    testWidgets('does NOT show CIE-10 segment when code is null', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(
+              familyHistory: [
+                FamilyHistoryItem(
+                  relationship: '01',
+                  conditionDescription: 'Diabetes',
+                  conditionCie10Code: null,
+                ),
+              ],
             ),
           ),
-        );
+        ),
+      );
 
-        expect(find.text('Hipertensión'), findsOneWidget);
-        expect(find.text('Asma'), findsOneWidget);
-        // Empty-state placeholder must NOT appear.
-        expect(
-          find.text('Sin antecedentes familiares registrados.'),
-          findsNothing,
-        );
-      },
-    );
-
-    testWidgets(
-      'shows CIE-10 code inline when provided',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(
-            draft: _record(
-              backgroundHistory: BackgroundHistory(
-                familyHistory: [
-                  FamilyHistoryItem(
-                    relationship: '04',
-                    conditionDescription: 'Cáncer de colon',
-                    conditionCie10Code: 'C18',
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-
-        expect(find.textContaining('CIE-10 C18'), findsOneWidget);
-      },
-    );
-
-    testWidgets(
-      'does NOT show CIE-10 segment when code is null',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(
-            draft: _record(
-              backgroundHistory: BackgroundHistory(
-                familyHistory: [
-                  FamilyHistoryItem(
-                    relationship: '01',
-                    conditionDescription: 'Diabetes',
-                    conditionCie10Code: null,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-
-        expect(find.textContaining('CIE-10'), findsNothing);
-      },
-    );
+      expect(find.textContaining('CIE-10'), findsNothing);
+    });
   });
 
   // ── Widget: section headers & icons ──────────────────────────────────────
 
   group('Section headers', () {
     testWidgets('renders CONDICIONES CRÓNICAS header', (tester) async {
-      await tester
-          .pumpWidget(_buildSubject(draft: _record()));
+      await tester.pumpWidget(_buildSubject(draft: _record()));
 
       expect(find.text('CONDICIONES CRÓNICAS'), findsOneWidget);
     });
 
     testWidgets('renders HISTORIAL PERSONAL header', (tester) async {
-      await tester
-          .pumpWidget(_buildSubject(draft: _record()));
+      await tester.pumpWidget(_buildSubject(draft: _record()));
 
       expect(find.text('HISTORIAL PERSONAL'), findsOneWidget);
     });
 
     testWidgets('renders ANTECEDENTES FAMILIARES header', (tester) async {
-      await tester
-          .pumpWidget(_buildSubject(draft: _record()));
+      await tester.pumpWidget(_buildSubject(draft: _record()));
 
       expect(find.text('ANTECEDENTES FAMILIARES'), findsOneWidget);
     });
@@ -362,18 +331,29 @@ void main() {
   // ── Widget: callbacks ─────────────────────────────────────────────────────
 
   group('Callbacks', () {
-    testWidgets('onEditChronic fires when Editar (chronic) is tapped',
-        (tester) async {
+    testWidgets('onAddChronic fires when Agregar (chronic) is tapped', (
+      tester,
+    ) async {
       var called = false;
       await tester.pumpWidget(
-        _buildSubject(
-          draft: _record(),
-          onEditChronic: () => called = true,
-        ),
+        _buildSubject(draft: _record(), onAddChronic: () => called = true),
       );
 
-      // ProfileSectionHeader renders an 'Editar' button; the chronic one is
-      // the first occurrence in the list.
+      final agregarButtons = find.text('Agregar');
+      await tester.tap(agregarButtons.first);
+      await tester.pump();
+
+      expect(called, isTrue);
+    });
+
+    testWidgets('onEditPersonal fires when Editar (personal) is tapped', (
+      tester,
+    ) async {
+      var called = false;
+      await tester.pumpWidget(
+        _buildSubject(draft: _record(), onEditPersonal: () => called = true),
+      );
+
       final editarButtons = find.text('Editar');
       await tester.tap(editarButtons.first);
       await tester.pump();
@@ -381,26 +361,9 @@ void main() {
       expect(called, isTrue);
     });
 
-    testWidgets('onEditPersonal fires when Editar (personal) is tapped',
-        (tester) async {
-      var called = false;
-      await tester.pumpWidget(
-        _buildSubject(
-          draft: _record(),
-          onEditPersonal: () => called = true,
-        ),
-      );
-
-      // The second 'Editar' belongs to the personal-history section.
-      final editarButtons = find.text('Editar');
-      await tester.tap(editarButtons.at(1));
-      await tester.pump();
-
-      expect(called, isTrue);
-    });
-
-    testWidgets('onAddFamilyHistory fires when Agregar is tapped',
-        (tester) async {
+    testWidgets('onAddFamilyHistory fires when Agregar is tapped', (
+      tester,
+    ) async {
       var called = false;
       await tester.pumpWidget(
         _buildSubject(
@@ -409,7 +372,8 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Agregar'));
+      final agregarButtons = find.text('Agregar');
+      await tester.tap(agregarButtons.at(2));
       await tester.pump();
 
       expect(called, isTrue);
@@ -442,8 +406,7 @@ void main() {
         );
 
         // Tap the delete button on the second card (index 1).
-        final deleteButtons =
-            find.byIcon(Icons.delete_outline);
+        final deleteButtons = find.byIcon(Icons.delete_outline);
         await tester.tap(deleteButtons.at(1));
         await tester.pump();
 
