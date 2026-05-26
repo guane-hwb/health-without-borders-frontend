@@ -1,4 +1,7 @@
 // lib/src/features/nfc/presentation/register/steps/step2_guardian.dart
+import 'dart:convert';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../design/tokens/app_colors.dart';
@@ -54,8 +57,14 @@ class _Step2State extends State<Step2Guardian> {
   late final TextEditingController _name2;
   late final TextEditingController _phone2;
   late final TextEditingController _docNumber2;
+  late final TextEditingController _uid2;
+  late final TextEditingController _email2;
   String _selectedDocType2 = 'CC';
   String _guardian2Relationship = '01';
+  bool _auth2Accepted = false;
+  final List<List<Offset>> _signatureStrokes2 = [];
+  List<Offset>? _currentStroke2;
+  bool _scanning2 = false;
 
   static const _rels = {
     '01': 'Padres',
@@ -80,8 +89,11 @@ class _Step2State extends State<Step2Guardian> {
     _name2      = TextEditingController(text: d.guardian2Name ?? '');
     _phone2     = TextEditingController(text: d.guardian2Phone ?? '');
     _docNumber2 = TextEditingController(text: d.guardian2DocNumber ?? '');
+    _uid2       = TextEditingController();
+    _email2     = TextEditingController(text: d.guardian2Email ?? '');
     _selectedDocType2    = d.guardian2DocType ?? 'CC';
     _guardian2Relationship = d.guardian2Relationship ?? '01';
+    _auth2Accepted = d.guardian2AuthAccepted ?? false;
     _hasGuardian2 = d.guardian2Name != null && d.guardian2Name!.isNotEmpty;
   }
 
@@ -95,6 +107,8 @@ class _Step2State extends State<Step2Guardian> {
     _name2.dispose();
     _phone2.dispose();
     _docNumber2.dispose();
+    _uid2.dispose();
+    _email2.dispose();
     super.dispose();
   }
 
@@ -141,8 +155,68 @@ class _Step2State extends State<Step2Guardian> {
     }
   }
 
+  Future<void> _scanNfc2() async {
+    setState(() => _scanning2 = true);
+    try {
+      final uid = await NfcService.readDeviceUid();
+      if (mounted) setState(() { _uid2.text = uid; _scanning2 = false; });
+    } on NfcNotAvailableException {
+      if (mounted) {
+        setState(() => _scanning2 = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('NFC no disponible. Use el campo manual.'),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _scanning2 = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Error al leer NFC. Inténtalo de nuevo.'),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        ));
+      }
+    }
+  }
+
+  /// Renders signature strokes to a PNG and returns the base64-encoded string.
+  /// Returns null if strokes are empty.
+  Future<String?> _signatureToBase64(List<List<Offset>> strokes) async {
+    if (strokes.isEmpty) return null;
+    const w = 400.0, h = 200.0;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, w, h));
+    // White background
+    canvas.drawRect(Rect.fromLTWH(0, 0, w, h), Paint()..color = const Color(0xFFFFFFFF));
+    // Draw strokes
+    final paint = Paint()
+      ..color = const Color(0xFF1A1A2E)
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    for (final stroke in strokes) {
+      if (stroke.length < 2) continue;
+      final path = Path()..moveTo(stroke[0].dx, stroke[0].dy);
+      for (int i = 1; i < stroke.length; i++) {
+        path.lineTo(stroke[i].dx, stroke[i].dy);
+      }
+      canvas.drawPath(path, paint);
+    }
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(w.toInt(), h.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (byteData == null) return null;
+    return base64Encode(byteData.buffer.asUint8List());
+  }
+
   // ── Validation and saving ─────────────────────
-  void _save() {
+  Future<void> _save() async {
     final missing = <String>[];
 
     if (widget.requiredForMinor) {
@@ -159,12 +233,24 @@ class _Step2State extends State<Step2Guardian> {
       if (!_authAccepted) missing.add('Autorización y privacidad');
     }
 
+    // Validate guardian 2 consent if guardian 2 exists and has data
+    if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
+      if (_email2.text.trim().isNotEmpty || _signatureStrokes2.isNotEmpty) {
+        if (!_auth2Accepted) missing.add('Autorización guardián 2');
+      }
+    }
+
     if (missing.isNotEmpty) {
       setState(() => _err = 'Campos requeridos: ${missing.join(', ')}');
       return;
     }
 
     setState(() => _err = null);
+
+    // Convert signatures to PNG base64
+    final sig1Base64 = await _signatureToBase64(_signatureStrokes);
+    final sig2Base64 = _hasGuardian2 ? await _signatureToBase64(_signatureStrokes2) : null;
+
     final d = widget.draft;
     d.guardianName = _name.text.trim().isEmpty ? null : _name.text.trim();
     d.guardianPhone = _phone.text.trim().isEmpty ? null : _phone.text.trim();
@@ -175,6 +261,7 @@ class _Step2State extends State<Step2Guardian> {
     d.guardianAuthAccepted = _authAccepted;
     d.guardianEmail =
         _email.text.trim().isEmpty ? null : _email.text.trim();
+    d.guardianSignatureBase64 = sig1Base64;
 
     // Save guardian 2 if it was added
     if (_hasGuardian2) {
@@ -183,11 +270,17 @@ class _Step2State extends State<Step2Guardian> {
       d.guardian2DocType = _selectedDocType2;
       d.guardian2DocNumber = _docNumber2.text.trim().isEmpty ? null : _docNumber2.text.trim();
       d.guardian2Relationship = _guardian2Relationship;
+      d.guardian2AuthAccepted = _auth2Accepted;
+      d.guardian2Email = _email2.text.trim().isEmpty ? null : _email2.text.trim();
+      d.guardian2SignatureBase64 = sig2Base64;
     } else {
       d.guardian2Name = null;
       d.guardian2Phone = null;
       d.guardian2DocNumber = null;
       d.guardian2Relationship = null;
+      d.guardian2AuthAccepted = null;
+      d.guardian2Email = null;
+      d.guardian2SignatureBase64 = null;
     }
 
     widget.onContinue();
@@ -310,9 +403,15 @@ class _Step2State extends State<Step2Guardian> {
                   nameCtrl: _name2,
                   phoneCtrl: _phone2,
                   docNumberCtrl: _docNumber2,
+                  uidCtrl: _uid2,
+                  emailCtrl: _email2,
                   selectedDocType: _selectedDocType2,
                   relationship: _guardian2Relationship,
                   requiredForMinor: widget.requiredForMinor,
+                  authAccepted: _auth2Accepted,
+                  signatureStrokes: _signatureStrokes2,
+                  currentStroke: _currentStroke2,
+                  scanning: _scanning2,
                   onDocTypeChanged: (v) => setState(() => _selectedDocType2 = v),
                   onRelationshipChanged: (v) => setState(() => _guardian2Relationship = v),
                   onRemove: () {
@@ -321,10 +420,35 @@ class _Step2State extends State<Step2Guardian> {
                       _name2.clear();
                       _phone2.clear();
                       _docNumber2.clear();
+                      _uid2.clear();
+                      _email2.clear();
                       _selectedDocType2 = 'CC';
                       _guardian2Relationship = '01';
+                      _auth2Accepted = false;
+                      _signatureStrokes2.clear();
+                      _currentStroke2 = null;
                     });
                   },
+                  onScanNfc: _scanNfc2,
+                  onAuthChanged: (v) => setState(() => _auth2Accepted = v),
+                  onPrivacyTap: _showPrivacyPolicy,
+                  onSignatureStart: (offset) {
+                    setState(() {
+                      _currentStroke2 = [offset];
+                      _signatureStrokes2.add(_currentStroke2!);
+                    });
+                  },
+                  onSignatureUpdate: (offset) {
+                    setState(() => _currentStroke2?.add(offset));
+                  },
+                  onSignatureEnd: () => setState(() => _currentStroke2 = null),
+                  onClearSignature: () {
+                    setState(() {
+                      _signatureStrokes2.clear();
+                      _currentStroke2 = null;
+                    });
+                  },
+                  onNfcFieldChanged: () => setState(() {}),
                 ),
                 const SizedBox(height: 10),
               ],
@@ -1501,23 +1625,51 @@ class _Guardian2Section extends StatelessWidget {
     required this.nameCtrl,
     required this.phoneCtrl,
     required this.docNumberCtrl,
+    required this.uidCtrl,
+    required this.emailCtrl,
     required this.selectedDocType,
     required this.relationship,
     required this.requiredForMinor,
+    required this.authAccepted,
+    required this.signatureStrokes,
+    required this.currentStroke,
+    required this.scanning,
     required this.onDocTypeChanged,
     required this.onRelationshipChanged,
     required this.onRemove,
+    required this.onScanNfc,
+    required this.onAuthChanged,
+    required this.onPrivacyTap,
+    required this.onSignatureStart,
+    required this.onSignatureUpdate,
+    required this.onSignatureEnd,
+    required this.onClearSignature,
+    required this.onNfcFieldChanged,
   });
 
   final TextEditingController nameCtrl;
   final TextEditingController phoneCtrl;
   final TextEditingController docNumberCtrl;
+  final TextEditingController uidCtrl;
+  final TextEditingController emailCtrl;
   final String selectedDocType;
   final String relationship;
   final bool requiredForMinor;
+  final bool authAccepted;
+  final List<List<Offset>> signatureStrokes;
+  final List<Offset>? currentStroke;
+  final bool scanning;
   final ValueChanged<String> onDocTypeChanged;
   final ValueChanged<String> onRelationshipChanged;
   final VoidCallback onRemove;
+  final VoidCallback onScanNfc;
+  final ValueChanged<bool> onAuthChanged;
+  final VoidCallback onPrivacyTap;
+  final ValueChanged<Offset> onSignatureStart;
+  final ValueChanged<Offset> onSignatureUpdate;
+  final VoidCallback onSignatureEnd;
+  final VoidCallback onClearSignature;
+  final VoidCallback onNfcFieldChanged;
 
   static const _rels = {
     '01': 'Padres',
@@ -1627,6 +1779,34 @@ class _Guardian2Section extends StatelessWidget {
                   hint: 'Ej. 1234567890',
                   icon: Icons.badge_outlined,
                   keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                // ── NFC guardian 2 ──
+                FormSectionHeader(
+                  icon: Icons.nfc,
+                  title: 'Dispositivo NFC del guardián 2',
+                  subtitle: 'Para autenticación 2FA alternativa.',
+                ),
+                const SizedBox(height: 12),
+                _NfcField(
+                  controller: uidCtrl,
+                  scanning: scanning,
+                  onScan: onScanNfc,
+                  onChanged: onNfcFieldChanged,
+                ),
+                const SizedBox(height: 16),
+                // ── Consent guardian 2 ──
+                _AuthSection(
+                  accepted: authAccepted,
+                  emailController: emailCtrl,
+                  signatureStrokes: signatureStrokes,
+                  currentStroke: currentStroke,
+                  onAcceptedChanged: onAuthChanged,
+                  onPrivacyTap: onPrivacyTap,
+                  onSignatureStart: onSignatureStart,
+                  onSignatureUpdate: onSignatureUpdate,
+                  onSignatureEnd: onSignatureEnd,
+                  onClearSignature: onClearSignature,
                 ),
               ],
             ),

@@ -85,6 +85,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         deviceUid: _savedRecord!.deviceUid,
         patientInfo: _savedRecord!.patientInfo,
         guardianInfo: _savedRecord!.guardianInfo,
+        guardian2Info: _savedRecord!.guardian2Info,
         backgroundHistory: _savedRecord!.backgroundHistory,
         allergies: _savedRecord!.allergies,
         medicalHistory: [..._savedRecord!.medicalHistory, result],
@@ -117,6 +118,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         deviceUid: _savedRecord!.deviceUid,
         patientInfo: _savedRecord!.patientInfo,
         guardianInfo: _savedRecord!.guardianInfo,
+        guardian2Info: _savedRecord!.guardian2Info,
         backgroundHistory: _savedRecord!.backgroundHistory,
         allergies: _savedRecord!.allergies,
         medicalHistory: _savedRecord!.medicalHistory,
@@ -361,14 +363,19 @@ class RegisterDraft {
   String? guardianDocNumber;
   bool? guardianAuthAccepted;
   String? guardianEmail;
+  String? guardianSignatureBase64;
   String? guardian2Name;
   String? guardian2Relationship;
   String? guardian2Phone;
   String? guardian2DocType;
   String? guardian2DocNumber;
-  String? chronicConditions;
+  bool? guardian2AuthAccepted;
+  String? guardian2Email;
+  String? guardian2SignatureBase64;
+  List<ChronicConditionItem> chronicConditions = [];
   String? personalHistory;
   List<FamilyHistoryItem> familyHistory = [];
+  List<MedicationStatementItem> medications = [];
   List<AllergyInfo> allergies = [];
 
   PatientFullRecord toRecord() {
@@ -413,11 +420,39 @@ class RegisterDraft {
         relationship: guardianRelationship ?? '01',
         phone: guardianPhone ?? '',
         deviceUid: guardianDeviceUid,
+        documentType: guardianDocType,
+        documentNumber: guardianDocNumber,
+        consent: (guardianAuthAccepted == true)
+            ? GuardianConsent(
+                accepted: true,
+                acceptedAt: DateTime.now().toIso8601String(),
+                email: guardianEmail,
+                signatureBase64: guardianSignatureBase64,
+              )
+            : null,
       ),
+      guardian2Info: guardian2Name != null && guardian2Name!.isNotEmpty
+          ? GuardianInfo(
+              name: guardian2Name!,
+              relationship: guardian2Relationship ?? '01',
+              phone: guardian2Phone ?? '',
+              documentType: guardian2DocType,
+              documentNumber: guardian2DocNumber,
+              consent: (guardian2AuthAccepted == true)
+                  ? GuardianConsent(
+                      accepted: true,
+                      acceptedAt: DateTime.now().toIso8601String(),
+                      email: guardian2Email,
+                      signatureBase64: guardian2SignatureBase64,
+                    )
+                  : null,
+            )
+          : null,
       backgroundHistory: BackgroundHistory(
         chronicConditions: chronicConditions,
         personalHistory: personalHistory,
         familyHistory: familyHistory,
+        medications: medications,
       ),
       allergies: allergies,
       medicalHistory: const [],

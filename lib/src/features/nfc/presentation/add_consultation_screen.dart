@@ -254,6 +254,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             double.tryParse(_heightCtrl.text) ?? _patient!.patientInfo.height,
       ),
       guardianInfo: _patient!.guardianInfo,
+      guardian2Info: _patient!.guardian2Info,
       backgroundHistory: _patient!.backgroundHistory,
       allergies: _patient!.allergies,
       medicalHistory: [..._patient!.medicalHistory, newConsultation],
