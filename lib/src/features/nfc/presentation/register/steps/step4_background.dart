@@ -13,16 +13,24 @@ class Step4Background extends StatefulWidget {
 }
 
 class _Step4State extends State<Step4Background> {
-  late final _chronic = TextEditingController(text: widget.draft.chronicConditions ?? '');
   late final _personal = TextEditingController(text: widget.draft.personalHistory ?? '');
 
-  @override void dispose() { _chronic.dispose(); _personal.dispose(); super.dispose(); }
+  @override void dispose() { _personal.dispose(); super.dispose(); }
 
   void _save() {
     final d = widget.draft;
-    d.chronicConditions = _chronic.text.trim().isEmpty ? null : _chronic.text.trim();
     d.personalHistory = _personal.text.trim().isEmpty ? null : _personal.text.trim();
     widget.onContinue();
+  }
+
+  Future<void> _addChronicCondition() async {
+    final item = await showModalBottomSheet<ChronicConditionItem>(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (_) => const _AddChronicConditionSheet());
+    if (item != null) setState(() => widget.draft.chronicConditions.add(item));
+  }
+
+  Future<void> _addMedication() async {
+    final item = await showModalBottomSheet<MedicationStatementItem>(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (_) => const _AddMedicationSheet());
+    if (item != null) setState(() => widget.draft.medications.add(item));
   }
 
   Future<void> _addFamilyHistory() async {
@@ -40,13 +48,34 @@ class _Step4State extends State<Step4Background> {
     final d = widget.draft;
     return Column(children: [
       Expanded(child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 16), children: [
-        FormSectionHeader(icon: Icons.favorite_border, title: 'Condiciones crónicas', subtitle: 'Texto libre. El backend codifica automáticamente.'),
-        const SizedBox(height: 12),
-        _StyledTextArea(label: 'Condiciones crónicas', controller: _chronic, hint: 'Ej. Asma leve diagnosticada en 2022...', maxLines: 3),
+        // Chronic conditions (list-based)
+        Row(children: [
+          Expanded(child: FormSectionHeader(icon: Icons.favorite_border, title: 'Condiciones crónicas', subtitle: 'Agregue cada condición. El backend codifica automáticamente.')),
+          TextButton.icon(onPressed: _addChronicCondition, icon: const Icon(Icons.add, size: 16), label: const Text('Agregar'), style: TextButton.styleFrom(foregroundColor: AppColors.primary)),
+        ]),
+        if (d.chronicConditions.isEmpty) _EmptyCard(msg: 'Sin condiciones crónicas. Toque "Agregar".')
+        else Column(children: List.generate(d.chronicConditions.length, (i) {
+          final it = d.chronicConditions[i];
+          return _ItemCard(icon: Icons.favorite_border, title: it.chronicDescription, subtitle: 'Codificación automática por IA',
+            onRemove: () => setState(() => d.chronicConditions.removeAt(i)));
+        })),
         const SizedBox(height: 22),
         FormSectionHeader(icon: Icons.history_edu_outlined, title: 'Historial personal', subtitle: 'Antecedentes quirúrgicos, hospitalizaciones, etc.'),
         const SizedBox(height: 12),
         _StyledTextArea(label: 'Historial personal', controller: _personal, hint: 'Ej. Cirugía de adenoides 2021...', maxLines: 3),
+        const SizedBox(height: 22),
+        // Medications
+        Row(children: [
+          Expanded(child: FormSectionHeader(icon: Icons.medication_outlined, title: 'Medicamentos', subtitle: 'Medicamentos actuales del paciente.')),
+          TextButton.icon(onPressed: _addMedication, icon: const Icon(Icons.add, size: 16), label: const Text('Agregar'), style: TextButton.styleFrom(foregroundColor: AppColors.primary)),
+        ]),
+        if (d.medications.isEmpty) _EmptyCard(msg: 'Sin medicamentos registrados. Toque "Agregar".')
+        else Column(children: List.generate(d.medications.length, (i) {
+          final it = d.medications[i];
+          return _ItemCard(icon: Icons.medication_outlined, title: it.medicationName,
+            subtitle: '${_medStatusLabel(it.status)}${it.dosage != null && it.dosage!.isNotEmpty ? ' · ${it.dosage}' : ''}',
+            onRemove: () => setState(() => d.medications.removeAt(i)));
+        })),
         const SizedBox(height: 22),
         // Family history
         Row(children: [
@@ -108,15 +137,11 @@ class _StyledTextArea extends StatefulWidget {
     required this.controller,
     required this.hint,
     this.maxLines = 3,
-    this.required = false,
-    this.onChanged,
   });
   final String label;
   final TextEditingController controller;
   final String hint;
   final int maxLines;
-  final bool required;
-  final VoidCallback? onChanged;
 
   @override
   State<_StyledTextArea> createState() => _StyledTextAreaState();
@@ -174,6 +199,10 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
 
     await _speech.listen(
       localeId: 'es_CO',
+      listenOptions: stt.SpeechListenOptions(
+        cancelOnError: true,
+        partialResults: true,
+      ),
       onResult: (result) {
         final recognized = result.recognizedWords;
         setState(() {
@@ -182,14 +211,11 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
             TextPosition(offset: widget.controller.text.length),
           );
         });
-        widget.onChanged?.call();
         if (result.finalResult) {
           _baseText = widget.controller.text;
           if (mounted) setState(() => _isListening = false);
         }
       },
-      cancelOnError: true,
-      partialResults: true,
     );
   }
 
@@ -215,15 +241,6 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
                 color: AppColors.textPrimary,
               ),
             ),
-            if (widget.required)
-              const Text(
-                ' *',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
           ],
         ),
         const SizedBox(height: 6),
@@ -233,7 +250,6 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
             TextField(
               controller: widget.controller,
               maxLines: widget.maxLines,
-              onChanged: widget.onChanged != null ? (_) => widget.onChanged!() : null,
               style: const TextStyle(
                 fontSize: 15,
                 color: AppColors.textPrimary,
@@ -373,6 +389,7 @@ class _PulsingDotState extends State<_PulsingDot>
 
 String _relLabel(String c) => const {'01':'Padres','02':'Hermanos','03':'Tíos','04':'Abuelos'}[c] ?? c;
 String _catLabel(String c) => const {'01':'Medicamento','02':'Alimento','03':'Sust. ambiente','04':'Sust. piel','05':'Picadura','06':'Otra'}[c] ?? c;
+String _medStatusLabel(String c) => const {'active':'Activo','completed':'Completado','stopped':'Suspendido','unknown':'Desconocido'}[c] ?? c;
 
 class _EmptyCard extends StatelessWidget {
   const _EmptyCard({required this.msg});
@@ -400,6 +417,55 @@ class _ItemCard extends StatelessWidget {
 }
 
 // ── Sheets ───────────────────────────────────────────────────────────────────
+
+class _AddChronicConditionSheet extends StatefulWidget {
+  const _AddChronicConditionSheet();
+  @override State<_AddChronicConditionSheet> createState() => _AddCCState();
+}
+class _AddCCState extends State<_AddChronicConditionSheet> {
+  final _ctrl = TextEditingController();
+  @override void dispose() { _ctrl.dispose(); super.dispose(); }
+  @override Widget build(BuildContext context) {
+    final ok = _ctrl.text.trim().isNotEmpty;
+    return _Sheet(title: 'Agregar condición crónica', subtitle: 'El backend asigna los códigos CIE automáticamente.', canConfirm: ok, onConfirm: () {
+      Navigator.of(context).pop(ChronicConditionItem(chronicDescription: _ctrl.text.trim()));
+    }, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      LabeledTextField(label: 'CONDICIÓN', controller: _ctrl, hint: 'Ej. Diabetes mellitus tipo 2', maxLines: 3, requiredField: true, onChanged: (_) => setState(() {})),
+    ]));
+  }
+}
+
+class _AddMedicationSheet extends StatefulWidget {
+  const _AddMedicationSheet();
+  @override State<_AddMedicationSheet> createState() => _AddMedState();
+}
+class _AddMedState extends State<_AddMedicationSheet> {
+  final _name = TextEditingController();
+  final _dosage = TextEditingController();
+  final _notes = TextEditingController();
+  String _status = 'active';
+  static const _statuses = {'active':'Activo','completed':'Completado','stopped':'Suspendido','unknown':'Desconocido'};
+  @override void dispose() { _name.dispose(); _dosage.dispose(); _notes.dispose(); super.dispose(); }
+  @override Widget build(BuildContext context) {
+    final ok = _name.text.trim().isNotEmpty;
+    return _Sheet(title: 'Agregar medicamento', canConfirm: ok, onConfirm: () {
+      Navigator.of(context).pop(MedicationStatementItem(
+        medicationName: _name.text.trim(),
+        status: _status,
+        dosage: _dosage.text.trim().isEmpty ? null : _dosage.text.trim(),
+        notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+      ));
+    }, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      LabeledTextField(label: 'MEDICAMENTO', controller: _name, hint: 'Ej. Metformina 850mg', requiredField: true, onChanged: (_) => setState(() {})),
+      const SizedBox(height: 14),
+      ChipSelector<String>(label: 'ESTADO', value: _status, options: _statuses, onChanged: (v) => setState(() => _status = v)),
+      const SizedBox(height: 14),
+      LabeledTextField(label: 'POSOLOGÍA', controller: _dosage, hint: 'Ej. 1 tableta cada 12 horas'),
+      const SizedBox(height: 12),
+      LabeledTextField(label: 'NOTAS', controller: _notes, hint: 'Observaciones adicionales', maxLines: 2),
+    ]));
+  }
+}
 
 class _AddFamilyHistorySheet extends StatefulWidget {
   const _AddFamilyHistorySheet();

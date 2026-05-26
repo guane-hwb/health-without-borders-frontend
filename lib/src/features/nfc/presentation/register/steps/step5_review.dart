@@ -98,7 +98,7 @@ class _Step5State extends State<Step5Review> {
                       d.street,
                       d.addressCity,
                       d.addressState,
-                      d.zone == 'R' ? 'Rural' : 'Urbana',
+                      d.zone == '02' ? 'Rural' : 'Urbana',
                     ].where((s) => s != null && s.isNotEmpty).join(', '),
                   ),
                 ],
@@ -130,8 +130,16 @@ class _Step5State extends State<Step5Review> {
                 icon: Icons.history_edu_outlined,
                 title: 'Antecedentes',
                 rows: [
-                  _kv('Crónicas', d.chronicConditions ?? '—'),
+                  _kv('Crónicas', d.chronicConditions.isEmpty
+                        ? '—'
+                        : '${d.chronicConditions.length} ítems'),
                   _kv('Personal', d.personalHistory ?? '—'),
+                  _kv(
+                    'Medicam.',
+                    d.medications.isEmpty
+                        ? '—'
+                        : '${d.medications.length} ítems',
+                  ),
                   _kv(
                     'Fam.',
                     d.familyHistory.isEmpty
