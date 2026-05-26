@@ -37,6 +37,9 @@ class FakeAuthRepository implements AuthRepository {
   FakeAuthRepository({this.currentUser});
 
   @override
+  Future<String?> getNfcEncryptionKey() async => null;
+
+  @override
   UserSession? currentUser;
 
   bool clearSessionCalled = false;
@@ -44,7 +47,10 @@ class FakeAuthRepository implements AuthRepository {
   String? lastPassword;
 
   @override
-  Future<UserSession> login({required String email, required String password}) async {
+  Future<UserSession> login({
+    required String email,
+    required String password,
+  }) async {
     lastEmail = email;
     lastPassword = password;
     return currentUser ?? UserSession.fromEmail(email);
@@ -54,7 +60,8 @@ class FakeAuthRepository implements AuthRepository {
   Future<UserSession?> getCurrentUser() async => currentUser;
 
   @override
-  Future<String> getAccessToken({bool forceRefresh = false}) async => 'test-token';
+  Future<String> getAccessToken({bool forceRefresh = false}) async =>
+      'test-token';
 
   @override
   Future<void> clearSession() async {
@@ -78,13 +85,15 @@ class FakeLocalDatabase implements LocalDatabase {
   Future<void> deleteRecord(String patientId) async {}
 
   @override
-  Future<List<LocalPatientEntry>> getAllRecords() async => <LocalPatientEntry>[];
+  Future<List<LocalPatientEntry>> getAllRecords() async =>
+      <LocalPatientEntry>[];
 
   @override
   Future<int> getUnsyncedCount() async => pendingCount;
 
   @override
-  Future<List<LocalPatientEntry>> getUnsyncedRecords() async => <LocalPatientEntry>[];
+  Future<List<LocalPatientEntry>> getUnsyncedRecords() async =>
+      <LocalPatientEntry>[];
 
   @override
   Future<void> markSyncError(String patientId, String error) async {}
@@ -156,7 +165,9 @@ void main() {
 
   // ── Grupo 1: Redirección sin sesión ───────────────────────────────────────
   group('HomeScreen — sin usuario activo', () {
-    testWidgets('muestra LoginScreen cuando currentUser es null', (tester) async {
+    testWidgets('muestra LoginScreen cuando currentUser es null', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrapHome(user: null));
       await tester.pumpAndSettle();
 
@@ -195,7 +206,9 @@ void main() {
       expect(find.byIcon(Icons.shield_outlined), findsOneWidget);
     });
 
-    testWidgets('header tiene fondo con gradiente (Container decorado)', (tester) async {
+    testWidgets('header tiene fondo con gradiente (Container decorado)', (
+      tester,
+    ) async {
       final user = _session(UserRole.nurse);
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
@@ -227,7 +240,9 @@ void main() {
       expect(find.text('Estadísticas de brigadas'), findsOneWidget);
     });
 
-    testWidgets('NO muestra card de Nuevo paciente para superadmin', (tester) async {
+    testWidgets('NO muestra card de Nuevo paciente para superadmin', (
+      tester,
+    ) async {
       final user = _session(UserRole.superadmin);
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
@@ -324,19 +339,22 @@ void main() {
 
   // ── Grupo 6: _SyncCard — estado con pendientes ────────────────────────────
   group('_SyncCard — badge de pendientes', () {
-    testWidgets('sin pendientes muestra cloud_done y NO muestra badge numérico',
-        (tester) async {
-      mockDb.pendingCount = 0;
-      final user = _session(UserRole.nurse);
-      await tester.pumpWidget(_wrapHome(user: user));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'sin pendientes muestra cloud_done y NO muestra badge numérico',
+      (tester) async {
+        mockDb.pendingCount = 0;
+        final user = _session(UserRole.nurse);
+        await tester.pumpWidget(_wrapHome(user: user));
+        await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.cloud_done_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.cloud_upload_outlined), findsNothing);
-    });
+        expect(find.byIcon(Icons.cloud_done_outlined), findsOneWidget);
+        expect(find.byIcon(Icons.cloud_upload_outlined), findsNothing);
+      },
+    );
 
-    testWidgets('con 3 pendientes muestra cloud_upload y badge "3"',
-        (tester) async {
+    testWidgets('con 3 pendientes muestra cloud_upload y badge "3"', (
+      tester,
+    ) async {
       mockDb.pendingCount = 3;
       final user = _session(UserRole.doctor);
       await tester.pumpWidget(_wrapHome(user: user));
@@ -346,7 +364,9 @@ void main() {
       expect(find.text('3'), findsOneWidget);
     });
 
-    testWidgets('el badge numérico tiene fondo Color(0xFFD4A017)', (tester) async {
+    testWidgets('el badge numérico tiene fondo Color(0xFFD4A017)', (
+      tester,
+    ) async {
       mockDb.pendingCount = 5;
       final user = _session(UserRole.doctor);
       await tester.pumpWidget(_wrapHome(user: user));
@@ -355,10 +375,9 @@ void main() {
       final badgeContainer = tester
           .widgetList<Container>(find.byType(Container))
           .firstWhere((c) {
-        final d = c.decoration;
-        return d is BoxDecoration &&
-            d.color == const Color(0xFFD4A017);
-      });
+            final d = c.decoration;
+            return d is BoxDecoration && d.color == const Color(0xFFD4A017);
+          });
       expect(badgeContainer, isNotNull);
     });
   });
@@ -377,8 +396,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('al tocar logout aparece el diálogo de confirmación',
-        (tester) async {
+    testWidgets('al tocar logout aparece el diálogo de confirmación', (
+      tester,
+    ) async {
       final user = _session(UserRole.doctor);
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
@@ -396,10 +416,12 @@ void main() {
       await tapLogout(tester);
 
       // El primer TextButton del diálogo es siempre "Cancelar"
-      final cancelBtn = find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.byType(TextButton),
-      ).first;
+      final cancelBtn = find
+          .descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(TextButton),
+          )
+          .first;
       await tester.tap(cancelBtn);
       await tester.pumpAndSettle();
 
@@ -415,10 +437,12 @@ void main() {
       await tapLogout(tester);
 
       // El segundo TextButton (último) es el de confirmar
-      final confirmBtn = find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.byType(TextButton),
-      ).last;
+      final confirmBtn = find
+          .descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(TextButton),
+          )
+          .last;
       await tester.tap(confirmBtn);
       await tester.pumpAndSettle();
 
@@ -446,8 +470,9 @@ void main() {
 
       await tapLogout(tester);
 
-      final redText = find.byWidgetPredicate((w) =>
-          w is Text && w.style?.color == AppColors.error);
+      final redText = find.byWidgetPredicate(
+        (w) => w is Text && w.style?.color == AppColors.error,
+      );
       expect(redText, findsOneWidget);
     });
   });
@@ -472,10 +497,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Doctor tiene al menos 3 cards con flecha (NFC, Nuevo paciente, Buscar)
-      expect(
-        find.byIcon(Icons.chevron_right_rounded),
-        findsAtLeastNWidgets(3),
-      );
+      expect(find.byIcon(Icons.chevron_right_rounded), findsAtLeastNWidgets(3));
     });
 
     testWidgets('cards tienen fondo blanco (AppColors.white)', (tester) async {

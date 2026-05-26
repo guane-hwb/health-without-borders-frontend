@@ -24,10 +24,16 @@ class FakeAuthRepository implements AuthRepository {
   bool clearSessionCalled = false;
 
   @override
+  Future<String?> getNfcEncryptionKey() async => null;
+
+  @override
   UserSession? get currentUser => session;
 
   @override
-  Future<UserSession> login({required String email, required String password}) async {
+  Future<UserSession> login({
+    required String email,
+    required String password,
+  }) async {
     if (session != null) return session!;
     return UserSession.fromEmail(email);
   }
@@ -36,7 +42,8 @@ class FakeAuthRepository implements AuthRepository {
   Future<UserSession?> getCurrentUser() async => session;
 
   @override
-  Future<String> getAccessToken({bool forceRefresh = false}) async => 'test-token';
+  Future<String> getAccessToken({bool forceRefresh = false}) async =>
+      'test-token';
 
   @override
   Future<void> clearSession() async {
@@ -63,12 +70,12 @@ String _greetingForHour(int hour) {
 
 /// Crea un [UserSession] de prueba con el [role] dado.
 UserSession _session(UserRole role) => UserSession(
-      id: 'user-test-01',
-      fullName: 'Test User',
-      email: 'test@hwb.org',
-      role: role,
-      organizationId: 'org-01',
-    );
+  id: 'user-test-01',
+  fullName: 'Test User',
+  email: 'test@hwb.org',
+  role: role,
+  organizationId: 'org-01',
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Tests
@@ -233,12 +240,15 @@ void main() {
       );
     });
 
-    test('doctor y nurse comparten el mismo body clínico (canRegisterPatient)', () {
-      // Si ambos pueden registrar paciente, ambos reciben el body clínico.
-      final clinicalRoles = UserRole.values
-          .where((r) => r != UserRole.superadmin && r != UserRole.orgAdmin)
-          .toList();
-      expect(clinicalRoles, containsAll([UserRole.doctor, UserRole.nurse]));
-    });
+    test(
+      'doctor y nurse comparten el mismo body clínico (canRegisterPatient)',
+      () {
+        // Si ambos pueden registrar paciente, ambos reciben el body clínico.
+        final clinicalRoles = UserRole.values
+            .where((r) => r != UserRole.superadmin && r != UserRole.orgAdmin)
+            .toList();
+        expect(clinicalRoles, containsAll([UserRole.doctor, UserRole.nurse]));
+      },
+    );
   });
 }

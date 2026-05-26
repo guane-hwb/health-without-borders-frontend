@@ -20,11 +20,20 @@ class FakeAuthRepository implements AuthRepository {
   bool loginCalled = false;
   String? loginEmail;
   String? loginPassword;
-  Future<UserSession> Function({required String email, required String password})?
-      loginHandler;
+  Future<UserSession> Function({
+    required String email,
+    required String password,
+  })?
+  loginHandler;
 
   @override
-  Future<UserSession> login({required String email, required String password}) async {
+  Future<String?> getNfcEncryptionKey() async => null;
+
+  @override
+  Future<UserSession> login({
+    required String email,
+    required String password,
+  }) async {
     loginCalled = true;
     loginEmail = email;
     loginPassword = password;
@@ -81,9 +90,7 @@ void main() {
         patientRepository: patientRepository,
         localDatabase: LocalDatabase.instance,
         syncEngine: syncEngine,
-        child: const MaterialApp(
-          home: LoginScreen(),
-        ),
+        child: const MaterialApp(home: LoginScreen()),
       ),
     );
   }
@@ -130,8 +137,9 @@ void main() {
 
   // ── Grupo 2: Validaciones del formulario ────────────────────────────────────
   group('Validaciones del formulario', () {
-    testWidgets('muestra error de email requerido al enviar vacio',
-        (tester) async {
+    testWidgets('muestra error de email requerido al enviar vacio', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildSubject());
       await tester.tap(find.byType(ElevatedButton));
       await tester.pumpAndSettle();
@@ -139,8 +147,9 @@ void main() {
       expect(find.textContaining('Ingresa'), findsWidgets);
     });
 
-    testWidgets('muestra error de email invalido con formato incorrecto',
-        (tester) async {
+    testWidgets('muestra error de email invalido con formato incorrecto', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildSubject());
       await tester.enterText(find.byType(TextFormField).first, 'noesvalido');
       await tester.pump();
@@ -148,8 +157,9 @@ void main() {
       expect(find.textContaining('no v'), findsOneWidget);
     });
 
-    testWidgets('muestra error de contrasena corta (menos de 6 caracteres)',
-        (tester) async {
+    testWidgets('muestra error de contrasena corta (menos de 6 caracteres)', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildSubject());
       await tester.enterText(find.byType(TextFormField).last, '123');
       await tester.pump();
@@ -157,11 +167,14 @@ void main() {
       expect(find.textContaining('al menos 6'), findsOneWidget);
     });
 
-    testWidgets('no muestra errores con email y contrasena validos',
-        (tester) async {
+    testWidgets('no muestra errores con email y contrasena validos', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildSubject());
       await tester.enterText(
-          find.byType(TextFormField).first, 'usuario@test.com');
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
       await tester.enterText(find.byType(TextFormField).last, 'password123');
       await tester.pump();
       // Usar los strings exactos de error para no confundir con el hintText
@@ -174,8 +187,9 @@ void main() {
 
   // ── Grupo 3: Toggle de visibilidad de contraseña ────────────────────────────
   group('Toggle visibilidad de contrasena', () {
-    testWidgets('al tocar el icono de ojo, la contrasena se muestra',
-        (tester) async {
+    testWidgets('al tocar el icono de ojo, la contrasena se muestra', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildSubject());
       // Antes de tocar, el icono debe ser el de visibilidad oculta
       expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
@@ -186,8 +200,9 @@ void main() {
       expect(find.byIcon(Icons.visibility_off_outlined), findsOneWidget);
     });
 
-    testWidgets('al tocar el ojo dos veces, la contrasena vuelve a ocultarse',
-        (tester) async {
+    testWidgets('al tocar el ojo dos veces, la contrasena vuelve a ocultarse', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildSubject());
       await tester.tap(find.byIcon(Icons.visibility_outlined));
       await tester.pump();
@@ -202,13 +217,16 @@ void main() {
   // ── Grupo 4: Flujo de login exitoso ─────────────────────────────────────────
   group('Flujo login exitoso', () {
     testWidgets('navega a HomeScreen tras login exitoso', (tester) async {
-      mockAuthRepo.loginHandler = ({required String email, required String password}) async {
-        return UserSession.fromEmail(email);
-      };
+      mockAuthRepo.loginHandler =
+          ({required String email, required String password}) async {
+            return UserSession.fromEmail(email);
+          };
 
       await tester.pumpWidget(buildSubject());
       await tester.enterText(
-          find.byType(TextFormField).first, 'usuario@test.com');
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
       await tester.enterText(find.byType(TextFormField).last, 'password123');
       await tester.tap(find.byType(ElevatedButton));
       await tester.pumpAndSettle();
@@ -218,8 +236,9 @@ void main() {
       expect(mockAuthRepo.loginPassword, 'password123');
     });
 
-    testWidgets('muestra CircularProgressIndicator mientras hace login',
-        (tester) async {
+    testWidgets('muestra CircularProgressIndicator mientras hace login', (
+      tester,
+    ) async {
       final completer = Completer<UserSession>();
       mockAuthRepo.loginHandler =
           ({required String email, required String password}) =>
@@ -227,7 +246,9 @@ void main() {
 
       await tester.pumpWidget(buildSubject());
       await tester.enterText(
-          find.byType(TextFormField).first, 'usuario@test.com');
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
       await tester.enterText(find.byType(TextFormField).last, 'password123');
       await tester.tap(find.byType(ElevatedButton));
       // Flush microtasks + un frame para que setState(_isLoading=true) se procese
@@ -244,13 +265,16 @@ void main() {
   // ── Grupo 5: Flujo de login fallido ─────────────────────────────────────────
   group('Flujo login fallido', () {
     testWidgets('muestra SnackBar con mensaje de ApiException', (tester) async {
-      mockAuthRepo.loginHandler = ({required String email, required String password}) async {
-        throw ApiException('Credenciales incorrectas');
-      };
+      mockAuthRepo.loginHandler =
+          ({required String email, required String password}) async {
+            throw ApiException('Credenciales incorrectas');
+          };
 
       await tester.pumpWidget(buildSubject());
       await tester.enterText(
-          find.byType(TextFormField).first, 'usuario@test.com');
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
       await tester.enterText(find.byType(TextFormField).last, 'password123');
       await tester.tap(find.byType(ElevatedButton));
       await tester.pumpAndSettle();
@@ -259,15 +283,19 @@ void main() {
       expect(find.textContaining('Credenciales'), findsOneWidget);
     });
 
-    testWidgets('muestra SnackBar generico para errores inesperados',
-        (tester) async {
-      mockAuthRepo.loginHandler = ({required String email, required String password}) async {
-        throw Exception('Error de red');
-      };
+    testWidgets('muestra SnackBar generico para errores inesperados', (
+      tester,
+    ) async {
+      mockAuthRepo.loginHandler =
+          ({required String email, required String password}) async {
+            throw Exception('Error de red');
+          };
 
       await tester.pumpWidget(buildSubject());
       await tester.enterText(
-          find.byType(TextFormField).first, 'usuario@test.com');
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
       await tester.enterText(find.byType(TextFormField).last, 'password123');
       await tester.tap(find.byType(ElevatedButton));
       await tester.pumpAndSettle();
@@ -275,15 +303,19 @@ void main() {
       expect(find.byType(SnackBar), findsOneWidget);
     });
 
-    testWidgets('el boton de login vuelve a estar activo tras error',
-        (tester) async {
-      mockAuthRepo.loginHandler = ({required String email, required String password}) async {
-        throw ApiException('Error');
-      };
+    testWidgets('el boton de login vuelve a estar activo tras error', (
+      tester,
+    ) async {
+      mockAuthRepo.loginHandler =
+          ({required String email, required String password}) async {
+            throw ApiException('Error');
+          };
 
       await tester.pumpWidget(buildSubject());
       await tester.enterText(
-          find.byType(TextFormField).first, 'usuario@test.com');
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
       await tester.enterText(find.byType(TextFormField).last, 'password123');
       await tester.tap(find.byType(ElevatedButton));
       await tester.pumpAndSettle();
