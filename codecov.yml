@@ -1,0 +1,20 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 15%
+        threshold: 2%
+    patch:
+      default:
+        target: 60%
+
+ignore:
+  - "lib/**/*.g.dart"
+  - "lib/**/*.freezed.dart"
+  - "lib/**/*.mocks.dart"
+  - "test/**"
+
+comment:
+  layout: "reach,diff,flags,components"
+  behavior: default
+  require_changes: true
