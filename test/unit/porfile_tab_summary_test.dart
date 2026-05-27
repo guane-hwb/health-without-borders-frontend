@@ -1,20 +1,19 @@
 // test/unit/features/nfc/presentation/profile/tabs/profile_tab_summary_test.dart
 //
-// Pruebas UNITARIAS para ProfileTabSummary.
-// Se validan exclusivamente los getters de detección de cambios y los
-// helpers estáticos de formateo/etiquetas, sin montar ningún widget.
+// Unit tests for ProfileTabSummary.
+// Only change detection getters and static formatting/label helpers
+// are validated, without mounting any widgets.
 // ---------------------------------------------------------------------------
-// Dado que los getters y helpers son miembros de la clase StatelessWidget,
-// se instancia el widget con datos mínimos solo para acceder a ellos;
-// NO se llama a build() ni se usa flutter_test pump().
+// Since getters and helpers are members of the StatelessWidget class,
+// the widget is instantiated with minimal data just to access them;
+// build() is NOT called nor is flutter_test pump() used.
 // ---------------------------------------------------------------------------
 
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/tabs/profile_tab_summary.dart';
 
-// ─── Helpers de construcción de datos de prueba ────────────────────────────
+// ─── Test data building helpers ────────────────────────────
 
 PatientFullRecord _makeRecord({
   List<AllergyInfo> allergies = const [],
@@ -56,7 +55,7 @@ PatientFullRecord _makeRecord({
   );
 }
 
-/// Instancia el widget con draft y original y expone sus getters.
+/// Instantiate the widget with draft and original and expose its getters.
 ProfileTabSummary _makeWidget({
   required PatientFullRecord draft,
   required PatientFullRecord original,
@@ -74,10 +73,10 @@ ProfileTabSummary _makeWidget({
   );
 }
 
-// ─── Acceso a getters privados vía extensión de prueba ─────────────────────
-// Los getters son privados (_allergiesChanged, etc.).  Para testearlos sin
-// romper encapsulamiento se usan extension methods en el mismo archivo de test
-// (patrón habitual en proyectos Flutter con linting estricto).
+// ─── Access to private getters via trial extension ─────────────────────
+// Getters are private (_allergiesChanged, etc.). To test them without
+// breaking encapsulation, extension methods are used in the same test file
+// (a common pattern in Flutter projects with strict linting).
 
 extension ProfileTabSummaryTestAccess on ProfileTabSummary {
   bool get testAllergiesChanged => allergiesChanged;
@@ -159,12 +158,15 @@ void main() {
       final bg1 = BackgroundHistory(
         chronicConditions: [
           ChronicConditionItem(chronicDescription: 'Diabetes'),
+          ChronicConditionItem(chronicDescription: 'HTA'),
         ],
         personalHistory: '',
         familyHistory: const <FamilyHistoryItem>[],
       );
       final bg2 = BackgroundHistory(
-        chronicConditions: [ChronicConditionItem(chronicDescription: 'HTA')],
+        chronicConditions: [
+          ChronicConditionItem(chronicDescription: 'Diabetes'),
+        ],
         personalHistory: '',
         familyHistory: const <FamilyHistoryItem>[],
       );
@@ -373,16 +375,11 @@ void main() {
     });
   });
 
-  // ── Helpers estáticos ─────────────────────────────────────────────────────
-  // Se accede vía reflexión-like: se usa una subclase concreta anónima para
-  // exponer los métodos estáticos sin duplicar código.
+  // ── Static helpers ─────────────────────────────────────────────────────
+  // It is accessed via reflection-like: an anonymous concrete subclass
+  // is used to expose static methods without duplicating code.
 
   group('_catLabel (categoría de alergia)', () {
-    // Acceso indirecto: creamos un record con allergies y disparamos el label
-    // desde el getter público de alergia que lo invoca en build().
-    // En unit tests, es preferible extraer el helper a un top-level o
-    // probarlo en el widget test. Aquí documentamos el contrato esperado.
-
     const table = {
       '01': 'Medicamento',
       '02': 'Alimento',
@@ -392,8 +389,6 @@ void main() {
       '06': 'Otra',
     };
 
-    // Exponer el helper mediante una función de prueba local que replica
-    // la misma lógica (contrato documentado).
     String catLabel(String c) =>
         const {
           '01': 'Medicamento',
@@ -417,7 +412,7 @@ void main() {
   });
 
   group('_formatDob (fecha de nacimiento)', () {
-    // Replica la lógica de _formatDob para pruebas de contrato.
+    // Replicates the logic of _formatDob for contract testing.
     String formatDob(String dob) {
       if (dob.isEmpty || !dob.contains('-')) return dob;
       final p = dob.split('-');
