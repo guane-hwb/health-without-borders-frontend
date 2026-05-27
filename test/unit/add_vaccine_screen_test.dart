@@ -34,9 +34,13 @@ import 'package:health_without_borders_frontend/src/features/nfc/presentation/ad
 // ---------------------------------------------------------------------------
 
 class _MockAuthRepository extends Mock implements AuthRepository {}
+
 class _MockUserRepository extends Mock implements UserRepository {}
+
 class _MockPatientRepository extends Mock implements PatientRepository {}
+
 class _MockLocalDatabase extends Mock implements LocalDatabase {}
+
 class _MockSyncEngine extends Mock implements SyncEngine {}
 
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
@@ -47,16 +51,16 @@ class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
 
 /// Search for a [TextField] by its exact hint text.
 Finder textFieldWithHint(String hint) => find.byWidgetPredicate(
-      (widget) => widget is TextField && widget.decoration?.hintText == hint,
-      description: 'TextField with hint "$hint"',
-    );
+  (widget) => widget is TextField && widget.decoration?.hintText == hint,
+  description: 'TextField with hint "$hint"',
+);
 
 // Actual hints defined in _VaccineEntryCard → _StyledTextField
 // (verified against the source code of add_vaccine_screen.dart)
 const String _hintVaccineName = 'Ej: Triple Viral (SRP)';
-const String _hintCvxCode     = 'Ej: 03';
-const String _hintAdminBy     = 'Ej: Enf. Ana Ruiz';
-const String _hintAdminAt     = 'Ej: Brigada Frontera Cucuta';
+const String _hintCvxCode = 'Ej: 03';
+const String _hintAdminBy = 'Ej: Enf. Ana Ruiz';
+const String _hintAdminAt = 'Ej: Brigada Frontera Cucuta';
 
 /// Minimal [PatientFullRecord] with all required fields.
 PatientFullRecord _fakePatient({String name = 'Ana García'}) =>
@@ -68,8 +72,7 @@ PatientFullRecord _fakePatient({String name = 'Ana García'}) =>
           documentType: 'CC',
           documentNumber: '123456789',
         ),
-        firstLastName:
-            name.split(' ').length > 1 ? name.split(' ').last : name,
+        firstLastName: name.split(' ').length > 1 ? name.split(' ').last : name,
         firstName: name.split(' ').first,
         dob: '2010-05-01',
         biologicalSex: 'F',
@@ -117,7 +120,7 @@ AppScope _defaultScope() {
   final auth = _MockAuthRepository();
   final user = _MockUserRepository();
   final repo = _MockPatientRepository();
-  final db   = _MockLocalDatabase();
+  final db = _MockLocalDatabase();
   final sync = _MockSyncEngine();
 
   when(() => sync.syncAll()).thenAnswer((_) async {});
@@ -245,8 +248,9 @@ void main() {
       expect(find.text('Buscar por UID'), findsNothing);
     });
 
-    testWidgets('NFC scan shows CircularProgressIndicator while scanning',
-        (tester) async {
+    testWidgets('NFC scan shows CircularProgressIndicator while scanning', (
+      tester,
+    ) async {
       final scope = _defaultScope();
 
       // scanDevice never completes → _scanning remains true indefinitely.
@@ -314,8 +318,9 @@ void main() {
       expect(btn.onPressed, isNull);
     });
 
-    testWidgets('save button enables when all required fields are filled',
-        (tester) async {
+    testWidgets('save button enables when all required fields are filled', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
@@ -323,7 +328,9 @@ void main() {
       await tester.enterText(textFieldWithHint(_hintCvxCode).first, '19');
       await tester.enterText(textFieldWithHint(_hintAdminBy), 'Dr. Pérez');
       await tester.enterText(
-          textFieldWithHint(_hintAdminAt), 'Hospital Central');
+        textFieldWithHint(_hintAdminAt),
+        'Hospital Central',
+      );
       await tester.pump();
 
       final btn = tester.widget<ElevatedButton>(
@@ -345,8 +352,9 @@ void main() {
       expect(find.textContaining('Guardar 2 vacunas'), findsOneWidget);
     });
 
-    testWidgets('removing an entry reduces the list back to one',
-        (tester) async {
+    testWidgets('removing an entry reduces the list back to one', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
@@ -426,20 +434,22 @@ void main() {
   // ── Widget: SUCCESS STEP ──────────────────────────────────────────────────
 
   group('Success step', () {
-    Future<void> _fillAndSave(WidgetTester tester, AppScope scope) async {
-      when(() => scope.localDatabase.savePatient(any()))
-          .thenAnswer((_) async {});
+    Future<void> fillAndSave(WidgetTester tester, AppScope scope) async {
+      when(
+        () => scope.localDatabase.savePatient(any()),
+      ).thenAnswer((_) async {});
       when(() => scope.syncEngine.syncAll()).thenAnswer((_) async {});
 
       await tester.pumpWidget(_buildApp(patient: _fakePatient(), scope: scope));
       await tester.pumpAndSettle();
 
-      await tester.enterText(
-          textFieldWithHint(_hintVaccineName).first, 'BCG');
+      await tester.enterText(textFieldWithHint(_hintVaccineName).first, 'BCG');
       await tester.enterText(textFieldWithHint(_hintCvxCode).first, '19');
       await tester.enterText(textFieldWithHint(_hintAdminBy), 'Dr. López');
       await tester.enterText(
-          textFieldWithHint(_hintAdminAt), 'Centro de Salud');
+        textFieldWithHint(_hintAdminAt),
+        'Centro de Salud',
+      );
       await tester.pump();
 
       // The button is outside the viewport → ensureVisible before tapping.
@@ -447,10 +457,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('renders success icon after saving 1 vaccine',
-        (tester) async {
+    testWidgets('renders success icon after saving 1 vaccine', (tester) async {
       final scope = _defaultScope();
-      await _fillAndSave(tester, scope);
+      await fillAndSave(tester, scope);
 
       expect(find.byIcon(Icons.check), findsOneWidget);
       expect(find.text('Vacuna guardada exitosamente'), findsWidgets);
@@ -458,14 +467,14 @@ void main() {
 
     testWidgets('shows patient name in success step', (tester) async {
       final scope = _defaultScope();
-      await _fillAndSave(tester, scope);
+      await fillAndSave(tester, scope);
 
       expect(find.text('Ana García'), findsOneWidget);
     });
 
     testWidgets('shows local-save and sync status rows', (tester) async {
       final scope = _defaultScope();
-      await _fillAndSave(tester, scope);
+      await fillAndSave(tester, scope);
 
       expect(find.textContaining('Guardado local'), findsOneWidget);
       expect(find.textContaining('Sincronizacion'), findsOneWidget);
@@ -473,18 +482,20 @@ void main() {
 
     testWidgets('save failure shows error snackbar', (tester) async {
       final scope = _defaultScope();
-      when(() => scope.localDatabase.savePatient(any()))
-          .thenThrow(Exception('disk full'));
+      when(
+        () => scope.localDatabase.savePatient(any()),
+      ).thenThrow(Exception('disk full'));
 
       await tester.pumpWidget(_buildApp(patient: _fakePatient(), scope: scope));
       await tester.pumpAndSettle();
 
-      await tester.enterText(
-          textFieldWithHint(_hintVaccineName).first, 'BCG');
+      await tester.enterText(textFieldWithHint(_hintVaccineName).first, 'BCG');
       await tester.enterText(textFieldWithHint(_hintCvxCode).first, '19');
       await tester.enterText(textFieldWithHint(_hintAdminBy), 'Dr. López');
       await tester.enterText(
-          textFieldWithHint(_hintAdminAt), 'Centro de Salud');
+        textFieldWithHint(_hintAdminAt),
+        'Centro de Salud',
+      );
       await tester.pump();
 
       await _tapGuardar(tester);
@@ -500,8 +511,9 @@ void main() {
   // ── Widget: returnToProfile path ──────────────────────────────────────────
 
   group('returnToProfile = true', () {
-    testWidgets('pops with vaccine result instead of saving locally',
-        (tester) async {
+    testWidgets('pops with vaccine result instead of saving locally', (
+      tester,
+    ) async {
       VaccinationRecordItem? popped;
       final scope = _defaultScope();
 
@@ -519,26 +531,26 @@ void main() {
               home: Builder(
                 builder: (ctx) => TextButton(
                   onPressed: () async {
-                    final result =
-                        await Navigator.of(ctx).push<VaccinationRecordItem>(
-                      MaterialPageRoute(
-                        builder: (_) => AppScope(
-                          authRepository: scope.authRepository,
-                          userRepository: scope.userRepository,
-                          patientRepository: scope.patientRepository,
-                          localDatabase: scope.localDatabase,
-                          syncEngine: scope.syncEngine,
-                          child: AppLocale(
-                            locale: 'es',
-                            setLocale: (_) {},
-                            child: AddVaccineScreen(
-                              patient: _fakePatient(),
-                              returnToProfile: true,
+                    final result = await Navigator.of(ctx)
+                        .push<VaccinationRecordItem>(
+                          MaterialPageRoute(
+                            builder: (_) => AppScope(
+                              authRepository: scope.authRepository,
+                              userRepository: scope.userRepository,
+                              patientRepository: scope.patientRepository,
+                              localDatabase: scope.localDatabase,
+                              syncEngine: scope.syncEngine,
+                              child: AppLocale(
+                                locale: 'es',
+                                setLocale: (_) {},
+                                child: AddVaccineScreen(
+                                  patient: _fakePatient(),
+                                  returnToProfile: true,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    );
+                        );
                     popped = result;
                   },
                   child: const Text('Open'),
@@ -553,7 +565,9 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(
-          textFieldWithHint(_hintVaccineName).first, 'Varicela');
+        textFieldWithHint(_hintVaccineName).first,
+        'Varicela',
+      );
       await tester.enterText(textFieldWithHint(_hintCvxCode).first, '21');
       await tester.enterText(textFieldWithHint(_hintAdminBy), 'Enfermera R.');
       await tester.enterText(textFieldWithHint(_hintAdminAt), 'IPS Sur');
