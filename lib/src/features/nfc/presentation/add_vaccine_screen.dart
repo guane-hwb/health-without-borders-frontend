@@ -30,6 +30,8 @@ class _VaccineEntry {
   }
 }
 
+typedef VaccineEntry = _VaccineEntry;
+
 class AddVaccineScreen extends StatefulWidget {
   const AddVaccineScreen({
     super.key,

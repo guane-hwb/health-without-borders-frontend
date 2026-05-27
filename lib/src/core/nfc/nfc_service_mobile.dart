@@ -10,6 +10,8 @@ import 'package:nfc_manager/nfc_manager.dart';
 class NfcService {
   NfcService._();
 
+  static Future<String> Function()? overrideReadDeviceUid;
+
   /// Whether the device hardware supports NFC.
   static Future<bool> get isAvailable => NfcManager.instance.isAvailable();
 
@@ -19,6 +21,9 @@ class NfcService {
   /// Throws [NfcNotAvailableException] if the device lacks NFC hardware.
   /// Throws [NfcSessionException] on read error or cancellation.
   static Future<String> readDeviceUid() async {
+    if (overrideReadDeviceUid != null) {
+      return overrideReadDeviceUid!();
+    }
     if (!await NfcManager.instance.isAvailable()) {
       throw NfcNotAvailableException();
     }
