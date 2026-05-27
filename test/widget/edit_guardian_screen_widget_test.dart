@@ -51,8 +51,6 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<String> getAccessToken({bool forceRefresh = false}) async =>
       'test-token';
-
-  // --- ESTE ES EL AJUSTE QUE DEBES AGREGAR ---
   @override
   Future<String?> getNfcEncryptionKey() async => 'fake-nfc-key-12345';
 
