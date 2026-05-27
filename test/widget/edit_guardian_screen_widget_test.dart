@@ -40,14 +40,21 @@ class FakeAuthRepository implements AuthRepository {
   UserSession? get currentUser => null;
 
   @override
-  Future<UserSession> login({required String email, required String password}) async =>
-      UserSession.fromEmail(email);
+  Future<UserSession> login({
+    required String email,
+    required String password,
+  }) async => UserSession.fromEmail(email);
 
   @override
   Future<UserSession?> getCurrentUser() async => null;
 
   @override
-  Future<String> getAccessToken({bool forceRefresh = false}) async => 'test-token';
+  Future<String> getAccessToken({bool forceRefresh = false}) async =>
+      'test-token';
+
+  // --- ESTE ES EL AJUSTE QUE DEBES AGREGAR ---
+  @override
+  Future<String?> getNfcEncryptionKey() async => 'fake-nfc-key-12345';
 
   @override
   Future<void> clearSession() async {}
@@ -147,9 +154,7 @@ Widget _buildSubject({
       patientRepository: patientRepo,
       localDatabase: FakeLocalDatabase(),
       syncEngine: syncEngine,
-      child: MaterialApp(
-        home: EditGuardianScreen(patient: patient),
-      ),
+      child: MaterialApp(home: EditGuardianScreen(patient: patient)),
     ),
   );
 }
@@ -161,8 +166,9 @@ Widget _buildSubject({
 void main() {
   // ── Group 1: Initial Rendering ────────────────────────────────────────
   group('EditGuardianScreen — renderizado inicial', () {
-    testWidgets('muestra el título "Editar / actualizar" en el header',
-        (tester) async {
+    testWidgets('muestra el título "Editar / actualizar" en el header', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildSubject(patient: _makePatient()));
       await tester.pump();
       expect(find.text('Editar / actualizar'), findsOneWidget);
@@ -203,56 +209,63 @@ void main() {
 
   // ── Group 2: Guardian data pre-loading ────────────────────────────
   group('EditGuardianScreen — pre-carga de datos', () {
-    testWidgets('el campo de nombre muestra el nombre del guardián',
-        (tester) async {
+    testWidgets('el campo de nombre muestra el nombre del guardián', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-          _buildSubject(patient: _makePatient(guardianName: 'Carlos Ruiz')));
+        _buildSubject(patient: _makePatient(guardianName: 'Carlos Ruiz')),
+      );
       await tester.pump();
       expect(find.text('Carlos Ruiz'), findsOneWidget);
     });
 
-    testWidgets('el campo de teléfono muestra el teléfono del guardián',
-        (tester) async {
+    testWidgets('el campo de teléfono muestra el teléfono del guardián', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-          _buildSubject(patient: _makePatient(guardianPhone: '3109876543')));
+        _buildSubject(patient: _makePatient(guardianPhone: '3109876543')),
+      );
       await tester.pump();
       expect(find.text('3109876543'), findsOneWidget);
     });
 
-    testWidgets(
-        'el dropdown de tipo de documento muestra CC por defecto',
-        (tester) async {
+    testWidgets('el dropdown de tipo de documento muestra CC por defecto', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildSubject(patient: _makePatient()));
       await tester.pump();
       expect(find.text('Cédula de Ciudadanía'), findsOneWidget);
     });
 
-    testWidgets('el dropdown de país muestra Colombia por defecto',
-        (tester) async {
+    testWidgets('el dropdown de país muestra Colombia por defecto', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildSubject(patient: _makePatient()));
       await tester.pump();
       expect(find.text('Colombia'), findsOneWidget);
     });
 
     testWidgets(
-        'el campo de número de documento inicia vacío aunque el guardián tenga datos',
-        (tester) async {
-      await tester.pumpWidget(_buildSubject(patient: _makePatient()));
-      await tester.pump();
-      final textFields = tester.widgetList<TextField>(find.byType(TextField));
-      final docNumField = textFields.elementAt(1);
-      expect(docNumField.controller?.text ?? '', isEmpty);
-    });
+      'el campo de número de documento inicia vacío aunque el guardián tenga datos',
+      (tester) async {
+        await tester.pumpWidget(_buildSubject(patient: _makePatient()));
+        await tester.pump();
+        final textFields = tester.widgetList<TextField>(find.byType(TextField));
+        final docNumField = textFields.elementAt(1);
+        expect(docNumField.controller?.text ?? '', isEmpty);
+      },
+    );
 
     testWidgets(
-        'el campo de dirección inicia vacío aunque el guardián tenga datos',
-        (tester) async {
-      await tester.pumpWidget(_buildSubject(patient: _makePatient()));
-      await tester.pump();
-      final textFields = tester.widgetList<TextField>(find.byType(TextField));
-      final addressField = textFields.elementAt(2);
-      expect(addressField.controller?.text ?? '', isEmpty);
-    });
+      'el campo de dirección inicia vacío aunque el guardián tenga datos',
+      (tester) async {
+        await tester.pumpWidget(_buildSubject(patient: _makePatient()));
+        await tester.pump();
+        final textFields = tester.widgetList<TextField>(find.byType(TextField));
+        final addressField = textFields.elementAt(2);
+        expect(addressField.controller?.text ?? '', isEmpty);
+      },
+    );
   });
 
   // ── Group 3: Interaction with text fields ────────────────────────────
@@ -285,8 +298,7 @@ void main() {
       expect(find.text('3157654321'), findsOneWidget);
     });
 
-    testWidgets('el campo de número de documento acepta texto',
-        (tester) async {
+    testWidgets('el campo de número de documento acepta texto', (tester) async {
       await tester.pumpWidget(_buildSubject(patient: _makePatient()));
       await tester.pump();
 
@@ -311,10 +323,11 @@ void main() {
     });
   });
 
-    // ── Group 4: Interaction with dropdowns ─────────────────────────────────
+  // ── Group 4: Interaction with dropdowns ─────────────────────────────────
   group('EditGuardianScreen — dropdowns', () {
-    testWidgets('el dropdown de tipo de documento muestra las 3 opciones',
-        (tester) async {
+    testWidgets('el dropdown de tipo de documento muestra las 3 opciones', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildSubject(patient: _makePatient()));
       await tester.pump();
 
@@ -326,8 +339,9 @@ void main() {
       expect(find.text('Cédula Extranjería'), findsOneWidget);
     });
 
-    testWidgets('el dropdown de tipo de documento cambia a Pasaporte',
-        (tester) async {
+    testWidgets('el dropdown de tipo de documento cambia a Pasaporte', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildSubject(patient: _makePatient()));
       await tester.pump();
 
@@ -340,8 +354,9 @@ void main() {
       expect(find.text('Pasaporte'), findsOneWidget);
     });
 
-    testWidgets('el dropdown de país muestra las 2 opciones disponibles',
-        (tester) async {
+    testWidgets('el dropdown de país muestra las 2 opciones disponibles', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildSubject(patient: _makePatient()));
       await tester.pump();
 
@@ -398,9 +413,7 @@ void main() {
                 child: const Text('Open'),
               ),
             ),
-            navigatorObservers: [
-              _PopObserver(onPop: () => popped = true),
-            ],
+            navigatorObservers: [_PopObserver(onPop: () => popped = true)],
           ),
         ),
       );
@@ -443,9 +456,7 @@ void main() {
                 child: const Text('Open'),
               ),
             ),
-            navigatorObservers: [
-              _PopObserver(onPop: () => popped = true),
-            ],
+            navigatorObservers: [_PopObserver(onPop: () => popped = true)],
           ),
         ),
       );
@@ -459,8 +470,9 @@ void main() {
       expect(popped, isTrue);
     });
 
-    testWidgets('el botón de flecha en el header hace pop de la pantalla',
-        (tester) async {
+    testWidgets('el botón de flecha en el header hace pop de la pantalla', (
+      tester,
+    ) async {
       bool popped = false;
 
       await tester.pumpWidget(
@@ -484,9 +496,7 @@ void main() {
                 child: const Text('Open'),
               ),
             ),
-            navigatorObservers: [
-              _PopObserver(onPop: () => popped = true),
-            ],
+            navigatorObservers: [_PopObserver(onPop: () => popped = true)],
           ),
         ),
       );
@@ -505,28 +515,32 @@ void main() {
   group('EditGuardianScreen — localización', () {
     testWidgets('en locale ES muestra "Guardar"', (tester) async {
       await tester.pumpWidget(
-          _buildSubject(patient: _makePatient(), locale: 'es'));
+        _buildSubject(patient: _makePatient(), locale: 'es'),
+      );
       await tester.pump();
       expect(find.text('Guardar'), findsOneWidget);
     });
 
     testWidgets('en locale EN muestra "Save"', (tester) async {
-      await tester
-          .pumpWidget(_buildSubject(patient: _makePatient(), locale: 'en'));
+      await tester.pumpWidget(
+        _buildSubject(patient: _makePatient(), locale: 'en'),
+      );
       await tester.pump();
       expect(find.text('Save'), findsOneWidget);
     });
 
     testWidgets('en locale ES muestra "Atrás"', (tester) async {
       await tester.pumpWidget(
-          _buildSubject(patient: _makePatient(), locale: 'es'));
+        _buildSubject(patient: _makePatient(), locale: 'es'),
+      );
       await tester.pump();
       expect(find.text('Atrás'), findsOneWidget);
     });
 
     testWidgets('en locale EN muestra "Back"', (tester) async {
-      await tester
-          .pumpWidget(_buildSubject(patient: _makePatient(), locale: 'en'));
+      await tester.pumpWidget(
+        _buildSubject(patient: _makePatient(), locale: 'en'),
+      );
       await tester.pump();
       expect(find.text('Back'), findsOneWidget);
     });
