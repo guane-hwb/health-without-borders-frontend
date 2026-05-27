@@ -10,10 +10,11 @@ class AuthRepository {
   AuthRepository({
     required ApiClient apiClient,
     FlutterSecureStorage? secureStorage,
-  })  : _apiClient = apiClient,
-        _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  }) : _apiClient = apiClient,
+       _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const String _tokenKey = 'hwb_access_token';
+  static const String _nfcKeyKey = 'hwb_nfc_key';
 
   final ApiClient _apiClient;
   final FlutterSecureStorage _secureStorage;
@@ -45,6 +46,13 @@ class AuthRepository {
       await _secureStorage.write(key: _tokenKey, value: accessToken);
     } catch (_) {}
 
+    // Store global NFC master key for offline NFC operations
+    final nfcKey = tokenData['nfc_encryption_key']?.toString();
+    if (nfcKey != null && nfcKey.isNotEmpty) {
+      try {
+        await _secureStorage.write(key: _nfcKeyKey, value: nfcKey);
+      } catch (_) {}
+    }
     _session = await _fetchMe(accessToken);
     return _session!;
   }
@@ -69,14 +77,31 @@ class AuthRepository {
         return stored!;
       }
     } catch (_) {}
-    throw ApiException('Session expired. Please log in again.',
-        statusCode: 401);
+    throw ApiException(
+      'Session expired. Please log in again.',
+      statusCode: 401,
+    );
+  }
+
+  /// Returns the global NFC master key for encrypting/decrypting NFC payloads.
+  /// Returns null if not available (user not logged in yet).
+  Future<String?> getNfcEncryptionKey() async {
+    try {
+      return await _secureStorage.read(key: _nfcKeyKey);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> clearSession() async {
     _cachedToken = null;
     _session = null;
-    try { await _secureStorage.delete(key: _tokenKey); } catch (_) {}
+    try {
+      await _secureStorage.delete(key: _tokenKey);
+    } catch (_) {}
+    try {
+      await _secureStorage.delete(key: _nfcKeyKey);
+    } catch (_) {}
   }
 
   bool get hasToken => _cachedToken?.isNotEmpty == true;
@@ -103,8 +128,12 @@ class AuthRepository {
     try {
       final parts = token.split('.');
       if (parts.length != 3) return null;
-      final payload = utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+      final payload = utf8.decode(
+        base64Url.decode(base64Url.normalize(parts[1])),
+      );
       return (jsonDecode(payload) as Map<String, dynamic>)['sub']?.toString();
-    } catch (_) { return null; }
+    } catch (_) {
+      return null;
+    }
   }
 }
