@@ -60,12 +60,12 @@ class FakeAuthRepository implements AuthRepository {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper falso para AuthRepository sin necesitar mockito ni código generado.
+// Fake helper for AuthRepository without needing mockito or generated code.
 // ─────────────────────────────────────────────────────────────────────────────
 void main() {
   late FakeAuthRepository mockAuthRepo;
 
-  // ── Helper: envuelve LoginScreen con todos sus providers requeridos ─────────
+  // ── Helper: wraps LoginScreen with all its required providers ─────────
   Widget buildSubject({String locale = 'es'}) {
     final apiClient = ApiClient(baseUrl: 'https://example.com');
     final userRepository = UserRepository(
@@ -99,7 +99,7 @@ void main() {
     mockAuthRepo = FakeAuthRepository();
   });
 
-  // ── Grupo 1: Renderizado inicial ────────────────────────────────────────────
+  // ── Group 1: Initial Rendering ────────────────────────────────────────────
   group('Renderizado inicial', () {
     testWidgets('muestra el campo de email', (tester) async {
       await tester.pumpWidget(buildSubject());
@@ -124,18 +124,18 @@ void main() {
 
     testWidgets('muestra el enlace de olvide mi contrasena', (tester) async {
       await tester.pumpWidget(buildSubject());
-      // Busca el TextButton de "olvide contrasena" por su contenido
+      // Search for the "forgot password" TextButton by its content
       expect(find.byType(TextButton), findsOneWidget);
     });
 
     testWidgets('la contrasena se muestra oculta por defecto', (tester) async {
       await tester.pumpWidget(buildSubject());
-      // Antes de tocar el ícono, se debe mostrar el icono de visibilidad cerrada.
+      // Before tapping the icon, the closed visibility icon must be displayed.
       expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
     });
   });
 
-  // ── Grupo 2: Validaciones del formulario ────────────────────────────────────
+  // ── Group 2: Form Validations ────────────────────────────────────
   group('Validaciones del formulario', () {
     testWidgets('muestra error de email requerido al enviar vacio', (
       tester,
@@ -143,7 +143,7 @@ void main() {
       await tester.pumpWidget(buildSubject());
       await tester.tap(find.byType(ElevatedButton));
       await tester.pumpAndSettle();
-      // Los mensajes reales son "Ingresa tu correo..." y "Ingresa tu contraseña..."
+      // The actual messages are "Enter your email..." and "Enter your password..."
       expect(find.textContaining('Ingresa'), findsWidgets);
     });
 
@@ -153,7 +153,7 @@ void main() {
       await tester.pumpWidget(buildSubject());
       await tester.enterText(find.byType(TextFormField).first, 'noesvalido');
       await tester.pump();
-      // Mensaje real: "Correo electrónico no válido"
+      // Actual message: "Invalid email address"
       expect(find.textContaining('no v'), findsOneWidget);
     });
 
@@ -163,7 +163,7 @@ void main() {
       await tester.pumpWidget(buildSubject());
       await tester.enterText(find.byType(TextFormField).last, '123');
       await tester.pump();
-      // Mensaje real: "La contraseña debe tener al menos 6 caracteres"
+      // Actual message: "The password must be at least 6 characters long"
       expect(find.textContaining('al menos 6'), findsOneWidget);
     });
 
@@ -177,7 +177,7 @@ void main() {
       );
       await tester.enterText(find.byType(TextFormField).last, 'password123');
       await tester.pump();
-      // Usar los strings exactos de error para no confundir con el hintText
+      // Use the exact error strings to avoid confusion with the hintText
       expect(find.text('Ingresa tu correo electrónico'), findsNothing);
       expect(find.text('Ingresa tu contraseña'), findsNothing);
       expect(find.textContaining('no válido'), findsNothing);
@@ -185,13 +185,13 @@ void main() {
     });
   });
 
-  // ── Grupo 3: Toggle de visibilidad de contraseña ────────────────────────────
+  // ── Group 3: Password Visibility Toggle ────────────────────────────
   group('Toggle visibilidad de contrasena', () {
     testWidgets('al tocar el icono de ojo, la contrasena se muestra', (
       tester,
     ) async {
       await tester.pumpWidget(buildSubject());
-      // Antes de tocar, el icono debe ser el de visibilidad oculta
+      // Before tapping, the icon must be the closed visibility icon
       expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
 
       await tester.tap(find.byIcon(Icons.visibility_outlined));
@@ -214,7 +214,7 @@ void main() {
     });
   });
 
-  // ── Grupo 4: Flujo de login exitoso ─────────────────────────────────────────
+  // ── Group 4: Successful login flow ─────────────────────────────────────────
   group('Flujo login exitoso', () {
     testWidgets('navega a HomeScreen tras login exitoso', (tester) async {
       mockAuthRepo.loginHandler =
@@ -251,18 +251,18 @@ void main() {
       );
       await tester.enterText(find.byType(TextFormField).last, 'password123');
       await tester.tap(find.byType(ElevatedButton));
-      // Flush microtasks + un frame para que setState(_isLoading=true) se procese
+      // Flush microtasks + a frame for setState(_isLoading=true) to be processed
       await tester.pump();
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-      // Completar el Future para no dejar timers abiertos
+      // Complete the Future to avoid leaving any timers open.
       completer.complete(UserSession.fromEmail('usuario@test.com'));
       await tester.pumpAndSettle();
     });
   });
 
-  // ── Grupo 5: Flujo de login fallido ─────────────────────────────────────────
+  // ── Group 5: Failed login flow ─────────────────────────────────────────
   group('Flujo login fallido', () {
     testWidgets('muestra SnackBar con mensaje de ApiException', (tester) async {
       mockAuthRepo.loginHandler =
@@ -325,7 +325,7 @@ void main() {
     });
   });
 
-  // ── Grupo 6: Dialog "Olvide mi contrasena" ──────────────────────────────────
+  // ── Group 6: Dialog "I forgot my password" ──────────────────────────────────
   group('Dialog olvide contrasena', () {
     testWidgets('al tocar el enlace se muestra el AlertDialog', (tester) async {
       await tester.pumpWidget(buildSubject());
@@ -345,14 +345,12 @@ void main() {
     });
   });
 
-  // ── Grupo 7: Toggle de idioma ────────────────────────────────────────────────
+  // ── Group 7: Language Toggle ────────────────────────────────────────────────
   group('Toggle de idioma', () {
     testWidgets('al tocar EN el pill EN queda seleccionado', (tester) async {
       await tester.pumpWidget(buildSubject(locale: 'es'));
       await tester.tap(find.text('EN'));
       await tester.pumpAndSettle();
-      // La pill EN debe mostrarse con color primario (seleccionada)
-      // Verificamos que el locale cambio buscando texto en ingles
       expect(find.text('EN'), findsOneWidget);
     });
 
@@ -364,7 +362,7 @@ void main() {
     });
   });
 
-  // ── Grupo 8: Checkbox recordar sesion ───────────────────────────────────────
+  // ── Group 8: Remember Me Checkbox ───────────────────────────────────────
   group('Checkbox recordar sesion', () {
     testWidgets('inicia en true (marcado)', (tester) async {
       await tester.pumpWidget(buildSubject());

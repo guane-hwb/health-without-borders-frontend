@@ -4,15 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Estas pruebas validan la LÓGICA PURA del LoginScreen:
-//  • Validadores del formulario (email y contraseña)
-//  • Cambio de idioma (toggle ES ↔ EN)
-//  • Estado inicial de los controladores
-// No requieren render de widgets ni dependencias externas.
+// These tests validate the PURE LOGIC of the LoginScreen:
+//  • Form validators (email and password)
+//  • Language change (toggle ES ↔ EN)
+//  • Initial state of the controllers
+// They do not require widget rendering or external dependencies.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void main() {
-  // ── Helpers: replicamos los mismos validadores que usa _LabeledField ────────
+  // ── Helpers: We replicate the same validators used by _LabeledField ────────
 
   String? emailValidator(String? v, {String locale = 'es'}) {
     if (v == null || v.trim().isEmpty) {
@@ -32,14 +32,12 @@ void main() {
           : 'Password is required';
     }
     if (v.length < 6) {
-      return locale == 'es'
-          ? 'Minimo 6 caracteres'
-          : 'Minimum 6 characters';
+      return locale == 'es' ? 'Minimo 6 caracteres' : 'Minimum 6 characters';
     }
     return null;
   }
 
-  // ── Grupo 1: Validador de email ─────────────────────────────────────────────
+  // ── Group 1: Email validator ─────────────────────────────────────────────
   group('Email validator', () {
     test('retorna error cuando el campo esta vacio', () {
       expect(emailValidator(''), isNotNull);
@@ -73,7 +71,7 @@ void main() {
     });
   });
 
-  // ── Grupo 2: Validador de contraseña ────────────────────────────────────────
+  // ── Group 2: Password validator ────────────────────────────────────────
   group('Password validator', () {
     test('retorna error cuando el campo esta vacio', () {
       expect(passwordValidator(''), isNotNull);
@@ -102,7 +100,7 @@ void main() {
     });
   });
 
-  // ── Grupo 3: Lógica del toggle de idioma ────────────────────────────────────
+  // ── Group 3: Language toggle logic ────────────────────────────────────
   group('Language toggle logic', () {
     test('al empezar en es, el toggle produce en', () {
       String locale = 'es';
@@ -124,7 +122,7 @@ void main() {
     });
   });
 
-  // ── Grupo 4: TextEditingController — estado inicial ─────────────────────────
+  // ── Group 4: TextEditingController — initial state ─────────────────────────
   group('TextEditingController initial state', () {
     late TextEditingController emailCtrl;
     late TextEditingController passwordCtrl;
@@ -157,10 +155,9 @@ void main() {
     });
   });
 
-  // ── Grupo 5: Estado booleano interno ────────────────────────────────────────
+  // ── Group 5: Boolean state flags ────────────────────────────────────────
   group('Boolean state flags', () {
     test('_rememberSession inicia en true por defecto', () {
-      // Refleja el valor hardcodeado en _LoginScreenState
       const bool rememberSession = true;
       expect(rememberSession, isTrue);
     });
@@ -176,7 +173,7 @@ void main() {
     });
   });
 
-  // ── Grupo 6: Regex de email — casos borde ───────────────────────────────────
+  // ── Group 6: Email regex edge cases ────────────────────────────────────
   group('Email regex edge cases', () {
     final emailRegex = RegExp(r'^[\w\-.]+@[\w\-]+\.[a-zA-Z]{2,}$');
 
