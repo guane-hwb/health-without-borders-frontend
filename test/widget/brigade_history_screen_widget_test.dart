@@ -12,7 +12,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fake_async/fake_async.dart';
 
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/design/tokens/app_colors.dart';
@@ -24,18 +23,15 @@ import 'package:health_without_borders_frontend/src/shared/widgets/screen_bottom
 //  Helper — minimal tree
 // ─────────────────────────────────────────────────────────────────────────────
 Widget _wrap() => AppLocale(
-      locale: 'es',
-      setLocale: (_) {},
-      child: const MaterialApp(
-        home: BrigadeHistoryScreen(),
-      ),
-    );
+  locale: 'es',
+  setLocale: (_) {},
+  child: const MaterialApp(home: BrigadeHistoryScreen()),
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Tests
 // ─────────────────────────────────────────────────────────────────────────────
 void main() {
-
   // ── Group 1: Initial state (pending) ─────────────────────────────────────
   group('BrigadeHistoryScreen — estado inicial (pending)', () {
     testWidgets('muestra el banner offline amarillo', (tester) async {
@@ -47,8 +43,9 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
     });
 
-    testWidgets('el banner offline contiene texto de brigadeOffline',
-        (tester) async {
+    testWidgets('el banner offline contiene texto de brigadeOffline', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pump();
 
@@ -60,22 +57,25 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
     });
 
-    testWidgets('el header tiene color amarillo (0xFFD4A017) en estado pending',
-        (tester) async {
-      await tester.pumpWidget(_wrap());
-      await tester.pump();
+    testWidgets(
+      'el header tiene color amarillo (0xFFD4A017) en estado pending',
+      (tester) async {
+        await tester.pumpWidget(_wrap());
+        await tester.pump();
 
-      final containers = tester.widgetList<Container>(find.byType(Container));
-      final hasYellowHeader = containers.any((c) {
-        final d = c.decoration;
-        return d is BoxDecoration && d.color == const Color(0xFFD4A017);
-      });
-      expect(hasYellowHeader, isTrue);
-      await tester.pump(const Duration(seconds: 6));
-    });
+        final containers = tester.widgetList<Container>(find.byType(Container));
+        final hasYellowHeader = containers.any((c) {
+          final d = c.decoration;
+          return d is BoxDecoration && d.color == const Color(0xFFD4A017);
+        });
+        expect(hasYellowHeader, isTrue);
+        await tester.pump(const Duration(seconds: 6));
+      },
+    );
 
-    testWidgets('la lista está vacía — muestra ícono people_outline',
-        (tester) async {
+    testWidgets('la lista está vacía — muestra ícono people_outline', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pump();
 
@@ -83,8 +83,9 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
     });
 
-    testWidgets('muestra el header con ícono format_list_bulleted',
-        (tester) async {
+    testWidgets('muestra el header con ícono format_list_bulleted', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pump();
 
@@ -95,8 +96,9 @@ void main() {
 
   // ── Group 2: State synchronizing (after 2 seconds) ───────────────────────
   group('BrigadeHistoryScreen — estado synchronizing', () {
-    testWidgets('el banner offline desaparece después de 2 segundos',
-        (tester) async {
+    testWidgets('el banner offline desaparece después de 2 segundos', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pump();
 
@@ -113,8 +115,9 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
     });
 
-    testWidgets('el header cambia a AppColors.secondary tras 2 segundos',
-        (tester) async {
+    testWidgets('el header cambia a AppColors.secondary tras 2 segundos', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pump(const Duration(seconds: 2));
       await tester.pump();
@@ -132,8 +135,9 @@ void main() {
 
   // ── Group 3: Synchronized state (after 5 seconds) ───────────────────────
   group('BrigadeHistoryScreen — estado synchronized', () {
-    testWidgets('el header cambia a verde (0xFF2E7D32) tras 5 segundos',
-        (tester) async {
+    testWidgets('el header cambia a verde (0xFF2E7D32) tras 5 segundos', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       // 2 s → synchronizing, 3 s más → synchronized = 5 s total
       await tester.pump(const Duration(seconds: 5));
@@ -162,8 +166,9 @@ void main() {
 
   // ── Group 4: Empty list ──────────────────────────────────────────────────
   group('BrigadeHistoryScreen — lista vacía', () {
-    testWidgets('muestra ícono people_outline cuando no hay pacientes',
-        (tester) async {
+    testWidgets('muestra ícono people_outline cuando no hay pacientes', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pump();
 
@@ -171,7 +176,9 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
     });
 
-    testWidgets('NO muestra botones de eliminar en lista vacía', (tester) async {
+    testWidgets('NO muestra botones de eliminar en lista vacía', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pump();
 
@@ -193,17 +200,20 @@ void main() {
   // rendered if there are patients. These tests verify the logic of
   // icons through an accessible state without injecting data directly.
   group('_PatientRow — íconos según estado', () {
-    testWidgets('en pending — cloud_upload_outlined no está en pantalla (lista vacía)',
-        (tester) async {
-      await tester.pumpWidget(_wrap());
-      await tester.pump();
+    testWidgets(
+      'en pending — cloud_upload_outlined no está en pantalla (lista vacía)',
+      (tester) async {
+        await tester.pumpWidget(_wrap());
+        await tester.pump();
 
-      expect(find.byIcon(Icons.cloud_upload_outlined), findsNothing);
-      await tester.pump(const Duration(seconds: 6));
-    });
+        expect(find.byIcon(Icons.cloud_upload_outlined), findsNothing);
+        await tester.pump(const Duration(seconds: 6));
+      },
+    );
 
-    testWidgets('en synchronizing — sync no está en pantalla (lista vacía)',
-        (tester) async {
+    testWidgets('en synchronizing — sync no está en pantalla (lista vacía)', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pump(const Duration(seconds: 2));
       await tester.pump();
@@ -212,15 +222,17 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
     });
 
-    testWidgets('en synchronized — cloud_done no está en pantalla (lista vacía)',
-        (tester) async {
-      await tester.pumpWidget(_wrap());
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pump();
+    testWidgets(
+      'en synchronized — cloud_done no está en pantalla (lista vacía)',
+      (tester) async {
+        await tester.pumpWidget(_wrap());
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pump();
 
-      expect(find.byIcon(Icons.cloud_done), findsNothing);
-      await tester.pump(const Duration(seconds: 6));
-    });
+        expect(find.byIcon(Icons.cloud_done), findsNothing);
+        await tester.pump(const Duration(seconds: 6));
+      },
+    );
   });
 
   // ── Group 6: General screen structure ────────────────────────────
@@ -233,8 +245,9 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
     });
 
-    testWidgets('contiene un Scaffold con fondo Color(0xFFEBF2F8)',
-        (tester) async {
+    testWidgets('contiene un Scaffold con fondo Color(0xFFEBF2F8)', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pump();
 
@@ -259,8 +272,9 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
     });
 
-    testWidgets('la card principal tiene borderRadius circular 16',
-        (tester) async {
+    testWidgets('la card principal tiene borderRadius circular 16', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pump();
 
@@ -278,28 +292,31 @@ void main() {
 
   // ── Group 7: fake_async — precise time control ─────────────────────
   group('BrigadeHistoryScreen — transiciones con fake_async', () {
-    testWidgets('la transición pending→synchronizing ocurre exactamente a los 2 s',
-        (tester) async {
-      await tester.pumpWidget(_wrap());
-      await tester.pump();
+    testWidgets(
+      'la transición pending→synchronizing ocurre exactamente a los 2 s',
+      (tester) async {
+        await tester.pumpWidget(_wrap());
+        await tester.pump();
 
-      // Banner visible in pending
-      expect(find.byIcon(Icons.warning), findsOneWidget);
+        // Banner visible in pending
+        expect(find.byIcon(Icons.warning), findsOneWidget);
 
-      // Just before the 2-second mark, the banner is still visible
-      await tester.pump(const Duration(milliseconds: 1999));
-      expect(find.byIcon(Icons.warning), findsOneWidget);
+        // Just before the 2-second mark, the banner is still visible
+        await tester.pump(const Duration(milliseconds: 1999));
+        expect(find.byIcon(Icons.warning), findsOneWidget);
 
-      // The banner disappears at exactly 2 seconds.
-      await tester.pump(const Duration(milliseconds: 1));
-      await tester.pump(); // rebuild
-      expect(find.byIcon(Icons.warning), findsNothing);
-      // Drain Future.delayed from _simulateSync (2 s + 3 s).
-      await tester.pump(const Duration(seconds: 6));
-    });
+        // The banner disappears at exactly 2 seconds.
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.pump(); // rebuild
+        expect(find.byIcon(Icons.warning), findsNothing);
+        // Drain Future.delayed from _simulateSync (2 s + 3 s).
+        await tester.pump(const Duration(seconds: 6));
+      },
+    );
 
-    testWidgets('la transición synchronizing→synchronized ocurre a los 5 s',
-        (tester) async {
+    testWidgets('la transición synchronizing→synchronized ocurre a los 5 s', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pump(const Duration(seconds: 2));
       await tester.pump();
@@ -316,7 +333,9 @@ void main() {
       // When it reaches 5 seconds, the header changes to green.
       await tester.pump(const Duration(milliseconds: 1));
       await tester.pump();
-      final containersAfter = tester.widgetList<Container>(find.byType(Container));
+      final containersAfter = tester.widgetList<Container>(
+        find.byType(Container),
+      );
       final isGreen = containersAfter.any((c) {
         final d = c.decoration;
         return d is BoxDecoration && d.color == const Color(0xFF2E7D32);

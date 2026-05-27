@@ -141,29 +141,29 @@ void main() {
 
     test('_currentIllnessCtrl usa el último historial médico', () {
       final eval = patient.medicalHistory.last.clinicalEvaluation;
-      expect(eval?.historyOfCurrentIllness, 'Dolor abdominal 3 días');
+      expect(eval.historyOfCurrentIllness, 'Dolor abdominal 3 días');
     });
 
     test('_generalExamCtrl se pre-puebla con generalPhysicalExamination', () {
       final eval = patient.medicalHistory.last.clinicalEvaluation;
-      expect(eval?.generalPhysicalExamination, 'Abdomen blando');
+      expect(eval.generalPhysicalExamination, 'Abdomen blando');
     });
 
     test('_systemsExamCtrl se pre-puebla con systemsExamination', () {
       final eval = patient.medicalHistory.last.clinicalEvaluation;
-      expect(eval?.systemsExamination, 'Sin alteraciones');
+      expect(eval.systemsExamination, 'Sin alteraciones');
     });
 
     test('_treatmentPlanCtrl se pre-puebla con treatmentPlanObservations', () {
       final eval = patient.medicalHistory.last.clinicalEvaluation;
-      expect(eval?.treatmentPlanObservations, 'Reposo y dieta blanda');
+      expect(eval.treatmentPlanObservations, 'Reposo y dieta blanda');
     });
 
     test(
       '_familyHistoryItems se inicializa con copia de la lista original',
       () {
         final items = List<FamilyHistoryItem>.from(
-          patient.backgroundHistory!.familyHistory!,
+          patient.backgroundHistory!.familyHistory,
         );
         expect(items.length, 2);
         expect(items.first.conditionDescription, 'Diabetes tipo 2');
@@ -173,7 +173,7 @@ void main() {
     test(
       '_familyHistoryItems es una COPIA (mutarla no afecta al original)',
       () {
-        final original = patient.backgroundHistory!.familyHistory!;
+        final original = patient.backgroundHistory!.familyHistory;
         final copy = List<FamilyHistoryItem>.from(original);
         copy.removeAt(0);
         expect(original.length, 2); // original intacto
@@ -219,7 +219,7 @@ void main() {
 
     setUp(() {
       items = List<FamilyHistoryItem>.from(
-        fullPatient().backgroundHistory!.familyHistory!,
+        fullPatient().backgroundHistory!.familyHistory,
       );
     });
 

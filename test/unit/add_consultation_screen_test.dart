@@ -21,11 +21,17 @@ import 'package:health_without_borders_frontend/src/features/nfc/presentation/ad
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
 class _MockAuthRepository extends Mock implements AuthRepository {}
+
 class _MockUserRepository extends Mock implements UserRepository {}
+
 class _MockPatientRepository extends Mock implements PatientRepository {}
+
 class _MockLocalDatabase extends Mock implements LocalDatabase {}
+
 class _MockSyncEngine extends Mock implements SyncEngine {}
+
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
+
 class _FakeMedicalHistoryItem extends Fake implements MedicalHistoryItem {}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -36,35 +42,31 @@ PatientFullRecord _fakePatient({
   double? weight,
   double? height,
   List<AllergyInfo> allergies = const [],
-}) =>
-    PatientFullRecord(
-      patientId: 'P-001',
-      deviceUid: 'UID-001',
-      patientInfo: PatientInfo(
-        identification: PatientIdentification(
-          documentType: 'CC',
-          documentNumber: '987654321',
-        ),
-        firstName: firstName,
-        firstLastName: lastName,
-        dob: '2005-08-15',
-        biologicalSex: 'F',
-        address: Address(city: 'Medellín', state: 'Antioquia'),
-        weight: weight,
-        height: height,
-      ),
-      guardianInfo: GuardianInfo(name: '', relationship: '', phone: ''),
-      backgroundHistory: null,
-      allergies: allergies,
-      medicalHistory: [],
-      vaccinationRecord: [],
-    );
+}) => PatientFullRecord(
+  patientId: 'P-001',
+  deviceUid: 'UID-001',
+  patientInfo: PatientInfo(
+    identification: PatientIdentification(
+      documentType: 'CC',
+      documentNumber: '987654321',
+    ),
+    firstName: firstName,
+    firstLastName: lastName,
+    dob: '2005-08-15',
+    biologicalSex: 'F',
+    address: Address(city: 'Medellín', state: 'Antioquia'),
+    weight: weight,
+    height: height,
+  ),
+  guardianInfo: GuardianInfo(name: '', relationship: '', phone: ''),
+  backgroundHistory: null,
+  allergies: allergies,
+  medicalHistory: [],
+  vaccinationRecord: [],
+);
 
-AllergyInfo _allergyMed() => AllergyInfo(
-      category: '01',
-      allergen: 'Penicilina',
-      reaction: 'Urticaria',
-    );
+AllergyInfo _allergyMed() =>
+    AllergyInfo(category: '01', allergen: 'Penicilina', reaction: 'Urticaria');
 
 // ── AppScope factory ──────────────────────────────────────────────────────────
 
@@ -73,24 +75,24 @@ AppScope _defaultScope({
   _MockSyncEngine? sync,
   _MockPatientRepository? repo,
 }) {
-  final auth         = _MockAuthRepository();
-  final user         = _MockUserRepository();
-  final resolvedRepo = repo  ?? _MockPatientRepository();
-  final resolvedDb   = db   ?? _MockLocalDatabase();
+  final auth = _MockAuthRepository();
+  final user = _MockUserRepository();
+  final resolvedRepo = repo ?? _MockPatientRepository();
+  final resolvedDb = db ?? _MockLocalDatabase();
   final resolvedSync = sync ?? _MockSyncEngine();
   when(() => resolvedSync.syncAll()).thenAnswer((_) async {});
   return AppScope(
-    authRepository:    auth,
-    userRepository:    user,
+    authRepository: auth,
+    userRepository: user,
     patientRepository: resolvedRepo,
-    localDatabase:     resolvedDb,
-    syncEngine:        resolvedSync,
+    localDatabase: resolvedDb,
+    syncEngine: resolvedSync,
     child: const SizedBox.shrink(),
   );
 }
 
 AppScope _scopeWithSave() {
-  final db   = _MockLocalDatabase();
+  final db = _MockLocalDatabase();
   final sync = _MockSyncEngine();
   when(() => db.savePatient(any())).thenAnswer((_) async {});
   when(() => sync.syncAll()).thenAnswer((_) async {});
@@ -106,11 +108,11 @@ Widget _buildApp({
 }) {
   final s = scope ?? _defaultScope();
   return AppScope(
-    authRepository:    s.authRepository,
-    userRepository:    s.userRepository,
+    authRepository: s.authRepository,
+    userRepository: s.userRepository,
     patientRepository: s.patientRepository,
-    localDatabase:     s.localDatabase,
-    syncEngine:        s.syncEngine,
+    localDatabase: s.localDatabase,
+    syncEngine: s.syncEngine,
     child: AppLocale(
       locale: 'es',
       setLocale: (_) {},
@@ -127,13 +129,13 @@ Widget _buildApp({
 // ── Finders ───────────────────────────────────────────────────────────────────
 
 Finder _fieldWithHint(String hint) => find.byWidgetPredicate(
-      (w) => w is TextField && w.decoration?.hintText == hint,
-      description: 'TextField hint="$hint"',
-    );
+  (w) => w is TextField && w.decoration?.hintText == hint,
+  description: 'TextField hint="$hint"',
+);
 
-const _hintHistory   = 'Fiebre de 3 días de evolución, tos seca, rinorrea...';
-const _hintPhysical  = 'T: 38.2°C, FC: 110, FR: 28. Faringe eritematosa...';
-const _hintSystems   = 'Pulmones: murmullo vesicular conservado sin agregados...';
+const _hintHistory = 'Fiebre de 3 días de evolución, tos seca, rinorrea...';
+const _hintPhysical = 'T: 38.2°C, FC: 110, FR: 28. Faringe eritematosa...';
+const _hintSystems = 'Pulmones: murmullo vesicular conservado sin agregados...';
 const _hintTreatment = 'Acetaminofén 15mg/kg cada 6h. Control en 72h...';
 
 // ROOT-CAUSE FIX:
@@ -228,40 +230,55 @@ void main() {
       required String name,
       String docType = 'CC',
       String doc = '',
-    }) =>
-        name.isNotEmpty
-            ? PractitionerInfo(
-                documentType:   docType,
-                documentNumber: doc.isEmpty ? '0' : doc,
-                name:           name,
-              )
-            : null;
+    }) => name.isNotEmpty
+        ? PractitionerInfo(
+            documentType: docType,
+            documentNumber: doc.isEmpty ? '0' : doc,
+            name: name,
+          )
+        : null;
 
-    test('es null cuando el nombre está vacío',
-        () => expect(build(name: ''), isNull));
-    test('es no-null cuando el nombre tiene texto',
-        () => expect(build(name: 'Dr. García'), isNotNull));
-    test('documentNumber usa "0" cuando doc está vacío',
-        () => expect(build(name: 'X')!.documentNumber, '0'));
-    test('documentNumber usa el valor cuando se provee',
-        () => expect(build(name: 'X', doc: '123')!.documentNumber, '123'));
+    test(
+      'es null cuando el nombre está vacío',
+      () => expect(build(name: ''), isNull),
+    );
+    test(
+      'es no-null cuando el nombre tiene texto',
+      () => expect(build(name: 'Dr. García'), isNotNull),
+    );
+    test(
+      'documentNumber usa "0" cuando doc está vacío',
+      () => expect(build(name: 'X')!.documentNumber, '0'),
+    );
+    test(
+      'documentNumber usa el valor cuando se provee',
+      () => expect(build(name: 'X', doc: '123')!.documentNumber, '123'),
+    );
   });
 
   // ── ProviderInfo ───────────────────────────────────────────────────────────
   group('ProviderInfo (unit)', () {
     ProviderInfo? build({required String name, String reps = ''}) =>
         name.isNotEmpty
-            ? ProviderInfo(repsCode: reps.isEmpty ? '0' : reps, name: name)
-            : null;
+        ? ProviderInfo(repsCode: reps.isEmpty ? '0' : reps, name: name)
+        : null;
 
-    test('es null cuando el nombre está vacío',
-        () => expect(build(name: ''), isNull));
-    test('es no-null cuando el nombre tiene texto',
-        () => expect(build(name: 'Hospital'), isNotNull));
-    test('repsCode usa "0" cuando se omite',
-        () => expect(build(name: 'H')!.repsCode, '0'));
-    test('repsCode usa el valor cuando se provee',
-        () => expect(build(name: 'H', reps: 'ABC')!.repsCode, 'ABC'));
+    test(
+      'es null cuando el nombre está vacío',
+      () => expect(build(name: ''), isNull),
+    );
+    test(
+      'es no-null cuando el nombre tiene texto',
+      () => expect(build(name: 'Hospital'), isNotNull),
+    );
+    test(
+      'repsCode usa "0" cuando se omite',
+      () => expect(build(name: 'H')!.repsCode, '0'),
+    );
+    test(
+      'repsCode usa el valor cuando se provee',
+      () => expect(build(name: 'H', reps: 'ABC')!.repsCode, 'ABC'),
+    );
   });
 
   // ── PayerInfo ──────────────────────────────────────────────────────────────
@@ -269,20 +286,27 @@ void main() {
     PayerInfo? build(String name) =>
         name.isNotEmpty ? PayerInfo(name: name) : null;
 
-    test('es null cuando el nombre está vacío',
-        () => expect(build(''), isNull));
-    test('es no-null con "No asegurado" (valor por defecto)',
-        () => expect(build('No asegurado'), isNotNull));
+    test(
+      'es null cuando el nombre está vacío',
+      () => expect(build(''), isNull),
+    );
+    test(
+      'es no-null con "No asegurado" (valor por defecto)',
+      () => expect(build('No asegurado'), isNotNull),
+    );
   });
 
   // ── dischargeDisposition ───────────────────────────────────────────────────
   group('dischargeDisposition (unit)', () {
     String? resolve(String? v) => (v?.isEmpty ?? true) ? null : v;
 
-    test('es null para cadena vacía ""',                () => expect(resolve(''), isNull));
-    test('es null cuando el valor es null',              () => expect(resolve(null), isNull));
-    test('es "01" para Alta voluntaria',                 () => expect(resolve('01'), '01'));
-    test('es "04" para Alta médica',                     () => expect(resolve('04'), '04'));
+    test('es null para cadena vacía ""', () => expect(resolve(''), isNull));
+    test(
+      'es null cuando el valor es null',
+      () => expect(resolve(null), isNull),
+    );
+    test('es "01" para Alta voluntaria', () => expect(resolve('01'), '01'));
+    test('es "04" para Alta médica', () => expect(resolve('04'), '04'));
   });
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -309,8 +333,9 @@ void main() {
       expect(find.textContaining('Error'), findsNothing);
     });
 
-    testWidgets('tap en "Buscar paciente" abre diálogo con campo UID',
-        (tester) async {
+    testWidgets('tap en "Buscar paciente" abre diálogo con campo UID', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildApp());
       await tester.tap(find.text('Buscar paciente'));
       await tester.pumpAndSettle();
@@ -333,11 +358,13 @@ void main() {
       expect(find.text('NFC no disponible.'), findsNothing);
     });
 
-    testWidgets('tap en ícono NFC muestra CircularProgressIndicator',
-        (tester) async {
+    testWidgets('tap en ícono NFC muestra CircularProgressIndicator', (
+      tester,
+    ) async {
       final repo = _MockPatientRepository();
-      when(() => repo.scanDevice(any()))
-          .thenAnswer((_) => Completer<PatientFullRecord>().future);
+      when(
+        () => repo.scanDevice(any()),
+      ).thenAnswer((_) => Completer<PatientFullRecord>().future);
 
       NfcService.overrideReadDeviceUid = () async => 'UID-FAKE';
 
@@ -352,9 +379,11 @@ void main() {
       NfcService.overrideReadDeviceUid = null;
     });
 
-    testWidgets('NfcNotAvailableException muestra texto de error', (tester) async {
-      NfcService.overrideReadDeviceUid =
-          () async => throw NfcNotAvailableException();
+    testWidgets('NfcNotAvailableException muestra texto de error', (
+      tester,
+    ) async {
+      NfcService.overrideReadDeviceUid = () async =>
+          throw NfcNotAvailableException();
 
       await tester.pumpWidget(_buildApp());
       await tester.tap(find.byIcon(Icons.nfc_rounded));
@@ -388,16 +417,18 @@ void main() {
       expect(find.text('Evaluación clínica'), findsOneWidget);
       expect(find.text('Diagnóstico y egreso'), findsOneWidget);
     });
-    testWidgets('botón "Guardar consulta" deshabilitado con form vacío',
-        (tester) async {
+    testWidgets('botón "Guardar consulta" deshabilitado con form vacío', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
       expect(_isGuardarEnabled(tester), isFalse);
     });
 
-    testWidgets('botón habilitado al escribir en "Enfermedad actual"',
-        (tester) async {
+    testWidgets('botón habilitado al escribir en "Enfermedad actual"', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
@@ -414,8 +445,9 @@ void main() {
       expect(_isGuardarEnabled(tester), isTrue);
     });
 
-    testWidgets('pre-carga peso y talla cuando el paciente los tiene',
-        (tester) async {
+    testWidgets('pre-carga peso y talla cuando el paciente los tiene', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _buildApp(patient: _fakePatient(weight: 58.5, height: 162.0)),
       );
@@ -426,14 +458,21 @@ void main() {
           .map((tf) => tf.controller?.text ?? '')
           .toList();
 
-      expect(values.any((v) => v == '58.5'), isTrue,
-          reason: 'Peso pre-cargado como 58.5');
-      expect(values.any((v) => v == '162.0'), isTrue,
-          reason: 'Talla pre-cargada como 162.0');
+      expect(
+        values.any((v) => v == '58.5'),
+        isTrue,
+        reason: 'Peso pre-cargado como 58.5',
+      );
+      expect(
+        values.any((v) => v == '162.0'),
+        isTrue,
+        reason: 'Talla pre-cargada como 162.0',
+      );
     });
 
-    testWidgets('dropdowns de modalidad, grupo y entorno presentes',
-        (tester) async {
+    testWidgets('dropdowns de modalidad, grupo y entorno presentes', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
@@ -453,16 +492,18 @@ void main() {
       expect(values.any((v) => v == 'No asegurado'), isTrue);
     });
 
-    testWidgets('sin alergias no aparece advertencia de alergia en el form',
-        (tester) async {
+    testWidgets('sin alergias no aparece advertencia de alergia en el form', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('alergia'), findsNothing);
     });
 
-    testWidgets('con alergias muestra contador en badge del paciente',
-        (tester) async {
+    testWidgets('con alergias muestra contador en badge del paciente', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _buildApp(patient: _fakePatient(allergies: [_allergyMed()])),
       );
@@ -471,8 +512,9 @@ void main() {
       expect(find.textContaining('1 alergia(s)'), findsOneWidget);
     });
 
-    testWidgets('campos de evaluación clínica tienen los hints correctos',
-        (tester) async {
+    testWidgets('campos de evaluación clínica tienen los hints correctos', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
@@ -482,24 +524,26 @@ void main() {
       expect(_fieldWithHint(_hintTreatment), findsOneWidget);
     });
 
-    testWidgets('botón vuelve a deshabilitarse si se borra el campo obligatorio',
-        (tester) async {
-      await tester.pumpWidget(_buildApp(patient: _fakePatient()));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'botón vuelve a deshabilitarse si se borra el campo obligatorio',
+      (tester) async {
+        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+        await tester.pumpAndSettle();
 
-      final historyField = _fieldWithHint(_hintHistory);
-      await tester.ensureVisible(historyField);
-      await tester.pump();
-      await tester.enterText(historyField, 'Fiebre');
-      await tester.pump();
-      await tester.enterText(historyField, '');
-      await tester.pump();
+        final historyField = _fieldWithHint(_hintHistory);
+        await tester.ensureVisible(historyField);
+        await tester.pump();
+        await tester.enterText(historyField, 'Fiebre');
+        await tester.pump();
+        await tester.enterText(historyField, '');
+        await tester.pump();
 
-      await tester.ensureVisible(_guardarButtonFinder());
-      await tester.pump();
+        await tester.ensureVisible(_guardarButtonFinder());
+        await tester.pump();
 
-      expect(_isGuardarEnabled(tester), isFalse);
-    });
+        expect(_isGuardarEnabled(tester), isFalse);
+      },
+    );
   });
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -509,7 +553,8 @@ void main() {
   group('Success step', () {
     testWidgets('muestra ícono check tras guardar', (tester) async {
       await tester.pumpWidget(
-          _buildApp(patient: _fakePatient(), scope: _scopeWithSave()));
+        _buildApp(patient: _fakePatient(), scope: _scopeWithSave()),
+      );
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
@@ -519,7 +564,8 @@ void main() {
 
     testWidgets('muestra "Consulta guardada exitosamente"', (tester) async {
       await tester.pumpWidget(
-          _buildApp(patient: _fakePatient(), scope: _scopeWithSave()));
+        _buildApp(patient: _fakePatient(), scope: _scopeWithSave()),
+      );
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
@@ -527,9 +573,12 @@ void main() {
       expect(find.text('Consulta guardada exitosamente'), findsWidgets);
     });
 
-    testWidgets('muestra nombre del paciente en el paso de éxito', (tester) async {
+    testWidgets('muestra nombre del paciente en el paso de éxito', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-          _buildApp(patient: _fakePatient(), scope: _scopeWithSave()));
+        _buildApp(patient: _fakePatient(), scope: _scopeWithSave()),
+      );
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
@@ -539,7 +588,8 @@ void main() {
 
     testWidgets('muestra fila "Guardado local: Exitoso"', (tester) async {
       await tester.pumpWidget(
-          _buildApp(patient: _fakePatient(), scope: _scopeWithSave()));
+        _buildApp(patient: _fakePatient(), scope: _scopeWithSave()),
+      );
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
@@ -550,7 +600,8 @@ void main() {
 
     testWidgets('muestra fila de sincronización', (tester) async {
       await tester.pumpWidget(
-          _buildApp(patient: _fakePatient(), scope: _scopeWithSave()));
+        _buildApp(patient: _fakePatient(), scope: _scopeWithSave()),
+      );
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
@@ -561,7 +612,8 @@ void main() {
 
     testWidgets('muestra SnackBar de éxito', (tester) async {
       await tester.pumpWidget(
-          _buildApp(patient: _fakePatient(), scope: _scopeWithSave()));
+        _buildApp(patient: _fakePatient(), scope: _scopeWithSave()),
+      );
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
@@ -574,7 +626,8 @@ void main() {
 
     testWidgets('sin alergia cat. 01 → no aparece advertencia', (tester) async {
       await tester.pumpWidget(
-          _buildApp(patient: _fakePatient(), scope: _scopeWithSave()));
+        _buildApp(patient: _fakePatient(), scope: _scopeWithSave()),
+      );
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
@@ -582,8 +635,9 @@ void main() {
       expect(find.textContaining('alertas de alergia'), findsNothing);
     });
 
-    testWidgets('con alergia cat. 01 → aparece advertencia de alergia',
-        (tester) async {
+    testWidgets('con alergia cat. 01 → aparece advertencia de alergia', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _buildApp(
           patient: _fakePatient(allergies: [_allergyMed()]),
@@ -597,9 +651,10 @@ void main() {
       expect(find.textContaining('alertas de alergia'), findsOneWidget);
     });
 
-    testWidgets('error al guardar muestra SnackBar con "Error al guardar:"',
-        (tester) async {
-      final db   = _MockLocalDatabase();
+    testWidgets('error al guardar muestra SnackBar con "Error al guardar:"', (
+      tester,
+    ) async {
+      final db = _MockLocalDatabase();
       final sync = _MockSyncEngine();
       when(() => db.savePatient(any())).thenThrow(Exception('sin espacio'));
       when(() => sync.syncAll()).thenAnswer((_) async {});
@@ -630,11 +685,11 @@ void main() {
 
       await tester.pumpWidget(
         AppScope(
-          authRepository:    scope.authRepository,
-          userRepository:    scope.userRepository,
+          authRepository: scope.authRepository,
+          userRepository: scope.userRepository,
           patientRepository: scope.patientRepository,
-          localDatabase:     scope.localDatabase,
-          syncEngine:        scope.syncEngine,
+          localDatabase: scope.localDatabase,
+          syncEngine: scope.syncEngine,
           child: AppLocale(
             locale: 'es',
             setLocale: (_) {},
@@ -642,26 +697,26 @@ void main() {
               home: Builder(
                 builder: (ctx) => TextButton(
                   onPressed: () async {
-                    final result =
-                        await Navigator.of(ctx).push<MedicalHistoryItem>(
-                      MaterialPageRoute(
-                        builder: (_) => AppScope(
-                          authRepository:    scope.authRepository,
-                          userRepository:    scope.userRepository,
-                          patientRepository: scope.patientRepository,
-                          localDatabase:     scope.localDatabase,
-                          syncEngine:        scope.syncEngine,
-                          child: AppLocale(
-                            locale: 'es',
-                            setLocale: (_) {},
-                            child: AddConsultationScreen(
-                              patient: _fakePatient(),
-                              returnToProfile: true,
+                    final result = await Navigator.of(ctx)
+                        .push<MedicalHistoryItem>(
+                          MaterialPageRoute(
+                            builder: (_) => AppScope(
+                              authRepository: scope.authRepository,
+                              userRepository: scope.userRepository,
+                              patientRepository: scope.patientRepository,
+                              localDatabase: scope.localDatabase,
+                              syncEngine: scope.syncEngine,
+                              child: AppLocale(
+                                locale: 'es',
+                                setLocale: (_) {},
+                                child: AddConsultationScreen(
+                                  patient: _fakePatient(),
+                                  returnToProfile: true,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    );
+                        );
                     popped = result;
                   },
                   child: const Text('Open'),
@@ -687,7 +742,7 @@ void main() {
       expect(popped, isNotNull);
       expect(popped!.type, 'Consultation');
       expect(
-        popped!.clinicalEvaluation?.historyOfCurrentIllness,
+        popped!.clinicalEvaluation.historyOfCurrentIllness,
         'Consulta de seguimiento',
       );
     });

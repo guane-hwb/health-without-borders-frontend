@@ -23,37 +23,37 @@ GuardianInfo _guardian({
   String phone = '3001234567',
   String relationship = '01',
   String? deviceUid,
-}) =>
-    GuardianInfo(
-      name: name,
-      phone: phone,
-      relationship: relationship,
-      deviceUid: deviceUid,
-    );
+}) => GuardianInfo(
+  name: name,
+  phone: phone,
+  relationship: relationship,
+  deviceUid: deviceUid,
+);
 
 PatientFullRecord _patientWith(GuardianInfo guardian) => PatientFullRecord(
-      patientId: 'p-001',
-      deviceUid: 'd-001',
-      patientInfo: PatientInfo(
-        identification: PatientIdentification(
-          documentType: 'CC',
-          documentNumber: '123456',
-        ),
-        firstLastName: 'Pérez',
-        firstName: 'Juan',
-        dob: '2000-01-01',
-        biologicalSex: 'M',
-        address: Address(city: 'Bogotá', state: 'Cundinamarca'),
-      ),
-      guardianInfo: guardian,
-    );
+  patientId: 'p-001',
+  deviceUid: 'd-001',
+  patientInfo: PatientInfo(
+    identification: PatientIdentification(
+      documentType: 'CC',
+      documentNumber: '123456',
+    ),
+    firstLastName: 'Pérez',
+    firstName: 'Juan',
+    dob: '2000-01-01',
+    biologicalSex: 'M',
+    address: Address(city: 'Bogotá', state: 'Cundinamarca'),
+  ),
+  guardianInfo: guardian,
+);
+
 /// Simulates initState: creates the controllers from a GuardianInfo.
 Map<String, TextEditingController> _initControllers(GuardianInfo g) => {
-      'name': TextEditingController(text: g.name),
-      'docNumber': TextEditingController(),
-      'address': TextEditingController(),
-      'contact': TextEditingController(text: g.phone),
-    };
+  'name': TextEditingController(text: g.name),
+  'docNumber': TextEditingController(),
+  'address': TextEditingController(),
+  'contact': TextEditingController(text: g.phone),
+};
 
 void _disposeControllers(Map<String, TextEditingController> ctrls) {
   for (final c in ctrls.values) {
@@ -69,15 +69,12 @@ const Map<String, String> kDocTypes = {
 };
 
 /// Available countries — exact copy of the widget.
-const Map<String, String> kCountries = {
-  'COL': 'Colombia',
-  'VEN': 'Venezuela',
-};
+const Map<String, String> kCountries = {'COL': 'Colombia', 'VEN': 'Venezuela'};
 
 /// Simulates the toggle logic of _docType.
 String toggleDocType(String current, String next) => next;
 
-  /// Simula la lógica de toggle de _country.
+/// Simula la lógica de toggle de _country.
 String toggleCountry(String current, String next) => next;
 
 /// Phone validator: digits only, 7–15 characters.
@@ -236,12 +233,13 @@ void main() {
       expect(kDocTypes.containsKey(docType), isTrue);
     });
 
-    test('null callback no cambia el estado (guard)', () {
-      // The widget uses: if (v != null) setState(() => _docType = v)
+    test('callback cambia el estado correctamente', () {
       String docType = 'CC';
-      String? newVal;
-      if (newVal != null) docType = newVal;
-      expect(docType, 'CC');
+      String newVal = 'TI';
+
+      docType = newVal;
+
+      expect(docType, 'TI');
     });
   });
 
@@ -265,11 +263,12 @@ void main() {
       expect(kCountries.containsKey(country), isTrue);
     });
 
-    test('null callback no cambia el estado (guard)', () {
+    test('callback cambia el país correctamente', () {
       String country = 'COL';
-      String? newVal;
-      if (newVal != null) country = newVal;
-      expect(country, 'COL');
+      String newVal = 'USA';
+
+      country = newVal;
+      expect(country, 'USA');
     });
   });
 

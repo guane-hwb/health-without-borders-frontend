@@ -320,8 +320,6 @@ void main() {
 
   group('Navegación', () {
     testWidgets('botón regresar hace pop', (tester) async {
-      bool didPop = false;
-
       await tester.pumpWidget(
         MaterialApp(
           builder: (context, child) {
@@ -337,8 +335,6 @@ void main() {
                           EditMedicalHistoryScreen(patient: emptyPatient()),
                     ),
                   );
-
-                  didPop = true;
                 },
                 child: const Text('Abrir'),
               );
@@ -365,7 +361,6 @@ void main() {
 
       expect(tester.takeException(), isNull);
     });
-
     testWidgets('botón guardar existe', (tester) async {
       await tester.pumpWidget(buildSubject(emptyPatient()));
 
