@@ -1,16 +1,13 @@
 // test/widget/features/home/home_screen_widget_test.dart
 //
-// Pruebas de widget para HomeScreen.
-// Cubre lo que SÍ requiere el árbol de widgets de Flutter:
-//   • Renderizado del header (saludo, nombre, badge de rol)
-//   • Cards visibles según rol (superadmin / orgAdmin / clínico)
-//   • Navegación al tocar cada ActionCard
-//   • Diálogo de confirmación de logout
-//   • _SyncCard muestra el badge de pendientes cuando hay > 0
-//   • Redirección a LoginScreen cuando no hay usuario
-//
-// Ejecutar:
-//   flutter test test/widget/features/home/home_screen_widget_test.dart
+// Widget testing for HomeScreen.
+// It covers what the Flutter widget tree DOES require:
+//   • Rendering of the header (greeting, name, role badge)
+//    • Cards visible according to role (superadmin / orgAdmin / clinician)
+//    • Navigation when tapping each ActionCard
+//    • Logout confirmation dialog
+//    • _SyncCard displays the pending badge when there are > 0
+//    • Redirection to LoginScreen when no user is present
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,11 +27,14 @@ import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Helpers de prueba
+//  Helpers test
 // ─────────────────────────────────────────────────────────────────────────────
 
 class FakeAuthRepository implements AuthRepository {
   FakeAuthRepository({this.currentUser});
+
+  @override
+  Future<String?> getNfcEncryptionKey() async => null;
 
   @override
   UserSession? currentUser;
@@ -44,7 +44,10 @@ class FakeAuthRepository implements AuthRepository {
   String? lastPassword;
 
   @override
-  Future<UserSession> login({required String email, required String password}) async {
+  Future<UserSession> login({
+    required String email,
+    required String password,
+  }) async {
     lastEmail = email;
     lastPassword = password;
     return currentUser ?? UserSession.fromEmail(email);
@@ -54,7 +57,8 @@ class FakeAuthRepository implements AuthRepository {
   Future<UserSession?> getCurrentUser() async => currentUser;
 
   @override
-  Future<String> getAccessToken({bool forceRefresh = false}) async => 'test-token';
+  Future<String> getAccessToken({bool forceRefresh = false}) async =>
+      'test-token';
 
   @override
   Future<void> clearSession() async {
@@ -78,13 +82,15 @@ class FakeLocalDatabase implements LocalDatabase {
   Future<void> deleteRecord(String patientId) async {}
 
   @override
-  Future<List<LocalPatientEntry>> getAllRecords() async => <LocalPatientEntry>[];
+  Future<List<LocalPatientEntry>> getAllRecords() async =>
+      <LocalPatientEntry>[];
 
   @override
   Future<int> getUnsyncedCount() async => pendingCount;
 
   @override
-  Future<List<LocalPatientEntry>> getUnsyncedRecords() async => <LocalPatientEntry>[];
+  Future<List<LocalPatientEntry>> getUnsyncedRecords() async =>
+      <LocalPatientEntry>[];
 
   @override
   Future<void> markSyncError(String patientId, String error) async {}
@@ -96,7 +102,7 @@ class FakeLocalDatabase implements LocalDatabase {
   Future<void> savePatient(PatientFullRecord record) async {}
 }
 
-/// Crea un [UserSession] con el rol indicado.
+/// Create a [UserSession] with the specified role.
 UserSession _session(UserRole role, {String name = 'Ana Rodríguez'}) =>
     UserSession(
       id: 'uid-001',
@@ -154,19 +160,19 @@ void _setUpMocks() {
 void main() {
   setUp(_setUpMocks);
 
-  // ── Grupo 1: Redirección sin sesión ───────────────────────────────────────
+  // ── Group 1: Session-free redirection ───────────────────────────────────────
   group('HomeScreen — sin usuario activo', () {
-    testWidgets('muestra LoginScreen cuando currentUser es null', (tester) async {
+    testWidgets('muestra LoginScreen cuando currentUser es null', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrapHome(user: null));
       await tester.pumpAndSettle();
 
-      // HomeScreen retorna LoginScreen() en su build cuando user == null.
-      // LoginScreen debe estar presente en el árbol.
       expect(find.byType(LoginScreen), findsOneWidget);
     });
   });
 
-  // ── Grupo 2: Header ───────────────────────────────────────────────────────
+  // ── Group 2: Header ───────────────────────────────────────────────────────
   group('HomeScreen — header', () {
     testWidgets('muestra el nombre completo del usuario', (tester) async {
       final user = _session(UserRole.doctor, name: 'Carlos Mejía');
@@ -181,7 +187,6 @@ void main() {
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
 
-      // El saludo termina en coma: "Buenos días," / "Buenas tardes," etc.
       final greetingFinder = find.textContaining(',');
       expect(greetingFinder, findsAtLeastNWidgets(1));
     });
@@ -191,11 +196,12 @@ void main() {
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
 
-      // El badge contiene el texto del rol (doctor → "Médico" o equivalente)
       expect(find.byIcon(Icons.shield_outlined), findsOneWidget);
     });
 
-    testWidgets('header tiene fondo con gradiente (Container decorado)', (tester) async {
+    testWidgets('header tiene fondo con gradiente (Container decorado)', (
+      tester,
+    ) async {
       final user = _session(UserRole.nurse);
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
@@ -209,7 +215,7 @@ void main() {
     });
   });
 
-  // ── Grupo 3: Body superadmin ──────────────────────────────────────────────
+  // ── Group 3: Body superadmin ──────────────────────────────────────────────
   group('HomeScreen — body superadmin', () {
     testWidgets('muestra card de Gestionar organizaciones', (tester) async {
       final user = _session(UserRole.superadmin);
@@ -227,12 +233,13 @@ void main() {
       expect(find.text('Estadísticas de brigadas'), findsOneWidget);
     });
 
-    testWidgets('NO muestra card de Nuevo paciente para superadmin', (tester) async {
+    testWidgets('NO muestra card de Nuevo paciente para superadmin', (
+      tester,
+    ) async {
       final user = _session(UserRole.superadmin);
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
 
-      // actionNewPatient solo aparece en body clínico
       expect(find.byIcon(Icons.person_add_alt_1_rounded), findsNothing);
     });
 
@@ -245,7 +252,7 @@ void main() {
     });
   });
 
-  // ── Grupo 4: Body orgAdmin ────────────────────────────────────────────────
+  // ── Group 4: Body orgAdmin ────────────────────────────────────────────────
   group('HomeScreen — body orgAdmin', () {
     testWidgets('muestra card de Gestionar usuarios', (tester) async {
       final user = _session(UserRole.orgAdmin);
@@ -280,7 +287,7 @@ void main() {
     });
   });
 
-  // ── Grupo 5: Body clínico (doctor / nurse) ────────────────────────────────
+  // ── Group 5: Body clínico (doctor / nurse) ────────────────────────────────
   group('HomeScreen — body clínico', () {
     for (final role in [UserRole.doctor, UserRole.nurse]) {
       testWidgets('$role — muestra card Leer NFC', (tester) async {
@@ -322,21 +329,24 @@ void main() {
     }
   });
 
-  // ── Grupo 6: _SyncCard — estado con pendientes ────────────────────────────
+  // ── Group 6: _SyncCard — state with pending ────────────────────────────
   group('_SyncCard — badge de pendientes', () {
-    testWidgets('sin pendientes muestra cloud_done y NO muestra badge numérico',
-        (tester) async {
-      mockDb.pendingCount = 0;
-      final user = _session(UserRole.nurse);
-      await tester.pumpWidget(_wrapHome(user: user));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'sin pendientes muestra cloud_done y NO muestra badge numérico',
+      (tester) async {
+        mockDb.pendingCount = 0;
+        final user = _session(UserRole.nurse);
+        await tester.pumpWidget(_wrapHome(user: user));
+        await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.cloud_done_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.cloud_upload_outlined), findsNothing);
-    });
+        expect(find.byIcon(Icons.cloud_done_outlined), findsOneWidget);
+        expect(find.byIcon(Icons.cloud_upload_outlined), findsNothing);
+      },
+    );
 
-    testWidgets('con 3 pendientes muestra cloud_upload y badge "3"',
-        (tester) async {
+    testWidgets('con 3 pendientes muestra cloud_upload y badge "3"', (
+      tester,
+    ) async {
       mockDb.pendingCount = 3;
       final user = _session(UserRole.doctor);
       await tester.pumpWidget(_wrapHome(user: user));
@@ -346,7 +356,9 @@ void main() {
       expect(find.text('3'), findsOneWidget);
     });
 
-    testWidgets('el badge numérico tiene fondo Color(0xFFD4A017)', (tester) async {
+    testWidgets('el badge numérico tiene fondo Color(0xFFD4A017)', (
+      tester,
+    ) async {
       mockDb.pendingCount = 5;
       final user = _session(UserRole.doctor);
       await tester.pumpWidget(_wrapHome(user: user));
@@ -355,19 +367,18 @@ void main() {
       final badgeContainer = tester
           .widgetList<Container>(find.byType(Container))
           .firstWhere((c) {
-        final d = c.decoration;
-        return d is BoxDecoration &&
-            d.color == const Color(0xFFD4A017);
-      });
+            final d = c.decoration;
+            return d is BoxDecoration && d.color == const Color(0xFFD4A017);
+          });
       expect(badgeContainer, isNotNull);
     });
   });
 
-  // ── Grupo 7: Diálogo de logout ────────────────────────────────────────────
-  // El botón de logout está al final del ListView y puede estar fuera del
-  // viewport. scrollUntilVisible + ensureVisible garantizan que sea tappable.
-  group('HomeScreen — diálogo de logout', () {
-    /// Hace scroll hasta el icono de logout y lo toca.
+  // ── Group 7: Logout dialog ────────────────────────────────────────────
+  // The logout button is at the end of the ListView and may be outside the
+  // viewport. scrollUntilVisible + ensureVisible guarantee that it is tappable.
+  group('HomeScreen — logout dialog', () {
+    /// Scrolls to the logout icon and taps it.
     Future<void> tapLogout(WidgetTester tester) async {
       final logoutIcon = find.byIcon(Icons.logout_rounded);
       await tester.scrollUntilVisible(logoutIcon, 80);
@@ -377,8 +388,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('al tocar logout aparece el diálogo de confirmación',
-        (tester) async {
+    testWidgets('al tocar logout aparece el diálogo de confirmación', (
+      tester,
+    ) async {
       final user = _session(UserRole.doctor);
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
@@ -395,11 +407,13 @@ void main() {
 
       await tapLogout(tester);
 
-      // El primer TextButton del diálogo es siempre "Cancelar"
-      final cancelBtn = find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.byType(TextButton),
-      ).first;
+      // The first TextButton in the dialog is always "Cancelar"
+      final cancelBtn = find
+          .descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(TextButton),
+          )
+          .first;
       await tester.tap(cancelBtn);
       await tester.pumpAndSettle();
 
@@ -414,11 +428,13 @@ void main() {
 
       await tapLogout(tester);
 
-      // El segundo TextButton (último) es el de confirmar
-      final confirmBtn = find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.byType(TextButton),
-      ).last;
+      // The second TextButton (last) is the confirm button
+      final confirmBtn = find
+          .descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(TextButton),
+          )
+          .last;
       await tester.tap(confirmBtn);
       await tester.pumpAndSettle();
 
@@ -446,13 +462,14 @@ void main() {
 
       await tapLogout(tester);
 
-      final redText = find.byWidgetPredicate((w) =>
-          w is Text && w.style?.color == AppColors.error);
+      final redText = find.byWidgetPredicate(
+        (w) => w is Text && w.style?.color == AppColors.error,
+      );
       expect(redText, findsOneWidget);
     });
   });
 
-  // ── Grupo 8: Locale switcher ──────────────────────────────────────────────
+  // ── Group 8: Locale switcher ──────────────────────────────────────────────
   group('HomeScreen — selector de idioma', () {
     testWidgets('muestra botones ES y EN', (tester) async {
       final user = _session(UserRole.doctor);
@@ -464,18 +481,15 @@ void main() {
     });
   });
 
-  // ── Grupo 9: ActionCard — estructura visual ───────────────────────────────
+  // ── Group 9: ActionCard — visual structure ───────────────────────────────
   group('_ActionCard — estructura visual', () {
     testWidgets('cada card tiene ícono de flecha derecha', (tester) async {
       final user = _session(UserRole.doctor);
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
 
-      // Doctor tiene al menos 3 cards con flecha (NFC, Nuevo paciente, Buscar)
-      expect(
-        find.byIcon(Icons.chevron_right_rounded),
-        findsAtLeastNWidgets(3),
-      );
+      // Doctor has at least 3 cards with arrows (NFC, New Patient, Search)
+      expect(find.byIcon(Icons.chevron_right_rounded), findsAtLeastNWidgets(3));
     });
 
     testWidgets('cards tienen fondo blanco (AppColors.white)', (tester) async {

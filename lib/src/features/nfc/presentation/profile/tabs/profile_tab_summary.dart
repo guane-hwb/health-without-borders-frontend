@@ -43,6 +43,7 @@ class ProfileTabSummary extends StatelessWidget {
         db.familyHistory.length != ob.familyHistory.length ||
         db.medications.length != ob.medications.length;
   }
+
   @visibleForTesting
   bool get backgroundChanged => _backgroundChanged;
 
@@ -64,6 +65,7 @@ class ProfileTabSummary extends StatelessWidget {
         da.state != oa.state ||
         da.zone != oa.zone;
   }
+
   @visibleForTesting
   bool get addressChanged => _addressChanged;
 
@@ -75,6 +77,7 @@ class ProfileTabSummary extends StatelessWidget {
         dg.relationship != og.relationship ||
         dg.deviceUid != og.deviceUid;
   }
+
   @visibleForTesting
   bool get guardianChanged => _guardianChanged;
 
@@ -85,7 +88,7 @@ class ProfileTabSummary extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 60),
       children: [
-        // ══ ALERGIAS (clickable) ══════════════════════════════════
+        // ══ ALLERGIES (clickable) ══════════════════════════════════
         _ClickableSection(
           icon: Icons.warning_amber_rounded,
           iconColor: AppColors.error,
@@ -139,7 +142,7 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 14),
 
-        // ══ ANTECEDENTES (clickable) ═════════════════════════════
+        // ══ BACKGROUND (clickable) ═════════════════════════════
         _ClickableSection(
           icon: Icons.history_edu_outlined,
           title: 'ANTECEDENTES',
@@ -173,7 +176,7 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 18),
 
-        // ══ MEDICIONES ══════════════════════════════════════════
+        // ══ MEASUREMENTS ══════════════════════════════════════════
         ProfileSectionHeader(
           icon: Icons.monitor_heart_outlined,
           title: 'MEDICIONES',
@@ -219,7 +222,7 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 18),
 
-        // ══ IDENTIDAD (read-only) ═══════════════════════════════
+        // ══ IDENTITY (read-only) ═══════════════════════════════
         const ProfileSectionHeader(
           icon: Icons.person_outline,
           title: 'IDENTIDAD',
@@ -278,7 +281,7 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 18),
 
-        // ══ RESIDENCIA (editable) ═══════════════════════════════
+        // ══ RESIDENCE (editable) ═══════════════════════════════
         ProfileSectionHeader(
           icon: Icons.location_on_outlined,
           title: 'RESIDENCIA',
@@ -325,7 +328,7 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 18),
 
-        // ══ GUARDIÁN (editable) ═════════════════════════════════
+        // ══ GUARDIAN (editable) ═════════════════════════════════
         if (draft.guardianInfo.name.isNotEmpty) ...[
           ProfileSectionHeader(
             icon: Icons.family_restroom,
@@ -339,9 +342,7 @@ class ProfileTabSummary extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (_guardianChanged) _OrangeDot(),
-                Expanded(
-                  child: _GuardianContent(guardian: draft.guardianInfo),
-                ),
+                Expanded(child: _GuardianContent(guardian: draft.guardianInfo)),
               ],
             ),
           ),
@@ -617,11 +618,11 @@ class _VitalCell extends StatelessWidget {
 class _VitalDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
-        width: 1,
-        height: 32,
-        margin: const EdgeInsets.symmetric(horizontal: 30),
-        color: AppColors.divider,
-      );
+    width: 1,
+    height: 32,
+    margin: const EdgeInsets.symmetric(horizontal: 30),
+    color: AppColors.divider,
+  );
 }
 
 class _IdRow extends StatelessWidget {

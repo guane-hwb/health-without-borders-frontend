@@ -8,6 +8,10 @@ import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/hwb_logo.dart';
 import '../../../../shared/widgets/screen_bottom_handle.dart';
 import '../../domain/patient_record.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../../../core/nfc/nfc_payload_codec.dart';
+import '../../../../core/nfc/nfc_triage_payload.dart';
+import '../../../../core/nfc/nfc_payload_service.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
 import 'steps/step1_wristband.dart';
@@ -60,8 +64,29 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     // Save locally only — don't sync yet. The user may add consultations/vaccines.
     // Sync happens when the user taps "Finalizar".
     await scope.localDatabase.savePatient(record);
-    // TODO (mobile): write encrypted emergency data to NFC chip per §7.2
-    // Plaintext: firstName|firstLastName|dob|bloodType|guardianPhone|allergies|chronicConditions|guardianDeviceUid
+    // Write encrypted triage data to patient's NFC wristband
+    try {
+      final nfcKey = await scope.authRepository.getNfcEncryptionKey();
+      if (nfcKey != null && nfcKey.isNotEmpty) {
+        final codec = NfcPayloadCodec(hexKey: nfcKey);
+        final triageMap = NfcTriagePayload.buildPatientPayload(record: record);
+        final payloadSize = codec.estimateSize(triageMap);
+        debugPrint('NFC triage payload estimated size: $payloadSize bytes');
+
+        if (!kIsWeb) {
+          final payloadService = NfcPayloadService(codec: codec);
+          final writeResult = await payloadService.writeTriagePayload(
+            triageMap,
+          );
+          debugPrint(
+            'NFC write OK: ${writeResult.bytesWritten}/${writeResult.chipCapacity} bytes '
+            '(${writeResult.utilizationPercent.toStringAsFixed(1)}%)',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('NFC write failed (non-blocking): $e');
+    }
     if (!mounted) return;
     setState(() {
       _savedRecord = record;
@@ -203,7 +228,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           onContinue: _next,
         );
       case 2:
-          return Step3PatientData(
+        return Step3PatientData(
           draft: _draft,
           onBack: _back,
           onContinue: _next,
@@ -235,11 +260,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
 // ── Header ──────────────────────────────────────────────────────────────────
 class _WizardHeader extends StatelessWidget {
-  const _WizardHeader({
-    required this.title,
-    this.onBack,
-    this.stepText,
-  });
+  const _WizardHeader({required this.title, this.onBack, this.stepText});
   final String title;
   final VoidCallback? onBack;
   final String? stepText;
@@ -263,7 +284,11 @@ class _WizardHeader extends StatelessWidget {
                 child: const SizedBox(
                   width: 40,
                   height: 40,
-                  child: Icon(Icons.arrow_back, color: AppColors.white, size: 20),
+                  child: Icon(
+                    Icons.arrow_back,
+                    color: AppColors.white,
+                    size: 20,
+                  ),
                 ),
               ),
             )
@@ -278,7 +303,11 @@ class _WizardHeader extends StatelessWidget {
             child: Center(
               child: Text(
                 title,
-                style: const TextStyle(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  color: AppColors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -292,7 +321,11 @@ class _WizardHeader extends StatelessWidget {
               ),
               child: Text(
                 stepText!,
-                style: const TextStyle(color: AppColors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  color: AppColors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           if (stepText == null && onBack == null) const SizedBox(width: 40),

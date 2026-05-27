@@ -1,10 +1,17 @@
-name: CI (manual backup)
+name: CI
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - develop
 
 jobs:
   quality-gates:
+    name: Lint & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -18,8 +25,19 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Create env files for CI
+        run: |
+          echo "API_BASE_URL=http://localhost:8000" > .env
+          echo "API_BASE_URL=http://localhost:8000" > .env.production
+
       - name: Analyze
         run: flutter analyze
 
-      - name: Test
-        run: flutter test
+      - name: Test with coverage
+        run: flutter test --coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false

@@ -1,16 +1,15 @@
 // test/unit/features/nfc/presentation/profile/tabs/profile_tab_summary_test.dart
 //
 // Unit tests for ProfileTabSummary.
-// Only change detection getters and the
-// Static formatting/label helpers, without mounting any widgets.
+// Only change detection getters and static formatting/label helpers
+// are validated, without mounting any widgets.
 // ---------------------------------------------------------------------------
 // Since getters and helpers are members of the StatelessWidget class,
-// the widget is instantiated with minimal data just to access it;
-// build() is NOT called, nor is flutter_test pump() used.
+// the widget is instantiated with minimal data just to access them;
+// build() is NOT called nor is flutter_test pump() used.
 // ---------------------------------------------------------------------------
 
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/tabs/profile_tab_summary.dart';
 
@@ -76,7 +75,8 @@ ProfileTabSummary _makeWidget({
 
 // ─── Access to private getters via trial extension ─────────────────────
 // Getters are private (_allergiesChanged, etc.). To test them without
-// Breaking encapsulation involves using extension methods in the same test file
+// breaking encapsulation, extension methods are used in the same test file
+// (a common pattern in Flutter projects with strict linting).
 
 extension ProfileTabSummaryTestAccess on ProfileTabSummary {
   bool get testAllergiesChanged => allergiesChanged;
@@ -158,12 +158,15 @@ void main() {
       final bg1 = BackgroundHistory(
         chronicConditions: [
           ChronicConditionItem(chronicDescription: 'Diabetes'),
+          ChronicConditionItem(chronicDescription: 'HTA'),
         ],
         personalHistory: '',
         familyHistory: const <FamilyHistoryItem>[],
       );
       final bg2 = BackgroundHistory(
-        chronicConditions: [ChronicConditionItem(chronicDescription: 'HTA')],
+        chronicConditions: [
+          ChronicConditionItem(chronicDescription: 'Diabetes'),
+        ],
         personalHistory: '',
         familyHistory: const <FamilyHistoryItem>[],
       );
@@ -373,11 +376,10 @@ void main() {
   });
 
   // ── Static helpers ─────────────────────────────────────────────────────
-  // Accessed via reflection-like: an anonymous concrete subclass is used to
-  // expose static methods without duplicating code.
+  // It is accessed via reflection-like: an anonymous concrete subclass
+  // is used to expose static methods without duplicating code.
 
   group('_catLabel (categoría de alergia)', () {
-
     const table = {
       '01': 'Medicamento',
       '02': 'Alimento',
@@ -387,7 +389,6 @@ void main() {
       '06': 'Otra',
     };
 
-    // Expose the helper using a local test function that replicates the same logic (documented contract).
     String catLabel(String c) =>
         const {
           '01': 'Medicamento',

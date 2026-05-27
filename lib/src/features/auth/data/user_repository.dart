@@ -80,7 +80,7 @@ class UserRepository {
       'full_name': fullName,
       'role': role,
       'password': password,
-      ?'organization_id': organizationId,
+      'organization_id': organizationId,
     };
     final data = await _apiClient.postJson(
       path: '/api/v1/users/',
