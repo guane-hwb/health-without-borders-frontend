@@ -128,7 +128,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     });
   }
 
-  void _updateBackground({List<ChronicConditionItem>? chronicConditions, String? personalHistory}) {
+  void _updateBackground({
+    List<ChronicConditionItem>? chronicConditions,
+    String? personalHistory,
+  }) {
     final old = _draft.backgroundHistory ?? BackgroundHistory();
     setState(() {
       _draft = _replaceBackground(
@@ -308,7 +311,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     deviceUid: _draft.deviceUid,
     patientInfo: info,
     guardianInfo: _draft.guardianInfo,
-        guardian2Info: _draft.guardian2Info,
+    guardian2Info: _draft.guardian2Info,
     backgroundHistory: _draft.backgroundHistory,
     allergies: _draft.allergies,
     medicalHistory: _draft.medicalHistory,
@@ -755,8 +758,6 @@ class _ProfileHeader extends StatelessWidget {
               const Spacer(),
               _LanguageToggle(),
               const SizedBox(width: 4),
-              const Icon(Icons.more_vert, color: AppColors.white),
-              const SizedBox(width: 4),
             ],
           ),
           const SizedBox(height: 4),
@@ -817,13 +818,16 @@ class _ProfileHeader extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: hasUnsyncedChanges
                         ? const Color(0xFFFFB300)
-                        : const Color(0xFF00E676), // brighter green — visible on primary bg
+                        : const Color(
+                            0xFF00E676,
+                          ), // brighter green — visible on primary bg
                     boxShadow: [
                       BoxShadow(
-                        color: (hasUnsyncedChanges
-                                ? const Color(0xFFFFB300)
-                                : const Color(0xFF00E676))
-                            .withValues(alpha: 0.55),
+                        color:
+                            (hasUnsyncedChanges
+                                    ? const Color(0xFFFFB300)
+                                    : const Color(0xFF00E676))
+                                .withValues(alpha: 0.55),
                         blurRadius: 5,
                         spreadRadius: 1,
                       ),
@@ -973,7 +977,7 @@ class _LanguageToggle extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.25), 
+          color: Colors.white.withValues(alpha: 0.25),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -1005,7 +1009,7 @@ class _LangDot extends StatelessWidget {
         label,
         style: TextStyle(
           color: selected ? AppColors.primary : AppColors.white,
-          fontSize: 12, 
+          fontSize: 12,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -1426,7 +1430,10 @@ class _BackgroundManageSheet extends StatelessWidget {
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  if (bg.chronicConditions[i].chronicCie10Code != null)
+                                  if (bg
+                                          .chronicConditions[i]
+                                          .chronicCie10Code !=
+                                      null)
                                     Text(
                                       'CIE-10: ${bg.chronicConditions[i].chronicCie10Code}',
                                       style: const TextStyle(
@@ -1511,7 +1518,9 @@ class _BackgroundManageSheet extends StatelessWidget {
                                   ),
                                   Text(
                                     _medStatusLabel(bg.medications[i].status) +
-                                        (bg.medications[i].dosage != null ? ' · ${bg.medications[i].dosage}' : ''),
+                                        (bg.medications[i].dosage != null
+                                            ? ' · ${bg.medications[i].dosage}'
+                                            : ''),
                                     style: const TextStyle(
                                       fontSize: 12,
                                       color: AppColors.textSecondary,

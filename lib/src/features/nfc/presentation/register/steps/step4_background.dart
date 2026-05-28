@@ -958,16 +958,16 @@ class _AddAlState extends State<_AddAllergySheet> {
 class _Sheet extends StatelessWidget {
   const _Sheet({
     required this.title,
-    this.subtitle,
     required this.child,
     required this.onConfirm,
     this.canConfirm = true,
   });
+
   final String title;
-  final String? subtitle;
   final Widget child;
   final VoidCallback onConfirm;
   final bool canConfirm;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1003,28 +1003,12 @@ class _Sheet extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          if (subtitle != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: Text(
-                                subtitle!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ),
-                        ],
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                     IconButton(
