@@ -27,7 +27,6 @@ class _AddChronicConditionSheetState extends State<AddChronicConditionSheet> {
     final canConfirm = _ctrl.text.trim().isNotEmpty;
     return SheetScaffold(
       title: 'Agregar condición crónica',
-      subtitle: 'El backend asignará los códigos CIE automáticamente',
       confirmLabel: 'Agregar',
       confirmIcon: Icons.add,
       canConfirm: canConfirm,

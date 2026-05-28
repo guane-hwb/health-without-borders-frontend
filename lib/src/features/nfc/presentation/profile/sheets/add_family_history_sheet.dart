@@ -36,7 +36,6 @@ class _AddFamilyHistorySheetState extends State<AddFamilyHistorySheet> {
     final canConfirm = _ctrl.text.trim().isNotEmpty;
     return SheetScaffold(
       title: 'Agregar antecedente familiar',
-      subtitle: 'El backend asignará el código CIE automáticamente',
       confirmLabel: 'Agregar',
       confirmIcon: Icons.add,
       canConfirm: canConfirm,

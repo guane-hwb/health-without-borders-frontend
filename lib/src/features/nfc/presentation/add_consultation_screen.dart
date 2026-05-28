@@ -534,7 +534,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             title: 'Contexto de atención',
             children: [
               _dropdownField(
-                'Modalidad de atención (Elem. 18.1)',
+                'Modalidad de atención',
                 _careModality,
                 _careModalityOpts,
                 (v) {
@@ -543,7 +543,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
               ),
               const SizedBox(height: 10),
               _dropdownField(
-                'Grupo de servicios (Elem. 18.2)',
+                'Grupo de servicios',
                 _serviceGroup,
                 _serviceGroupOpts,
                 (v) {
@@ -552,7 +552,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
               ),
               const SizedBox(height: 10),
               _dropdownField(
-                'Entorno de atención (Elem. 19)',
+                'Entorno de atención',
                 _careEnvironment,
                 _careEnvOpts,
                 (v) {
@@ -566,7 +566,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           // ── Practitioner ─────────────────────────────────────────────────
           _SectionCard(
             icon: Icons.badge_outlined,
-            title: 'Profesional de salud (Elems. 49.1, 49.2)',
+            title: 'Profesional de salud',
             children: [
               Row(
                 children: [
@@ -604,7 +604,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           // ── Provider ─────────────────────────────────────────────────────
           _SectionCard(
             icon: Icons.apartment_outlined,
-            title: 'Prestador de servicios (Elem. 16)',
+            title: 'Prestador de servicios',
             children: [
               _textField(
                 'Código REPS del prestador',
@@ -624,7 +624,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           // ── Payer ────────────────────────────────────────────────────────
           _SectionCard(
             icon: Icons.health_and_safety_outlined,
-            title: 'Entidad pagadora (Elem. 15)',
+            title: 'Entidad pagadora',
             children: [
               _textField(
                 'Nombre de la EAPB / aseguradora',
@@ -675,43 +675,16 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             title: 'Diagnóstico y egreso',
             children: [
               _dropdownField(
-                'Tipo de diagnóstico (Elem. 37.3)',
+                'Tipo de diagnóstico',
                 _diagnosisType,
                 _diagnosisTypeOpts,
                 (v) {
                   if (v != null) setState(() => _diagnosisType = v);
                 },
               ),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(
-                      Icons.auto_awesome,
-                      size: 14,
-                      color: AppColors.primary,
-                    ),
-                    SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Los códigos CIE-10/11 se completan automáticamente por el LLM del backend a partir de la evaluación clínica.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               const SizedBox(height: 10),
               _dropdownField(
-                'Condición al egreso (Elem. 41)',
+                'Condición al egreso',
                 _dischargeDisposition ?? '',
                 _dischargeOpts,
                 (v) {
@@ -856,92 +829,80 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
   // ── Widget helpers ────────────────────────────────────────────────────────
 
-  Widget _vitalField(String label, TextEditingController ctrl, IconData icon) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-            ),
+  Widget _vitalField(
+    String label,
+    TextEditingController ctrl,
+    IconData icon,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
+      const SizedBox(height: 4),
+      TextField(
+        controller: ctrl,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        style: const TextStyle(fontSize: 14),
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 10,
           ),
-          const SizedBox(height: 4),
-          TextField(
-            controller: ctrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: const TextStyle(fontSize: 14),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 10,
-              ),
-              filled: true,
-              fillColor: AppColors.white,
-              prefixIcon: Icon(icon, size: 16, color: AppColors.secondary),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFFB0B8C4),
-                  width: 1.5,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: AppColors.primary,
-                  width: 2,
-                ),
-              ),
-            ),
+          filled: true,
+          fillColor: AppColors.white,
+          prefixIcon: Icon(icon, size: 16, color: AppColors.secondary),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
           ),
-        ],
-      );
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          ),
+        ),
+      ),
+    ],
+  );
 
-  Widget _textField(String label, TextEditingController ctrl, IconData icon) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-            ),
+  Widget _textField(
+    String label,
+    TextEditingController ctrl,
+    IconData icon,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
+      const SizedBox(height: 4),
+      TextField(
+        controller: ctrl,
+        style: const TextStyle(fontSize: 14),
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 11,
           ),
-          const SizedBox(height: 4),
-          TextField(
-            controller: ctrl,
-            style: const TextStyle(fontSize: 14),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 11,
-              ),
-              filled: true,
-              fillColor: AppColors.white,
-              prefixIcon: Icon(icon, size: 17, color: AppColors.secondary),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFFB0B8C4),
-                  width: 1.5,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: AppColors.primary,
-                  width: 2,
-                ),
-              ),
-            ),
+          filled: true,
+          fillColor: AppColors.white,
+          prefixIcon: Icon(icon, size: 17, color: AppColors.secondary),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
           ),
-        ],
-      );
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          ),
+        ),
+      ),
+    ],
+  );
 
   Widget _textArea(
     String label,
@@ -981,17 +942,11 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           fillColor: AppColors.white,
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(
-              color: Color(0xFFB0B8C4),
-              width: 1.5,
-            ),
+            borderSide: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(
-              color: AppColors.primary,
-              width: 2,
-            ),
+            borderSide: const BorderSide(color: AppColors.primary, width: 2),
           ),
         ),
       ),
@@ -1238,7 +1193,10 @@ class _DateTimeRow extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: AppColors.white,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
+                    border: Border.all(
+                      color: const Color(0xFFB0B8C4),
+                      width: 1.5,
+                    ),
                   ),
                   child: Row(
                     children: [
