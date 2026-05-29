@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../shared/sheet_scaffold.dart';
 
 class EditChronicPersonalSheet extends StatefulWidget {
@@ -38,9 +39,11 @@ class _EditChronicPersonalSheetState extends State<EditChronicPersonalSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+
     return SheetScaffold(
       title: widget.title,
-      subtitle: 'Texto libre — el sistema codifica automáticamente',
+      subtitle: s.editChronicPersonalSubtitle,
       onConfirm: () {
         final text = _ctrl.text.trim();
         widget.onConfirm(text.isEmpty ? null : text);
@@ -51,7 +54,7 @@ class _EditChronicPersonalSheetState extends State<EditChronicPersonalSheet> {
         maxLines: 8,
         style: const TextStyle(fontSize: 14, height: 1.4),
         decoration: InputDecoration(
-          hintText: 'Describa la información en texto libre...',
+          hintText: s.editChronicPersonalHint,
           hintStyle: const TextStyle(fontSize: 13, color: AppColors.disabled),
           contentPadding: const EdgeInsets.all(12),
           border: OutlineInputBorder(

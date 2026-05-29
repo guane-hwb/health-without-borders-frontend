@@ -1,6 +1,7 @@
 // lib/src/features/nfc/presentation/profile/sheets/edit_vital_signs_sheet.dart
 import 'package:flutter/material.dart';
 
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../shared/sheet_scaffold.dart';
 
@@ -48,8 +49,9 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return SheetScaffold(
-      title: 'Editar mediciones',
+      title: s.editMeasurements,
       onConfirm: () {
         final w = double.tryParse(_weightCtrl.text.trim());
         final h = double.tryParse(_heightCtrl.text.trim());
@@ -60,7 +62,7 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Weight
-          _FieldLabel(label: 'PESO (KG)'),
+          _FieldLabel(label: s.weightKg),
           const SizedBox(height: 6),
           TextField(
             controller: _weightCtrl,
@@ -86,7 +88,10 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
+                borderSide: const BorderSide(
+                  color: Color(0xFFB0B8C4),
+                  width: 1.5,
+                ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -100,7 +105,7 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
           if (widget.previousWeight != null) ...[
             const SizedBox(height: 4),
             Text(
-              'Anterior: ${widget.previousWeight!.toStringAsFixed(1)} kg',
+              '${s.previous}: ${widget.previousWeight!.toStringAsFixed(1)} kg',
               style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,
@@ -111,7 +116,7 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
           const SizedBox(height: 20),
 
           // Height
-          _FieldLabel(label: 'ALTURA (CM)'),
+          _FieldLabel(label: s.heightCm),
           const SizedBox(height: 6),
           TextField(
             controller: _heightCtrl,
@@ -137,7 +142,10 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
+                borderSide: const BorderSide(
+                  color: Color(0xFFB0B8C4),
+                  width: 1.5,
+                ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -151,7 +159,7 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
           if (widget.previousHeight != null) ...[
             const SizedBox(height: 4),
             Text(
-              'Anterior: ${widget.previousHeight!.toStringAsFixed(0)} cm',
+              '${s.previous}: ${widget.previousHeight!.toStringAsFixed(0)} cm',
               style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,
@@ -167,14 +175,18 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
               color: const Color(0xFFE3F2FD),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.info_outline, size: 16, color: AppColors.primary),
-                SizedBox(width: 8),
+                const Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'El tipo de sangre no se edita aquí — es un dato biológico permanente.',
-                    style: TextStyle(
+                    s.bloodTypeReadOnly,
+                    style: const TextStyle(
                       fontSize: 11,
                       color: AppColors.textPrimary,
                       height: 1.4,

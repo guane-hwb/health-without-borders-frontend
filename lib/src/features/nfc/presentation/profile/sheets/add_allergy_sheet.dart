@@ -1,6 +1,7 @@
 // lib/src/features/nfc/presentation/profile/sheets/add_allergy_sheet.dart
 import 'package:flutter/material.dart';
 
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/sheet_scaffold.dart';
@@ -18,14 +19,35 @@ class _AddAllergySheetState extends State<AddAllergySheet> {
   final _reactionCtrl = TextEditingController();
   String _category = '01';
 
-  static const Map<String, String> _categories = {
-    '01': 'Medicamento',
-    '02': 'Alimento',
-    '03': 'Sust. ambiente',
-    '04': 'Sust. piel',
-    '05': 'Picadura',
-    '06': 'Otra',
-  };
+  // Category codes — labels resolved from AppStrings at build time
+  static const List<String> _categoryCodes = [
+    '01',
+    '02',
+    '03',
+    '04',
+    '05',
+    '06',
+  ];
+
+  /// Returns the translated label for an allergy category code.
+  String _categoryLabel(AppStrings s, String code) {
+    switch (code) {
+      case '01':
+        return s.allergenMedication;
+      case '02':
+        return s.allergenFood;
+      case '03':
+        return s.allergenEnvironment;
+      case '04':
+        return s.allergenSkin;
+      case '05':
+        return s.allergenInsect;
+      case '06':
+        return s.allergenOther;
+      default:
+        return code;
+    }
+  }
 
   @override
   void dispose() {
@@ -36,10 +58,12 @@ class _AddAllergySheetState extends State<AddAllergySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final canConfirm = _allergenCtrl.text.trim().isNotEmpty;
+
     return SheetScaffold(
-      title: 'Agregar alergia',
-      confirmLabel: 'Agregar',
+      title: s.addAllergyBtn,
+      confirmLabel: s.add,
       confirmIcon: Icons.add,
       canConfirm: canConfirm,
       onConfirm: () {
@@ -57,9 +81,10 @@ class _AddAllergySheetState extends State<AddAllergySheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Categoría',
-            style: TextStyle(
+          // ── Category ──────────────────────────────────────────────────────
+          Text(
+            s.allergyCategoryLabel,
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -69,10 +94,10 @@ class _AddAllergySheetState extends State<AddAllergySheet> {
           Wrap(
             spacing: 8,
             runSpacing: 6,
-            children: _categories.entries.map((e) {
-              final sel = _category == e.key;
+            children: _categoryCodes.map((code) {
+              final sel = _category == code;
               return GestureDetector(
-                onTap: () => setState(() => _category = e.key),
+                onTap: () => setState(() => _category = code),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -86,7 +111,7 @@ class _AddAllergySheetState extends State<AddAllergySheet> {
                     ),
                   ),
                   child: Text(
-                    e.value,
+                    _categoryLabel(s, code),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -97,10 +122,12 @@ class _AddAllergySheetState extends State<AddAllergySheet> {
               );
             }).toList(),
           ),
+
+          // ── Allergen ──────────────────────────────────────────────────────
           const SizedBox(height: 14),
-          const Text(
-            'Alérgeno',
-            style: TextStyle(
+          Text(
+            s.allergenLabel,
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -113,7 +140,7 @@ class _AddAllergySheetState extends State<AddAllergySheet> {
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               isDense: true,
-              hintText: 'ej: Penicilina, Maní, Polen...',
+              hintText: s.allergenHint,
               hintStyle: const TextStyle(
                 fontSize: 13,
                 color: AppColors.disabled,
@@ -129,10 +156,12 @@ class _AddAllergySheetState extends State<AddAllergySheet> {
               ),
             ),
           ),
+
+          // ── Reaction ──────────────────────────────────────────────────────
           const SizedBox(height: 14),
-          const Text(
-            'Reacción (opcional)',
-            style: TextStyle(
+          Text(
+            s.reactionOptionalLabel,
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -144,7 +173,7 @@ class _AddAllergySheetState extends State<AddAllergySheet> {
             maxLines: 3,
             style: const TextStyle(fontSize: 14),
             decoration: InputDecoration(
-              hintText: 'ej: Erupción cutánea generalizada, Edema labial...',
+              hintText: s.reactionHint,
               hintStyle: const TextStyle(
                 fontSize: 12,
                 color: AppColors.disabled,

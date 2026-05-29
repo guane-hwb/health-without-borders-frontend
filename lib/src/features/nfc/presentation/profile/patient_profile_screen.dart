@@ -350,8 +350,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         _isSyncing = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cambios guardados. Se sincronizarán automáticamente.'),
+        SnackBar(
+          content: Text(AppStrings.of(context).savedChangesMsg),
           backgroundColor: AppColors.success,
         ),
       );
@@ -374,10 +374,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   Future<void> _navigateAddConsultation() async {
     if (!_currentRole.canAddConsultation) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'No autorizado: solo doctores pueden agregar consultas.',
-          ),
+        SnackBar(
+          content: Text(AppStrings.of(context).notAuthorizedConsultations),
         ),
       );
       return;
@@ -452,7 +450,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => EditChronicPersonalSheet(
-        title: 'Historial personal',
+        title: AppStrings.of(context).personalHistoryTitle,
         currentValue: bg.personalHistory,
         onConfirm: (text) {
           _updateBackground(personalHistory: text);
@@ -628,20 +626,18 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cambios sin sincronizar'),
-        content: const Text(
-          'Tienes cambios pendientes. ¿Salir sin sincronizar?',
-        ),
+        title: Text(AppStrings.of(context).unsyncedChangesTitle),
+        content: Text(AppStrings.of(context).exitWithoutSyncMsg),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
+            child: Text(AppStrings.of(context).cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text(
-              'Salir',
-              style: TextStyle(color: AppColors.error),
+            child: Text(
+              AppStrings.of(context).exit,
+              style: const TextStyle(color: AppColors.error),
             ),
           ),
         ],
@@ -702,37 +698,39 @@ class _ProfileHeader extends StatelessWidget {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
 
-  String get _sexLabel {
+  String _sexLabel(BuildContext context) {
+    final s = AppStrings.of(context);
     switch (patient.patientInfo.biologicalSex) {
       case 'M':
-        return 'Masculino';
+        return s.sexMale;
       case 'F':
-        return 'Femenino';
+        return s.sexFemale;
       default:
-        return 'Indeterminado';
+        return s.sexIndeterminate;
     }
   }
 
-  String get _docTypeLabel {
+  String _docTypeLabel(BuildContext context) {
+    final s = AppStrings.of(context);
     switch (patient.patientInfo.identification.documentType) {
       case 'RC':
-        return 'Reg. civil';
+        return s.docTypeRC;
       case 'TI':
-        return 'Tarjeta identidad';
+        return s.docTypeTI;
       case 'CC':
-        return 'Cédula';
+        return s.docTypeCC;
       case 'CE':
-        return 'Céd. extranjería';
+        return s.docTypeCE;
       case 'PA':
-        return 'Pasaporte';
+        return s.docTypePA;
       case 'PE':
-        return 'Permiso esp.';
+        return s.docTypePE;
       case 'PT':
-        return 'PPT';
+        return s.docTypePT;
       case 'MS':
-        return 'Menor s/ID';
+        return s.docTypeMS;
       case 'AS':
-        return 'Adulto s/ID';
+        return s.docTypeAS;
       default:
         return patient.patientInfo.identification.documentType;
     }
@@ -742,6 +740,7 @@ class _ProfileHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final age = _age;
     final docNumber = patient.patientInfo.identification.documentNumber;
+    final s = AppStrings.of(context);
     return Container(
       color: AppColors.primary,
       padding: const EdgeInsets.fromLTRB(8, 6, 14, 14),
@@ -787,12 +786,13 @@ class _ProfileHeader extends StatelessWidget {
                         children: [
                           if (age != null)
                             _PillChip(
-                              label: '$age años · $_sexLabel',
+                              label:
+                                  '$age ${s.yearsOldSuffix} · ${_sexLabel(context)}',
                               filled: true,
                             ),
                           if (docNumber.isNotEmpty)
                             _PillChip(
-                              label: '$_docTypeLabel $docNumber',
+                              label: '${_docTypeLabel(context)} $docNumber',
                               filled: false,
                             ),
                         ],
@@ -818,9 +818,7 @@ class _ProfileHeader extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: hasUnsyncedChanges
                         ? const Color(0xFFFFB300)
-                        : const Color(
-                            0xFF00E676,
-                          ), // brighter green — visible on primary bg
+                        : const Color(0xFF00E676),
                     boxShadow: [
                       BoxShadow(
                         color:
@@ -837,10 +835,10 @@ class _ProfileHeader extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   hasUnsyncedChanges
-                      ? 'Cambios sin sincronizar'
+                      ? s.unsyncedChanges
                       : (lastSyncedAt != null
-                            ? 'Sincronizado · $lastSyncedAt'
-                            : 'Sincronizado'),
+                            ? s.syncedAt.replaceAll('{time}', lastSyncedAt!)
+                            : s.synced),
                   style: const TextStyle(
                     color: AppColors.white,
                     fontSize: 14,
@@ -877,7 +875,7 @@ class _ProfileHeader extends StatelessWidget {
                             color: AppColors.white,
                           ),
                     label: Text(
-                      isSyncing ? 'Sincronizando...' : 'Sincronizar',
+                      isSyncing ? s.syncingBtn : s.syncBtn,
                       style: const TextStyle(
                         color: AppColors.white,
                         fontSize: 13,
@@ -1051,16 +1049,16 @@ class _ProfileTabsBar extends StatelessWidget {
         ),
         dividerColor: Colors.transparent,
         tabs: [
-          const Tab(text: '  Resumen  '),
+          Tab(text: '  ${AppStrings.of(context).tabSummary}  '),
           Tab(
             child: _TabLabelWithBadge(
-              text: 'Consultas',
+              text: AppStrings.of(context).consultations,
               count: draft.medicalHistory.length,
             ),
           ),
           Tab(
             child: _TabLabelWithBadge(
-              text: 'Vacunas',
+              text: AppStrings.of(context).vaccines,
               count: draft.vaccinationRecord.length,
             ),
           ),
@@ -1154,7 +1152,7 @@ class _AllergiesManageSheet extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Alergias · ${allergies.length}',
+                    '${AppStrings.of(context).allergiesSheetTitle} · ${allergies.length}',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -1175,10 +1173,10 @@ class _AllergiesManageSheet extends StatelessWidget {
             ),
             Expanded(
               child: allergies.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        'Sin alergias registradas.',
-                        style: TextStyle(color: AppColors.textSecondary),
+                        AppStrings.of(context).noAllergiesRegistered,
+                        style: const TextStyle(color: AppColors.textSecondary),
                       ),
                     )
                   : ListView.builder(
@@ -1210,7 +1208,7 @@ class _AllergiesManageSheet extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      _catLabel(a.category),
+                                      _catLabel(context, a.category),
                                       style: const TextStyle(
                                         fontSize: 12,
                                         color: AppColors.error,
@@ -1221,7 +1219,7 @@ class _AllergiesManageSheet extends StatelessWidget {
                                         a.reaction!.isNotEmpty) ...[
                                       const SizedBox(height: 4),
                                       Text(
-                                        'Reacción: ${a.reaction}',
+                                        '${AppStrings.of(context).reactionLabel}${a.reaction}',
                                         style: const TextStyle(
                                           fontSize: 12,
                                           color: AppColors.textSecondary,
@@ -1266,9 +1264,9 @@ class _AllergiesManageSheet extends StatelessWidget {
                       size: 18,
                       color: AppColors.white,
                     ),
-                    label: const Text(
-                      'Agregar alergia',
-                      style: TextStyle(
+                    label: Text(
+                      AppStrings.of(context).addAllergyBtn,
+                      style: const TextStyle(
                         color: AppColors.white,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -1284,16 +1282,25 @@ class _AllergiesManageSheet extends StatelessWidget {
     );
   }
 
-  static String _catLabel(String c) =>
-      const {
-        '01': 'Medicamento',
-        '02': 'Alimento',
-        '03': 'Ambiente',
-        '04': 'Piel',
-        '05': 'Picadura',
-        '06': 'Otra',
-      }[c] ??
-      c;
+  String _catLabel(BuildContext context, String c) {
+    final s = AppStrings.of(context);
+    switch (c) {
+      case '01':
+        return s.allergenMedication;
+      case '02':
+        return s.allergenFood;
+      case '03':
+        return s.allergenEnvironment;
+      case '04':
+        return s.allergenSkin;
+      case '05':
+        return s.allergenInsect;
+      case '06':
+        return s.allergenOther;
+      default:
+        return c;
+    }
+  }
 }
 
 class _BackgroundManageSheet extends StatelessWidget {
@@ -1352,9 +1359,9 @@ class _BackgroundManageSheet extends StatelessWidget {
                     color: AppColors.primary,
                   ),
                   const SizedBox(width: 6),
-                  const Text(
-                    'Antecedentes',
-                    style: TextStyle(
+                  Text(
+                    AppStrings.of(context).backgroundSheetTitle,
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textPrimary,
@@ -1380,9 +1387,9 @@ class _BackgroundManageSheet extends StatelessWidget {
                   // Chronic conditions (list)
                   Row(
                     children: [
-                      const Text(
-                        'Condiciones crónicas',
-                        style: TextStyle(
+                      Text(
+                        AppStrings.of(context).chronicConditions,
+                        style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
@@ -1392,7 +1399,7 @@ class _BackgroundManageSheet extends StatelessWidget {
                       TextButton.icon(
                         onPressed: onAddChronic,
                         icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Agregar'),
+                        label: Text(AppStrings.of(context).add),
                         style: TextButton.styleFrom(
                           foregroundColor: AppColors.primary,
                         ),
@@ -1400,9 +1407,9 @@ class _BackgroundManageSheet extends StatelessWidget {
                     ],
                   ),
                   if (bg == null || bg.chronicConditions.isEmpty)
-                    const Text(
-                      'Sin condiciones crónicas.',
-                      style: TextStyle(
+                    Text(
+                      AppStrings.of(context).noChronicConditions,
+                      style: const TextStyle(
                         fontSize: 13,
                         color: AppColors.textSecondary,
                       ),
@@ -1435,7 +1442,7 @@ class _BackgroundManageSheet extends StatelessWidget {
                                           .chronicCie10Code !=
                                       null)
                                     Text(
-                                      'CIE-10: ${bg.chronicConditions[i].chronicCie10Code}',
+                                      '${AppStrings.of(context).cie10Label}${bg.chronicConditions[i].chronicCie10Code}',
                                       style: const TextStyle(
                                         fontSize: 12,
                                         color: AppColors.textSecondary,
@@ -1458,7 +1465,7 @@ class _BackgroundManageSheet extends StatelessWidget {
                   const SizedBox(height: 12),
                   // Personal
                   _BgSection(
-                    title: 'Historial personal',
+                    title: AppStrings.of(context).personalHistoryTitle,
                     value: bg?.personalHistory,
                     onEdit: onEditPersonal,
                   ),
@@ -1466,9 +1473,9 @@ class _BackgroundManageSheet extends StatelessWidget {
                   // Medications (list)
                   Row(
                     children: [
-                      const Text(
-                        'Medicamentos',
-                        style: TextStyle(
+                      Text(
+                        AppStrings.of(context).medications,
+                        style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
@@ -1478,7 +1485,7 @@ class _BackgroundManageSheet extends StatelessWidget {
                       TextButton.icon(
                         onPressed: onAddMedication,
                         icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Agregar'),
+                        label: Text(AppStrings.of(context).add),
                         style: TextButton.styleFrom(
                           foregroundColor: AppColors.primary,
                         ),
@@ -1486,9 +1493,9 @@ class _BackgroundManageSheet extends StatelessWidget {
                     ],
                   ),
                   if (bg == null || bg.medications.isEmpty)
-                    const Text(
-                      'Sin medicamentos registrados.',
-                      style: TextStyle(
+                    Text(
+                      AppStrings.of(context).noMedications,
+                      style: const TextStyle(
                         fontSize: 13,
                         color: AppColors.textSecondary,
                       ),
@@ -1517,7 +1524,10 @@ class _BackgroundManageSheet extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    _medStatusLabel(bg.medications[i].status) +
+                                    _medStatusLabel(
+                                          context,
+                                          bg.medications[i].status,
+                                        ) +
                                         (bg.medications[i].dosage != null
                                             ? ' · ${bg.medications[i].dosage}'
                                             : ''),
@@ -1544,9 +1554,9 @@ class _BackgroundManageSheet extends StatelessWidget {
                   // Family history
                   Row(
                     children: [
-                      const Text(
-                        'Antecedentes familiares',
-                        style: TextStyle(
+                      Text(
+                        AppStrings.of(context).familyHistory,
+                        style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
@@ -1556,7 +1566,7 @@ class _BackgroundManageSheet extends StatelessWidget {
                       TextButton.icon(
                         onPressed: onAddFamily,
                         icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Agregar'),
+                        label: Text(AppStrings.of(context).add),
                         style: TextButton.styleFrom(
                           foregroundColor: AppColors.primary,
                         ),
@@ -1564,9 +1574,9 @@ class _BackgroundManageSheet extends StatelessWidget {
                     ],
                   ),
                   if (bg == null || bg.familyHistory.isEmpty)
-                    const Text(
-                      'Sin antecedentes familiares.',
-                      style: TextStyle(
+                    Text(
+                      AppStrings.of(context).noFamilyHistoryEntries,
+                      style: const TextStyle(
                         fontSize: 13,
                         color: AppColors.textSecondary,
                       ),
@@ -1595,7 +1605,10 @@ class _BackgroundManageSheet extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    _relLabel(bg.familyHistory[i].relationship),
+                                    _relLabel(
+                                      context,
+                                      bg.familyHistory[i].relationship,
+                                    ),
                                     style: const TextStyle(
                                       fontSize: 12,
                                       color: AppColors.textSecondary,
@@ -1624,23 +1637,37 @@ class _BackgroundManageSheet extends StatelessWidget {
     );
   }
 
-  static String _relLabel(String r) =>
-      const {
-        '01': 'Padres',
-        '02': 'Hermanos',
-        '03': 'Tíos',
-        '04': 'Abuelos',
-      }[r] ??
-      r;
+  String _relLabel(BuildContext context, String r) {
+    final s = AppStrings.of(context);
+    switch (r) {
+      case '01':
+        return s.relParents;
+      case '02':
+        return s.relSiblings;
+      case '03':
+        return s.relUncles;
+      case '04':
+        return s.relGrandparents;
+      default:
+        return r;
+    }
+  }
 
-  static String _medStatusLabel(String c) =>
-      const {
-        'active': 'Activo',
-        'completed': 'Completado',
-        'stopped': 'Suspendido',
-        'unknown': 'Desconocido',
-      }[c] ??
-      c;
+  String _medStatusLabel(BuildContext context, String c) {
+    final s = AppStrings.of(context);
+    switch (c) {
+      case 'active':
+        return s.medStatusActive;
+      case 'completed':
+        return s.medStatusCompleted;
+      case 'stopped':
+        return s.medStatusStopped;
+      case 'unknown':
+        return s.medStatusUnknown;
+      default:
+        return c;
+    }
+  }
 }
 
 class _BgSection extends StatelessWidget {

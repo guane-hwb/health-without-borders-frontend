@@ -1,6 +1,7 @@
 // lib/src/features/nfc/presentation/profile/sheets/edit_guardian_sheet.dart
 import 'package:flutter/material.dart';
 
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../domain/patient_record.dart';
@@ -27,12 +28,24 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   late String _relationship;
   bool _scanning = false;
 
-  static const Map<String, String> _relationships = {
-    '01': 'Padres',
-    '02': 'Hermanos',
-    '03': 'Tíos',
-    '04': 'Abuelos',
-  };
+  // Relationship codes — labels are resolved from AppStrings at build time
+  static const List<String> _relationshipCodes = ['01', '02', '03', '04'];
+
+  /// Returns the translated label for a relationship code.
+  String _relationshipLabel(AppStrings s, String code) {
+    switch (code) {
+      case '01':
+        return s.relParents;
+      case '02':
+        return s.relSiblings;
+      case '03':
+        return s.relUncles;
+      case '04':
+        return s.relGrandparents;
+      default:
+        return code;
+    }
+  }
 
   @override
   void initState() {
@@ -65,25 +78,27 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
       if (mounted) {
         setState(() => _scanning = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('NFC no disponible. Ingrese el UID manualmente.'),
+          SnackBar(
+            content: Text(AppStrings.of(context).guardianNfcUnavailable),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _scanning = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppStrings.of(context).guardianNfcError)),
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+
     return SheetScaffold(
-      title: 'Editar guardián',
+      title: s.editGuardianTitle,
       onConfirm: () {
         widget.onConfirm(
           GuardianInfo(
@@ -100,21 +115,21 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _label('Nombre completo'),
+          _label(s.guardianFullName),
           _input(
             _nameCtrl,
-            hint: 'ej: Carmen Vargas Pinto',
+            hint: s.guardianFullNameHint,
             icon: Icons.person_outline,
           ),
           const SizedBox(height: 14),
-          _label('Parentesco'),
+          _label(s.guardianRelationship),
           Wrap(
             spacing: 8,
             runSpacing: 6,
-            children: _relationships.entries.map((e) {
-              final sel = _relationship == e.key;
+            children: _relationshipCodes.map((code) {
+              final sel = _relationship == code;
               return GestureDetector(
-                onTap: () => setState(() => _relationship = e.key),
+                onTap: () => setState(() => _relationship = code),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -128,7 +143,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
                     ),
                   ),
                   child: Text(
-                    e.value,
+                    _relationshipLabel(s, code),
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -140,15 +155,15 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
             }).toList(),
           ),
           const SizedBox(height: 14),
-          _label('Teléfono'),
+          _label(s.guardianPhoneLabel),
           _input(
             _phoneCtrl,
-            hint: 'ej: +57 310 482 9914',
+            hint: s.guardianPhoneHint,
             icon: Icons.phone_outlined,
             keyboard: TextInputType.phone,
           ),
           const SizedBox(height: 14),
-          _label('Dispositivo NFC del guardián'),
+          _label(s.guardianNfcDevice),
           Row(
             children: [
               Expanded(
@@ -157,7 +172,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
                   style: const TextStyle(fontSize: 13),
                   decoration: InputDecoration(
                     isDense: true,
-                    hintText: 'UID del dispositivo NFC',
+                    hintText: s.guardianNfcUidHint,
                     prefixIcon: Icon(
                       Icons.family_restroom,
                       size: 18,

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../core/i18n/app_strings.dart';
 
 /// Reusable bottom-sheet scaffold for all profile edit sheets.
 class SheetScaffold extends StatelessWidget {
@@ -10,7 +11,7 @@ class SheetScaffold extends StatelessWidget {
     required this.title,
     this.subtitle,
     required this.child,
-    this.confirmLabel = 'Confirmar cambios',
+    this.confirmLabel,
     this.confirmIcon = Icons.check,
     required this.onConfirm,
     this.canConfirm = true,
@@ -19,13 +20,16 @@ class SheetScaffold extends StatelessWidget {
   final String title;
   final String? subtitle;
   final Widget child;
-  final String confirmLabel;
+  final String? confirmLabel;
   final IconData confirmIcon;
   final VoidCallback? onConfirm;
   final bool canConfirm;
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final effectiveConfirmLabel = confirmLabel ?? s.confirmChanges;
+
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -42,18 +46,18 @@ class SheetScaffold extends StatelessWidget {
           ),
           child: Column(
             children: [
-              const SizedBox(height: 8),
-              Center(
-                child: Container(
-                  width: 50,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.disabled,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+              // Handle
+              const SizedBox(height: 10),
+              Container(
+                width: 36,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(2.5),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
+              // Header
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 18),
                 child: Row(
@@ -65,37 +69,37 @@ class SheetScaffold extends StatelessWidget {
                           Text(
                             title,
                             style: const TextStyle(
-                              fontSize: 18,
+                              fontSize: 17,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textPrimary,
                             ),
                           ),
-                          if (subtitle != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: Text(
-                                subtitle!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
+                          if (subtitle != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              subtitle!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
                               ),
                             ),
+                          ],
                         ],
                       ),
                     ),
                     IconButton(
+                      onPressed: () => Navigator.pop(context),
                       icon: const Icon(
                         Icons.close,
-                        size: 22,
+                        size: 20,
                         color: AppColors.textSecondary,
                       ),
-                      onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 4),
+              const Divider(height: 24, color: Color(0xFFF1F5F9)),
+              // Content
               Expanded(
                 child: SingleChildScrollView(
                   controller: scrollController,
@@ -124,7 +128,7 @@ class SheetScaffold extends StatelessWidget {
                       ),
                       icon: Icon(confirmIcon, size: 20, color: AppColors.white),
                       label: Text(
-                        confirmLabel,
+                        effectiveConfirmLabel,
                         style: const TextStyle(
                           color: AppColors.white,
                           fontSize: 15,
