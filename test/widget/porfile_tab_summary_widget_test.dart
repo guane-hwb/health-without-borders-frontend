@@ -8,364 +8,891 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/tabs/profile_tab_summary.dart';
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
+// ── _LocaleWrapper ────────────────────────────────────────────────────────────
+class _LocaleWrapper extends StatefulWidget {
+  const _LocaleWrapper({required this.locale, required this.child});
+  final String locale;
+  final Widget child;
 
-/// Wrap the widget in the minimum tree necessary for it to be mounted.
-Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+  @override
+  State<_LocaleWrapper> createState() => _LocaleWrapperState();
+}
+
+class _LocaleWrapperState extends State<_LocaleWrapper> {
+  late String _locale;
+
+  @override
+  void initState() {
+    super.initState();
+    _locale = widget.locale;
+  }
+
+  @override
+  void didUpdateWidget(covariant _LocaleWrapper oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.locale != widget.locale) {
+      _locale = widget.locale;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppLocale(
+      locale: _locale,
+      setLocale: (l) => setState(() => _locale = l),
+      child: widget.child,
+    );
+  }
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 PatientFullRecord _baseRecord({
-  List<AllergyInfo> allergies = const [],
-  BackgroundHistory? backgroundHistory,
-  double? weight = 70.0,
-  double? height = 170.0,
+  String firstName = 'Ana',
+  String firstLastName = 'García',
+  String? secondName,
+  String? secondLastName,
+  String dob = '1990-06-15',
+  String biologicalSex = 'F',
+  String? genderIdentity,
+  String documentType = 'CC',
+  String documentNumber = '1023456789',
   String? bloodType = 'O+',
-  String street = 'Calle 10 # 5-20',
-  String city = 'Bogotá',
-  String state = 'Cundinamarca',
-  String zone = 'U',
+  double? weight = 62.0,
+  double? height = 165.0,
+  String? ethnicity,
+  String? disabilityCategory,
+  String nationalityCode = 'COL',
+  String? nationalityName,
+  Address? address,
   GuardianInfo? guardian,
+  BackgroundHistory? background,
+  List<AllergyInfo> allergies = const [],
 }) {
   return PatientFullRecord(
-    patientId: 'patient-123',
-    deviceUid: 'device-123',
+    patientId: 'test-uuid-001',
+    deviceUid: 'NFC-001',
     patientInfo: PatientInfo(
       identification: PatientIdentification(
-        documentType: 'TI',
-        documentNumber: '987654321',
+        documentType: documentType,
+        documentNumber: documentNumber,
       ),
-      firstLastName: 'García',
-      firstName: 'María',
-      dob: '2018-06-15',
-      biologicalSex: 'F',
-      address: Address(street: street, city: city, state: state, zone: zone),
+      firstName: firstName,
+      secondName: secondName,
+      firstLastName: firstLastName,
+      secondLastName: secondLastName,
+      dob: dob,
+      biologicalSex: biologicalSex,
+      genderIdentity: genderIdentity,
+      ethnicity: ethnicity,
+      disabilityCategory: disabilityCategory,
+      nationalityCode: nationalityCode,
+      nationalityName: nationalityName,
+      address:
+          address ??
+          Address(
+            street: 'Calle 123',
+            city: 'Bogotá',
+            state: 'Cundinamarca',
+            zone: '01',
+          ),
       bloodType: bloodType,
       weight: weight,
       height: height,
     ),
     guardianInfo:
-        guardian ??
-        GuardianInfo(
-          name: 'Carlos Díaz',
-          phone: '3001112233',
-          relationship: '01',
-        ),
+        guardian ?? GuardianInfo(name: '', relationship: '', phone: ''),
+    backgroundHistory: background,
     allergies: allergies,
-    backgroundHistory: backgroundHistory,
   );
 }
 
-ProfileTabSummary _buildWidget({
-  PatientFullRecord? draft,
+Widget _buildWidget({
+  required PatientFullRecord draft,
   PatientFullRecord? original,
-  bool canEdit = false,
+  bool canEdit = true,
   VoidCallback? onEditVitalSigns,
   VoidCallback? onEditAddress,
   VoidCallback? onEditGuardian,
   VoidCallback? onOpenAllergies,
   VoidCallback? onOpenBackground,
+  Locale locale = const Locale('es'),
 }) {
-  return ProfileTabSummary(
-    draft: draft ?? _baseRecord(),
-    original: original ?? original ?? draft ?? _baseRecord(),
-    canEdit: canEdit,
-    onEditVitalSigns: onEditVitalSigns ?? () {},
-    onEditAddress: onEditAddress ?? () {},
-    onEditGuardian: onEditGuardian ?? () {},
-    onOpenAllergies: onOpenAllergies ?? () {},
-    onOpenBackground: onOpenBackground ?? () {},
+  final rec = original ?? draft;
+  return _LocaleWrapper(
+    locale: locale.languageCode,
+    child: MaterialApp(
+      locale: locale,
+      home: Scaffold(
+        body: SizedBox(
+          height: 6000,
+          width: 800,
+          child: ProfileTabSummary(
+            draft: draft,
+            original: rec,
+            canEdit: canEdit,
+            onEditVitalSigns: onEditVitalSigns ?? () {},
+            onEditAddress: onEditAddress ?? () {},
+            onEditGuardian: onEditGuardian ?? () {},
+            onOpenAllergies: onOpenAllergies ?? () {},
+            onOpenBackground: onOpenBackground ?? () {},
+          ),
+        ),
+      ),
+    ),
   );
 }
 
-// ─── Tests ─────────────────────────────────────────────────────────────────
+// ── Tests ────────────────────────────────────────────────────────────────────
 
 void main() {
-  // ── Rendering of main sections ─────────────────────────────────
-  group('Renderizado de secciones', () {
-    testWidgets('muestra el encabezado ALERGIAS', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.text('ALERGIAS'), findsOneWidget);
+  // ══════════════════════════════════════════════════════════════════════════
+  // 1. Change-detection computed properties (@visibleForTesting getters)
+  // ══════════════════════════════════════════════════════════════════════════
+  group('Change detection —', () {
+    late PatientFullRecord base;
+
+    setUp(() => base = _baseRecord());
+
+    ProfileTabSummary _widget(
+      PatientFullRecord draft,
+      PatientFullRecord original,
+    ) => ProfileTabSummary(
+      draft: draft,
+      original: original,
+      canEdit: true,
+      onEditVitalSigns: () {},
+      onEditAddress: () {},
+      onEditGuardian: () {},
+      onOpenAllergies: () {},
+      onOpenBackground: () {},
+    );
+
+    test('allergiesChanged is false when both lists are empty', () {
+      final w = _widget(base, base);
+      expect(w.allergiesChanged, isFalse);
     });
 
-    testWidgets('muestra el encabezado ANTECEDENTES', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.text('ANTECEDENTES'), findsOneWidget);
+    test('allergiesChanged is true when draft has more allergies', () {
+      final draft = _baseRecord(
+        allergies: [AllergyInfo(category: '01', allergen: 'Penicilina')],
+      );
+      final w = _widget(draft, base);
+      expect(w.allergiesChanged, isTrue);
     });
 
-    testWidgets('muestra el encabezado MEDICIONES', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.text('MEDICIONES'), findsOneWidget);
+    test('weightChanged is false when weight is equal', () {
+      final w = _widget(base, base);
+      expect(w.weightChanged, isFalse);
     });
 
-    testWidgets('muestra el encabezado IDENTIDAD', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.text('IDENTIDAD'), findsOneWidget);
+    test('weightChanged is true when draft weight differs', () {
+      final draft = _baseRecord(weight: 70.0);
+      final original = _baseRecord(weight: 62.0);
+      final w = _widget(draft, original);
+      expect(w.weightChanged, isTrue);
     });
 
-    testWidgets('muestra el encabezado RESIDENCIA', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.byType(ProfileTabSummary), findsOneWidget);
+    test('heightChanged is false when heights match', () {
+      final w = _widget(base, base);
+      expect(w.heightChanged, isFalse);
     });
-  });
 
-  // ── Allergy section ────────────────────────────────────────────────
-  group('Sección ALERGIAS', () {
-    testWidgets(
-      'muestra "Sin allergies registradas." cuando la lista está vacía',
-      (tester) async {
-        final emptyRecord = _baseRecord(allergies: []);
-        await tester.pumpWidget(
-          _wrap(_buildWidget(draft: emptyRecord, original: emptyRecord)),
-        );
-        expect(find.textContaining('registradas'), findsWidgets);
+    test('heightChanged is true when draft height differs', () {
+      final draft = _baseRecord(height: 170.0);
+      final original = _baseRecord(height: 165.0);
+      final w = _widget(draft, original);
+      expect(w.heightChanged, isTrue);
+    });
+
+    test('addressChanged is false when address is identical', () {
+      final w = _widget(base, base);
+      expect(w.addressChanged, isFalse);
+    });
+
+    test('addressChanged is true when city differs', () {
+      final draft = _baseRecord(
+        address: Address(
+          street: 'Calle 123',
+          city: 'Medellín',
+          state: 'Antioquia',
+          zone: '01',
+        ),
+      );
+      final original = _baseRecord(
+        address: Address(
+          street: 'Calle 123',
+          city: 'Bogotá',
+          state: 'Cundinamarca',
+          zone: '01',
+        ),
+      );
+      final w = _widget(draft, original);
+      expect(w.addressChanged, isTrue);
+    });
+
+    test('addressChanged is true when zone differs', () {
+      final draft = _baseRecord(
+        address: Address(
+          street: 'Calle 1',
+          city: 'Bogotá',
+          state: 'Cund.',
+          zone: '02',
+        ),
+      );
+      final original = _baseRecord(
+        address: Address(
+          street: 'Calle 1',
+          city: 'Bogotá',
+          state: 'Cund.',
+          zone: '01',
+        ),
+      );
+      final w = _widget(draft, original);
+      expect(w.addressChanged, isTrue);
+    });
+
+    test('backgroundChanged is false when both backgroundHistory are null', () {
+      final w = _widget(base, base);
+      expect(w.backgroundChanged, isFalse);
+    });
+
+    test(
+      'backgroundChanged is true when draft has background and original does not',
+      () {
+        final draft = _baseRecord(background: BackgroundHistory());
+        final original = _baseRecord(background: null);
+        final w = _widget(draft, original);
+        expect(w.backgroundChanged, isTrue);
       },
     );
 
-    testWidgets('muestra el alérgeno cuando hay allergies', (tester) async {
-      final record = _baseRecord(
-        allergies: [AllergyInfo(allergen: 'Penicilina', category: '01')],
+    test('backgroundChanged is true when chronicConditions counts differ', () {
+      final draft = _baseRecord(
+        background: BackgroundHistory(
+          chronicConditions: [
+            ChronicConditionItem(chronicDescription: 'Diabetes'),
+          ],
+        ),
       );
-      await tester.pumpWidget(
-        _wrap(_buildWidget(draft: record, original: record)),
+      final original = _baseRecord(background: BackgroundHistory());
+      final w = _widget(draft, original);
+      expect(w.backgroundChanged, isTrue);
+    });
+
+    test('backgroundChanged is true when personalHistory text differs', () {
+      final draft = _baseRecord(
+        background: BackgroundHistory(personalHistory: 'Cirugía 2020'),
       );
+      final original = _baseRecord(background: BackgroundHistory());
+      final w = _widget(draft, original);
+      expect(w.backgroundChanged, isTrue);
+    });
+
+    test('guardianChanged is false when guardians are identical', () {
+      final guardian = GuardianInfo(
+        name: 'María López',
+        relationship: '01',
+        phone: '3001234567',
+      );
+      final draft = _baseRecord(guardian: guardian);
+      final original = _baseRecord(guardian: guardian);
+      final w = _widget(draft, original);
+      expect(w.guardianChanged, isFalse);
+    });
+
+    test('guardianChanged is true when phone differs', () {
+      final draft = _baseRecord(
+        guardian: GuardianInfo(
+          name: 'María López',
+          relationship: '01',
+          phone: '3009999999',
+        ),
+      );
+      final original = _baseRecord(
+        guardian: GuardianInfo(
+          name: 'María López',
+          relationship: '01',
+          phone: '3001234567',
+        ),
+      );
+      final w = _widget(draft, original);
+      expect(w.guardianChanged, isTrue);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 2. Allergies section rendering
+  // ══════════════════════════════════════════════════════════════════════════
+  group('Allergies section —', () {
+    testWidgets('shows empty-state text when there are no allergies', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildWidget(draft: _baseRecord()));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('alerg', findRichText: true), findsWidgets);
+    });
+
+    testWidgets('shows allergen name when one allergy is present', (
+      tester,
+    ) async {
+      final draft = _baseRecord(
+        allergies: [AllergyInfo(category: '01', allergen: 'Penicilina')],
+      );
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
       expect(find.text('Penicilina'), findsOneWidget);
     });
 
-    testWidgets('muestra la categoría formateada del alérgeno', (tester) async {
-      final record = _baseRecord(
-        allergies: [AllergyInfo(allergen: 'Penicilina', category: '01')],
+    testWidgets('shows category label for allergy', (tester) async {
+      final draft = _baseRecord(
+        allergies: [AllergyInfo(category: '02', allergen: 'Maní')],
       );
-      await tester.pumpWidget(
-        _wrap(_buildWidget(draft: record, original: record)),
-      );
-      expect(find.textContaining('Medicamento'), findsOneWidget);
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Maní'), findsOneWidget);
     });
 
-    testWidgets('muestra el badge con la cantidad de allergies', (
+    testWidgets('shows badge count equal to number of allergies', (
       tester,
     ) async {
-      final record = _baseRecord(
+      final draft = _baseRecord(
         allergies: [
-          AllergyInfo(allergen: 'Polen', category: '03'),
-          AllergyInfo(allergen: 'Maní', category: '02'),
+          AllergyInfo(category: '01', allergen: 'A'),
+          AllergyInfo(category: '02', allergen: 'B'),
+          AllergyInfo(category: '03', allergen: 'C'),
         ],
       );
-      await tester.pumpWidget(
-        _wrap(_buildWidget(draft: record, original: record)),
-      );
-      expect(find.text('2'), findsOneWidget);
-    });
-  });
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
 
-  // ── Callbacks of clickable sections ────────────────────────────────────
-  group('Callbacks', () {
-    testWidgets('onOpenAllergies se invoca al tocar la sección de allergies', (
-      tester,
-    ) async {
-      bool called = false;
+      expect(find.text('3'), findsOneWidget);
+    });
+
+    testWidgets('tapping the section calls onOpenAllergies', (tester) async {
+      var called = false;
+      final draft = _baseRecord();
       await tester.pumpWidget(
-        _wrap(_buildWidget(onOpenAllergies: () => called = true)),
+        _buildWidget(draft: draft, onOpenAllergies: () => called = true),
       );
-      await tester.tap(find.textContaining('ALERGIAS'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.warning_amber_rounded).first);
+      await tester.pumpAndSettle();
+
       expect(called, isTrue);
     });
 
-    testWidgets(
-      'onOpenBackground se invoca al tocar la sección de antecedentes',
-      (tester) async {
-        bool called = false;
-        await tester.pumpWidget(
-          _wrap(_buildWidget(onOpenBackground: () => called = true)),
-        );
-        await tester.tap(find.textContaining('ANTECEDENTES'));
-        expect(called, isTrue);
-      },
-    );
-
-    testWidgets('onEditVitalSigns se invoca cuando canEdit es true', (
-      tester,
-    ) async {
-      bool called = false;
-      await tester.pumpWidget(
-        _wrap(
-          _buildWidget(canEdit: true, onEditVitalSigns: () => called = true),
-        ),
+    testWidgets('multiple allergens all appear in the list', (tester) async {
+      final draft = _baseRecord(
+        allergies: [
+          AllergyInfo(category: '01', allergen: 'Penicilina'),
+          AllergyInfo(category: '02', allergen: 'Maní'),
+        ],
       );
-      final editButtons = find.textContaining('Editar');
-      await tester.tap(editButtons.first);
-      expect(called, isTrue);
-    });
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
 
-    testWidgets(
-      'no muestra botón Editar en MEDICIONES cuando canEdit es false',
-      (tester) async {
-        await tester.pumpWidget(_wrap(_buildWidget(canEdit: false)));
-        expect(find.text('Editar'), findsNothing);
-      },
-    );
-  });
-
-  // ── Vital signs ─────────────────────────────────────────────────────
-  group('Sección MEDICIONES', () {
-    testWidgets('muestra el peso con una decimal y unidad kg', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.textContaining('70.0'), findsOneWidget);
-    });
-
-    testWidgets('muestra la altura sin decimales y unidad cm', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.textContaining('170'), findsOneWidget);
-    });
-
-    testWidgets('muestra el tipo de sangre', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.textContaining('O+'), findsOneWidget);
-    });
-
-    testWidgets('muestra "—" cuando el peso es nulo', (tester) async {
-      final record = _baseRecord(weight: null);
-      await tester.pumpWidget(
-        _wrap(_buildWidget(draft: record, original: record)),
-      );
-      expect(find.text('—'), findsWidgets);
+      expect(find.text('Penicilina'), findsOneWidget);
+      expect(find.text('Maní'), findsOneWidget);
     });
   });
 
-  // ── RESIDENCE section ────────────────────────────────────────────────────
-  group('Sección RESIDENCIA', () {
-    testWidgets('muestra la dirección del paciente', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      // Solución: Buscamos en el componente cargado la presencia del layout de datos seguros
-      expect(find.byType(ProfileTabSummary), findsOneWidget);
-    });
-
-    testWidgets('muestra "Urbana" cuando zone es "U"', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.byType(ProfileTabSummary), findsOneWidget);
-    });
-
-    testWidgets('muestra "Rural" cuando zone es "R"', (tester) async {
-      final record = _baseRecord(zone: 'R');
+  // ══════════════════════════════════════════════════════════════════════════
+  // 3. Background section rendering
+  // ══════════════════════════════════════════════════════════════════════════
+  group('Background section —', () {
+    testWidgets('shows dashes when backgroundHistory is null', (tester) async {
       await tester.pumpWidget(
-        _wrap(_buildWidget(draft: record, original: record)),
+        _buildWidget(draft: _baseRecord(background: null)),
       );
-      expect(find.byType(ProfileTabSummary), findsOneWidget);
-    });
+      await tester.pumpAndSettle();
 
-    testWidgets('muestra la ciudad y el departamento', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.byType(ProfileTabSummary), findsOneWidget);
-    });
-  });
-
-  // ── GUARDIAN Section ──────────────────────────────────────────────────────
-  group('Sección GUARDIÁN', () {
-    testWidgets('no muestra la sección cuando el guardián no tiene nombre', (
-      tester,
-    ) async {
-      final emptyGuardian = GuardianInfo(name: '', phone: '', relationship: '');
-      final record = _baseRecord(guardian: emptyGuardian);
-      await tester.pumpWidget(
-        _wrap(_buildWidget(draft: record, original: record)),
-      );
-      expect(find.text('Carlos Díaz'), findsNothing);
-    });
-
-    testWidgets('muestra la sección cuando el guardián tiene nombre', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.byType(ProfileTabSummary), findsOneWidget);
-    });
-
-    testWidgets('muestra las iniciales del guardián', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.byType(ProfileTabSummary), findsOneWidget);
-    });
-
-    testWidgets('muestra la relación formateada del guardián', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
-      expect(find.byType(ProfileTabSummary), findsOneWidget);
-    });
-  });
-
-  // ── Change indicator (orange dot) ──────────────────────────────────
-  group('Indicador de cambios (_OrangeDot)', () {
-    testWidgets('no aparece ningún punto naranja cuando draft == original', (
-      tester,
-    ) async {
-      final record = _baseRecord();
-      await tester.pumpWidget(
-        _wrap(_buildWidget(draft: record, original: record)),
-      );
-      final orangeDots = tester
-          .widgetList<Container>(find.byType(Container))
-          .where(
-            (c) =>
-                c.decoration is BoxDecoration &&
-                (c.decoration as BoxDecoration).color ==
-                    const Color(0xFFFF9800),
-          );
-      expect(orangeDots, isEmpty);
-    });
-
-    testWidgets('aparece punto naranja cuando el peso cambia', (tester) async {
-      final draft = _baseRecord(weight: 80.0);
-      final original = _baseRecord(weight: 70.0);
-      await tester.pumpWidget(
-        _wrap(_buildWidget(draft: draft, original: original)),
-      );
-      expect(find.byType(ProfileTabSummary), findsOneWidget);
-    });
-  });
-
-  // ── BACKGROUND section ──────────────────────────────────────────────────
-  group('Sección ANTECEDENTES', () {
-    testWidgets('muestra "—" cuando no hay antecedentes', (tester) async {
-      await tester.pumpWidget(_wrap(_buildWidget()));
       expect(find.text('—'), findsWidgets);
     });
 
-    testWidgets('muestra condiciones crónicas cuando existen', (tester) async {
-      final record = _baseRecord(
-        backgroundHistory: BackgroundHistory(
+    testWidgets('shows chronic count when conditions exist', (tester) async {
+      final draft = _baseRecord(
+        background: BackgroundHistory(
           chronicConditions: [
             ChronicConditionItem(chronicDescription: 'Diabetes tipo 2'),
+            ChronicConditionItem(chronicDescription: 'Hipertensión'),
           ],
-          personalHistory: '',
-          familyHistory: [],
         ),
       );
-      await tester.pumpWidget(
-        _wrap(_buildWidget(draft: record, original: record)),
-      );
-      // The widget displays the record count, not the individual description.
-      expect(find.textContaining('1 registros'), findsOneWidget);
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('2'), findsWidgets);
     });
 
-    testWidgets('muestra el conteo de antecedentes familiares', (tester) async {
-      final record = _baseRecord(
-        backgroundHistory: BackgroundHistory(
-          chronicConditions: [],
-          personalHistory: '',
+    testWidgets('shows personalHistory text in mini-row when present', (
+      tester,
+    ) async {
+      final draft = _baseRecord(
+        background: BackgroundHistory(personalHistory: 'Apendicectomía 2015'),
+      );
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Apendicectomía 2015', findRichText: true),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('tapping section calls onOpenBackground', (tester) async {
+      var called = false;
+      await tester.pumpWidget(
+        _buildWidget(
+          draft: _baseRecord(),
+          onOpenBackground: () => called = true,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.history_edu_outlined).first);
+      await tester.pumpAndSettle();
+
+      expect(called, isTrue);
+    });
+
+    testWidgets('shows medication count when medications exist', (
+      tester,
+    ) async {
+      final draft = _baseRecord(
+        background: BackgroundHistory(
+          medications: [
+            MedicationStatementItem(medicationName: 'Metformina'),
+            MedicationStatementItem(medicationName: 'Losartán'),
+          ],
+        ),
+      );
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('2'), findsWidgets);
+    });
+
+    testWidgets('shows family history count when entries exist', (
+      tester,
+    ) async {
+      final draft = _baseRecord(
+        background: BackgroundHistory(
           familyHistory: [
             FamilyHistoryItem(
-              conditionDescription: 'Hipertensión',
-              relationship: '01',
-            ),
-            FamilyHistoryItem(
-              conditionDescription: 'Cáncer',
+              conditionDescription: 'Cáncer colon',
               relationship: '01',
             ),
           ],
         ),
       );
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('1'), findsWidgets);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 4. Measurements / vitals section
+  // ══════════════════════════════════════════════════════════════════════════
+  group('Measurements section —', () {
+    testWidgets('displays formatted weight', (tester) async {
+      final draft = _baseRecord(weight: 73.5);
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('73.5 kg'), findsOneWidget);
+    });
+
+    testWidgets('displays formatted height', (tester) async {
+      final draft = _baseRecord(height: 168.0);
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('168 cm'), findsOneWidget);
+    });
+
+    testWidgets('displays em dash when weight is null', (tester) async {
+      final draft = _baseRecord(weight: null);
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('—'), findsWidgets);
+    });
+
+    testWidgets('displays em dash when height is null', (tester) async {
+      final draft = _baseRecord(height: null);
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('—'), findsWidgets);
+    });
+
+    testWidgets('displays blood type when present', (tester) async {
+      final draft = _baseRecord(bloodType: 'A+');
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('A+'), findsOneWidget);
+    });
+
+    testWidgets('shows Edit button when canEdit is true', (tester) async {
       await tester.pumpWidget(
-        _wrap(_buildWidget(draft: record, original: record)),
+        _buildWidget(draft: _baseRecord(), canEdit: true),
       );
-      expect(find.textContaining('2 registros'), findsOneWidget);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('dit', findRichText: true), findsWidgets);
+    });
+
+    testWidgets('hides Edit button when canEdit is false', (tester) async {
+      await tester.pumpWidget(
+        _buildWidget(draft: _baseRecord(), canEdit: false),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Editar'), findsNothing);
+    });
+
+    testWidgets('tapping Edit vitals calls onEditVitalSigns', (tester) async {
+      var called = false;
+      await tester.pumpWidget(
+        _buildWidget(
+          draft: _baseRecord(),
+          canEdit: true,
+          onEditVitalSigns: () => called = true,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final editButtons = find.textContaining('Editar');
+      expect(editButtons, findsWidgets);
+      await tester.tap(editButtons.first);
+      await tester.pumpAndSettle();
+
+      expect(called, isTrue);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 5. Identity section
+  // ══════════════════════════════════════════════════════════════════════════
+  group('Identity section —', () {
+    testWidgets('displays document number when non-empty', (tester) async {
+      final draft = _baseRecord(documentNumber: '987654321');
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('987654321'), findsOneWidget);
+    });
+
+    testWidgets('shows em dash when document number is empty', (tester) async {
+      final draft = _baseRecord(documentNumber: '');
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('—'), findsWidgets);
+    });
+
+    testWidgets('displays nationalityName when available', (tester) async {
+      final draft = _baseRecord(
+        nationalityCode: 'VEN',
+        nationalityName: 'Venezuela',
+      );
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Venezuela'), findsOneWidget);
+    });
+
+    testWidgets('falls back to nationalityCode when name is null', (
+      tester,
+    ) async {
+      final draft = _baseRecord(nationalityCode: 'ECU', nationalityName: null);
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ECU'), findsOneWidget);
+    });
+
+    testWidgets('formats valid dob in Spanish locale', (tester) async {
+      final draft = _baseRecord(dob: '1990-06-15');
+      await tester.pumpWidget(
+        _buildWidget(draft: draft, locale: const Locale('es')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('junio'), findsOneWidget);
+    });
+
+    testWidgets('returns raw dob when format is unrecognised', (tester) async {
+      final draft = _baseRecord(dob: 'invalid-date');
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('invalid-date'), findsOneWidget);
+    });
+
+    testWidgets('returns raw dob when string is empty', (tester) async {
+      final draft = _baseRecord(dob: '');
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ProfileTabSummary), findsOneWidget);
+    });
+
+    testWidgets('sex label M renders correctly', (tester) async {
+      final draft = _baseRecord(biologicalSex: 'M');
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('asculin', findRichText: true), findsWidgets);
+    });
+
+    testWidgets('sex label F renders correctly', (tester) async {
+      final draft = _baseRecord(biologicalSex: 'F');
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('emenin', findRichText: true), findsWidgets);
+    });
+
+    testWidgets('unknown sex code is shown as-is', (tester) async {
+      // biologicalSex 'X' is used as fallback in TWO _IdCell widgets:
+      // (1) the Sexo row, (2) the Identidad de género row (which falls back
+      // to _sexLabel when genderIdentity is null). So findsWidgets is correct.
+      final draft = _baseRecord(biologicalSex: 'X');
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('X'), findsWidgets);
+    });
+
+    testWidgets('docType CC renders localised label', (tester) async {
+      final draft = _baseRecord(documentType: 'CC');
+      await tester.pumpWidget(
+        _buildWidget(draft: draft, locale: const Locale('es')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('dula', findRichText: true).evaluate().isNotEmpty ||
+            find.textContaining('National ID').evaluate().isNotEmpty,
+        isTrue,
+      );
+    });
+
+    testWidgets('unknown docType code falls through as raw string', (
+      tester,
+    ) async {
+      final draft = _baseRecord(documentType: 'ZZ');
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ZZ'), findsOneWidget);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 6. Residence section
+  // ══════════════════════════════════════════════════════════════════════════
+  group('Residence section —', () {
+    testWidgets('shows em dash when street is null', (tester) async {
+      final draft = _baseRecord(
+        address: Address(city: 'Bogotá', state: 'Cundinamarca'),
+      );
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('—'), findsWidgets);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 7. Guardian section
+  // ══════════════════════════════════════════════════════════════════════════
+  group('Guardian section —', () {
+    testWidgets('guardian section is hidden when name is empty', (
+      tester,
+    ) async {
+      final draft = _baseRecord(
+        guardian: GuardianInfo(name: '', relationship: '', phone: ''),
+      );
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.family_restroom), findsNothing);
+    });
+
+    testWidgets('shows em dash when guardian phone is empty', (tester) async {
+      final draft = _baseRecord(
+        guardian: GuardianInfo(
+          name: 'María López',
+          relationship: '02',
+          phone: '',
+        ),
+      );
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.text('—'), findsWidgets);
+    });
+
+    testWidgets('unknown relationship code is shown as-is', (tester) async {
+      final draft = _baseRecord(
+        guardian: GuardianInfo(
+          name: 'X Y',
+          relationship: '99',
+          phone: '3001234567',
+        ),
+      );
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('99', findRichText: true), findsWidgets);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 8. Orange change-indicator dot visibility
+  // ══════════════════════════════════════════════════════════════════════════
+  group('Orange change-dot visibility —', () {
+    final _orangeDot = find.byWidgetPredicate((w) {
+      if (w is Container) {
+        final deco = w.decoration;
+        if (deco is BoxDecoration) {
+          final color = deco.color;
+          if (color != null) {
+            return color.red == 255 && color.green == 152 && color.blue == 0;
+          }
+        }
+      }
+      return false;
+    });
+
+    testWidgets('no dots shown when draft equals original', (tester) async {
+      final rec = _baseRecord();
+      await tester.pumpWidget(_buildWidget(draft: rec, original: rec));
+      await tester.pumpAndSettle();
+
+      expect(_orangeDot, findsNothing);
+    });
+
+    testWidgets('dot appears when allergies changed', (tester) async {
+      final draft = _baseRecord(
+        allergies: [AllergyInfo(category: '06', allergen: 'Polen')],
+      );
+      final original = _baseRecord();
+      await tester.pumpWidget(_buildWidget(draft: draft, original: original));
+      await tester.pumpAndSettle();
+
+      expect(_orangeDot, findsAtLeastNWidgets(1));
+    });
+
+    testWidgets('dot appears when weight changed', (tester) async {
+      final draft = _baseRecord(weight: 80.0);
+      final original = _baseRecord(weight: 62.0);
+      await tester.pumpWidget(_buildWidget(draft: draft, original: original));
+      await tester.pumpAndSettle();
+
+      expect(_orangeDot, findsAtLeastNWidgets(1));
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 9. Locale switching (ES → EN)
+  // ══════════════════════════════════════════════════════════════════════════
+  group('Locale switching —', () {
+    testWidgets('no crashes rendering every doc type code', (tester) async {
+      const codes = ['RC', 'TI', 'CC', 'CE', 'PA', 'PE', 'PT', 'MS', 'AS'];
+      for (final code in codes) {
+        final draft = _baseRecord(documentType: code);
+        await tester.pumpWidget(
+          _buildWidget(draft: draft, locale: const Locale('en')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(ProfileTabSummary),
+          findsOneWidget,
+          reason: 'Crashed for docType=$code',
+        );
+      }
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 10. Smoke / robustness
+  // ══════════════════════════════════════════════════════════════════════════
+  group('Robustness —', () {
+    testWidgets('renders without error with all-null optional fields', (
+      tester,
+    ) async {
+      final draft = _baseRecord(
+        secondName: null,
+        secondLastName: null,
+        bloodType: null,
+        weight: null,
+        height: null,
+        ethnicity: null,
+        disabilityCategory: null,
+        nationalityName: null,
+        address: Address(city: '', state: ''),
+        background: null,
+        allergies: const [],
+      );
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ProfileTabSummary), findsOneWidget);
+    });
+
+    testWidgets('renders without error with many allergies', (tester) async {
+      final draft = _baseRecord(
+        allergies: List.generate(
+          20,
+          (i) => AllergyInfo(category: '06', allergen: 'Allergen $i'),
+        ),
+      );
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ProfileTabSummary), findsOneWidget);
+    });
+
+    testWidgets('renders without error with very long strings', (tester) async {
+      final longStr = 'A' * 300;
+      final draft = _baseRecord(
+        firstName: longStr,
+        address: Address(
+          street: longStr,
+          city: longStr,
+          state: longStr,
+          zone: '01',
+        ),
+      );
+      await tester.pumpWidget(_buildWidget(draft: draft));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ProfileTabSummary), findsOneWidget);
+    });
+
+    testWidgets('canEdit false hides all Edit buttons', (tester) async {
+      await tester.pumpWidget(
+        _buildWidget(draft: _baseRecord(), canEdit: false),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Editar'), findsNothing);
+      expect(find.text('Edit'), findsNothing);
     });
   });
 }

@@ -8,6 +8,7 @@
 /// To change locale, call AppLocale.of(context).setLocale('en') from any widget.
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 // ─── Locale state ───────────────────────────────────────────────────────────
@@ -43,6 +44,9 @@ class AppStrings {
   static AppStrings of(BuildContext context) {
     return AppStrings._(AppLocale.of(context).locale);
   }
+
+  @visibleForTesting
+  static AppStrings forTesting(String locale) => AppStrings._(locale);
 
   String _get(String key) => (_locale == 'en' ? _en : _es)[key] ?? key;
 
