@@ -8,7 +8,7 @@
 /// To change locale, call AppLocale.of(context).setLocale('en') from any widget.
 library;
 
-import 'package:flutter/foundation.dart';
+// import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 // ─── Locale state ───────────────────────────────────────────────────────────

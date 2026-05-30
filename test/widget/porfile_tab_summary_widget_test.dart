@@ -158,7 +158,7 @@ void main() {
 
     setUp(() => base = _baseRecord());
 
-    ProfileTabSummary _widget(
+    ProfileTabSummary widget(
       PatientFullRecord draft,
       PatientFullRecord original,
     ) => ProfileTabSummary(
@@ -173,7 +173,7 @@ void main() {
     );
 
     test('allergiesChanged is false when both lists are empty', () {
-      final w = _widget(base, base);
+      final w = widget(base, base);
       expect(w.allergiesChanged, isFalse);
     });
 
@@ -181,36 +181,36 @@ void main() {
       final draft = _baseRecord(
         allergies: [AllergyInfo(category: '01', allergen: 'Penicilina')],
       );
-      final w = _widget(draft, base);
+      final w = widget(draft, base);
       expect(w.allergiesChanged, isTrue);
     });
 
     test('weightChanged is false when weight is equal', () {
-      final w = _widget(base, base);
+      final w = widget(base, base);
       expect(w.weightChanged, isFalse);
     });
 
     test('weightChanged is true when draft weight differs', () {
       final draft = _baseRecord(weight: 70.0);
       final original = _baseRecord(weight: 62.0);
-      final w = _widget(draft, original);
+      final w = widget(draft, original);
       expect(w.weightChanged, isTrue);
     });
 
     test('heightChanged is false when heights match', () {
-      final w = _widget(base, base);
+      final w = widget(base, base);
       expect(w.heightChanged, isFalse);
     });
 
     test('heightChanged is true when draft height differs', () {
       final draft = _baseRecord(height: 170.0);
       final original = _baseRecord(height: 165.0);
-      final w = _widget(draft, original);
+      final w = widget(draft, original);
       expect(w.heightChanged, isTrue);
     });
 
     test('addressChanged is false when address is identical', () {
-      final w = _widget(base, base);
+      final w = widget(base, base);
       expect(w.addressChanged, isFalse);
     });
 
@@ -231,7 +231,7 @@ void main() {
           zone: '01',
         ),
       );
-      final w = _widget(draft, original);
+      final w = widget(draft, original);
       expect(w.addressChanged, isTrue);
     });
 
@@ -252,12 +252,12 @@ void main() {
           zone: '01',
         ),
       );
-      final w = _widget(draft, original);
+      final w = widget(draft, original);
       expect(w.addressChanged, isTrue);
     });
 
     test('backgroundChanged is false when both backgroundHistory are null', () {
-      final w = _widget(base, base);
+      final w = widget(base, base);
       expect(w.backgroundChanged, isFalse);
     });
 
@@ -266,7 +266,7 @@ void main() {
       () {
         final draft = _baseRecord(background: BackgroundHistory());
         final original = _baseRecord(background: null);
-        final w = _widget(draft, original);
+        final w = widget(draft, original);
         expect(w.backgroundChanged, isTrue);
       },
     );
@@ -280,7 +280,7 @@ void main() {
         ),
       );
       final original = _baseRecord(background: BackgroundHistory());
-      final w = _widget(draft, original);
+      final w = widget(draft, original);
       expect(w.backgroundChanged, isTrue);
     });
 
@@ -289,7 +289,7 @@ void main() {
         background: BackgroundHistory(personalHistory: 'Cirugía 2020'),
       );
       final original = _baseRecord(background: BackgroundHistory());
-      final w = _widget(draft, original);
+      final w = widget(draft, original);
       expect(w.backgroundChanged, isTrue);
     });
 
@@ -301,7 +301,7 @@ void main() {
       );
       final draft = _baseRecord(guardian: guardian);
       final original = _baseRecord(guardian: guardian);
-      final w = _widget(draft, original);
+      final w = widget(draft, original);
       expect(w.guardianChanged, isFalse);
     });
 
@@ -320,7 +320,7 @@ void main() {
           phone: '3001234567',
         ),
       );
-      final w = _widget(draft, original);
+      final w = widget(draft, original);
       expect(w.guardianChanged, isTrue);
     });
   });
@@ -766,13 +766,15 @@ void main() {
   // 8. Orange change-indicator dot visibility
   // ══════════════════════════════════════════════════════════════════════════
   group('Orange change-dot visibility —', () {
-    final _orangeDot = find.byWidgetPredicate((w) {
+    final orangeDot = find.byWidgetPredicate((w) {
       if (w is Container) {
         final deco = w.decoration;
         if (deco is BoxDecoration) {
           final color = deco.color;
           if (color != null) {
-            return color.red == 255 && color.green == 152 && color.blue == 0;
+            return (color.r * 255).round() == 255 &&
+                (color.g * 255).round() == 152 &&
+                (color.b * 255).round() == 0;
           }
         }
       }
@@ -784,7 +786,7 @@ void main() {
       await tester.pumpWidget(_buildWidget(draft: rec, original: rec));
       await tester.pumpAndSettle();
 
-      expect(_orangeDot, findsNothing);
+      expect(orangeDot, findsNothing);
     });
 
     testWidgets('dot appears when allergies changed', (tester) async {
@@ -795,7 +797,7 @@ void main() {
       await tester.pumpWidget(_buildWidget(draft: draft, original: original));
       await tester.pumpAndSettle();
 
-      expect(_orangeDot, findsAtLeastNWidgets(1));
+      expect(orangeDot, findsAtLeastNWidgets(1));
     });
 
     testWidgets('dot appears when weight changed', (tester) async {
@@ -804,7 +806,7 @@ void main() {
       await tester.pumpWidget(_buildWidget(draft: draft, original: original));
       await tester.pumpAndSettle();
 
-      expect(_orangeDot, findsAtLeastNWidgets(1));
+      expect(orangeDot, findsAtLeastNWidgets(1));
     });
   });
 
