@@ -8,6 +8,7 @@
 /// To change locale, call AppLocale.of(context).setLocale('en') from any widget.
 library;
 
+// import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 // ─── Locale state ───────────────────────────────────────────────────────────
@@ -43,6 +44,9 @@ class AppStrings {
   static AppStrings of(BuildContext context) {
     return AppStrings._(AppLocale.of(context).locale);
   }
+
+  @visibleForTesting
+  static AppStrings forTesting(String locale) => AppStrings._(locale);
 
   String _get(String key) => (_locale == 'en' ? _en : _es)[key] ?? key;
 
@@ -93,6 +97,7 @@ class AppStrings {
   String get retry => _get('retry');
   String get delete => _get('delete');
   String get confirm => _get('confirm');
+  String get confirmChanges => _get('confirmChanges');
   String get loading => _get('loading');
   String get error => _get('error');
   String get success => _get('success');
@@ -149,6 +154,21 @@ class AppStrings {
   String get guardianDocNumber => _get('guardianDocNumber');
   String get guardianAuthAccepted => _get('guardianAuthAccepted');
   String get guardianEmail => _get('guardianEmail');
+  // Edit guardian sheet
+  String get editGuardianTitle => _get('editGuardianTitle');
+  String get guardianFullName => _get('guardianFullName');
+  String get guardianFullNameHint => _get('guardianFullNameHint');
+  String get guardianRelationship => _get('guardianRelationship');
+  String get guardianPhoneLabel => _get('guardianPhoneLabel');
+  String get guardianPhoneHint => _get('guardianPhoneHint');
+  String get guardianNfcDevice => _get('guardianNfcDevice');
+  String get guardianNfcUidHint => _get('guardianNfcUidHint');
+  String get guardianNfcUnavailable => _get('guardianNfcUnavailable');
+  String get guardianNfcError => _get('guardianNfcError');
+  String get relParents => _get('relParents');
+  String get relSiblings => _get('relSiblings');
+  String get relUncles => _get('relUncles');
+  String get relGrandparents => _get('relGrandparents');
 
   // ── Read NFC ────────────────────────────────────────────────────────────
   String get scanWristband => _get('scanWristband');
@@ -186,6 +206,18 @@ class AppStrings {
   String get city => _get('city');
   String get state => _get('state');
   String get name => _get('name');
+
+  // ── Edit address sheet ──────────────────────────────────────────────────
+  String get editResidence => _get('editResidence');
+  String get addressZoneSubtitle => _get('addressZoneSubtitle');
+  String get municipality => _get('municipality');
+  String get department => _get('department');
+  String get zone => _get('zone');
+  String get streetHint => _get('streetHint');
+  String get cityHint => _get('cityHint');
+  String get stateHint => _get('stateHint');
+  String get zoneUrban => _get('zoneUrban');
+  String get zoneRural => _get('zoneRural');
 
   // ── Medical history edit ────────────────────────────────────────────────
   String get clinicalEvaluation => _get('clinicalEvaluation');
@@ -258,6 +290,13 @@ class AppStrings {
   String get administeredBy => _get('administeredBy');
   String get administeredAt => _get('administeredAt');
 
+  // ── Vital signs sheet ──────────────────────────────────────────────────
+  String get editMeasurements => _get('editMeasurements');
+  String get weightKg => _get('weightKg');
+  String get heightCm => _get('heightCm');
+  String get previous => _get('previous');
+  String get bloodTypeReadOnly => _get('bloodTypeReadOnly');
+
   // ── Allergen categories ─────────────────────────────────────────────────
   String get allergenMedication => _get('allergenMedication');
   String get allergenFood => _get('allergenFood');
@@ -266,7 +305,7 @@ class AppStrings {
   String get allergenInsect => _get('allergenInsect');
   String get allergenOther => _get('allergenOther');
 
-  // ── Login screen v2 / Home v2 ──
+  // ── Login screen v2 / Home v2 ──────────────────────────────────────
   String get appSubtitleShort => _get('appSubtitleShort');
   String get emailLabel => _get('emailLabel');
   String get passwordLabel => _get('passwordLabel');
@@ -284,7 +323,8 @@ class AppStrings {
   String get roleOrgAdmin => _get('roleOrgAdmin');
   String get roleSuperadmin => _get('roleSuperadmin');
   String get offline => _get('offline');
-  // Home actions v2
+
+  // Home actions v2 ─────────────────────────────────────────────────────
   String get actionReadNfc => _get('actionReadNfc');
   String get actionReadNfcSub => _get('actionReadNfcSub');
   String get actionNewPatient => _get('actionNewPatient');
@@ -296,7 +336,7 @@ class AppStrings {
   String get actionPendingSyncEmpty => _get('actionPendingSyncEmpty');
   String actionPendingSyncCount(int n) =>
       _get('actionPendingSyncCount').replaceAll('{n}', '$n');
-  // Admin v2
+  // Admin v2 ─────────────────────────────────────────────────────────────
   String get kpiUsers => _get('kpiUsers');
   String get kpiSyncedOk => _get('kpiSyncedOk');
   String get adminManageUsers => _get('adminManageUsers');
@@ -305,7 +345,8 @@ class AppStrings {
   String get adminViewPatientsSub => _get('adminViewPatientsSub');
   String adminBrigadeHistorySub(int n) =>
       _get('adminBrigadeHistorySub').replaceAll('{n}', '$n');
-  // Read NFC v2
+
+  // Read NFC v2────────────────────────────────────────────────────────────
   String get readWristbandTitle => _get('readWristbandTitle');
   String get scanGuardianTitle => _get('scanGuardianTitle');
   String get scanPatientHeadline => _get('scanPatientHeadline');
@@ -319,7 +360,8 @@ class AppStrings {
   String get manualGuardianUidLabel => _get('manualGuardianUidLabel');
   String get manualGuardianUidHint => _get('manualGuardianUidHint');
   String get useManualUid => _get('useManualUid');
-  // Search v2
+
+  // Search v2 ──────────────────────────────────────────────────────────────
   String get searchPatientTitle => _get('searchPatientTitle');
   String get searchSubtitle => _get('searchSubtitle');
   String get searchPrivacyNotice => _get('searchPrivacyNotice');
@@ -335,6 +377,181 @@ class AppStrings {
   String get searchPatientButton => _get('searchPatientButton');
   String get searchFooterNote => _get('searchFooterNote');
   String get searchNoMatch => _get('searchNoMatch');
+
+  // ── Patient profile screen ──────────────────────────────────────────────
+  String get unsyncedChanges => _get('unsyncedChanges');
+  String get synced => _get('synced');
+  String get syncedAt => _get('syncedAt');
+  String get syncingBtn => _get('syncingBtn');
+  String get syncBtn => _get('syncBtn');
+  String get savedChangesMsg => _get('savedChangesMsg');
+  String get notAuthorizedConsultations => _get('notAuthorizedConsultations');
+  String get unsyncedChangesTitle => _get('unsyncedChangesTitle');
+  String get exitWithoutSyncMsg => _get('exitWithoutSyncMsg');
+  String get exit => _get('exit');
+  String get tabSummary => _get('tabSummary');
+  String get yearsOldSuffix => _get('yearsOldSuffix');
+  String get noAllergiesRegistered => _get('noAllergiesRegistered');
+  String get addAllergyBtn => _get('addAllergyBtn');
+
+  // Add allergy sheet ─────────────────────────────────────────────────────
+  String get allergyCategoryLabel => _get('allergyCategoryLabel');
+  String get allergenLabel => _get('allergenLabel');
+  String get allergenHint => _get('allergenHint');
+  String get reactionOptionalLabel => _get('reactionOptionalLabel');
+  String get reactionHint => _get('reactionHint');
+  String get allergiesSheetTitle => _get('allergiesSheetTitle');
+  String get backgroundSheetTitle => _get('backgroundSheetTitle');
+  String get noChronicConditions => _get('noChronicConditions');
+
+  // Add chronic condition sheet ───────────────────────────────────────────
+  String get addChronicConditionTitle => _get('addChronicConditionTitle');
+  String get chronicConditionHint => _get('chronicConditionHint');
+  String get noMedications => _get('noMedications');
+  String get medications => _get('medications');
+  String get personalHistoryTitle => _get('personalHistoryTitle');
+  String get noFamilyHistoryEntries => _get('noFamilyHistoryEntries');
+  String get reactionLabel => _get('reactionLabel');
+  String get sexMale => _get('sexMale');
+  String get sexFemale => _get('sexFemale');
+  String get sexIndeterminate => _get('sexIndeterminate');
+  String get docTypeRC => _get('docTypeRC');
+  String get docTypeTI => _get('docTypeTI');
+  String get docTypeCC => _get('docTypeCC');
+  String get docTypeCE => _get('docTypeCE');
+  String get docTypePA => _get('docTypePA');
+  String get docTypePE => _get('docTypePE');
+  String get docTypePT => _get('docTypePT');
+  String get docTypeMS => _get('docTypeMS');
+  String get docTypeAS => _get('docTypeAS');
+  String get medStatusActive => _get('medStatusActive');
+  String get medStatusCompleted => _get('medStatusCompleted');
+  String get medStatusStopped => _get('medStatusStopped');
+  String get medStatusUnknown => _get('medStatusUnknown');
+  String get cie10Label => _get('cie10Label');
+
+  // ── Add medication sheet ─────────────────────────────────────────────────
+  String get addMedicationTitle => _get('addMedicationTitle');
+  String get addMedicationSubtitle => _get('addMedicationSubtitle');
+  String get medicationLabel => _get('medicationLabel');
+  String get medicationHint => _get('medicationHint');
+  String get statusLabel => _get('statusLabel');
+  String get dosageLabel => _get('dosageLabel');
+  String get dosageHint => _get('dosageHint');
+  String get notesLabel => _get('notesLabel');
+  String get notesHint => _get('notesHint');
+
+  // ── Edit chronic / personal sheet ────────────────────────────────────────
+  String get editChronicPersonalSubtitle => _get('editChronicPersonalSubtitle');
+  String get editChronicPersonalHint => _get('editChronicPersonalHint');
+
+  // ── Allergies tab ────────────────────────────────────────────────────────
+  String allergiesHeader(int n) =>
+      _get('allergiesHeader').replaceAll('{n}', '$n');
+  String get reactionHeader => _get('reactionHeader');
+  String get allergyShortMedication => _get('allergyShortMedication');
+  String get allergyShortFood => _get('allergyShortFood');
+  String get allergyShortEnvironment => _get('allergyShortEnvironment');
+  String get allergyShortSkin => _get('allergyShortSkin');
+  String get allergyShortInsect => _get('allergyShortInsect');
+  String get allergyShortOther => _get('allergyShortOther');
+
+  // ── Summary tab ────────────────────────────────────────────────────────
+  String get personalTitle => _get('personalTitle');
+  String get chronic => _get('chronic');
+  String get family => _get('family');
+  String get recordsLabel => _get('recordsLabel');
+
+  // ── Consultations View & Detail ─────────────────────────────────────────
+  String get consultationsTabTitle => _get('consultationsTabTitle');
+  String get noConsultationsRegistered => _get('noConsultationsRegistered');
+  String get addConsultationButton => _get('addConsultationButton');
+  String get viewDetailHint => _get('viewDetailHint');
+  String get consultationDetailTitle => _get('consultationDetailTitle');
+  String get careContextSection => _get('careContextSection');
+  String get startDateLabel => _get('startDateLabel');
+  String get endDateLabel => _get('endDateLabel');
+  String get serviceGroupLabel => _get('serviceGroupLabel');
+  String get environmentLabel => _get('environmentLabel');
+  String get entryRouteLabel => _get('entryRouteLabel');
+  String get externalCauseLabel => _get('externalCauseLabel');
+  String get docLabelShort => _get('docLabelShort');
+  String get diagnosisTitle => _get('diagnosisTitle');
+  String get dischargeSection => _get('dischargeSection');
+  String get riskFactorsSection => _get('riskFactorsSection');
+  String get incapacitySection => _get('incapacitySection');
+  String get incapacityScope => _get('incapacityScope');
+  String get incapacityDays => _get('incapacityDays');
+  String get payerSection => _get('payerSection');
+  String get codeLabel => _get('codeLabel');
+
+  // Days & Months Short ─────────────────────────────────────────────────
+  String get dayLun => _get('dayLun');
+  String get dayMar => _get('dayMar');
+  String get dayMie => _get('dayMie');
+  String get dayJue => _get('dayJue');
+  String get dayVie => _get('dayVie');
+  String get daySab => _get('daySab');
+  String get dayDom => _get('dayDom');
+  String get monEne => _get('monEne');
+  String get monFeb => _get('monFeb');
+  String get monMarString => _get('monMar');
+  String get monMar => _get('monMar');
+  String get monAbr => _get('monAbr');
+  String get monMay => _get('monMay');
+  String get monJun => _get('monJun');
+  String get monJul => _get('monJul');
+  String get monAgo => _get('monAgo');
+  String get monSep => _get('monSep');
+  String get monOct => _get('monOct');
+  String get monNov => _get('monNov');
+  String get monDic => _get('monDic');
+  String get timeAm => _get('timeAm');
+  String get timePm => _get('timePm');
+
+  // Care Modality Labels ─────────────────────────────────────────────────
+  String get modIntramural => _get('modIntramural');
+  String get modExtramuralMobil => _get('modExtramuralMobil');
+  String get modDomiciliaria => _get('modDomiciliaria');
+  String get modJornada => _get('modJornada');
+  String get modPrehospitalaria => _get('modPrehospitalaria');
+  String get modTelemedicinaInteractiva => _get('modTelemedicinaInteractiva');
+  String get modNoInteractiva => _get('modNoInteractiva');
+  String get modTelexperticia => _get('modTelexperticia');
+  String get modTelemonitoreo => _get('modTelemonitoreo');
+
+  // Service Group Labels
+  String get sgConsultaExterna => _get('sgConsultaExterna');
+  String get sgApoyoDiagnostico => _get('sgApoyoDiagnostico');
+  String get sgInternacion => _get('sgInternacion');
+  String get sgQuirurgico => _get('sgQuirurgico');
+  String get sgAtencionInmediata => _get('sgAtencionInmediata');
+
+  // Care Environment Labels ─────────────────────────────────────────────────
+  String get ceHogar => _get('ceHogar');
+  String get ceComunitario => _get('ceComunitario');
+  String get ceEscolar => _get('ceEscolar');
+  String get ceLaboral => _get('ceLaboral');
+  String get ceInstitucional => _get('ceInstitucional');
+
+  // Diagnosis Type Labels ────────────────────────────────────────────────────
+  String get dtImpresion => _get('dtImpresion');
+  String get dtConfirmadoNuevo => _get('dtConfirmadoNuevo');
+  String get dtConfirmadoRepetido => _get('dtConfirmadoRepetido');
+
+  // Discharge Disposition Labels ─────────────────────────────────────────────
+  String get ddAltaVoluntaria => _get('ddAltaVoluntaria');
+  String get ddFallecido => _get('ddFallecido');
+  String get ddRemitido => _get('ddRemitido');
+  String get ddAltaMedica => _get('ddAltaMedica');
+
+  // ── Vaccines tab ────────────────────────────────────────────────────────
+  String get vaccineSchemeTitle => _get('vaccineSchemeTitle');
+  String get vaccineLabelSingle => _get('vaccineLabelSingle');
+  String get vaccineLabelPlural => _get('vaccineLabelPlural');
+  String get noVaccinesRegistered => _get('noVaccinesRegistered');
+  String get addVaccineButton => _get('addVaccineButton');
+  String get doseLabel => _get('doseLabel');
 
   // ══════════════════════════════════════════════════════════════════════════
   // TRANSLATIONS
@@ -389,6 +606,7 @@ class AppStrings {
     'retry': 'Reintentar',
     'delete': 'Eliminar',
     'confirm': 'Confirmar',
+    'confirmChanges': 'Confirmar cambios',
     'loading': 'Cargando...',
     'error': 'Error',
     'success': 'Éxito',
@@ -481,6 +699,18 @@ class AppStrings {
     'city': 'Ciudad',
     'state': 'Departamento',
     'name': 'Nombre',
+
+    // Edit address sheet
+    'editResidence': 'Editar residencia',
+    'addressZoneSubtitle': 'Dirección y zona del paciente',
+    'municipality': 'Municipio',
+    'department': 'Departamento',
+    'zone': 'Zona',
+    'streetHint': 'ej: Cra. 18 #27-43',
+    'cityHint': 'ej: Riohacha',
+    'stateHint': 'ej: La Guajira',
+    'zoneUrban': 'Urbana',
+    'zoneRural': 'Rural',
 
     // Medical history
     'clinicalEvaluation': 'Evaluación clínica',
@@ -632,6 +862,187 @@ class AppStrings {
         'Se devolverá exactamente un registro o ninguno.\nPor privacidad, no se exponen listas.',
     'searchNoMatch':
         'No se encontró ningún paciente con esos datos. Verifique los campos.',
+
+    // Vital signs sheet
+    'editMeasurements': 'Editar mediciones',
+    'weightKg': 'PESO (KG)',
+    'heightCm': 'ALTURA (CM)',
+    'previous': 'Anterior',
+    'bloodTypeReadOnly':
+        'El tipo de sangre no se edita aquí — es un dato biológico permanente.',
+
+    // Patient profile screen
+    'unsyncedChanges': 'Cambios sin sincronizar',
+    'synced': 'Sincronizado',
+    'syncedAt': 'Sincronizado · {time}',
+    'syncingBtn': 'Sincronizando...',
+    'syncBtn': 'Sincronizar',
+    'savedChangesMsg': 'Cambios guardados. Se sincronizarán automáticamente.',
+    'notAuthorizedConsultations':
+        'No autorizado: solo doctores pueden agregar consultas.',
+    'unsyncedChangesTitle': 'Cambios sin sincronizar',
+    'exitWithoutSyncMsg': 'Tienes cambios pendientes. ¿Salir sin sincronizar?',
+    'exit': 'Salir',
+    'tabSummary': 'Resumen',
+    'yearsOldSuffix': 'años',
+    'noAllergiesRegistered': 'Sin alergias registradas.',
+    'addAllergyBtn': 'Agregar alergia',
+    'allergyCategoryLabel': 'Categoría',
+    'allergenLabel': 'Alérgeno',
+    'allergenHint': 'ej: Penicilina, Maní, Polen...',
+    'reactionOptionalLabel': 'Reacción (opcional)',
+    'reactionHint': 'ej: Erupción cutánea generalizada, Edema labial...',
+    'allergiesSheetTitle': 'Alergias',
+    'backgroundSheetTitle': 'Antecedentes',
+    'noChronicConditions': 'Sin condiciones crónicas.',
+    'addChronicConditionTitle': 'Agregar condición crónica',
+    'chronicConditionHint':
+        'ej: Diabetes mellitus tipo 2, Hipertensión arterial...',
+    'noMedications': 'Sin medicamentos registrados.',
+    'medications': 'Medicamentos',
+    'personalHistoryTitle': 'Historial personal',
+    'noFamilyHistoryEntries': 'Sin antecedentes familiares.',
+    'reactionLabel': 'Reacción: ',
+    'sexMale': 'Masculino',
+    'sexFemale': 'Femenino',
+    'sexIndeterminate': 'Indeterminado',
+    'docTypeRC': 'Reg. civil',
+    'docTypeTI': 'Tarjeta identidad',
+    'docTypeCC': 'Cédula',
+    'docTypeCE': 'Céd. extranjería',
+    'docTypePA': 'Pasaporte',
+    'docTypePE': 'Permiso esp.',
+    'docTypePT': 'PPT',
+    'docTypeMS': 'Menor s/ID',
+    'docTypeAS': 'Adulto s/ID',
+    'editGuardianTitle': 'Editar guardián',
+    'guardianFullName': 'Nombre completo',
+    'guardianFullNameHint': 'ej: Carmen Vargas Pinto',
+    'guardianRelationship': 'Parentesco',
+    'guardianPhoneLabel': 'Teléfono',
+    'guardianPhoneHint': 'ej: +57 310 482 9914',
+    'guardianNfcDevice': 'Dispositivo NFC del guardán',
+    'guardianNfcUidHint': 'UID del dispositivo NFC',
+    'guardianNfcUnavailable': 'NFC no disponible. Ingrese el UID manualmente.',
+    'guardianNfcError': 'No se pudo leer el dispositivo. Inténtalo de nuevo.',
+    'relParents': 'Padres',
+    'relSiblings': 'Hermanos',
+    'relUncles': 'Tíos',
+    'relGrandparents': 'Abuelos',
+    'medStatusActive': 'Activo',
+    'medStatusCompleted': 'Completado',
+    'medStatusStopped': 'Suspendido',
+    'medStatusUnknown': 'Desconocido',
+    'cie10Label': 'CIE-10: ',
+
+    // Add medication sheet
+    'addMedicationTitle': 'Agregar medicamento',
+    'addMedicationSubtitle': 'Registrar medicamento actual del paciente',
+    'medicationLabel': 'Medicamento *',
+    'medicationHint': 'ej: Metformina 850mg',
+    'statusLabel': 'Estado',
+    'dosageLabel': 'Posología',
+    'dosageHint': 'ej: 1 tableta cada 12 horas',
+    'notesLabel': 'Notas',
+    'notesHint': 'Observaciones adicionales',
+
+    // Edit chronic / personal sheet
+    'editChronicPersonalSubtitle':
+        'Texto libre — el sistema codifica automáticamente',
+    'editChronicPersonalHint': 'Describa la información en texto libre...',
+
+    // Allergies tab
+    'allergiesHeader': 'ALERGIAS · {n}',
+    'reactionHeader': 'REACCIÓN',
+    'allergyShortMedication': 'Medicamento',
+    'allergyShortFood': 'Alimento',
+    'allergyShortEnvironment': 'Sust. ambiente',
+    'allergyShortSkin': 'Sust. piel',
+    'allergyShortInsect': 'Picadura',
+    'allergyShortOther': 'Otra',
+
+    // Summary tab
+    'personalTitle': 'Personal',
+    'chronic': 'Crónicos',
+    'family': 'Familiares',
+    'recordsLabel': 'registros',
+
+    // Consultations & Detail Detail
+    'consultationsTabTitle': 'Consultas',
+    'noConsultationsRegistered': 'Sin consultas registradas.',
+    'addConsultationButton': 'Agregar consulta',
+    'viewDetailHint': 'Ver detalle',
+    'consultationDetailTitle': 'Detalle de consulta',
+    'careContextSection': 'Contexto de atención',
+    'startDateLabel': 'Fecha inicio',
+    'endDateLabel': 'Fecha fin',
+    'serviceGroupLabel': 'Grupo servicio',
+    'environmentLabel': 'Entorno',
+    'entryRouteLabel': 'Vía ingreso',
+    'externalCauseLabel': 'Causa externa',
+    'docLabelShort': 'Doc.',
+    'diagnosisTitle': 'Diagnósticos',
+    'dischargeSection': 'Egreso',
+    'riskFactorsSection': 'Factores de riesgo',
+    'incapacitySection': 'Incapacidad',
+    'incapacityScope': 'Alcance',
+    'incapacityDays': 'Días',
+    'payerSection': 'Pagador',
+    'codeLabel': 'Código',
+    'dayLun': 'lun',
+    'dayMar': 'mar',
+    'dayMie': 'mié',
+    'dayJue': 'jue',
+    'dayVie': 'vie',
+    'daySab': 'sáb',
+    'dayDom': 'dom',
+    'monEne': 'ene',
+    'monFeb': 'feb',
+    'monMar': 'mar',
+    'monAbr': 'abr',
+    'monMay': 'may',
+    'monJun': 'jun',
+    'monJul': 'jul',
+    'monAgo': 'ago',
+    'monSep': 'sep',
+    'monOct': 'oct',
+    'monNov': 'nov',
+    'monDic': 'dic',
+    'timeAm': 'a.m.', 'timePm': 'p.m.',
+    'modIntramural': 'Intramural',
+    'modExtramuralMobil': 'Extramural móvil',
+    'modDomiciliaria': 'Domiciliaria',
+    'modJornada': 'Jornada',
+    'modPrehospitalaria': 'Prehospitalaria',
+    'modTelemedicinaInteractiva': 'Telemedicina interactiva',
+    'modNoInteractiva': 'No interactiva',
+    'modTelexperticia': 'Telexperticia',
+    'modTelemonitoreo': 'Telemonitoreo',
+    'sgConsultaExterna': 'Consulta externa',
+    'sgApoyoDiagnostico': 'Apoyo diagnóstico',
+    'sgInternacion': 'Internación',
+    'sgQuirurgico': 'Quirúrgico',
+    'sgAtencionInmediata': 'Atención inmediata',
+    'ceHogar': 'Hogar',
+    'ceComunitario': 'Comunitario',
+    'ceEscolar': 'Escolar',
+    'ceLaboral': 'Laboral',
+    'ceInstitucional': 'Institucional',
+    'dtImpresion': 'Impresión diagnóstica',
+    'dtConfirmadoNuevo': 'Confirmado nuevo',
+    'dtConfirmadoRepetido': 'Confirmado repetido',
+    'ddAltaVoluntaria': 'Alta voluntaria',
+    'ddFallecido': 'Paciente fallecido',
+    'ddRemitido': 'Remitido',
+    'ddAltaMedica': 'Alta médica',
+
+    // vaccine tab
+    'vaccineSchemeTitle': 'Esquema',
+    'vaccineLabelSingle': 'Vacuna',
+    'vaccineLabelPlural': 'Vacunas',
+    'noVaccinesRegistered': 'No hay vacunas registradas.',
+    'addVaccineButton': 'Agregar vacuna',
+    'doseLabel': 'Dosis',
   };
   static const Map<String, String> _en = {
     // Auth
@@ -679,6 +1090,7 @@ class AppStrings {
     'retry': 'Retry',
     'delete': 'Delete',
     'confirm': 'Confirm',
+    'confirmChanges': 'Confirm changes',
     'loading': 'Loading...',
     'error': 'Error',
     'success': 'Success',
@@ -731,6 +1143,20 @@ class AppStrings {
     'relationship': 'Relationship',
     'guardianPhone': 'Guardian phone *',
     'guardianPin': "Guardian's 4-digit PIN *",
+    'editGuardianTitle': 'Edit guardian',
+    'guardianFullName': 'Full name',
+    'guardianFullNameHint': 'e.g. Carmen Vargas Pinto',
+    'guardianRelationship': 'Relationship',
+    'guardianPhoneLabel': 'Phone',
+    'guardianPhoneHint': 'e.g. +1 310 482 9914',
+    'guardianNfcDevice': 'Guardian NFC device',
+    'guardianNfcUidHint': 'NFC device UID',
+    'guardianNfcUnavailable': 'NFC not available. Enter UID manually.',
+    'guardianNfcError': 'Could not read the device. Please try again.',
+    'relParents': 'Parents',
+    'relSiblings': 'Siblings',
+    'relUncles': 'Uncles',
+    'relGrandparents': 'Grandparents',
 
     // Read NFC
     'scanWristband': 'Bring the device close',
@@ -770,6 +1196,18 @@ class AppStrings {
     'city': 'City',
     'state': 'State / Department',
     'name': 'Name',
+
+    // Edit address sheet
+    'editResidence': 'Edit residence',
+    'addressZoneSubtitle': 'Patient address and zone',
+    'municipality': 'Municipality',
+    'department': 'Department',
+    'zone': 'Zone',
+    'streetHint': 'e.g. 123 Main St',
+    'cityHint': 'e.g. Riohacha',
+    'stateHint': 'e.g. La Guajira',
+    'zoneUrban': 'Urban',
+    'zoneRural': 'Rural',
 
     // Medical history
     'clinicalEvaluation': 'Clinical evaluation',
@@ -921,5 +1359,171 @@ class AppStrings {
         'Exactly one record or none will be returned.\nFor privacy, no list is exposed.',
     'searchNoMatch':
         'No patient found with these details. Please check the fields.',
+
+    // Vital signs sheet
+    'editMeasurements': 'Edit measurements',
+    'weightKg': 'WEIGHT (KG)',
+    'heightCm': 'HEIGHT (CM)',
+    'previous': 'Previous',
+    'bloodTypeReadOnly':
+        'Blood type is not edited here — it is a permanent biological datum.',
+
+    // Patient profile screen
+    'unsyncedChanges': 'Unsynced changes',
+    'synced': 'Synced',
+    'syncedAt': 'Synced · {time}',
+    'syncingBtn': 'Syncing...',
+    'syncBtn': 'Sync',
+    'savedChangesMsg': 'Changes saved. They will sync automatically.',
+    'notAuthorizedConsultations':
+        'Not authorized: only doctors can add consultations.',
+    'unsyncedChangesTitle': 'Unsynchronized changes',
+    'exitWithoutSyncMsg': 'You have pending changes. Exit without syncing?',
+    'exit': 'Exit',
+    'tabSummary': 'Summary',
+    'yearsOldSuffix': 'yrs',
+    'noAllergiesRegistered': 'No allergies registered.',
+    'addAllergyBtn': 'Add allergy',
+    'allergyCategoryLabel': 'Category',
+    'allergenLabel': 'Allergen',
+    'allergenHint': 'e.g. Penicillin, Peanut, Pollen...',
+    'reactionOptionalLabel': 'Reaction (optional)',
+    'reactionHint': 'e.g. Generalized rash, Lip swelling...',
+    'allergiesSheetTitle': 'Allergies',
+    'backgroundSheetTitle': 'Background',
+    'noChronicConditions': 'No chronic conditions.',
+    'addChronicConditionTitle': 'Add chronic condition',
+    'chronicConditionHint': 'e.g. Type 2 diabetes mellitus, Hypertension...',
+    'noMedications': 'No medications registered.',
+    'medications': 'Medications',
+    'personalHistoryTitle': 'Personal history',
+    'noFamilyHistoryEntries': 'No family history entries.',
+    'reactionLabel': 'Reaction: ',
+    'sexMale': 'Male',
+    'sexFemale': 'Female',
+    'sexIndeterminate': 'Indeterminate',
+    'docTypeRC': 'Civil reg.',
+    'docTypeTI': 'ID card',
+    'docTypeCC': 'National ID',
+    'docTypeCE': 'Foreign ID',
+    'docTypePA': 'Passport',
+    'docTypePE': 'Special permit',
+    'docTypePT': 'PPT',
+    'docTypeMS': 'Minor w/o ID',
+    'docTypeAS': 'Adult w/o ID',
+    'medStatusActive': 'Active',
+    'medStatusCompleted': 'Completed',
+    'medStatusStopped': 'Stopped',
+    'medStatusUnknown': 'Unknown',
+    'cie10Label': 'ICD-10: ',
+
+    // Add medication sheet
+    'addMedicationTitle': 'Add medication',
+    'addMedicationSubtitle': 'Register the patient\'s current medication',
+    'medicationLabel': 'Medication *',
+    'medicationHint': 'e.g. Metformin 850mg',
+    'statusLabel': 'Status',
+    'dosageLabel': 'Dosage',
+    'dosageHint': 'e.g. 1 tablet every 12 hours',
+    'notesLabel': 'Notes',
+    'notesHint': 'Additional observations',
+
+    // Edit chronic / personal sheet
+    'editChronicPersonalSubtitle':
+        'Free text — the system encodes automatically',
+    'editChronicPersonalHint': 'Describe the information in free text...',
+
+    // Allergies tab
+    'allergiesHeader': 'ALLERGIES · {n}',
+    'reactionHeader': 'REACTION',
+    'allergyShortMedication': 'Medication',
+    'allergyShortFood': 'Food',
+    'allergyShortEnvironment': 'Env. substance',
+    'allergyShortSkin': 'Skin substance',
+    'allergyShortInsect': 'Insect sting',
+    'allergyShortOther': 'Other',
+
+    // Summary tab
+    'personalTitle': 'Personal',
+    'chronic': 'Chronic',
+    'family': 'Family',
+    'recordsLabel': 'records',
+
+    // Consultations & Detail Detail
+    'consultationsTabTitle': 'Consultations',
+    'noConsultationsRegistered': 'No consultations registered.',
+    'addConsultationButton': 'Add consultation',
+    'viewDetailHint': 'View detail',
+    'consultationDetailTitle': 'Consultation Detail',
+    'careContextSection': 'Care Context',
+    'startDateLabel': 'Start date',
+    'endDateLabel': 'End date',
+    'serviceGroupLabel': 'Service group',
+    'environmentLabel': 'Environment',
+    'entryRouteLabel': 'Entry route',
+    'externalCauseLabel': 'External cause',
+    'docLabelShort': 'ID Doc.',
+    'diagnosisTitle': 'Diagnoses',
+    'dischargeSection': 'Discharge',
+    'riskFactorsSection': 'Risk factors',
+    'incapacitySection': 'Incapacity',
+    'incapacityScope': 'Scope',
+    'incapacityDays': 'Days',
+    'payerSection': 'Payer',
+    'codeLabel': 'Code',
+    'dayLun': 'Mon',
+    'dayMar': 'Tue',
+    'dayMie': 'Wed',
+    'dayJue': 'Thu',
+    'dayVie': 'Fri',
+    'daySab': 'Sat',
+    'dayDom': 'Sun',
+    'monEne': 'Jan',
+    'monFeb': 'Feb',
+    'monMar': 'Mar',
+    'monAbr': 'Apr',
+    'monMay': 'May',
+    'monJun': 'Jun',
+    'monJul': 'Jul',
+    'monAgo': 'Aug',
+    'monSep': 'Sep',
+    'monOct': 'Oct',
+    'monNov': 'Nov',
+    'monDic': 'Dec',
+    'timeAm': 'AM', 'timePm': 'PM',
+    'modIntramural': 'Intramural',
+    'modExtramuralMobil': 'Mobile extramural',
+    'modDomiciliaria': 'Home care',
+    'modJornada': 'Health campaign',
+    'modPrehospitalaria': 'Pre-hospital',
+    'modTelemedicinaInteractiva': 'Interactive telemedicine',
+    'modNoInteractiva': 'Non-interactive',
+    'modTelexperticia': 'Tele-expertise',
+    'modTelemonitoreo': 'Tele-monitoring',
+    'sgConsultaExterna': 'Outpatient care',
+    'sgApoyoDiagnostico': 'Diagnostic support',
+    'sgInternacion': 'Inpatient care',
+    'sgQuirurgico': 'Surgical care',
+    'sgAtencionInmediata': 'Immediate care',
+    'ceHogar': 'Home',
+    'ceComunitario': 'Community',
+    'ceEscolar': 'School',
+    'ceLaboral': 'Workplace',
+    'ceInstitucional': 'Institutional',
+    'dtImpresion': 'Diagnostic impression',
+    'dtConfirmadoNuevo': 'Confirmed new',
+    'dtConfirmadoRepetido': 'Confirmed repeated',
+    'ddAltaVoluntaria': 'Voluntary discharge',
+    'ddFallecido': 'Deceased patient',
+    'ddRemitido': 'Referred',
+    'ddAltaMedica': 'Medical discharge',
+
+    // vaccine tab
+    'vaccineSchemeTitle': 'Scheme',
+    'vaccineLabelSingle': 'Vaccine',
+    'vaccineLabelPlural': 'Vaccines',
+    'noVaccinesRegistered': 'No vaccines registered.',
+    'addVaccineButton': 'Add vaccine',
+    'doseLabel': 'Dose',
   };
 }

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/sheet_scaffold.dart';
 
@@ -44,9 +45,10 @@ class _EditAddressSheetState extends State<EditAddressSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return SheetScaffold(
-      title: 'Editar residencia',
-      subtitle: 'Dirección y zona del paciente',
+      title: s.editResidence,
+      subtitle: s.addressZoneSubtitle,
       onConfirm: () {
         widget.onConfirm(
           Address(
@@ -67,30 +69,26 @@ class _EditAddressSheetState extends State<EditAddressSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _label('Dirección'),
-          _input(
-            _streetCtrl,
-            hint: 'ej: Cra. 18 #27-43',
-            icon: Icons.home_outlined,
-          ),
+          _label(s.address),
+          _input(_streetCtrl, hint: s.streetHint, icon: Icons.home_outlined),
           const SizedBox(height: 14),
-          _label('Municipio'),
-          _input(_cityCtrl, hint: 'ej: Riohacha', icon: Icons.location_city),
+          _label(s.municipality),
+          _input(_cityCtrl, hint: s.cityHint, icon: Icons.location_city),
           const SizedBox(height: 14),
-          _label('Departamento'),
-          _input(_stateCtrl, hint: 'ej: La Guajira', icon: Icons.map_outlined),
+          _label(s.department),
+          _input(_stateCtrl, hint: s.stateHint, icon: Icons.map_outlined),
           const SizedBox(height: 14),
-          _label('Zona'),
+          _label(s.zone),
           Row(
             children: [
               _ZoneChip(
-                label: 'Urbana',
+                label: s.zoneUrban,
                 selected: _zone == '01',
                 onTap: () => setState(() => _zone = '01'),
               ),
               const SizedBox(width: 10),
               _ZoneChip(
-                label: 'Rural',
+                label: s.zoneRural,
                 selected: _zone == '02',
                 onTap: () => setState(() => _zone = '02'),
               ),

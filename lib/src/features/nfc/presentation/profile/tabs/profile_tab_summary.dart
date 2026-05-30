@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/profile_card.dart';
 import '../shared/profile_section_header.dart';
@@ -83,8 +84,10 @@ class ProfileTabSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final p = draft.patientInfo;
     final bg = draft.backgroundHistory;
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 60),
       children: [
@@ -92,14 +95,14 @@ class ProfileTabSummary extends StatelessWidget {
         _ClickableSection(
           icon: Icons.warning_amber_rounded,
           iconColor: AppColors.error,
-          title: 'ALERGIAS',
+          title: s.allergiesSheetTitle.toUpperCase(),
           badge: draft.allergies.length,
           hasChanges: _allergiesChanged,
           onTap: onOpenAllergies,
           child: draft.allergies.isEmpty
-              ? const Text(
-                  'Sin alergias registradas.',
-                  style: TextStyle(
+              ? Text(
+                  s.noAllergiesRegistered,
+                  style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
                   ),
@@ -126,7 +129,7 @@ class ProfileTabSummary extends StatelessWidget {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                '(${_catLabel(a.category)})',
+                                '(${_catLabel(context, a.category)})',
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: AppColors.textSecondary,
@@ -145,30 +148,33 @@ class ProfileTabSummary extends StatelessWidget {
         // ══ BACKGROUND (clickable) ═════════════════════════════
         _ClickableSection(
           icon: Icons.history_edu_outlined,
-          title: 'ANTECEDENTES',
+          title: s.backgroundSheetTitle.toUpperCase(),
           hasChanges: _backgroundChanged,
           onTap: onOpenBackground,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _MiniRow(
-                label: 'Crónicos',
+                label: s.chronic,
                 value: bg == null || bg.chronicConditions.isEmpty
                     ? '—'
-                    : '${bg.chronicConditions.length} registros',
+                    : '${bg.chronicConditions.length} ${s.recordsLabel}',
               ),
-              _MiniRow(label: 'Personal', value: bg?.personalHistory ?? '—'),
               _MiniRow(
-                label: 'Medicam.',
+                label: s.personalTitle,
+                value: bg?.personalHistory ?? '—',
+              ),
+              _MiniRow(
+                label: s.medications,
                 value: bg == null || bg.medications.isEmpty
                     ? '—'
-                    : '${bg.medications.length} registros',
+                    : '${bg.medications.length} ${s.recordsLabel}',
               ),
               _MiniRow(
-                label: 'Familiares',
+                label: s.family,
                 value: bg == null || bg.familyHistory.isEmpty
                     ? '—'
-                    : '${bg.familyHistory.length} registros',
+                    : '${bg.familyHistory.length} ${s.recordsLabel}',
               ),
             ],
           ),
@@ -179,8 +185,8 @@ class ProfileTabSummary extends StatelessWidget {
         // ══ MEASUREMENTS ══════════════════════════════════════════
         ProfileSectionHeader(
           icon: Icons.monitor_heart_outlined,
-          title: 'MEDICIONES',
-          actionLabel: canEdit ? 'Editar' : null,
+          title: s.editMeasurements.toUpperCase(),
+          actionLabel: canEdit ? s.editUpdate.split('/')[0].trim() : null,
           onAction: canEdit ? onEditVitalSigns : null,
         ),
         const SizedBox(height: 8),
@@ -192,7 +198,7 @@ class ProfileTabSummary extends StatelessWidget {
                 children: [
                   _VitalCell(
                     icon: Icons.scale_outlined,
-                    label: 'PESO',
+                    label: s.weightKg.split(' ')[0],
                     value: p.weight != null
                         ? '${p.weight!.toStringAsFixed(1)} kg'
                         : '—',
@@ -201,7 +207,7 @@ class ProfileTabSummary extends StatelessWidget {
                   _VitalDivider(),
                   _VitalCell(
                     icon: Icons.straighten,
-                    label: 'ALTURA',
+                    label: s.heightCm.split(' ')[0],
                     value: p.height != null
                         ? '${p.height!.toStringAsFixed(0)} cm'
                         : '—',
@@ -210,7 +216,7 @@ class ProfileTabSummary extends StatelessWidget {
                   _VitalDivider(),
                   _VitalCell(
                     icon: Icons.bloodtype_outlined,
-                    label: 'SANGRE',
+                    label: s.bloodType.toUpperCase(),
                     value: p.bloodType ?? '—',
                     changed: false,
                   ),
@@ -223,9 +229,9 @@ class ProfileTabSummary extends StatelessWidget {
         const SizedBox(height: 18),
 
         // ══ IDENTITY (read-only) ═══════════════════════════════
-        const ProfileSectionHeader(
+        ProfileSectionHeader(
           icon: Icons.person_outline,
-          title: 'IDENTIDAD',
+          title: s.identification.toUpperCase(),
         ),
         const SizedBox(height: 8),
         ProfileCard(
@@ -233,11 +239,11 @@ class ProfileTabSummary extends StatelessWidget {
             children: [
               _IdRow(
                 left: _IdCell(
-                  label: 'TIPO DOC.',
-                  value: _docTypeLabel(p.identification.documentType),
+                  label: s.documentTypeLabel,
+                  value: _docTypeLabel(context, p.identification.documentType),
                 ),
                 right: _IdCell(
-                  label: 'NÚMERO',
+                  label: s.documentNumberLabel.split(' ')[0],
                   value: p.identification.documentNumber.isEmpty
                       ? '—'
                       : p.identification.documentNumber,
@@ -245,34 +251,23 @@ class ProfileTabSummary extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               _IdRow(
-                left: _IdCell(label: 'F. NACIMIENTO', value: _formatDob(p.dob)),
+                left: _IdCell(label: s.dobLabel, value: _formatDob(p.dob)),
                 right: _IdCell(
-                  label: 'SEXO BIOLÓGICO',
-                  value: _sexLabel(p.biologicalSex),
+                  label: s.gender.toUpperCase(),
+                  value: _sexLabel(context, p.biologicalSex),
                 ),
               ),
               const SizedBox(height: 14),
               _IdRow(
                 left: _IdCell(
-                  label: 'IDENTIDAD GÉNERO',
+                  label: s.gender.toUpperCase(),
                   value:
-                      _genderLabel(p.genderIdentity) ??
-                      _sexLabel(p.biologicalSex),
+                      _genderLabel(context, p.genderIdentity) ??
+                      _sexLabel(context, p.biologicalSex),
                 ),
                 right: _IdCell(
-                  label: 'ETNIA',
-                  value: _ethnicityLabel(p.ethnicity) ?? 'Ninguno',
-                ),
-              ),
-              const SizedBox(height: 14),
-              _IdRow(
-                left: _IdCell(
-                  label: 'NACIONALIDAD',
+                  label: s.nationality.toUpperCase(),
                   value: p.nationalityName ?? p.nationalityCode,
-                ),
-                right: _IdCell(
-                  label: 'DISCAPACIDAD',
-                  value: _disabilityLabel(p.disabilityCategory) ?? 'Ninguna',
                 ),
               ),
             ],
@@ -284,8 +279,8 @@ class ProfileTabSummary extends StatelessWidget {
         // ══ RESIDENCE (editable) ═══════════════════════════════
         ProfileSectionHeader(
           icon: Icons.location_on_outlined,
-          title: 'RESIDENCIA',
-          actionLabel: canEdit ? 'Editar' : null,
+          title: s.address.toUpperCase(),
+          actionLabel: canEdit ? s.editUpdate.split('/')[0].trim() : null,
           onAction: canEdit ? onEditAddress : null,
         ),
         const SizedBox(height: 8),
@@ -298,14 +293,16 @@ class ProfileTabSummary extends StatelessWidget {
                   Expanded(
                     child: _IdRow(
                       left: _IdCell(
-                        label: 'DIRECCIÓN',
+                        label: s.street.toUpperCase(),
                         value: p.address.street?.isNotEmpty == true
                             ? p.address.street!
                             : '—',
                       ),
                       right: _IdCell(
-                        label: 'ZONA',
-                        value: p.address.zone == '02' ? 'Rural' : 'Urbana',
+                        label: s.zone.toUpperCase(),
+                        value: p.address.zone == '02'
+                            ? s.zoneRural
+                            : s.zoneUrban,
                       ),
                     ),
                   ),
@@ -314,11 +311,11 @@ class ProfileTabSummary extends StatelessWidget {
               const SizedBox(height: 14),
               _IdRow(
                 left: _IdCell(
-                  label: 'MUNICIPIO',
+                  label: s.municipality.toUpperCase(),
                   value: p.address.city.isNotEmpty ? p.address.city : '—',
                 ),
                 right: _IdCell(
-                  label: 'DEPARTAMENTO',
+                  label: s.department.toUpperCase(),
                   value: p.address.state.isNotEmpty ? p.address.state : '—',
                 ),
               ),
@@ -332,8 +329,8 @@ class ProfileTabSummary extends StatelessWidget {
         if (draft.guardianInfo.name.isNotEmpty) ...[
           ProfileSectionHeader(
             icon: Icons.family_restroom,
-            title: 'GUARDIÁN',
-            actionLabel: canEdit ? 'Editar' : null,
+            title: s.guardian.toUpperCase(),
+            actionLabel: canEdit ? s.editUpdate.split('/')[0].trim() : null,
             onAction: canEdit ? onEditGuardian : null,
           ),
           const SizedBox(height: 8),
@@ -351,65 +348,58 @@ class ProfileTabSummary extends StatelessWidget {
     );
   }
 
-  static String _catLabel(String c) =>
-      const {
-        '01': 'Medicamento',
-        '02': 'Alimento',
-        '03': 'Ambiente',
-        '04': 'Piel',
-        '05': 'Picadura',
-        '06': 'Otra',
-      }[c] ??
-      c;
-  static String _docTypeLabel(String c) =>
-      const {
-        'RC': 'Registro civil',
-        'TI': 'Tarjeta identidad',
-        'CC': 'Cédula',
-        'CE': 'Céd. extranjería',
-        'PA': 'Pasaporte',
-        'PE': 'Permiso esp.',
-        'PT': 'PPT',
-        'MS': 'Menor s/ID',
-        'AS': 'Adulto s/ID',
-      }[c] ??
-      c;
-  static String _sexLabel(String c) =>
-      const {'M': 'Masculino', 'F': 'Femenino', 'I': 'Indeterminado'}[c] ?? c;
-  static String? _genderLabel(String? c) => c == null
-      ? null
-      : const {
-          '01': 'Masculino',
-          '02': 'Femenino',
-          '03': 'Transgénero',
-          '04': 'No binario',
-        }[c];
-  static String? _ethnicityLabel(String? c) => c == null
-      ? null
-      : const {
-          '01': 'Indígena',
-          '02': 'ROM',
-          '03': 'Raizal',
-          '04': 'Palenquero',
-          '05': 'Negro/Afro',
-          '06': 'Ninguno',
-        }[c];
-  static String? _disabilityLabel(String? c) => (c == null || c == '00')
-      ? 'Ninguna'
-      : const {
-          '01': 'Física',
-          '02': 'Auditiva',
-          '03': 'Visual',
-          '04': 'Sordoceguera',
-          '05': 'Mental',
-          '06': 'Intelectual',
-          '07': 'Múltiple',
-        }[c];
-  static String _formatDob(String dob) {
+  String _catLabel(BuildContext context, String c) {
+    final s = AppStrings.of(context);
+    return {
+          '01': s.allergyShortMedication,
+          '02': s.allergyShortFood,
+          '03': s.allergyShortEnvironment,
+          '04': s.allergyShortSkin,
+          '05': s.allergyShortInsect,
+          '06': s.allergyShortOther,
+        }[c] ??
+        c;
+  }
+
+  String _docTypeLabel(BuildContext context, String c) {
+    final s = AppStrings.of(context);
+    return {
+          'RC': s.docTypeRC,
+          'TI': s.docTypeTI,
+          'CC': s.docTypeCC,
+          'CE': s.docTypeCE,
+          'PA': s.docTypePA,
+          'PE': s.docTypePE,
+          'PT': s.docTypePT,
+          'MS': s.docTypeMS,
+          'AS': s.docTypeAS,
+        }[c] ??
+        c;
+  }
+
+  String _sexLabel(BuildContext context, String c) {
+    final s = AppStrings.of(context);
+    return {'M': s.sexMale, 'F': s.sexFemale, 'I': s.sexIndeterminate}[c] ?? c;
+  }
+
+  String? _genderLabel(BuildContext context, String? c) {
+    if (c == null) return null;
+    final s = AppStrings.of(context);
+    return {
+      '01': s.sexMale,
+      '02': s.sexFemale,
+      '03':
+          'Transgénero', // Si no están en app_strings se mantienen, idealmente agregarlos ahí
+      '04': 'No binario',
+    }[c];
+  }
+
+  String _formatDob(String dob) {
     if (dob.isEmpty || !dob.contains('-')) return dob;
     final p = dob.split('-');
     if (p.length != 3) return dob;
-    const m = [
+
+    const mEs = [
       'enero',
       'febrero',
       'marzo',
@@ -423,9 +413,10 @@ class ProfileTabSummary extends StatelessWidget {
       'noviembre',
       'diciembre',
     ];
+
     final mi = int.tryParse(p[1]);
     if (mi == null || mi < 1 || mi > 12) return dob;
-    return '${int.parse(p[2])} de ${m[mi - 1]} de ${p[0]}';
+    return '${int.parse(p[2])} de ${mEs[mi - 1]} de ${p[0]}';
   }
 }
 
@@ -521,7 +512,7 @@ class _MiniRow extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 80,
+            width: 90,
             child: Text(
               label,
               style: const TextStyle(
@@ -620,7 +611,7 @@ class _VitalDivider extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: 1,
     height: 32,
-    margin: const EdgeInsets.symmetric(horizontal: 30),
+    margin: const EdgeInsets.symmetric(horizontal: 20),
     color: AppColors.divider,
   );
 }
@@ -714,7 +705,7 @@ class _GuardianContent extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${_relLabel(guardian.relationship)} · ${guardian.phone.isEmpty ? '—' : guardian.phone}',
+                    '${_relLabel(context, guardian.relationship)} · ${guardian.phone.isEmpty ? '—' : guardian.phone}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,
@@ -729,12 +720,14 @@ class _GuardianContent extends StatelessWidget {
     );
   }
 
-  static String _relLabel(String r) =>
-      const {
-        '01': 'Padres',
-        '02': 'Hermanos',
-        '03': 'Tíos',
-        '04': 'Abuelos',
-      }[r] ??
-      r;
+  String _relLabel(BuildContext context, String r) {
+    final s = AppStrings.of(context);
+    return {
+          '01': s.relParents,
+          '02': s.relSiblings,
+          '03': s.relUncles,
+          '04': s.relGrandparents,
+        }[r] ??
+        r;
+  }
 }

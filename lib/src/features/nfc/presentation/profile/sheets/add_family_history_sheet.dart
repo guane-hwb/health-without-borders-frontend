@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/sheet_scaffold.dart';
 
@@ -18,12 +19,7 @@ class _AddFamilyHistorySheetState extends State<AddFamilyHistorySheet> {
   final _ctrl = TextEditingController();
   String _relationship = '01';
 
-  static const Map<String, String> _relationships = {
-    '01': 'Padres',
-    '02': 'Hermanos',
-    '03': 'Tíos',
-    '04': 'Abuelos',
-  };
+  static const List<String> _relationshipKeys = ['01', '02', '03', '04'];
 
   @override
   void dispose() {
@@ -31,13 +27,23 @@ class _AddFamilyHistorySheetState extends State<AddFamilyHistorySheet> {
     super.dispose();
   }
 
+  /// Maps each relationship code to its localized label via [AppStrings].
+  String _label(AppStrings s, String code) => switch (code) {
+    '01' => s.relParents,
+    '02' => s.relSiblings,
+    '03' => s.relUncles,
+    '04' => s.relGrandparents,
+    _ => code,
+  };
+
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final canConfirm = _ctrl.text.trim().isNotEmpty;
+
     return SheetScaffold(
-      title: 'Agregar antecedente familiar',
-      subtitle: 'El backend asignará el código CIE automáticamente',
-      confirmLabel: 'Agregar',
+      title: s.addFamilyHistory,
+      confirmLabel: s.confirm,
       confirmIcon: Icons.add,
       canConfirm: canConfirm,
       onConfirm: () {
@@ -52,9 +58,9 @@ class _AddFamilyHistorySheetState extends State<AddFamilyHistorySheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Parentesco',
-            style: TextStyle(
+          Text(
+            s.relationship,
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -64,10 +70,10 @@ class _AddFamilyHistorySheetState extends State<AddFamilyHistorySheet> {
           Wrap(
             spacing: 8,
             runSpacing: 6,
-            children: _relationships.entries.map((e) {
-              final sel = _relationship == e.key;
+            children: _relationshipKeys.map((code) {
+              final sel = _relationship == code;
               return GestureDetector(
-                onTap: () => setState(() => _relationship = e.key),
+                onTap: () => setState(() => _relationship = code),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -81,7 +87,7 @@ class _AddFamilyHistorySheetState extends State<AddFamilyHistorySheet> {
                     ),
                   ),
                   child: Text(
-                    e.value,
+                    _label(s, code),
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -93,9 +99,9 @@ class _AddFamilyHistorySheetState extends State<AddFamilyHistorySheet> {
             }).toList(),
           ),
           const SizedBox(height: 14),
-          const Text(
-            'Condición',
-            style: TextStyle(
+          Text(
+            s.condition,
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -108,8 +114,7 @@ class _AddFamilyHistorySheetState extends State<AddFamilyHistorySheet> {
             style: const TextStyle(fontSize: 14),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              hintText:
-                  'ej: Diabetes mellitus tipo 2, Hipertensión arterial...',
+              hintText: s.chronicConditionHint,
               hintStyle: const TextStyle(
                 fontSize: 12,
                 color: AppColors.disabled,

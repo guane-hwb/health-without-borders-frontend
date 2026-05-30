@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/sheet_scaffold.dart';
 
@@ -24,11 +25,12 @@ class _AddChronicConditionSheetState extends State<AddChronicConditionSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final canConfirm = _ctrl.text.trim().isNotEmpty;
+
     return SheetScaffold(
-      title: 'Agregar condición crónica',
-      subtitle: 'El backend asignará los códigos CIE automáticamente',
-      confirmLabel: 'Agregar',
+      title: s.addChronicConditionTitle,
+      confirmLabel: s.confirm,
       confirmIcon: Icons.add,
       canConfirm: canConfirm,
       onConfirm: () {
@@ -40,9 +42,9 @@ class _AddChronicConditionSheetState extends State<AddChronicConditionSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Condición',
-            style: TextStyle(
+          Text(
+            s.condition,
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -55,8 +57,7 @@ class _AddChronicConditionSheetState extends State<AddChronicConditionSheet> {
             style: const TextStyle(fontSize: 14),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              hintText:
-                  'ej: Diabetes mellitus tipo 2, Hipertensión arterial...',
+              hintText: s.chronicConditionHint,
               hintStyle: const TextStyle(
                 fontSize: 12,
                 color: AppColors.disabled,

@@ -13,7 +13,7 @@ abstract final class AppColors {
   static const Color textSecondary = Color(0xFF757575);
   static const Color iconOnPrimary = Color(0xFFFFFFFF);
 
-  static const Color primary = Color(0xFF1CABE2);
+  static const Color primary = Color(0xFF17A3E0);
   static const Color lightPrimary = Color(0xFF8BD4F0);
   static const Color secondary = Color(0xFF004C99);
   static const Color accent = Color(0xFFFFCE34);

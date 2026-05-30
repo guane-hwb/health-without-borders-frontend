@@ -47,8 +47,7 @@ class ProfileTabBackground extends StatelessWidget {
           ProfileCard(
             child: const Text(
               'Sin condiciones crónicas registradas.',
-              style: TextStyle(
-                  fontSize: 13, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
           )
         else
@@ -57,8 +56,7 @@ class ProfileTabBackground extends StatelessWidget {
               item: bg.chronicConditions[i],
               onRemove: () => onRemoveChronic(i),
             ),
-            if (i < bg.chronicConditions.length - 1)
-              const SizedBox(height: 8),
+            if (i < bg.chronicConditions.length - 1) const SizedBox(height: 8),
           ],
 
         const SizedBox(height: 18),
@@ -78,8 +76,7 @@ class ProfileTabBackground extends StatelessWidget {
                 : bg.personalHistory!,
             style: TextStyle(
               fontSize: 13,
-              color: bg.personalHistory == null ||
-                      bg.personalHistory!.isEmpty
+              color: bg.personalHistory == null || bg.personalHistory!.isEmpty
                   ? AppColors.textSecondary
                   : AppColors.textPrimary,
               height: 1.4,
@@ -102,8 +99,7 @@ class ProfileTabBackground extends StatelessWidget {
           ProfileCard(
             child: const Text(
               'Sin medicamentos registrados.',
-              style: TextStyle(
-                  fontSize: 13, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
           )
         else
@@ -112,8 +108,7 @@ class ProfileTabBackground extends StatelessWidget {
               item: bg.medications[i],
               onRemove: () => onRemoveMedication(i),
             ),
-            if (i < bg.medications.length - 1)
-              const SizedBox(height: 8),
+            if (i < bg.medications.length - 1) const SizedBox(height: 8),
           ],
 
         const SizedBox(height: 18),
@@ -131,8 +126,7 @@ class ProfileTabBackground extends StatelessWidget {
           ProfileCard(
             child: const Text(
               'Sin antecedentes familiares registrados.',
-              style: TextStyle(
-                  fontSize: 13, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
           )
         else
@@ -141,8 +135,7 @@ class ProfileTabBackground extends StatelessWidget {
               item: bg.familyHistory[i],
               onRemove: () => onRemoveFamilyHistory(i),
             ),
-            if (i < bg.familyHistory.length - 1)
-              const SizedBox(height: 8),
+            if (i < bg.familyHistory.length - 1) const SizedBox(height: 8),
           ],
       ],
     );
@@ -166,8 +159,11 @@ class _ChronicConditionCard extends StatelessWidget {
               color: AppColors.primary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.favorite_border,
-                size: 18, color: AppColors.primary),
+            child: const Icon(
+              Icons.favorite_border,
+              size: 18,
+              color: AppColors.primary,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -177,7 +173,9 @@ class _ChronicConditionCard extends StatelessWidget {
                 Text(
                   item.chronicDescription,
                   style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 if (item.chronicCie10Code != null) ...[
                   const SizedBox(height: 2),
@@ -185,16 +183,20 @@ class _ChronicConditionCard extends StatelessWidget {
                     'CIE-10: ${item.chronicCie10Code}'
                     '${item.chronicCie11Code != null ? ' · CIE-11: ${item.chronicCie11Code}' : ''}',
                     style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary),
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline,
-                size: 18, color: AppColors.error),
+            icon: const Icon(
+              Icons.delete_outline,
+              size: 18,
+              color: AppColors.error,
+            ),
             onPressed: onRemove,
           ),
         ],
@@ -220,8 +222,11 @@ class _MedicationCard extends StatelessWidget {
               color: AppColors.primary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.medication_outlined,
-                size: 18, color: AppColors.primary),
+            child: const Icon(
+              Icons.medication_outlined,
+              size: 18,
+              color: AppColors.primary,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -231,22 +236,28 @@ class _MedicationCard extends StatelessWidget {
                 Text(
                   item.medicationName,
                   style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   _statusLabel(item.status) +
                       (item.dosage != null ? ' · ${item.dosage}' : ''),
                   style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary),
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline,
-                size: 18, color: AppColors.error),
+            icon: const Icon(
+              Icons.delete_outline,
+              size: 18,
+              color: AppColors.error,
+            ),
             onPressed: onRemove,
           ),
         ],
@@ -281,8 +292,11 @@ class _FamilyHistoryCard extends StatelessWidget {
               color: AppColors.primary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.diversity_3,
-                size: 18, color: AppColors.primary),
+            child: const Icon(
+              Icons.diversity_3,
+              size: 18,
+              color: AppColors.primary,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -292,22 +306,28 @@ class _FamilyHistoryCard extends StatelessWidget {
                 Text(
                   item.conditionDescription,
                   style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '${_relationshipLabel(item.relationship)}'
                   '${item.conditionCie10Code != null ? ' · CIE-10 ${item.conditionCie10Code}' : ''}',
                   style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary),
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline,
-                size: 18, color: AppColors.error),
+            icon: const Icon(
+              Icons.delete_outline,
+              size: 18,
+              color: AppColors.error,
+            ),
             onPressed: onRemove,
           ),
         ],

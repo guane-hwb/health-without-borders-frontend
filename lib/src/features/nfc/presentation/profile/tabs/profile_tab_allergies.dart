@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/profile_card.dart';
 
@@ -19,7 +20,9 @@ class ProfileTabAllergies extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final items = draft.allergies;
+
     return Stack(
       children: [
         ListView(
@@ -27,32 +30,37 @@ class ProfileTabAllergies extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.warning_amber_rounded,
-                    size: 18, color: AppColors.error),
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 18,
+                  color: AppColors.error,
+                ),
                 const SizedBox(width: 6),
                 Text(
-                  'ALERGIAS · ${items.length}',
+                  s.allergiesHeader(items.length),
                   style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.error,
-                      letterSpacing: 0.5),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.error,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             if (items.isEmpty)
               ProfileCard(
-                child: const Text(
-                  'Sin alergias registradas.',
-                  style: TextStyle(
-                      fontSize: 13, color: AppColors.textSecondary),
+                child: Text(
+                  s.noAllergiesRegistered,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               )
             else
               for (var i = 0; i < items.length; i++) ...[
-                _AllergyCard(
-                    item: items[i], onRemove: () => onRemove(i)),
+                _AllergyCard(item: items[i], onRemove: () => onRemove(i)),
                 if (i < items.length - 1) const SizedBox(height: 10),
               ],
           ],
@@ -68,15 +76,18 @@ class ProfileTabAllergies extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              icon: const Icon(Icons.add,
-                  size: 22, color: AppColors.white),
-              label: const Text('Agregar alergia',
-                  style: TextStyle(
-                      color: AppColors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600)),
+              icon: const Icon(Icons.add, size: 22, color: AppColors.white),
+              label: Text(
+                s.addAllergyBtn,
+                style: const TextStyle(
+                  color: AppColors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ),
@@ -92,6 +103,8 @@ class _AllergyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+
     return ProfileCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,8 +118,11 @@ class _AllergyCard extends StatelessWidget {
                   color: AppColors.error.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.warning_amber_rounded,
-                    size: 18, color: AppColors.error),
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 18,
+                  color: AppColors.error,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -116,31 +132,38 @@ class _AllergyCard extends StatelessWidget {
                     Text(
                       item.allergen,
                       style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w700),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
-                        color:
-                            AppColors.error.withValues(alpha: 0.12),
+                        color: AppColors.error.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        _categoryLabel(item.category),
+                        _categoryLabel(s, item.category),
                         style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.error),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.error,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline,
-                    size: 18, color: AppColors.error),
+                icon: const Icon(
+                  Icons.delete_outline,
+                  size: 18,
+                  color: AppColors.error,
+                ),
                 onPressed: onRemove,
               ),
             ],
@@ -148,8 +171,7 @@ class _AllergyCard extends StatelessWidget {
           if (item.reaction != null && item.reaction!.isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 color: const Color(0xFFFEF7F0),
                 borderRadius: BorderRadius.circular(8),
@@ -157,20 +179,22 @@ class _AllergyCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'REACCIÓN',
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textSecondary,
-                        letterSpacing: 0.6),
+                  Text(
+                    s.reactionHeader,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                      letterSpacing: 0.6,
+                    ),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     item.reaction!,
                     style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textPrimary),
+                      fontSize: 13,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                 ],
               ),
@@ -181,22 +205,13 @@ class _AllergyCard extends StatelessWidget {
     );
   }
 
-  static String _categoryLabel(String c) {
-    switch (c) {
-      case '01':
-        return 'Medicamento';
-      case '02':
-        return 'Alimento';
-      case '03':
-        return 'Sust. ambiente';
-      case '04':
-        return 'Sust. piel';
-      case '05':
-        return 'Picadura';
-      case '06':
-        return 'Otra';
-      default:
-        return c;
-    }
-  }
+  static String _categoryLabel(AppStrings s, String c) => switch (c) {
+    '01' => s.allergyShortMedication,
+    '02' => s.allergyShortFood,
+    '03' => s.allergyShortEnvironment,
+    '04' => s.allergyShortSkin,
+    '05' => s.allergyShortInsect,
+    '06' => s.allergyShortOther,
+    _ => c,
+  };
 }

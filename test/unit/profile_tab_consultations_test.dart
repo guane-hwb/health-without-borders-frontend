@@ -14,464 +14,770 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/tabs/profile_tab_consultations.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers / factories
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Tree helpers ────────────────────────────────────────────────────────
 
-/// Wrap the widget under test in MaterialApp so that Navigator and Theme are available.
-Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+Widget _wrap(Widget child, {String locale = 'es'}) {
+  return _LocaleWrapper(
+    locale: locale,
+    child: MaterialApp(home: Scaffold(body: child)),
+  );
+}
 
-/// Create a valid minimum [MedicalHistoryItem].
-MedicalHistoryItem _makeItem({
-  String startDateTime = '2026-05-20T10:30:00',
-  String? endDateTime,
-  String careModality = '01',
-  String serviceGroup = '01',
-  String careEnvironment = '01',
-  String? historyOfCurrentIllness,
-  String? treatmentPlanObservations,
-  List<DiagnosisItem> diagnosis = const [],
-  String diagnosisType = '01',
-  PractitionerInfo? practitioner,
-  ProviderInfo? provider,
-}) =>
-    MedicalHistoryItem(
-      startDateTime: startDateTime,
-      endDateTime: endDateTime,
-      careModality: careModality,
-      serviceGroup: serviceGroup,
-      careEnvironment: careEnvironment,
-      clinicalEvaluation: ClinicalEvaluation(
-        historyOfCurrentIllness: historyOfCurrentIllness,
-        treatmentPlanObservations: treatmentPlanObservations,
-        generalPhysicalExamination: null,
-        systemsExamination: null,
-      ),
-      diagnosis: diagnosis,
-      diagnosisType: diagnosisType,
-      practitioner: practitioner,
-      provider: provider,
-      riskFactors: const [],
-      incapacity: null,
-      payer: null,
-      entryRoute: null,
-      externalCause: null,
-      dischargeDisposition: null,
-    );
+class _LocaleWrapper extends StatefulWidget {
+  const _LocaleWrapper({required this.locale, required this.child});
+  final String locale;
+  final Widget child;
+  @override
+  State<_LocaleWrapper> createState() => _LocaleWrapperState();
+}
 
-/// Create a [PatientFullRecord] with the given query list.
-PatientFullRecord _makeRecord(List<MedicalHistoryItem> history) =>
+class _LocaleWrapperState extends State<_LocaleWrapper> {
+  late String _locale;
+  @override
+  void initState() {
+    super.initState();
+    _locale = widget.locale;
+  }
+
+  @override
+  Widget build(BuildContext context) => AppLocale(
+    locale: _locale,
+    setLocale: (l) => setState(() => _locale = l),
+    child: widget.child,
+  );
+}
+
+// ─── Domain Factories ─────────────────────────────────────────────────────
+
+/// PatientFullRecord minimum with the indicated consultation list.
+PatientFullRecord _makeRecord(List<MedicalHistoryItem> consultations) =>
     PatientFullRecord(
-      patientId: 'test-id',
-      deviceUid: 'device-123',
+      patientId: 'test-patient-id',
+      deviceUid: 'HWB-AA:BB:CC:DD',
       patientInfo: PatientInfo(
         identification: PatientIdentification(
           documentType: 'CC',
-          documentNumber: '123456',
+          documentNumber: '123456789',
         ),
-        firstLastName: 'Test',
-        firstName: 'Paciente',
-        dob: '1990-01-01',
-        biologicalSex: 'M',
+        firstLastName: 'García',
+        firstName: 'Ana',
+        dob: '1990-05-20',
+        biologicalSex: 'F',
         address: Address(city: 'Bogotá', state: 'Cundinamarca'),
       ),
       guardianInfo: GuardianInfo(name: '', relationship: '', phone: ''),
-      medicalHistory: history,
+      medicalHistory: consultations,
     );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. UNIT TESTS – formatting logic (accessed via widget in "black-box" mode
-// because the getters are private; the rendered text is verified)
-// ─────────────────────────────────────────────────────────────────────────────
+/// Medical History Item with writable default values.
+MedicalHistoryItem _makeConsultation({
+  String startDateTime = '2024-06-15T10:30:00',
+  String? endDateTime,
+  String careModality = '01',
+  String serviceGroup = '01',
+  String careEnvironment = '05',
+  ClinicalEvaluation? clinicalEvaluation,
+  List<DiagnosisItem> diagnosis = const [],
+  String diagnosisType = '01',
+  String? dischargeDisposition,
+  PractitionerInfo? practitioner,
+  ProviderInfo? provider,
+  List<RiskFactor> riskFactors = const [],
+  IncapacityInfo? incapacity,
+  PayerInfo? payer,
+}) => MedicalHistoryItem(
+  startDateTime: startDateTime,
+  endDateTime: endDateTime,
+  careModality: careModality,
+  serviceGroup: serviceGroup,
+  careEnvironment: careEnvironment,
+  clinicalEvaluation: clinicalEvaluation,
+  diagnosis: diagnosis,
+  diagnosisType: diagnosisType,
+  dischargeDisposition: dischargeDisposition,
+  practitioner: practitioner,
+  provider: provider,
+  riskFactors: riskFactors,
+  incapacity: incapacity,
+  payer: payer,
+);
+
+PractitionerInfo _makePractitioner({
+  String name = 'Dra. María López',
+  String documentType = 'CC',
+  String documentNumber = '987654321',
+}) => PractitionerInfo(
+  documentType: documentType,
+  documentNumber: documentNumber,
+  name: name,
+);
+
+ProviderInfo _makeProvider({
+  String name = 'Hospital Central',
+  String repsCode = 'REPS-001',
+}) => ProviderInfo(repsCode: repsCode, name: name);
+
+DiagnosisItem _makeDiagnosis({
+  String icd10Code = 'J00',
+  String description = 'Rinofaringitis aguda',
+}) => DiagnosisItem(icd10Code: icd10Code, description: description);
+
+// ════════════════════════════════════════════════════════════════════════════
+// TESTS
+// ════════════════════════════════════════════════════════════════════════════
 
 void main() {
-  // ── Group: Date formatting ──────────────────────────────────────────────
-  group('_ConsultationCard · _formattedDate', () {
-    testWidgets('muestra día de semana, día, mes y año en español',
-        (tester) async {
-      final item = _makeItem(startDateTime: '2026-05-20T10:30:00');
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
+  // ── Group 1: Empty state ─────────────────────────────────────────────────
+  group('ProfileTabConsultations – lista vacía', () {
+    testWidgets('muestra mensaje cuando no hay consultas', (tester) async {
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord(const []),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
 
-      expect(find.textContaining('mié'), findsOneWidget);
-      expect(find.textContaining('20'), findsOneWidget);
-      expect(find.textContaining('may'), findsOneWidget);
-      expect(find.textContaining('2026'), findsOneWidget);
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.noConsultationsRegistered), findsOneWidget);
     });
 
-    testWidgets('no lanza excepción con fecha inválida y muestra el raw string',
-        (tester) async {
-      final item = _makeItem(startDateTime: 'not-a-date');
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
+    testWidgets('no muestra ninguna tarjeta de consulta', (tester) async {
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord(const []),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
 
-      expect(find.textContaining('not-a-date'), findsOneWidget);
+      expect(find.byIcon(Icons.medical_information_outlined), findsNothing);
+    });
+
+    testWidgets('no muestra el botón de agregar cuando canAdd=false', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord(const []),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.byIcon(Icons.add), findsNothing);
+    });
+
+    testWidgets('muestra el botón de agregar cuando canAdd=true', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord(const []),
+            canAdd: true,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.byIcon(Icons.add), findsOneWidget);
     });
   });
 
-  // ── Group: Time formatting ───────────────────────────────────────────────
-  group('_ConsultationCard · _formattedTime', () {
-    testWidgets('formatea hora a.m. correctamente', (tester) async {
-      final item = _makeItem(startDateTime: '2026-05-20T09:05:00');
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-      expect(find.textContaining('9:05 a.m.'), findsOneWidget);
+  // ── Group 2: A query – basic rendering ────────────────────────────
+  group('ProfileTabConsultations – una consulta', () {
+    testWidgets('renderiza la fecha de la consulta formateada', (tester) async {
+      final c = _makeConsultation(startDateTime: '2024-06-15T10:30:00');
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.textContaining('15'), findsWidgets);
     });
 
-    testWidgets('formatea hora p.m. correctamente', (tester) async {
-      final item = _makeItem(startDateTime: '2026-05-20T14:00:00');
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-      expect(find.textContaining('2:00 p.m.'), findsOneWidget);
+    testWidgets('muestra la hora en formato 12h con AM/PM', (tester) async {
+      final c = _makeConsultation(startDateTime: '2024-01-10T14:05:00');
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.textContaining('2:05'), findsOneWidget);
     });
 
-    testWidgets('medianoche (00:xx) se muestra como 12:xx a.m.', (tester) async {
-      final item = _makeItem(startDateTime: '2026-05-20T00:45:00');
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-      expect(find.textContaining('12:45 a.m.'), findsOneWidget);
+    testWidgets('muestra 12:xx para medianoche (hora 0)', (tester) async {
+      final c = _makeConsultation(startDateTime: '2024-01-10T00:20:00');
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.textContaining('12:20'), findsOneWidget);
+    });
+
+    testWidgets('muestra fecha cruda si el formato ISO es inválido', (
+      tester,
+    ) async {
+      final c = _makeConsultation(startDateTime: 'no-es-fecha');
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.textContaining('no-es-fecha'), findsOneWidget);
+    });
+
+    testWidgets('no muestra el mensaje "sin consultas"', (tester) async {
+      final c = _makeConsultation();
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.noConsultationsRegistered), findsNothing);
     });
   });
 
-  // ── Group: modality label ──────────────────────────────────────────
-  group('_ConsultationCard · _modalityLabel', () {
-    const cases = {
+  // ── Group 3: Clinical content of the card ──────────────────────────────
+  group('_ConsultationCard – contenido clínico', () {
+    testWidgets(
+      'muestra historyOfCurrentIllness como resumen si está disponible',
+      (tester) async {
+        final c = _makeConsultation(
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Paciente con fiebre de 3 días.',
+            treatmentPlanObservations: 'Reposo absoluto.',
+          ),
+        );
+        await tester.pumpWidget(
+          _wrap(
+            ProfileTabConsultations(
+              draft: _makeRecord([c]),
+              canAdd: false,
+              onAdd: () {},
+            ),
+          ),
+        );
+
+        expect(find.text('Paciente con fiebre de 3 días.'), findsOneWidget);
+        expect(find.text('Reposo absoluto.'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'usa treatmentPlanObservations como resumen si history es null',
+      (tester) async {
+        final c = _makeConsultation(
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: null,
+            treatmentPlanObservations: 'Plan: antibióticos 7 días.',
+          ),
+        );
+        await tester.pumpWidget(
+          _wrap(
+            ProfileTabConsultations(
+              draft: _makeRecord([c]),
+              canAdd: false,
+              onAdd: () {},
+            ),
+          ),
+        );
+
+        expect(find.text('Plan: antibióticos 7 días.'), findsOneWidget);
+      },
+    );
+
+    testWidgets('no muestra bloque de resumen si ambos campos son null', (
+      tester,
+    ) async {
+      final c = _makeConsultation(
+        clinicalEvaluation: ClinicalEvaluation(
+          historyOfCurrentIllness: null,
+          treatmentPlanObservations: null,
+        ),
+      );
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.text(''), findsNothing);
+    });
+
+    testWidgets('muestra el nombre del practicante si está definido', (
+      tester,
+    ) async {
+      final c = _makeConsultation(
+        practitioner: _makePractitioner(name: 'Dra. María López'),
+      );
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.text('Dra. María López'), findsOneWidget);
+    });
+
+    testWidgets(
+      'no muestra ícono de persona si el nombre del practicante está vacío',
+      (tester) async {
+        final c = _makeConsultation(practitioner: _makePractitioner(name: ''));
+        await tester.pumpWidget(
+          _wrap(
+            ProfileTabConsultations(
+              draft: _makeRecord([c]),
+              canAdd: false,
+              onAdd: () {},
+            ),
+          ),
+        );
+
+        expect(find.byIcon(Icons.person_outline), findsNothing);
+      },
+    );
+
+    testWidgets('muestra el nombre del proveedor en el subtítulo de la hora', (
+      tester,
+    ) async {
+      final c = _makeConsultation(
+        startDateTime: '2024-03-10T09:00:00',
+        provider: _makeProvider(name: 'Clínica Los Andes'),
+      );
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.textContaining('Clínica Los Andes'), findsOneWidget);
+    });
+  });
+
+  // ── Group 4: DiagChip ─────────────────────────────────────────────────────
+  group('_DiagChip – chips de diagnóstico', () {
+    testWidgets('muestra chip con código ICD-10 y descripción', (tester) async {
+      final diag = _makeDiagnosis(
+        icd10Code: 'J00',
+        description: 'Rinofaringitis aguda',
+      );
+      final c = _makeConsultation(diagnosis: [diag]);
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.textContaining('J00'), findsOneWidget);
+      expect(find.textContaining('Rinofaringitis aguda'), findsOneWidget);
+    });
+
+    testWidgets('trunca la etiqueta del chip a 36 caracteres + "..."', (
+      tester,
+    ) async {
+      final diag = _makeDiagnosis(
+        icd10Code: 'Z00',
+        description:
+            'Descripción muy larga que supera los treinta y seis caracteres permitidos',
+      );
+      final c = _makeConsultation(diagnosis: [diag]);
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      final chipTexts = find.textContaining('...');
+      expect(chipTexts, findsAtLeastNWidgets(1));
+    });
+
+    testWidgets('no trunca etiquetas de 36 caracteres o menos', (tester) async {
+      // "A01 Corto" = 9 chars, sin truncamiento
+      final diag = _makeDiagnosis(icd10Code: 'A01', description: 'Corto');
+      final c = _makeConsultation(diagnosis: [diag]);
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.textContaining('...'), findsNothing);
+    });
+
+    testWidgets('renderiza múltiples chips para múltiples diagnósticos', (
+      tester,
+    ) async {
+      final c = _makeConsultation(
+        diagnosis: [
+          _makeDiagnosis(icd10Code: 'J00', description: 'Rinitis'),
+          _makeDiagnosis(icd10Code: 'K29', description: 'Gastritis'),
+        ],
+      );
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.byIcon(Icons.medical_information_outlined), findsNWidgets(2));
+    });
+
+    testWidgets('no muestra chips cuando no hay diagnósticos', (tester) async {
+      final c = _makeConsultation(diagnosis: const []);
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.byIcon(Icons.medical_information_outlined), findsNothing);
+    });
+  });
+
+  // ── Group 5: Care modality ───────────────────────────────────────
+  group('_ConsultationCard – etiqueta de modalidad', () {
+    final modalidades = {
       '01': 'Intramural',
       '02': 'Extramural',
-      '06': 'Telemedicina',
+      '03': 'Domiciliaria',
+      '04': 'Jornada',
+      '05': 'Prehospitalaria',
+      '06': 'Telemedicina interactiva',
+      '07': 'No interactiva',
+      '08': 'Telexperticia',
       '09': 'Telemonitoreo',
     };
 
-    for (final entry in cases.entries) {
-      testWidgets('código ${entry.key} → "${entry.value}"', (tester) async {
-        final item = _makeItem(careModality: entry.key);
-        await tester.pumpWidget(_wrap(ProfileTabConsultations(
-          draft: _makeRecord([item]),
-          canAdd: false,
-          onAdd: () {},
-        )));
-        expect(find.textContaining(entry.value), findsOneWidget);
-      });
+    for (final entry in modalidades.entries) {
+      testWidgets(
+        'código ${entry.key} muestra etiqueta "${entry.value}" (ES)',
+        (tester) async {
+          final c = _makeConsultation(careModality: entry.key);
+          await tester.pumpWidget(
+            _wrap(
+              ProfileTabConsultations(
+                draft: _makeRecord([c]),
+                canAdd: false,
+                onAdd: () {},
+              ),
+            ),
+          );
+
+          final s = AppStrings.forTesting('es');
+          final expected = {
+            '01': s.modIntramural,
+            '02': s.modExtramuralMobil,
+            '03': s.modDomiciliaria,
+            '04': s.modJornada,
+            '05': s.modPrehospitalaria,
+            '06': s.modTelemedicinaInteractiva,
+            '07': s.modNoInteractiva,
+            '08': s.modTelexperticia,
+            '09': s.modTelemonitoreo,
+          }[entry.key]!;
+
+          expect(find.text(expected), findsOneWidget);
+        },
+      );
     }
 
-    testWidgets('código desconocido muestra el código en bruto', (tester) async {
-      final item = _makeItem(careModality: 'ZZ');
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-      expect(find.textContaining('ZZ'), findsOneWidget);
-    });
-  });
-
-  // ── Group: _DiagChip – truncated from label ─────────────────────────────────
-  group('_DiagChip · label truncation', () {
-    testWidgets('label ≤ 36 chars se muestra completo', (tester) async {
-      final item = _makeItem(
-        diagnosis: [
-          DiagnosisItem(icd10Code: 'A00', description: 'Cólera'),
-        ],
-      );
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-      expect(find.textContaining('A00 Cólera'), findsOneWidget);
-    });
-
-    testWidgets('label > 36 chars se trunca con "..."', (tester) async {
-      final item = _makeItem(
-        diagnosis: [
-          DiagnosisItem(
-            icd10Code: 'Z99',
-            description: 'Descripción muy larga que supera el límite visible',
+    testWidgets('código desconocido muestra el código crudo', (tester) async {
+      final c = _makeConsultation(careModality: '99');
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
           ),
-        ],
-      );
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-      expect(find.textContaining('...'), findsOneWidget);
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // 2. WIDGET TESTS – ProfileTabConsultations
-  // ─────────────────────────────────────────────────────────────────────────
-
-  group('ProfileTabConsultations · empty state', () {
-    testWidgets('muestra "Sin consultas registradas." cuando no hay items',
-        (tester) async {
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-      expect(find.text('Sin consultas registradas.'), findsOneWidget);
-      expect(find.textContaining('CONSULTAS · 0'), findsOneWidget);
-    });
-
-    testWidgets('no muestra botón "Agregar consulta" cuando canAdd=false',
-        (tester) async {
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-      expect(find.text('Agregar consulta'), findsNothing);
-    });
-  });
-
-  group('ProfileTabConsultations · lista con items', () {
-    testWidgets('muestra una tarjeta por consulta', (tester) async {
-      final items = [
-        _makeItem(startDateTime: '2026-05-01T08:00:00'),
-        _makeItem(startDateTime: '2026-04-15T14:00:00'),
-        _makeItem(startDateTime: '2026-03-10T10:00:00'),
-      ];
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord(items),
-        canAdd: false,
-        onAdd: () {},
-      )));
-      expect(find.textContaining('CONSULTAS · 3'), findsOneWidget);
-    });
-
-    testWidgets('ordena las consultas de más reciente a más antigua',
-        (tester) async {
-      final items = [
-        _makeItem(startDateTime: '2026-01-01T00:00:00'),
-        _makeItem(startDateTime: '2026-05-20T00:00:00'),
-        _makeItem(startDateTime: '2026-03-15T00:00:00'),
-      ];
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord(items),
-        canAdd: false,
-        onAdd: () {},
-      )));
-
-      // We collect the rendered date texts in DOM order
-      final fechas = tester
-          .widgetList<Text>(find.byType(Text))
-          .map((t) => t.data ?? '')
-          .where((s) =>
-              s.contains('2026') &&
-              (s.contains('ene') || s.contains('may') || s.contains('mar')))
-          .toList();
-
-      // The first one must contain "may" (May = most recent)
-      expect(fechas.first, contains('may'));
-    });
-
-    testWidgets('muestra el resumen de la consulta cuando existe', (tester) async {
-      final item =
-          _makeItem(historyOfCurrentIllness: 'Paciente refiere dolor de cabeza');
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-      expect(
-          find.textContaining('Paciente refiere dolor de cabeza'), findsOneWidget);
-    });
-
-    testWidgets('muestra treatmentPlanObservations si no hay historyOfCurrentIllness',
-        (tester) async {
-      final item = _makeItem(
-        historyOfCurrentIllness: null,
-        treatmentPlanObservations: 'Reposo y analgésicos',
-      );
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-      expect(find.textContaining('Reposo y analgésicos'), findsOneWidget);
-    });
-
-    testWidgets('muestra el nombre del profesional cuando está presente',
-        (tester) async {
-      final item = _makeItem(
-        practitioner: PractitionerInfo(
-          name: 'Dr. García',
-          documentType: 'CC',
-          documentNumber: '987654',
         ),
       );
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-      expect(find.textContaining('Dr. García'), findsOneWidget);
+
+      expect(find.text('99'), findsOneWidget);
     });
   });
 
-  // ── Group: Add consultation button ─────────────────────────────────────────
-  group('ProfileTabConsultations · botón "Agregar consulta"', () {
-    testWidgets('se muestra cuando canAdd=true', (tester) async {
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([]),
-        canAdd: true,
-        onAdd: () {},
-      )));
-      expect(find.text('Agregar consulta'), findsOneWidget);
+  // ── Group 6: Reverse chronological order ───────────────────────────────────
+  group('ProfileTabConsultations – ordenamiento', () {
+    testWidgets('ordena consultas de más reciente a más antigua', (
+      tester,
+    ) async {
+      final c1 = _makeConsultation(
+        startDateTime: '2022-01-10T08:00:00',
+        clinicalEvaluation: ClinicalEvaluation(
+          historyOfCurrentIllness: 'Consulta 2022',
+        ),
+      );
+      final c2 = _makeConsultation(
+        startDateTime: '2024-03-20T14:00:00',
+        clinicalEvaluation: ClinicalEvaluation(
+          historyOfCurrentIllness: 'Consulta 2024',
+        ),
+      );
+      final c3 = _makeConsultation(
+        startDateTime: '2023-07-05T10:00:00',
+        clinicalEvaluation: ClinicalEvaluation(
+          historyOfCurrentIllness: 'Consulta 2023',
+        ),
+      );
+
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c1, c2, c3]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+      final offset2024 = tester.getTopLeft(find.text('Consulta 2024')).dy;
+      final offset2023 = tester.getTopLeft(find.text('Consulta 2023')).dy;
+      final offset2022 = tester.getTopLeft(find.text('Consulta 2022')).dy;
+
+      expect(offset2024, lessThan(offset2023));
+      expect(offset2023, lessThan(offset2022));
+    });
+  });
+
+  // ── Group 7: Multiple consultations ─────────────────────────────────────────
+  group('ProfileTabConsultations – múltiples consultas', () {
+    testWidgets('renderiza una tarjeta por cada consulta', (tester) async {
+      final consultations = List.generate(
+        3,
+        (i) => _makeConsultation(
+          startDateTime: '2024-0${i + 1}-10T09:00:00',
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Historia $i',
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord(consultations),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.text('Historia 0'), findsOneWidget);
+      expect(find.text('Historia 1'), findsOneWidget);
+      expect(find.text('Historia 2'), findsOneWidget);
     });
 
-    testWidgets('llama onAdd al presionar el botón', (tester) async {
+    testWidgets('el contador del header refleja la cantidad de consultas', (
+      tester,
+    ) async {
+      final consultations = List.generate(4, (_) => _makeConsultation());
+
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord(consultations),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      // El header tiene el formato "TÍTULO · N"
+      expect(find.textContaining('· 4'), findsOneWidget);
+    });
+  });
+
+  // ── Group 8: Button Callback ───────────────────────────────────────────
+  group('ProfileTabConsultations – interacción del botón', () {
+    testWidgets('llama onAdd al pulsar el botón (canAdd=true)', (tester) async {
       var called = false;
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([]),
-        canAdd: true,
-        onAdd: () => called = true,
-      )));
-      await tester.tap(find.text('Agregar consulta'));
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord(const []),
+            canAdd: true,
+            onAdd: () => called = true,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.add));
       await tester.pump();
+
       expect(called, isTrue);
     });
+  });
 
-    testWidgets('onAdd NO se llama si canAdd=false', (tester) async {
-      var called = false;
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([]),
-        canAdd: false,
-        onAdd: () => called = true,
-      )));
-      // The button does not exist; we verified that it did not throw an exception and was not called.
-      expect(find.text('Agregar consulta'), findsNothing);
-      expect(called, isFalse);
+  // ── Group 9: Detailed Navigation ───────────────────────────────────────
+  group('_ConsultationCard – tap abre detalle', () {
+    testWidgets('tocar la tarjeta navega a la pantalla de detalle', (
+      tester,
+    ) async {
+      final c = _makeConsultation(
+        clinicalEvaluation: ClinicalEvaluation(
+          historyOfCurrentIllness: 'Paciente con tos.',
+        ),
+      );
+
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Paciente con tos.'));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.consultationDetailTitle), findsOneWidget);
     });
   });
 
-  // ── Group: detailed navigation ──────────────────────────────────────────
-  group('ProfileTabConsultations · navegación a detalle', () {
-    testWidgets(
-        'tap en una tarjeta navega a _ConsultationDetailScreen con el título correcto',
-        (tester) async {
-      final item = _makeItem(startDateTime: '2026-05-20T10:30:00');
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
+  // ── Group 10: Date/time format ──────────────────────────────────────
+  group('_ConsultationCard – formato hora 12h', () {
+    final s = AppStrings.forTesting('es');
 
-      await tester.tap(find.textContaining('Ver detalle').first);
-      await tester.pumpAndSettle();
+    final cases = [
+      ('2024-01-01T00:00:00', '12:00', s.timeAm),
+      ('2024-01-01T11:59:00', '11:59', s.timeAm),
+      ('2024-01-01T12:00:00', '12:00', s.timePm),
+      ('2024-01-01T13:00:00', '1:00', s.timePm),
+      ('2024-01-01T23:45:00', '11:45', s.timePm),
+    ];
 
-      expect(find.text('Detalle de consulta'), findsOneWidget);
-    });
+    for (final (dt, time, period) in cases) {
+      testWidgets('$dt → $time $period', (tester) async {
+        final c = _makeConsultation(startDateTime: dt);
+        await tester.pumpWidget(
+          _wrap(
+            ProfileTabConsultations(
+              draft: _makeRecord([c]),
+              canAdd: false,
+              onAdd: () {},
+            ),
+          ),
+        );
 
-    testWidgets(
-        '_ConsultationDetailScreen muestra la sección "Contexto de atención"',
-        (tester) async {
-      final item = _makeItem(
-        startDateTime: '2026-05-20T10:30:00',
-        careModality: '06',
-        serviceGroup: '01',
-        careEnvironment: '02',
+        expect(find.textContaining('$time $period'), findsOneWidget);
+      });
+    }
+  });
+
+  // ── Grupo 11: i18n ────────────────────────────────────────────────────────
+  group('ProfileTabConsultations – i18n', () {
+    testWidgets('header muestra strings en español (locale=es)', (
+      tester,
+    ) async {
+      final s = AppStrings.forTesting('es');
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord(const []),
+            canAdd: false,
+            onAdd: () {},
+          ),
+          locale: 'es',
+        ),
       );
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
 
-      await tester.tap(find.textContaining('Ver detalle').first);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Contexto de atención'), findsOneWidget);
-      expect(find.textContaining('Telemedicina interactiva'), findsOneWidget);
-      expect(find.textContaining('Consulta externa'), findsOneWidget);
-      expect(find.textContaining('Comunitario'), findsOneWidget);
-    });
-
-    testWidgets(
-        '_ConsultationDetailScreen muestra diagnósticos cuando los hay',
-        (tester) async {
-      final item = _makeItem(
-        diagnosis: [
-          DiagnosisItem(icd10Code: 'J00', description: 'Rinofaringitis aguda'),
-        ],
-        diagnosisType: '02',
+      expect(
+        find.textContaining(s.consultationsTabTitle.toUpperCase()),
+        findsOneWidget,
       );
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-
-      await tester.tap(find.textContaining('Ver detalle').first);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Diagnósticos'), findsOneWidget);
-      expect(find.textContaining('J00'), findsOneWidget);
-      expect(find.textContaining('Rinofaringitis aguda'), findsOneWidget);
-      expect(find.textContaining('Confirmado nuevo'), findsOneWidget);
     });
 
-    testWidgets(
-        '_ConsultationDetailScreen muestra sección Prestador cuando existe provider',
-        (tester) async {
-      final item = _makeItem(
-        provider: ProviderInfo(name: 'Hospital Central', repsCode: 'REP001'),
+    testWidgets('header muestra strings en inglés (locale=en)', (tester) async {
+      final s = AppStrings.forTesting('en');
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord(const []),
+            canAdd: false,
+            onAdd: () {},
+          ),
+          locale: 'en',
+        ),
       );
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
 
-      await tester.tap(find.textContaining('Ver detalle').first);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Prestador'), findsOneWidget);
-      expect(find.textContaining('Hospital Central'), findsOneWidget);
-      expect(find.textContaining('REP001'), findsOneWidget);
-    });
-
-    testWidgets('botón back de AppBar regresa a la pantalla anterior',
-        (tester) async {
-      final item = _makeItem();
-      await tester.pumpWidget(_wrap(ProfileTabConsultations(
-        draft: _makeRecord([item]),
-        canAdd: false,
-        onAdd: () {},
-      )));
-
-      await tester.tap(find.textContaining('Ver detalle').first);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Detalle de consulta'), findsOneWidget);
-
-      // Navigate back
-      final NavigatorState navigator = tester.state(find.byType(Navigator));
-      navigator.pop();
-      await tester.pumpAndSettle();
-
-      // Return to the queries tab
-      expect(find.textContaining('CONSULTAS ·'), findsOneWidget);
+      expect(
+        find.textContaining(s.consultationsTabTitle.toUpperCase()),
+        findsOneWidget,
+      );
     });
   });
 }

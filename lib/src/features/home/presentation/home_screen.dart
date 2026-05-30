@@ -198,7 +198,7 @@ class HomeScreen extends StatelessWidget {
       children: [
         _ActionCard(
           icon: Icons.nfc_rounded,
-          iconBg: const Color(0xFFE2F4FB), 
+          iconBg: const Color(0xFFE2F4FB),
           iconColor: const Color(0xFF1CABE2),
           title: s.actionReadNfc,
           subtitle: s.actionReadNfcSub,
@@ -210,7 +210,7 @@ class HomeScreen extends StatelessWidget {
         if (user.role.canRegisterPatient) ...[
           _ActionCard(
             icon: Icons.person_add_alt_1_rounded,
-            iconBg: const Color(0xFFE5E7E8),  
+            iconBg: const Color(0xFFE5E7E8),
             iconColor: const Color(0xFF37474F),
             title: s.actionNewPatient,
             subtitle: s.actionNewPatientSub,
@@ -270,7 +270,7 @@ class _Header extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF29B6F6), AppColors.primary],
+          colors: [AppColors.primary, AppColors.primary],
         ),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
       ),
@@ -281,7 +281,7 @@ class _Header extends StatelessWidget {
           // ── Top row: logo + brand name + language switcher ──
           Row(
             children: [
-              const HwbLogo(size: 36, onDark: true),
+              const HwbLogo(size: 38, onDark: true),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -520,9 +520,9 @@ class _SyncCardState extends State<_SyncCard> {
         : s.actionPendingSyncCount(_pending);
 
     final hasPending = _pending > 0;
-    const cardBg   = AppColors.white; 
-    const iBg      = Color(0xFFE8F5E8);
-    const iColor   = Color(0xFF4CAF50); 
+    const cardBg = AppColors.white;
+    const iBg = Color(0xFFE8F5E8);
+    const iColor = Color(0xFF4CAF50);
 
     return Material(
       color: cardBg,
@@ -536,10 +536,7 @@ class _SyncCardState extends State<_SyncCard> {
           decoration: BoxDecoration(
             color: AppColors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: const Color(0xFFE8ECF0),
-              width: 1,
-            ),
+            border: Border.all(color: const Color(0xFFE8ECF0), width: 1),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x0A000000),

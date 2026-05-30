@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/profile_card.dart';
 
@@ -18,6 +19,7 @@ class ProfileTabConsultations extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final items = [...draft.medicalHistory]
       ..sort((a, b) => b.startDateTime.compareTo(a.startDateTime));
     return Stack(
@@ -34,7 +36,7 @@ class ProfileTabConsultations extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'CONSULTAS · ${items.length}',
+                  '${s.consultationsTabTitle.toUpperCase()} · ${items.length}',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -49,12 +51,15 @@ class ProfileTabConsultations extends StatelessWidget {
               DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
+                  border: Border.all(
+                    color: const Color(0xFFB0B8C4),
+                    width: 1.5,
+                  ),
                 ),
                 child: ProfileCard(
-                  child: const Text(
-                    'Sin consultas registradas.',
-                    style: TextStyle(
+                  child: Text(
+                    s.noConsultationsRegistered,
+                    style: const TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary,
                     ),
@@ -88,9 +93,9 @@ class ProfileTabConsultations extends StatelessWidget {
                   elevation: 0,
                 ),
                 icon: const Icon(Icons.add, size: 22, color: AppColors.white),
-                label: const Text(
-                  'Agregar consulta',
-                  style: TextStyle(
+                label: Text(
+                  s.addConsultationButton,
+                  style: const TextStyle(
                     color: AppColors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -115,23 +120,32 @@ class _ConsultationCard extends StatelessWidget {
   final MedicalHistoryItem item;
   final VoidCallback onTap;
 
-  String get _formattedDate {
+  String _formattedDate(BuildContext context) {
+    final s = AppStrings.of(context);
     try {
       final dt = DateTime.parse(item.startDateTime);
-      const d = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
-      const m = [
-        'ene',
-        'feb',
-        'mar',
-        'abr',
-        'may',
-        'jun',
-        'jul',
-        'ago',
-        'sep',
-        'oct',
-        'nov',
-        'dic',
+      final d = [
+        s.dayLun,
+        s.dayMar,
+        s.dayMie,
+        s.dayJue,
+        s.dayVie,
+        s.daySab,
+        s.dayDom,
+      ];
+      final m = [
+        s.monEne,
+        s.monFeb,
+        s.monMar,
+        s.monAbr,
+        s.monMay,
+        s.monJun,
+        s.monJul,
+        s.monAgo,
+        s.monSep,
+        s.monOct,
+        s.monNov,
+        s.monDic,
       ];
       return '${d[dt.weekday - 1]}, ${dt.day} ${m[dt.month - 1]} ${dt.year}';
     } catch (_) {
@@ -139,33 +153,38 @@ class _ConsultationCard extends StatelessWidget {
     }
   }
 
-  String get _formattedTime {
+  String _formattedTime(BuildContext context) {
+    final s = AppStrings.of(context);
     try {
       final dt = DateTime.parse(item.startDateTime);
       final h = dt.hour;
       final m = dt.minute.toString().padLeft(2, '0');
-      return '${h == 0 ? 12 : (h > 12 ? h - 12 : h)}:$m ${h < 12 ? 'a.m.' : 'p.m.'}';
+      final period = h < 12 ? s.timeAm : s.timePm;
+      return '${h == 0 ? 12 : (h > 12 ? h - 12 : h)}:$m $period';
     } catch (_) {
       return '';
     }
   }
 
-  String get _modalityLabel =>
-      const {
-        '01': 'Intramural',
-        '02': 'Extramural',
-        '03': 'Domiciliaria',
-        '04': 'Jornada',
-        '05': 'Prehospitalaria',
-        '06': 'Telemedicina',
-        '07': 'Teleaistencia',
-        '08': 'Telexperticia',
-        '09': 'Telemonitoreo',
-      }[item.careModality] ??
-      item.careModality;
+  String _modalityLabel(BuildContext context) {
+    final s = AppStrings.of(context);
+    return {
+          '01': s.modIntramural,
+          '02': s.modExtramuralMobil,
+          '03': s.modDomiciliaria,
+          '04': s.modJornada,
+          '05': s.modPrehospitalaria,
+          '06': s.modTelemedicinaInteractiva,
+          '07': s.modNoInteractiva,
+          '08': s.modTelexperticia,
+          '09': s.modTelemonitoreo,
+        }[item.careModality] ??
+        item.careModality;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final summary =
         item.clinicalEvaluation.historyOfCurrentIllness ??
         item.clinicalEvaluation.treatmentPlanObservations ??
@@ -179,118 +198,118 @@ class _ConsultationCard extends StatelessWidget {
           border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
         ),
         child: ProfileCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _formattedDate,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      if (_formattedTime.isNotEmpty)
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          '$_formattedTime${item.provider?.name != null ? ' · ${item.provider!.name}' : ''}',
+                          _formattedDate(context),
                           style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
                           ),
                         ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _modalityLabel,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
+                        if (_formattedTime(context).isNotEmpty)
+                          Text(
+                            '${_formattedTime(context)}${item.provider?.name != null ? ' · ${item.provider!.name}' : ''}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                ),
-              ],
-            ),
-            if (summary.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                summary,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textPrimary,
-                  height: 1.4,
-                ),
-              ),
-            ],
-            if (item.diagnosis.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: item.diagnosis.map((d) => _DiagChip(d: d)).toList(),
-              ),
-            ],
-            if (item.practitioner != null &&
-                item.practitioner!.name.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.person_outline,
-                    size: 14,
-                    color: AppColors.textSecondary,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    item.practitioner!.name,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary,
-                      fontStyle: FontStyle.italic,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _modalityLabel(context),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
                 ],
               ),
-            ],
-            // Tap hint
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
+              if (summary.isNotEmpty) ...[
+                const SizedBox(height: 8),
                 Text(
-                  'Ver detalle',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: AppColors.primary.withValues(alpha: 0.6),
+                  summary,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textPrimary,
+                    height: 1.4,
                   ),
                 ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 10,
-                  color: AppColors.primary.withValues(alpha: 0.6),
+              ],
+              if (item.diagnosis.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: item.diagnosis.map((d) => _DiagChip(d: d)).toList(),
                 ),
               ],
-            ),
-          ],
+              if (item.practitioner != null &&
+                  item.practitioner!.name.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.person_outline,
+                      size: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      item.practitioner!.name,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              // Tap hint
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    s.viewDetailHint,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.primary.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 10,
+                    color: AppColors.primary.withValues(alpha: 0.6),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -343,15 +362,16 @@ class _ConsultationDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final eval = item.clinicalEvaluation;
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FB),
       appBar: AppBar(
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
-        title: const Text(
-          'Detalle de consulta',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        title: Text(
+          s.consultationDetailTitle,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
@@ -361,37 +381,38 @@ class _ConsultationDetailScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
         children: [
           _Section(
-            title: 'Contexto de atención',
+            title: s.careContextSection,
             rows: [
-              _kv('Fecha inicio', _fmtDt(item.startDateTime)),
+              _kv(s.startDateLabel, _fmtDt(item.startDateTime)),
               if (item.endDateTime != null)
-                _kv('Fecha fin', _fmtDt(item.endDateTime!)),
-              _kv('Modalidad', _modLabel(item.careModality)),
-              _kv('Grupo servicio', _sgLabel(item.serviceGroup)),
-              _kv('Entorno', _ceLabel(item.careEnvironment)),
-              if (item.entryRoute != null) _kv('Vía ingreso', item.entryRoute!),
+                _kv(s.endDateLabel, _fmtDt(item.endDateTime!)),
+              _kv(s.zone, _modLabel(context, item.careModality)),
+              _kv(s.serviceGroupLabel, _sgLabel(context, item.serviceGroup)),
+              _kv(s.environmentLabel, _ceLabel(context, item.careEnvironment)),
+              if (item.entryRoute != null)
+                _kv(s.entryRouteLabel, item.entryRoute!),
               if (item.externalCause != null)
-                _kv('Causa externa', item.externalCause!),
+                _kv(s.externalCauseLabel, item.externalCause!),
             ],
           ),
           const SizedBox(height: 12),
           if (item.provider != null) ...[
             _Section(
-              title: 'Prestador',
+              title: s.healthcareProvider,
               rows: [
-                _kv('Nombre', item.provider!.name),
-                _kv('REPS', item.provider!.repsCode),
+                _kv(s.name, item.provider!.name),
+                _kv(s.repsCode, item.provider!.repsCode),
               ],
             ),
             const SizedBox(height: 12),
           ],
           if (item.practitioner != null) ...[
             _Section(
-              title: 'Profesional',
+              title: s.practitioner,
               rows: [
-                _kv('Nombre', item.practitioner!.name),
+                _kv(s.name, item.practitioner!.name),
                 _kv(
-                  'Doc.',
+                  s.docLabelShort,
                   '${item.practitioner!.documentType} ${item.practitioner!.documentNumber}',
                 ),
               ],
@@ -399,24 +420,24 @@ class _ConsultationDetailScreen extends StatelessWidget {
             const SizedBox(height: 12),
           ],
           _Section(
-            title: 'Evaluación clínica',
+            title: s.clinicalEvaluation,
             rows: [
               if (eval.historyOfCurrentIllness != null)
-                _kv('Enfermedad actual', eval.historyOfCurrentIllness!),
+                _kv(s.historyCurrentIllness, eval.historyOfCurrentIllness!),
               if (eval.generalPhysicalExamination != null)
-                _kv('Examen físico', eval.generalPhysicalExamination!),
+                _kv(s.generalExam, eval.generalPhysicalExamination!),
               if (eval.systemsExamination != null)
-                _kv('Revisión por sistemas', eval.systemsExamination!),
+                _kv(s.systemsExam, eval.systemsExamination!),
               if (eval.treatmentPlanObservations != null)
-                _kv('Plan de tratamiento', eval.treatmentPlanObservations!),
+                _kv(s.treatmentPlan, eval.treatmentPlanObservations!),
             ],
           ),
           const SizedBox(height: 12),
           if (item.diagnosis.isNotEmpty) ...[
             _Section(
-              title: 'Diagnósticos',
+              title: s.diagnosisTitle,
               rows: [
-                _kv('Tipo', _dtLabel(item.diagnosisType)),
+                _kv(s.diagnosisType, _dtLabel(context, item.diagnosisType)),
                 for (final d in item.diagnosis) _kv(d.icd10Code, d.description),
               ],
             ),
@@ -424,34 +445,36 @@ class _ConsultationDetailScreen extends StatelessWidget {
           ],
           if (item.dischargeDisposition != null) ...[
             _Section(
-              title: 'Egreso',
-              rows: [_kv('Condición', _ddLabel(item.dischargeDisposition!))],
+              title: s.dischargeSection,
+              rows: [
+                _kv(s.condition, _ddLabel(context, item.dischargeDisposition!)),
+              ],
             ),
             const SizedBox(height: 12),
           ],
           if (item.riskFactors.isNotEmpty) ...[
             _Section(
-              title: 'Factores de riesgo',
+              title: s.riskFactorsSection,
               rows: item.riskFactors.map((r) => _kv(r.type, r.name)).toList(),
             ),
             const SizedBox(height: 12),
           ],
           if (item.incapacity != null) ...[
             _Section(
-              title: 'Incapacidad',
+              title: s.incapacitySection,
               rows: [
-                _kv('Alcance', item.incapacity!.scope),
-                _kv('Días', '${item.incapacity!.days}'),
+                _kv(s.incapacityScope, item.incapacity!.scope),
+                _kv(s.incapacityDays, '${item.incapacity!.days}'),
               ],
             ),
             const SizedBox(height: 12),
           ],
           if (item.payer != null) ...[
             _Section(
-              title: 'Pagador',
+              title: s.payerSection,
               rows: [
-                _kv('Código', item.payer!.code ?? '—'),
-                _kv('Nombre', item.payer!.name ?? '—'),
+                _kv(s.codeLabel, item.payer!.code ?? '—'),
+                _kv(s.name, item.payer!.name ?? '—'),
               ],
             ),
           ],
@@ -470,52 +493,66 @@ class _ConsultationDetailScreen extends StatelessWidget {
     }
   }
 
-  static String _modLabel(String c) =>
-      const {
-        '01': 'Intramural',
-        '02': 'Extramural móvil',
-        '03': 'Domiciliaria',
-        '04': 'Jornada',
-        '05': 'Prehospitalaria',
-        '06': 'Telemedicina interactiva',
-        '07': 'No interactiva',
-        '08': 'Telexperticia',
-        '09': 'Telemonitoreo',
-      }[c] ??
-      c;
-  static String _sgLabel(String c) =>
-      const {
-        '01': 'Consulta externa',
-        '02': 'Apoyo diagnóstico',
-        '03': 'Internación',
-        '04': 'Quirúrgico',
-        '05': 'Atención inmediata',
-      }[c] ??
-      c;
-  static String _ceLabel(String c) =>
-      const {
-        '01': 'Hogar',
-        '02': 'Comunitario',
-        '03': 'Escolar',
-        '04': 'Laboral',
-        '05': 'Institucional',
-      }[c] ??
-      c;
-  static String _dtLabel(String c) =>
-      const {
-        '01': 'Impresión diagnóstica',
-        '02': 'Confirmado nuevo',
-        '03': 'Confirmado repetido',
-      }[c] ??
-      c;
-  static String _ddLabel(String c) =>
-      const {
-        '01': 'Alta voluntaria',
-        '02': 'Paciente fallecido',
-        '03': 'Remitido',
-        '04': 'Alta médica',
-      }[c] ??
-      c;
+  static String _modLabel(BuildContext context, String c) {
+    final s = AppStrings.of(context);
+    return {
+          '01': s.modIntramural,
+          '02': s.modExtramuralMobil,
+          '03': s.modDomiciliaria,
+          '04': s.modJornada,
+          '05': s.modPrehospitalaria,
+          '06': s.modTelemedicinaInteractiva,
+          '07': s.modNoInteractiva,
+          '08': s.modTelexperticia,
+          '09': s.modTelemonitoreo,
+        }[c] ??
+        c;
+  }
+
+  static String _sgLabel(BuildContext context, String c) {
+    final s = AppStrings.of(context);
+    return {
+          '01': s.sgConsultaExterna,
+          '02': s.sgApoyoDiagnostico,
+          '03': s.sgInternacion,
+          '04': s.sgQuirurgico,
+          '05': s.sgAtencionInmediata,
+        }[c] ??
+        c;
+  }
+
+  static String _ceLabel(BuildContext context, String c) {
+    final s = AppStrings.of(context);
+    return {
+          '01': s.ceHogar,
+          '02': s.ceComunitario,
+          '03': s.ceEscolar,
+          '04': s.ceLaboral,
+          '05': s.ceInstitucional,
+        }[c] ??
+        c;
+  }
+
+  static String _dtLabel(BuildContext context, String c) {
+    final s = AppStrings.of(context);
+    return {
+          '01': s.dtImpresion,
+          '02': s.dtConfirmadoNuevo,
+          '03': s.dtConfirmadoRepetido,
+        }[c] ??
+        c;
+  }
+
+  static String _ddLabel(BuildContext context, String c) {
+    final s = AppStrings.of(context);
+    return {
+          '01': s.ddAltaVoluntaria,
+          '02': s.ddFallecido,
+          '03': s.ddRemitido,
+          '04': s.ddAltaMedica,
+        }[c] ??
+        c;
+  }
 }
 
 class _Section extends StatelessWidget {

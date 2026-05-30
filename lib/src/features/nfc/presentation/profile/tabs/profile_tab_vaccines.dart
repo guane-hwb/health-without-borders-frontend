@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/profile_card.dart';
 
@@ -17,6 +18,7 @@ class ProfileTabVaccines extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final items = [...draft.vaccinationRecord]
       ..sort((a, b) => a.date.compareTo(b.date));
 
@@ -34,7 +36,7 @@ class ProfileTabVaccines extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'ESQUEMA · ${items.length} VACUNA${items.length == 1 ? '' : 'S'}',
+                  '${s.vaccineSchemeTitle.toUpperCase()} · ${items.length} ${items.length == 1 ? s.vaccineLabelSingle.toUpperCase() : s.vaccineLabelPlural.toUpperCase()}',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -46,19 +48,28 @@ class ProfileTabVaccines extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             if (items.isEmpty)
-              ProfileCard(
-                child: const Text(
-                  'Sin vacunas registradas.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFB0B8C4),
+                    width: 1.5,
+                  ),
+                ),
+                child: ProfileCard(
+                  child: Text(
+                    s.noVaccinesRegistered,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
               )
             else
               for (var i = 0; i < items.length; i++) ...[
                 _VaccineCard(item: items[i]),
-                if (i < items.length - 1) const SizedBox(height: 8),
+                if (i < items.length - 1) const SizedBox(height: 10),
               ],
           ],
         ),
@@ -75,11 +86,12 @@ class ProfileTabVaccines extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
+                elevation: 0,
               ),
               icon: const Icon(Icons.add, size: 22, color: AppColors.white),
-              label: const Text(
-                'Registrar vacuna',
-                style: TextStyle(
+              label: Text(
+                s.addVaccineButton,
+                style: const TextStyle(
                   color: AppColors.white,
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -95,84 +107,81 @@ class ProfileTabVaccines extends StatelessWidget {
 
 class _VaccineCard extends StatelessWidget {
   const _VaccineCard({required this.item});
+
   final VaccinationRecordItem item;
 
   String get _formattedDate {
-    if (!item.date.contains('-')) return item.date;
-    final p = item.date.split('-');
-    if (p.length != 3) return item.date;
-    const months = [
-      'ene',
-      'feb',
-      'mar',
-      'abr',
-      'may',
-      'jun',
-      'jul',
-      'ago',
-      'sep',
-      'oct',
-      'nov',
-      'dic',
-    ];
-    final m = int.tryParse(p[1]);
-    if (m == null || m < 1 || m > 12) return item.date;
-    return '${int.parse(p[2])} ${months[m - 1]}. de ${p[0]}';
+    if (item.date.length < 10) return item.date;
+    final datePart = item.date.substring(0, 10);
+    final p = datePart.split('-');
+    if (p.length != 3) return datePart;
+    return '${p[2]}/${p[1]}/${p[0]}';
   }
 
   @override
   Widget build(BuildContext context) {
-    return ProfileCard(
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
+    final s = AppStrings.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
+      ),
+      child: ProfileCard(
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.vaccines,
+                size: 18,
+                color: AppColors.success,
+              ),
             ),
-            child: const Icon(
-              Icons.vaccines,
-              size: 18,
-              color: AppColors.success,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.vaccineName,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Dosis ${item.dose} · $_formattedDate · CVX ${item.vaccineCode}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                if (item.administratedAt.isNotEmpty)
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    item.administratedAt,
+                    item.vaccineName,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${s.doseLabel} ${item.dose} · $_formattedDate · CVX ${item.vaccineCode}',
                     style: const TextStyle(
                       fontSize: 11,
                       color: AppColors.textSecondary,
-                      fontStyle: FontStyle.italic,
                     ),
                   ),
-              ],
+                  if (item.administratedAt.isNotEmpty)
+                    Text(
+                      item.administratedAt,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          if (item.status == 'completed')
-            const Icon(Icons.check_circle, size: 20, color: AppColors.success),
-        ],
+            if (item.status == 'completed')
+              const Icon(
+                Icons.check_circle,
+                size: 20,
+                color: AppColors.success,
+              ),
+          ],
+        ),
       ),
     );
   }

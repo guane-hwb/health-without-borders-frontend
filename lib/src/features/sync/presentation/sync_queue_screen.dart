@@ -135,7 +135,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const HwbLogo(size: 28),
+                      const HwbLogo(size: 38, onDark: true),
                       const Expanded(
                         child: Center(
                           child: Text(
@@ -654,7 +654,10 @@ class _ReviewSummaryScreen extends StatelessWidget {
                         : [
                             MapEntry('Nombre', g.name),
                             MapEntry('Parentesco', _relLabel(g.relationship)),
-                            MapEntry('Teléfono', g.phone.isEmpty ? '—' : g.phone),
+                            MapEntry(
+                              'Teléfono',
+                              g.phone.isEmpty ? '—' : g.phone,
+                            ),
                             MapEntry('NFC', g.deviceUid ?? 'No registrada'),
                           ],
                   ),
@@ -665,9 +668,12 @@ class _ReviewSummaryScreen extends StatelessWidget {
                     icon: Icons.history_edu_outlined,
                     title: 'Antecedentes',
                     rows: [
-                      MapEntry('Crónicas', bg == null || bg.chronicConditions.isEmpty
-                          ? '—'
-                          : '${bg.chronicConditions.length} ítems'),
+                      MapEntry(
+                        'Crónicas',
+                        bg == null || bg.chronicConditions.isEmpty
+                            ? '—'
+                            : '${bg.chronicConditions.length} ítems',
+                      ),
                       MapEntry('Personal', bg?.personalHistory ?? '—'),
                       MapEntry(
                         'Medicam.',

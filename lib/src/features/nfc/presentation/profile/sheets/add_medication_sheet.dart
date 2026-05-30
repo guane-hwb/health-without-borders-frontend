@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/sheet_scaffold.dart';
 
@@ -18,12 +19,12 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
   final _notesCtrl = TextEditingController();
   String _status = 'active';
 
-  static const Map<String, String> _statuses = {
-    'active': 'Activo',
-    'completed': 'Completado',
-    'stopped': 'Suspendido',
-    'unknown': 'Desconocido',
-  };
+  static const List<String> _statusKeys = [
+    'active',
+    'completed',
+    'stopped',
+    'unknown',
+  ];
 
   @override
   void dispose() {
@@ -33,13 +34,24 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
     super.dispose();
   }
 
+  /// Maps each status code to its localized label via [AppStrings].
+  String _statusLabel(AppStrings s, String code) => switch (code) {
+    'active' => s.medStatusActive,
+    'completed' => s.medStatusCompleted,
+    'stopped' => s.medStatusStopped,
+    'unknown' => s.medStatusUnknown,
+    _ => code,
+  };
+
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final canConfirm = _nameCtrl.text.trim().isNotEmpty;
+
     return SheetScaffold(
-      title: 'Agregar medicamento',
-      subtitle: 'Registrar medicamento actual del paciente',
-      confirmLabel: 'Agregar',
+      title: s.addMedicationTitle,
+      subtitle: s.addMedicationSubtitle,
+      confirmLabel: s.confirm,
       confirmIcon: Icons.add,
       canConfirm: canConfirm,
       onConfirm: () {
@@ -60,9 +72,9 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Medicamento *',
-            style: TextStyle(
+          Text(
+            s.medicationLabel,
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -74,7 +86,7 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
             style: const TextStyle(fontSize: 14),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              hintText: 'ej: Metformina 850mg',
+              hintText: s.medicationHint,
               hintStyle: const TextStyle(
                 fontSize: 12,
                 color: AppColors.disabled,
@@ -87,9 +99,9 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
             ),
           ),
           const SizedBox(height: 14),
-          const Text(
-            'Estado',
-            style: TextStyle(
+          Text(
+            s.statusLabel,
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -99,10 +111,10 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
           Wrap(
             spacing: 8,
             runSpacing: 6,
-            children: _statuses.entries.map((e) {
-              final sel = _status == e.key;
+            children: _statusKeys.map((code) {
+              final sel = _status == code;
               return GestureDetector(
-                onTap: () => setState(() => _status = e.key),
+                onTap: () => setState(() => _status = code),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -116,7 +128,7 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                     ),
                   ),
                   child: Text(
-                    e.value,
+                    _statusLabel(s, code),
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -128,9 +140,9 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
             }).toList(),
           ),
           const SizedBox(height: 14),
-          const Text(
-            'Posología',
-            style: TextStyle(
+          Text(
+            s.dosageLabel,
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -141,7 +153,7 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
             controller: _dosageCtrl,
             style: const TextStyle(fontSize: 14),
             decoration: InputDecoration(
-              hintText: 'ej: 1 tableta cada 12 horas',
+              hintText: s.dosageHint,
               hintStyle: const TextStyle(
                 fontSize: 12,
                 color: AppColors.disabled,
@@ -154,9 +166,9 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
             ),
           ),
           const SizedBox(height: 14),
-          const Text(
-            'Notas',
-            style: TextStyle(
+          Text(
+            s.notesLabel,
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -168,7 +180,7 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
             maxLines: 2,
             style: const TextStyle(fontSize: 14),
             decoration: InputDecoration(
-              hintText: 'Observaciones adicionales',
+              hintText: s.notesHint,
               hintStyle: const TextStyle(
                 fontSize: 12,
                 color: AppColors.disabled,
