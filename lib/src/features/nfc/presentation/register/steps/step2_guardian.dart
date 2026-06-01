@@ -7,14 +7,7 @@ import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../shared/widgets/form_widgets.dart';
 import '../register_nfc_screen.dart';
-
-// ─────────────────────────────────────────────
-//  Document types
-// ─────────────────────────────────────────────
-const _docTypes = {
-  'CC': 'Cédula de ciudadanía',
-  'CE': 'Cédula de extranjero',
-};
+import '../../../../../core/i18n/app_strings.dart';
 
 // ─────────────────────────────────────────────
 //  Main widget
@@ -66,32 +59,25 @@ class _Step2State extends State<Step2Guardian> {
   List<Offset>? _currentStroke2;
   bool _scanning2 = false;
 
-  static const _rels = {
-    '01': 'Padres',
-    '02': 'Hermanos',
-    '03': 'Tíos',
-    '04': 'Abuelos',
-  };
-
   @override
   void initState() {
     super.initState();
     final d = widget.draft;
-    _name        = TextEditingController(text: d.guardianName ?? '');
-    _phone       = TextEditingController(text: d.guardianPhone ?? '');
-    _uid         = TextEditingController(text: d.guardianDeviceUid ?? '');
-    _docNumber   = TextEditingController(text: d.guardianDocNumber ?? '');
-    _email       = TextEditingController(text: d.guardianEmail ?? '');
+    _name = TextEditingController(text: d.guardianName ?? '');
+    _phone = TextEditingController(text: d.guardianPhone ?? '');
+    _uid = TextEditingController(text: d.guardianDeviceUid ?? '');
+    _docNumber = TextEditingController(text: d.guardianDocNumber ?? '');
+    _email = TextEditingController(text: d.guardianEmail ?? '');
     _selectedDocType = d.guardianDocType ?? 'CC';
-    _authAccepted    = d.guardianAuthAccepted ?? false;
+    _authAccepted = d.guardianAuthAccepted ?? false;
 
     // Guardian 2
-    _name2      = TextEditingController(text: d.guardian2Name ?? '');
-    _phone2     = TextEditingController(text: d.guardian2Phone ?? '');
+    _name2 = TextEditingController(text: d.guardian2Name ?? '');
+    _phone2 = TextEditingController(text: d.guardian2Phone ?? '');
     _docNumber2 = TextEditingController(text: d.guardian2DocNumber ?? '');
-    _uid2       = TextEditingController();
-    _email2     = TextEditingController(text: d.guardian2Email ?? '');
-    _selectedDocType2    = d.guardian2DocType ?? 'CC';
+    _uid2 = TextEditingController();
+    _email2 = TextEditingController(text: d.guardian2Email ?? '');
+    _selectedDocType2 = d.guardian2DocType ?? 'CC';
     _guardian2Relationship = d.guardian2Relationship ?? '01';
     _auth2Accepted = d.guardian2AuthAccepted ?? false;
     _hasGuardian2 = d.guardian2Name != null && d.guardian2Name!.isNotEmpty;
@@ -114,6 +100,7 @@ class _Step2State extends State<Step2Guardian> {
 
   // ── NFC ──────────────────────────────────────
   Future<void> _scanNfc() async {
+    final s = AppStrings.of(context);
     setState(() => _scanning = true);
     try {
       final uid = await NfcService.readDeviceUid();
@@ -128,7 +115,7 @@ class _Step2State extends State<Step2Guardian> {
         setState(() => _scanning = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('NFC no disponible. Use el campo manual.'),
+            content: Text(s.guardianNfcUnavailable),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -142,7 +129,7 @@ class _Step2State extends State<Step2Guardian> {
         setState(() => _scanning = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Error al leer NFC. Inténtalo de nuevo.'),
+            content: Text(s.guardianNfcError),
             backgroundColor: Colors.red.shade700,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -156,44 +143,57 @@ class _Step2State extends State<Step2Guardian> {
   }
 
   Future<void> _scanNfc2() async {
+    final s = AppStrings.of(context);
     setState(() => _scanning2 = true);
     try {
       final uid = await NfcService.readDeviceUid();
-      if (mounted) setState(() { _uid2.text = uid; _scanning2 = false; });
+      if (mounted) {
+        setState(() {
+          _uid2.text = uid;
+          _scanning2 = false;
+        });
+      }
     } on NfcNotAvailableException {
       if (mounted) {
         setState(() => _scanning2 = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('NFC no disponible. Use el campo manual.'),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(s.guardianNfcUnavailable),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _scanning2 = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('Error al leer NFC. Inténtalo de nuevo.'),
-          backgroundColor: Colors.red.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(s.guardianNfcError),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          ),
+        );
       }
     }
   }
 
-  /// Renders signature strokes to a PNG and returns the base64-encoded string.
-  /// Returns null if strokes are empty.
   Future<String?> _signatureToBase64(List<List<Offset>> strokes) async {
     if (strokes.isEmpty) return null;
     const w = 400.0, h = 200.0;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, w, h));
-    // White background
-    canvas.drawRect(Rect.fromLTWH(0, 0, w, h), Paint()..color = const Color(0xFFFFFFFF));
-    // Draw strokes
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, w, h),
+      Paint()..color = const Color(0xFFFFFFFF),
+    );
     final paint = Paint()
       ..color = const Color(0xFF1A1A2E)
       ..strokeWidth = 2.2
@@ -217,61 +217,73 @@ class _Step2State extends State<Step2Guardian> {
 
   // ── Validation and saving ─────────────────────
   Future<void> _save() async {
+    final s = AppStrings.of(context);
     final missing = <String>[];
 
+    final isEs = s.welcome == 'Bienvenido';
+    final bioSigLabel = isEs ? 'Firma biométrica' : 'Biometric signature';
+    final auth2Label = isEs
+        ? 'Autorización guardián 2'
+        : 'Guardian 2 Authorization';
+    final requiredFieldsLabel = isEs ? 'Campos requeridos' : 'Required fields';
+
     if (widget.requiredForMinor) {
-      if (_name.text.trim().isEmpty) missing.add('Nombre completo');
-      if (_phone.text.trim().isEmpty) missing.add('Teléfono');
-      if (_uid.text.trim().isEmpty) missing.add('UID del dispositivo NFC');
-      if (_docNumber.text.trim().isEmpty) missing.add('Número de documento');
-      if (_email.text.trim().isEmpty) missing.add('Correo electrónico');
-      if (_signatureStrokes.isEmpty) missing.add('Firma biométrica');
+      if (_name.text.trim().isEmpty) missing.add(s.guardianFullName);
+      if (_phone.text.trim().isEmpty) missing.add(s.guardianPhoneLabel);
+      if (_uid.text.trim().isEmpty) missing.add(s.guardianNfcDevice);
+      if (_docNumber.text.trim().isEmpty) missing.add(s.documentNumberLabel);
+      if (_email.text.trim().isEmpty) missing.add(s.email);
+      if (_signatureStrokes.isEmpty) missing.add(bioSigLabel);
     }
 
-    // Validate authorization always when there's an email or signature
     if (_email.text.trim().isNotEmpty || _signatureStrokes.isNotEmpty) {
-      if (!_authAccepted) missing.add('Autorización y privacidad');
+      if (!_authAccepted) missing.add(s.confirmChanges);
     }
 
-    // Validate guardian 2 consent if guardian 2 exists and has data
     if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
       if (_email2.text.trim().isNotEmpty || _signatureStrokes2.isNotEmpty) {
-        if (!_auth2Accepted) missing.add('Autorización guardián 2');
+        if (!_auth2Accepted) missing.add(auth2Label);
       }
     }
 
     if (missing.isNotEmpty) {
-      setState(() => _err = 'Campos requeridos: ${missing.join(', ')}');
+      setState(() => _err = '$requiredFieldsLabel: ${missing.join(', ')}');
       return;
     }
 
     setState(() => _err = null);
 
-    // Convert signatures to PNG base64
     final sig1Base64 = await _signatureToBase64(_signatureStrokes);
-    final sig2Base64 = _hasGuardian2 ? await _signatureToBase64(_signatureStrokes2) : null;
+    final sig2Base64 = _hasGuardian2
+        ? await _signatureToBase64(_signatureStrokes2)
+        : null;
 
     final d = widget.draft;
     d.guardianName = _name.text.trim().isEmpty ? null : _name.text.trim();
     d.guardianPhone = _phone.text.trim().isEmpty ? null : _phone.text.trim();
     d.guardianDeviceUid = _uid.text.trim().isEmpty ? null : _uid.text.trim();
     d.guardianDocType = _selectedDocType;
-    d.guardianDocNumber =
-        _docNumber.text.trim().isEmpty ? null : _docNumber.text.trim();
+    d.guardianDocNumber = _docNumber.text.trim().isEmpty
+        ? null
+        : _docNumber.text.trim();
     d.guardianAuthAccepted = _authAccepted;
-    d.guardianEmail =
-        _email.text.trim().isEmpty ? null : _email.text.trim();
+    d.guardianEmail = _email.text.trim().isEmpty ? null : _email.text.trim();
     d.guardianSignatureBase64 = sig1Base64;
 
-    // Save guardian 2 if it was added
     if (_hasGuardian2) {
       d.guardian2Name = _name2.text.trim().isEmpty ? null : _name2.text.trim();
-      d.guardian2Phone = _phone2.text.trim().isEmpty ? null : _phone2.text.trim();
+      d.guardian2Phone = _phone2.text.trim().isEmpty
+          ? null
+          : _phone2.text.trim();
       d.guardian2DocType = _selectedDocType2;
-      d.guardian2DocNumber = _docNumber2.text.trim().isEmpty ? null : _docNumber2.text.trim();
+      d.guardian2DocNumber = _docNumber2.text.trim().isEmpty
+          ? null
+          : _docNumber2.text.trim();
       d.guardian2Relationship = _guardian2Relationship;
       d.guardian2AuthAccepted = _auth2Accepted;
-      d.guardian2Email = _email2.text.trim().isEmpty ? null : _email2.text.trim();
+      d.guardian2Email = _email2.text.trim().isEmpty
+          ? null
+          : _email2.text.trim();
       d.guardian2SignatureBase64 = sig2Base64;
     } else {
       d.guardian2Name = null;
@@ -286,7 +298,6 @@ class _Step2State extends State<Step2Guardian> {
     widget.onContinue();
   }
 
-  // ── Signature: clean ────────────────────────────
   void _clearSignature() {
     setState(() {
       _signatureStrokes.clear();
@@ -294,7 +305,6 @@ class _Step2State extends State<Step2Guardian> {
     });
   }
 
-  // ── Modal privacy policy ──────────────
   void _showPrivacyPolicy() {
     showDialog<void>(
       context: context,
@@ -306,6 +316,17 @@ class _Step2State extends State<Step2Guardian> {
   @override
   Widget build(BuildContext context) {
     final d = widget.draft;
+    final s = AppStrings.of(context);
+
+    final docTypes = {'CC': s.docTypeCC, 'CE': s.docTypeCE};
+
+    final rels = {
+      '01': s.relParents,
+      '02': s.relSiblings,
+      '03': s.relUncles,
+      '04': s.relGrandparents,
+    };
+
     return Column(
       children: [
         Expanded(
@@ -318,14 +339,14 @@ class _Step2State extends State<Step2Guardian> {
               // ── Guardian section ────────────────
               FormSectionHeader(
                 icon: Icons.family_restroom,
-                title: 'Información del guardián',
+                title: s.editGuardianTitle,
               ),
               const SizedBox(height: 14),
 
               _StyledTextField(
-                label: 'Nombre completo',
+                label: s.guardianFullName,
                 controller: _name,
-                hint: 'Ej. Carmen Vargas Pinto',
+                hint: s.guardianFullNameHint,
                 required: widget.requiredForMinor,
                 icon: Icons.person_outline,
                 keyboardType: TextInputType.name,
@@ -334,18 +355,18 @@ class _Step2State extends State<Step2Guardian> {
               const SizedBox(height: 14),
 
               _RelChipSelector(
-                label: 'Parentesco',
+                label: s.guardianRelationship,
                 required: widget.requiredForMinor,
                 value: d.guardianRelationship ?? '01',
-                options: _rels,
+                options: rels,
                 onChanged: (v) => setState(() => d.guardianRelationship = v),
               ),
               const SizedBox(height: 14),
 
               _StyledTextField(
-                label: 'Teléfono',
+                label: s.guardianPhoneLabel,
                 controller: _phone,
-                hint: '+57 310 482 9914',
+                hint: s.guardianPhoneHint,
                 required: widget.requiredForMinor,
                 icon: Icons.phone_outlined,
                 keyboardType: TextInputType.phone,
@@ -354,17 +375,17 @@ class _Step2State extends State<Step2Guardian> {
 
               // ── Document Type ────────
               _DocTypeSelector(
-                label: 'Tipo de documento',
+                label: s.documentTypeLabel,
                 required: widget.requiredForMinor,
                 value: _selectedDocType,
-                options: _docTypes,
+                options: docTypes,
                 onChanged: (v) => setState(() => _selectedDocType = v),
               ),
               const SizedBox(height: 14),
 
               // ── Document Number ───────
               _StyledTextField(
-                label: 'Número de documento',
+                label: s.documentNumberLabel,
                 controller: _docNumber,
                 hint: 'Ej. 1234567890',
                 required: widget.requiredForMinor,
@@ -376,9 +397,8 @@ class _Step2State extends State<Step2Guardian> {
               // ── NFC ─────────────────────────────
               FormSectionHeader(
                 icon: Icons.nfc,
-                title: 'Dispositivo NFC del guardián',
-                subtitle:
-                    'Necesaria para autenticación 2FA al consultar el historial de menores.',
+                title: s.guardianNfcDevice,
+                subtitle: s.scanGuardianHint,
               ),
               const SizedBox(height: 12),
 
@@ -390,7 +410,6 @@ class _Step2State extends State<Step2Guardian> {
               ),
               const SizedBox(height: 26),
 
-              // ── Button + Add guardian 2 (only if it doesn't already exist) ────────
               if (!_hasGuardian2)
                 _AddGuardianButton(
                   onTap: () => setState(() => _hasGuardian2 = true),
@@ -412,8 +431,10 @@ class _Step2State extends State<Step2Guardian> {
                   signatureStrokes: _signatureStrokes2,
                   currentStroke: _currentStroke2,
                   scanning: _scanning2,
-                  onDocTypeChanged: (v) => setState(() => _selectedDocType2 = v),
-                  onRelationshipChanged: (v) => setState(() => _guardian2Relationship = v),
+                  onDocTypeChanged: (v) =>
+                      setState(() => _selectedDocType2 = v),
+                  onRelationshipChanged: (v) =>
+                      setState(() => _guardian2Relationship = v),
                   onRemove: () {
                     setState(() {
                       _hasGuardian2 = false;
@@ -455,7 +476,6 @@ class _Step2State extends State<Step2Guardian> {
 
               const SizedBox(height: 26),
 
-              // ── Authorization and privacy ─
               _AuthSection(
                 accepted: _authAccepted,
                 emailController: _email,
@@ -476,7 +496,6 @@ class _Step2State extends State<Step2Guardian> {
                 onClearSignature: _clearSignature,
               ),
 
-              // ── Error ────────────────────────────
               if (_err != null) ...[
                 const SizedBox(height: 16),
                 _ErrorBanner(message: _err!),
@@ -539,10 +558,7 @@ class _DocTypeSelector extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.white,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: const Color(0xFFB0B8C4),
-              width: 1.5,
-            ),
+            border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: DropdownButtonHideUnderline(
@@ -618,6 +634,10 @@ class _AuthSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+    final signatureLabel = isEs ? 'Firma biométrica' : 'Biometric signature';
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
@@ -628,10 +648,9 @@ class _AuthSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Título sección
-          const Text(
-            'Autorización y Privacidad',
-            style: TextStyle(
+          Text(
+            s.confirmChanges,
+            style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
@@ -639,7 +658,6 @@ class _AuthSection extends StatelessWidget {
           ),
           const SizedBox(height: 14),
 
-          // ── Checkbox with text and link ──────────
           _AuthCheckbox(
             accepted: accepted,
             onChanged: onAcceptedChanged,
@@ -647,12 +665,11 @@ class _AuthSection extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // ── Email ──────────────────────────────
           Row(
             children: [
-              const Text(
-                'Email',
-                style: TextStyle(
+              Text(
+                s.email,
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textPrimary,
@@ -678,7 +695,7 @@ class _AuthSection extends StatelessWidget {
               fontWeight: FontWeight.w500,
             ),
             decoration: InputDecoration(
-              hintText: 'correo@ejemplo.com',
+              hintText: s.emailHint,
               hintStyle: const TextStyle(
                 fontSize: 14,
                 color: AppColors.textSecondary,
@@ -712,12 +729,11 @@ class _AuthSection extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // ── Biometric Signature ───────────────────
           Row(
             children: [
-              const Text(
-                'Firma biométrica',
-                style: TextStyle(
+              Text(
+                signatureLabel,
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textPrimary,
@@ -763,6 +779,9 @@ class _AuthCheckbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -790,18 +809,19 @@ class _AuthCheckbox extends StatelessWidget {
                   height: 1.45,
                 ),
                 children: [
-                  const TextSpan(
-                    text:
-                        'El guardián reconoce haber leído y autorizado el tratamiento de los datos del menor y la ',
+                  TextSpan(
+                    text: isEs
+                        ? 'El guardián reconoce haber leído y autorizado el tratamiento de los datos del menor y la '
+                        : 'The guardian acknowledges having read and authorized the processing of the minor\'s data and the ',
                   ),
                   WidgetSpan(
                     alignment: PlaceholderAlignment.baseline,
                     baseline: TextBaseline.alphabetic,
                     child: GestureDetector(
                       onTap: onPrivacyTap,
-                      child: const Text(
-                        'política de privacidad',
-                        style: TextStyle(
+                      child: Text(
+                        isEs ? 'política de privacidad' : 'privacy policy',
+                        style: const TextStyle(
                           fontSize: 13,
                           color: AppColors.primary,
                           fontWeight: FontWeight.w600,
@@ -812,9 +832,10 @@ class _AuthCheckbox extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const TextSpan(
-                    text:
-                        ' incluyendo el recibo electrónico de comprobantes.',
+                  TextSpan(
+                    text: isEs
+                        ? ' incluyendo el recibo electrónico de comprobantes.'
+                        : ' including the electronic receipt of credentials.',
                   ),
                 ],
               ),
@@ -848,6 +869,9 @@ class _SignaturePad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -856,10 +880,7 @@ class _SignaturePad extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.white,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: const Color(0xFFB0B8C4),
-              width: 1.5,
-            ),
+            border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
           ),
           clipBehavior: Clip.hardEdge,
           child: GestureDetector(
@@ -873,16 +894,16 @@ class _SignaturePad extends StatelessWidget {
                   : Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(
+                        children: [
+                          const Icon(
                             Icons.edit_outlined,
                             size: 24,
                             color: AppColors.textSecondary,
                           ),
-                          SizedBox(height: 6),
+                          const SizedBox(height: 6),
                           Text(
-                            'Firmar aquí',
-                            style: TextStyle(
+                            isEs ? 'Firmar aquí' : 'Sign here',
+                            style: const TextStyle(
                               fontSize: 13,
                               color: AppColors.textSecondary,
                             ),
@@ -911,9 +932,9 @@ class _SignaturePad extends StatelessWidget {
               foregroundColor: AppColors.primary,
             ),
             icon: const Icon(Icons.refresh, size: 16),
-            label: const Text(
-              'Limpiar firma',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            label: Text(
+              isEs ? 'Limpiar firma' : 'Clear signature',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             ),
           ),
         ),
@@ -922,9 +943,6 @@ class _SignaturePad extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-//  Painter of the firm
-// ─────────────────────────────────────────────
 class _SignaturePainter extends CustomPainter {
   _SignaturePainter({required this.strokes});
   final List<List<Offset>> strokes;
@@ -953,28 +971,30 @@ class _SignaturePainter extends CustomPainter {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  Privacy policy modality
+//  Privacy policy modal
 // ═════════════════════════════════════════════════════════════════════════════
 class _PrivacyPolicyDialog extends StatelessWidget {
   const _PrivacyPolicyDialog();
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Head ───────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 18, 12, 0),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Política de privacidad',
-                    style: TextStyle(
+                    isEs ? 'Política de privacidad' : 'Privacy Policy',
+                    style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textPrimary,
@@ -991,58 +1011,98 @@ class _PrivacyPolicyDialog extends StatelessWidget {
           ),
           const Divider(height: 16),
 
-          // ── Scrollable content ──────────────
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  _PolicyTitle(
-                    'Política de Privacidad: Aviso sobre el Tratamiento de Datos de Menores',
-                  ),
-                  SizedBox(height: 12),
-                  _PolicySection(
-                    title: '1. Introducción',
-                    body:
-                        'Esta Política de Privacidad describe cómo recopilamos, usamos y protegemos los datos personales de menores y sus tutores legales. Al proporcionar su consentimiento, usted autoriza el tratamiento de esta información con el propósito de identificación médica y asistencia de emergencia.',
-                  ),
-                  _PolicySection(
-                    title: '2. Datos que recopilamos',
-                    body: '',
-                    bullets: [
-                      'Información del menor: Nombre completo, número de identificación y condiciones médicas/de salud relevantes.',
-                      'Información del guardián: Nombre completo, relación con el menor, datos de contacto y dirección física.',
-                      'Datos biométricos: Firma digital como prueba de autorización legal.',
-                    ],
-                  ),
-                  _PolicySection(
-                    title: '3. Seguridad de los datos',
-                    body:
-                        'Implementamos protocolos de cifrado y seguridad de alto nivel para garantizar que la información personal y médica se almacene de forma segura y solo sea accesible por partes autorizadas en una emergencia.',
-                  ),
-                  _PolicySection(
-                    title: '4. Sus derechos (Derechos ARCO)',
-                    body:
-                        'Como guardián, tiene derecho a acceder, rectificar, cancelar u oponerse al tratamiento de sus datos o los datos del menor en cualquier momento a través de nuestros canales de soporte.',
-                  ),
-                  _PolicySection(
-                    title: '5. Recibo de prueba de consentimiento',
-                    body:
-                        'Una vez aceptada, se enviará a la dirección de correo electrónico proporcionada una copia digital de esta autorización y su firma digital como comprobante legal de esta transacción.',
-                  ),
-                  _PolicySection(
-                    title: '6. Finalidad del tratamiento',
-                    body:
-                        'Los datos se utilizarán exclusivamente para identificación médica, asistencia de emergencia y comunicación con el guardián legal del menor registrado en la plataforma.',
-                  ),
-                  SizedBox(height: 8),
-                ],
+                children: isEs
+                    ? const [
+                        _PolicyTitle(
+                          'Política de Privacidad: Aviso sobre el Tratamiento de Datos de Menores',
+                        ),
+                        SizedBox(height: 12),
+                        _PolicySection(
+                          title: '1. Introducción',
+                          body:
+                              'Esta Política de Privacidad describe cómo recopilamos, usamos y protegemos los datos personales de menores y sus tutores legales. Al proporcionar su consentimiento, usted autoriza el tratamiento de esta información con el propósito de identificación médica y asistencia de emergencia.',
+                        ),
+                        _PolicySection(
+                          title: '2. Datos que recopilamos',
+                          body: '',
+                          bullets: [
+                            'Información del menor: Nombre completo, número de identificación y condiciones médicas/de salud relevantes.',
+                            'Información del guardián: Nombre completo, relación con el menor, datos de contacto y dirección física.',
+                            'Datos biométricos: Firma digital como prueba de autorización legal.',
+                          ],
+                        ),
+                        _PolicySection(
+                          title: '3. Seguridad de los datos',
+                          body:
+                              'Implementamos protocolos de cifrado y seguridad de alto nivel para garantizar que la información personal y médica se almacene de forma segura y solo sea accesible por partes autorizadas en una emergencia.',
+                        ),
+                        _PolicySection(
+                          title: '4. Sus derechos (Derechos ARCO)',
+                          body:
+                              'Como guardián, tiene derecho a acceder, rectificar, cancelar u oponerse al tratamiento de sus datos o los datos del menor en cualquier momento a través de nuestros canales de soporte.',
+                        ),
+                        _PolicySection(
+                          title: '5. Recibo de prueba de consentimiento',
+                          body:
+                              'Una vez aceptada, se enviará a la dirección de correo electrónico proporcionada una copia digital de esta autorización y su firma digital como comprobante legal de esta transacción.',
+                        ),
+                        _PolicySection(
+                          title: '6. Finalidad del tratamiento',
+                          body:
+                              'Los datos se utilizarán exclusivamente para identificación médica, asistencia de emergencia y comunicación con el guardián legal del menor registrado en la plataforma.',
+                        ),
+                        SizedBox(height: 8),
+                      ]
+                    : const [
+                        _PolicyTitle(
+                          'Privacy Policy: Notice on the Processing of Minor\'s Data',
+                        ),
+                        SizedBox(height: 12),
+                        _PolicySection(
+                          title: '1. Introduction',
+                          body:
+                              'This Privacy Policy describes how we collect, use, and protect the personal data of minors and their legal guardians. By providing your consent, you authorize the processing of this information for medical identification and emergency assistance purposes.',
+                        ),
+                        _PolicySection(
+                          title: '2. Data We Collect',
+                          body: '',
+                          bullets: [
+                            'Minor\'s information: Full name, identification number, and relevant medical/health conditions.',
+                            'Guardian\'s information: Full name, relationship to the minor, contact details, and physical address.',
+                            'Biometric data: Digital signature as proof of legal authorization.',
+                          ],
+                        ),
+                        _PolicySection(
+                          title: '3. Data Security',
+                          body:
+                              'We implement high-level encryption and security protocols to ensure that personal and medical information is stored securely and is only accessible by authorized parties in an emergency.',
+                        ),
+                        _PolicySection(
+                          title: '4. Your Rights (ARCO Rights)',
+                          body:
+                              'As a guardian, you have the right to access, rectify, cancel, or object to the processing of your data or the minor\'s data at any time through our support channels.',
+                        ),
+                        _PolicySection(
+                          title: '5. Receipt of Proof of Consent',
+                          body:
+                              'Once accepted, a digital copy of this authorization and your digital signature will be sent to the provided email address as legal proof of this transaction.',
+                        ),
+                        _PolicySection(
+                          title: '6. Purpose of Processing',
+                          body:
+                              'The data will be used exclusively for medical identification, emergency assistance, and communication with the legal guardian of the minor registered on the platform.',
+                        ),
+                        SizedBox(height: 8),
+                      ],
               ),
             ),
           ),
 
-          // ── Accept button ──────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
             child: SizedBox(
@@ -1057,9 +1117,9 @@ class _PrivacyPolicyDialog extends StatelessWidget {
                   ),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Aceptar',
-                  style: TextStyle(
+                child: Text(
+                  s.ok,
+                  style: const TextStyle(
                     color: AppColors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -1204,6 +1264,7 @@ class _NoticeBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final isWarning = requiredForMinor;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -1211,9 +1272,7 @@ class _NoticeBanner extends StatelessWidget {
         color: isWarning ? const Color(0xFFFFF3CD) : const Color(0xFFE8F4FD),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isWarning
-              ? const Color(0xFFD4A017)
-              : const Color(0xFF90CAF9),
+          color: isWarning ? const Color(0xFFD4A017) : const Color(0xFF90CAF9),
           width: 1.5,
         ),
       ),
@@ -1232,9 +1291,7 @@ class _NoticeBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              isWarning
-                  ? 'El paciente es menor de 18 años. El guardián es obligatorio (Ley 1098/2006).'
-                  : 'Opcional para adultos. Si lo registra, podrá ser usado como contacto de emergencia.',
+              isWarning ? s.guardianRequiredSub : s.guardianHelper,
               style: TextStyle(
                 fontSize: 13,
                 color: isWarning
@@ -1328,10 +1385,7 @@ class _StyledTextField extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: AppColors.primary,
-                width: 2,
-              ),
+              borderSide: const BorderSide(color: AppColors.primary, width: 2),
             ),
           ),
         ),
@@ -1418,8 +1472,7 @@ class _RelChipSelector extends StatelessWidget {
                   e.value,
                   style: TextStyle(
                     fontSize: 14,
-                    fontWeight:
-                        selected ? FontWeight.w700 : FontWeight.w500,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                     color: selected ? AppColors.white : AppColors.textPrimary,
                   ),
                 ),
@@ -1447,7 +1500,11 @@ class _NfcField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final hasValue = controller.text.trim().isNotEmpty;
+    final isEs = s.welcome == 'Bienvenido';
+    final deviceLinkedLabel = isEs ? 'Dispositivo vinculado' : 'Linked device';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1465,7 +1522,7 @@ class _NfcField extends StatelessWidget {
                 ),
                 decoration: InputDecoration(
                   isDense: true,
-                  hintText: 'UID del dispositivo NFC',
+                  hintText: s.guardianNfcUidHint,
                   hintStyle: const TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -1548,7 +1605,7 @@ class _NfcField extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                'Dispositivo vinculado: ${controller.text.trim()}',
+                '$deviceLinkedLabel: ${controller.text.trim()}',
                 style: const TextStyle(
                   fontSize: 11,
                   color: AppColors.success,
@@ -1572,6 +1629,10 @@ class _AddGuardianButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+    final addLabel = isEs ? 'Agregar' : 'Add';
+
     return Row(
       children: [
         Container(
@@ -1588,9 +1649,9 @@ class _AddGuardianButton extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        const Text(
-          'Guardián 2',
-          style: TextStyle(
+        Text(
+          '${isEs ? 'Guardián' : 'Guardian'} 2',
+          style: const TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
             color: AppColors.textPrimary,
@@ -1600,9 +1661,9 @@ class _AddGuardianButton extends StatelessWidget {
         TextButton.icon(
           onPressed: onTap,
           icon: const Icon(Icons.add, size: 16, color: AppColors.primary),
-          label: const Text(
-            'Agregar',
-            style: TextStyle(
+          label: Text(
+            addLabel,
+            style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: AppColors.primary,
@@ -1638,7 +1699,7 @@ class _Guardian2Section extends StatelessWidget {
     required this.onRelationshipChanged,
     required this.onRemove,
     required this.onScanNfc,
-    required this.onAuthChanged,
+    required this.onAuthChanged, // Mapeado correctamente de la llamada en _Step2State
     required this.onPrivacyTap,
     required this.onSignatureStart,
     required this.onSignatureUpdate,
@@ -1663,7 +1724,7 @@ class _Guardian2Section extends StatelessWidget {
   final ValueChanged<String> onRelationshipChanged;
   final VoidCallback onRemove;
   final VoidCallback onScanNfc;
-  final ValueChanged<bool> onAuthChanged;
+  final ValueChanged<bool> onAuthChanged; // Tipo de dato e interfaz correctas
   final VoidCallback onPrivacyTap;
   final ValueChanged<Offset> onSignatureStart;
   final ValueChanged<Offset> onSignatureUpdate;
@@ -1671,23 +1732,25 @@ class _Guardian2Section extends StatelessWidget {
   final VoidCallback onClearSignature;
   final VoidCallback onNfcFieldChanged;
 
-  static const _rels = {
-    '01': 'Padres',
-    '02': 'Hermanos',
-    '03': 'Tíos',
-    '04': 'Abuelos',
-  };
-
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+    final deleteTooltip = isEs ? 'Eliminar guardián 2' : 'Remove guardian 2';
+    final docTypes = {'CC': s.docTypeCC, 'CE': s.docTypeCE};
+
+    final rels = {
+      '01': s.relParents,
+      '02': s.relSiblings,
+      '03': s.relUncles,
+      '04': s.relGrandparents,
+    };
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: const Color(0xFFB0B8C4),
-          width: 1.5,
-        ),
+        border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1715,9 +1778,9 @@ class _Guardian2Section extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                const Text(
-                  'Información del guardián 2',
-                  style: TextStyle(
+                Text(
+                  '${s.editGuardianTitle} 2',
+                  style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
@@ -1731,7 +1794,7 @@ class _Guardian2Section extends StatelessWidget {
                     size: 20,
                     color: AppColors.error,
                   ),
-                  tooltip: 'Eliminar guardián 2',
+                  tooltip: deleteTooltip,
                 ),
               ],
             ),
@@ -1743,49 +1806,48 @@ class _Guardian2Section extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _StyledTextField(
-                  label: 'Nombre completo',
+                  label: s.guardianFullName,
                   controller: nameCtrl,
-                  hint: 'Ej. Roberto Martínez',
+                  hint: s.guardianFullNameHint,
                   icon: Icons.person_outline,
                   keyboardType: TextInputType.name,
                   textCapitalization: TextCapitalization.words,
                 ),
                 const SizedBox(height: 12),
                 _RelChipSelector(
-                  label: 'Parentesco',
+                  label: s.guardianRelationship,
                   value: relationship,
-                  options: _rels,
+                  options: rels,
                   onChanged: onRelationshipChanged,
                 ),
                 const SizedBox(height: 12),
                 _StyledTextField(
-                  label: 'Teléfono',
+                  label: s.guardianPhoneLabel,
                   controller: phoneCtrl,
-                  hint: '+57 310 000 0000',
+                  hint: s.guardianPhoneHint,
                   icon: Icons.phone_outlined,
                   keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 12),
                 _DocTypeSelector(
-                  label: 'Tipo de documento',
+                  label: s.documentTypeLabel,
                   value: selectedDocType,
-                  options: _docTypes,
+                  options: docTypes,
                   onChanged: onDocTypeChanged,
                 ),
                 const SizedBox(height: 12),
                 _StyledTextField(
-                  label: 'Número de documento',
+                  label: s.documentNumberLabel,
                   controller: docNumberCtrl,
                   hint: 'Ej. 1234567890',
                   icon: Icons.badge_outlined,
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),
-                // ── NFC guardian 2 ──
+
                 FormSectionHeader(
                   icon: Icons.nfc,
-                  title: 'Dispositivo NFC del guardián 2',
-                  subtitle: 'Para autenticación 2FA alternativa.',
+                  title: '${s.guardianNfcDevice} 2',
                 ),
                 const SizedBox(height: 12),
                 _NfcField(
@@ -1795,13 +1857,14 @@ class _Guardian2Section extends StatelessWidget {
                   onChanged: onNfcFieldChanged,
                 ),
                 const SizedBox(height: 16),
-                // ── Consent guardian 2 ──
+
                 _AuthSection(
                   accepted: authAccepted,
                   emailController: emailCtrl,
                   signatureStrokes: signatureStrokes,
                   currentStroke: currentStroke,
-                  onAcceptedChanged: onAuthChanged,
+                  onAcceptedChanged:
+                      onAuthChanged, // Usa de forma correcta el callback asignado
                   onPrivacyTap: onPrivacyTap,
                   onSignatureStart: onSignatureStart,
                   onSignatureUpdate: onSignatureUpdate,
@@ -1825,6 +1888,7 @@ class _NavButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.white,
@@ -1845,10 +1909,7 @@ class _NavButtons extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: onBack,
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(
-                    color: Color(0xFFB0B8C4),
-                    width: 1.5,
-                  ),
+                  side: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -1858,9 +1919,9 @@ class _NavButtons extends StatelessWidget {
                   size: 18,
                   color: AppColors.textSecondary,
                 ),
-                label: const Text(
-                  'Atrás',
-                  style: TextStyle(
+                label: Text(
+                  s.back,
+                  style: const TextStyle(
                     fontSize: 15,
                     color: AppColors.textSecondary,
                     fontWeight: FontWeight.w500,
@@ -1888,9 +1949,9 @@ class _NavButtons extends StatelessWidget {
                   size: 18,
                   color: AppColors.white,
                 ),
-                label: const Text(
-                  'Continuar',
-                  style: TextStyle(
+                label: Text(
+                  s.continueBtn,
+                  style: const TextStyle(
                     color: AppColors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -1900,7 +1961,6 @@ class _NavButtons extends StatelessWidget {
             ),
           ),
         ],
-        
       ),
     );
   }

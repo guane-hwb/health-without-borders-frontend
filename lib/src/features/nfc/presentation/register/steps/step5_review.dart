@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../register_nfc_screen.dart';
+import '../../../../../core/i18n/app_strings.dart';
 
 class Step5Review extends StatefulWidget {
   const Step5Review({
@@ -37,68 +38,111 @@ class _Step5State extends State<Step5Review> {
   @override
   Widget build(BuildContext context) {
     final d = widget.draft;
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     final name = [
       d.firstName,
       d.secondName,
       d.firstLastName,
       d.secondLastName,
     ].where((s) => s != null && s.isNotEmpty).join(' ');
+
+    // ── Local variable mappings resolved via AppStrings ───────────────────
+    final sexLabel =
+        {
+          'M': s.sexMale,
+          'F': s.sexFemale,
+          'I': s.sexIndeterminate,
+        }[d.biologicalSex] ??
+        d.biologicalSex;
+
+    final zoneLabel = d.zone == '02' ? s.zoneRural : s.zoneUrban;
+
+    final guardianRelationshipLabel =
+        const {
+          '01': 'Padres',
+          '02': 'Hermanos',
+          '03': 'Tíos',
+          '04': 'Abuelos',
+        }[d.guardianRelationship ?? '01'] ??
+        '';
+
+    final guardianRelationshipLabelEn =
+        const {
+          '01': 'Parents',
+          '02': 'Siblings',
+          '03': 'Uncles',
+          '04': 'Grandparents',
+        }[d.guardianRelationship ?? '01'] ??
+        '';
+
+    // Text items counter string builder helper
+    String itemsCount(int count) {
+      if (count == 0) return '—';
+      return isEs ? '$count ítems' : '$count items';
+    }
+
+    final bannerText = isEs
+        ? 'El registro se guarda en el dispositivo. Si hay internet se sincroniza ahora; si no, queda en la cola y se enviará automáticamente.'
+        : 'The record is saved on the device. If internet is available, it syncs now; otherwise, it remains in the queue and will be sent automatically.';
+
     return Column(
       children: [
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             children: [
-              const Text(
-                'Revisa los datos',
-                style: TextStyle(
+              Text(
+                s.reviewData,
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
-                'Verifica la información antes de guardar. Si algo está incorrecto, vuelve atrás.',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              Text(
+                isEs
+                    ? 'Verifica la información antes de guardar. Si algo está incorrecto, vuelve atrás.'
+                    : 'Verify the information before saving. If anything is incorrect, go back.',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 18),
               _Card(
                 icon: Icons.nfc,
-                title: 'Dispositivo NFC',
+                title: isEs ? 'Dispositivo NFC' : 'NFC Device',
                 rows: [_kv('UID', d.deviceUid ?? '—')],
               ),
               const SizedBox(height: 10),
               _Card(
                 icon: Icons.person_outline,
-                title: 'Paciente',
+                title: s.patient,
                 rows: [
-                  _kv('Nombre', name),
-                  _kv('Documento', '${d.documentType} ${d.documentNumber}'),
+                  _kv(isEs ? 'Nombre' : 'Name', name),
                   _kv(
-                    'F. nacimiento',
+                    s.identification,
+                    '${d.documentType} ${d.documentNumber}',
+                  ),
+                  _kv(
+                    isEs ? 'F. nacimiento' : 'D.O.B.',
                     d.dob == null
                         ? '—'
                         : '${d.dob!.year}-${d.dob!.month.toString().padLeft(2, '0')}-${d.dob!.day.toString().padLeft(2, '0')}',
                   ),
+                  _kv(isEs ? 'Sexo' : 'Sex', sexLabel),
+                  _kv(s.nationality, d.nationalityName ?? d.nationalityCode),
+                  if (d.bloodType != null) _kv(s.bloodType, d.bloodType!),
                   _kv(
-                    'Sexo',
-                    {
-                          'M': 'Masculino',
-                          'F': 'Femenino',
-                          'I': 'Indeterminado',
-                        }[d.biologicalSex] ??
-                        d.biologicalSex,
-                  ),
-                  _kv('Nacionalidad', d.nationalityName ?? d.nationalityCode),
-                  if (d.bloodType != null) _kv('Sangre', d.bloodType!),
-                  _kv(
-                    'Dirección',
+                    s.address,
                     [
                       d.street,
                       d.addressCity,
                       d.addressState,
-                      d.zone == '02' ? 'Rural' : 'Urbana',
+                      zoneLabel,
                     ].where((s) => s != null && s.isNotEmpty).join(', '),
                   ),
                 ],
@@ -106,50 +150,47 @@ class _Step5State extends State<Step5Review> {
               const SizedBox(height: 10),
               _Card(
                 icon: Icons.family_restroom,
-                title: 'Guardián',
+                title: s.guardian,
                 rows: d.guardianName == null || d.guardianName!.isEmpty
-                    ? [_kv('—', 'Sin guardián')]
+                    ? [_kv('—', isEs ? 'Sin guardián' : 'No guardian')]
                     : [
-                        _kv('Nombre', d.guardianName!),
+                        _kv(isEs ? 'Nombre' : 'Name', d.guardianName!),
                         _kv(
-                          'Parentesco',
-                          const {
-                                '01': 'Padres',
-                                '02': 'Hermanos',
-                                '03': 'Tíos',
-                                '04': 'Abuelos',
-                              }[d.guardianRelationship ?? '01'] ??
-                              '',
+                          s.guardianRelationship,
+                          isEs
+                              ? guardianRelationshipLabel
+                              : guardianRelationshipLabelEn,
                         ),
-                        _kv('Teléfono', d.guardianPhone ?? '—'),
-                        _kv('NFC', d.guardianDeviceUid ?? 'No registrada'),
+                        _kv(
+                          isEs ? 'Teléfono' : 'Phone',
+                          d.guardianPhone ?? '—',
+                        ),
+                        _kv(
+                          'NFC',
+                          d.guardianDeviceUid ??
+                              (isEs ? 'No registrada' : 'Not registered'),
+                        ),
                       ],
               ),
               const SizedBox(height: 10),
               _Card(
                 icon: Icons.history_edu_outlined,
-                title: 'Antecedentes',
+                title: s.backgroundHistory,
                 rows: [
-                  _kv('Crónicas', d.chronicConditions.isEmpty
-                        ? '—'
-                        : '${d.chronicConditions.length} ítems'),
-                  _kv('Personal', d.personalHistory ?? '—'),
                   _kv(
-                    'Medicam.',
-                    d.medications.isEmpty
-                        ? '—'
-                        : '${d.medications.length} ítems',
+                    isEs ? 'Crónicas' : 'Chronic',
+                    itemsCount(d.chronicConditions.length),
+                  ),
+                  _kv(isEs ? 'Personal' : 'Personal', d.personalHistory ?? '—'),
+                  _kv(
+                    isEs ? 'Medicam.' : 'Medication',
+                    itemsCount(d.medications.length),
                   ),
                   _kv(
-                    'Fam.',
-                    d.familyHistory.isEmpty
-                        ? '—'
-                        : '${d.familyHistory.length} ítems',
+                    isEs ? 'Fam.' : 'Family',
+                    itemsCount(d.familyHistory.length),
                   ),
-                  _kv(
-                    'Alergias',
-                    d.allergies.isEmpty ? '—' : '${d.allergies.length} ítems',
-                  ),
+                  _kv(s.allergiesSheetTitle, itemsCount(d.allergies.length)),
                 ],
               ),
               const SizedBox(height: 16),
@@ -163,18 +204,18 @@ class _Step5State extends State<Step5Review> {
                     width: 1.5,
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.cloud_upload_outlined,
                       size: 16,
                       color: Color(0xFF8B6914),
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'El registro se guarda en el dispositivo. Si hay internet se sincroniza ahora; si no, queda en la cola y se enviará automáticamente.',
-                        style: TextStyle(
+                        bannerText,
+                        style: const TextStyle(
                           fontSize: 11.5,
                           color: Color(0xFF8B6914),
                           fontWeight: FontWeight.w500,
@@ -184,7 +225,7 @@ class _Step5State extends State<Step5Review> {
                     ),
                   ],
                 ),
-              )
+              ),
             ],
           ),
         ),
@@ -218,9 +259,9 @@ class _Step5State extends State<Step5Review> {
                       size: 16,
                       color: AppColors.textSecondary,
                     ),
-                    label: const Text(
-                      'Atrás',
-                      style: TextStyle(
+                    label: Text(
+                      s.back,
+                      style: const TextStyle(
                         fontSize: 14,
                         color: AppColors.textSecondary,
                       ),
@@ -258,7 +299,9 @@ class _Step5State extends State<Step5Review> {
                             color: AppColors.white,
                           ),
                     label: Text(
-                      _saving ? 'Guardando...' : 'Registrar paciente',
+                      _saving
+                          ? s.saving
+                          : (isEs ? 'Registrar paciente' : 'Register patient'),
                       style: const TextStyle(
                         color: AppColors.white,
                         fontSize: 15,

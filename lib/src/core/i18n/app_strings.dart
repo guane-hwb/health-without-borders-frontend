@@ -124,6 +124,15 @@ class AppStrings {
   String get goHome => _get('goHome');
   String get saving => _get('saving');
   String get saveError => _get('saveError');
+  // New
+  String get newPatient => _get('newPatient');
+  String get consultationSaved => _get('consultationSaved');
+  String get vaccineSaved => _get('vaccineSaved');
+  String get today => _get('today');
+  // Step 1
+  String get patientNfcDevice => _get('patientNfcDevice');
+  String get patientNfcDeviceSub => _get('patientNfcDeviceSub');
+  String get nfcUidRequired => _get('nfcUidRequired');
 
   // ── Patient form fields ─────────────────────────────────────────────────
   String get identification => _get('identification');
@@ -634,6 +643,14 @@ class AppStrings {
     'goHome': 'Volver al inicio',
     'saving': 'Guardando...',
     'saveError': 'Error al guardar',
+    'newPatient': 'Nuevo paciente',
+    'consultationSaved': 'Consulta guardada exitosamente',
+    'vaccineSaved': 'Vacuna guardada exitosamente',
+    'today': 'Hoy',
+    'patientNfcDevice': 'Dispositivo NFC del paciente',
+    'patientNfcDeviceSub':
+        'Acerque el dispositivo NFC o ingrese el UID manualmente.',
+    'nfcUidRequired': 'Debe escanear o ingresar el UID del dispositivo NFC.',
 
     // Patient form
     'identification': 'Identificación',
@@ -1117,6 +1134,13 @@ class AppStrings {
     'goHome': 'Go to home',
     'saving': 'Saving...',
     'saveError': 'Error saving',
+    'newPatient': 'New patient',
+    'consultationSaved': 'Consultation saved successfully',
+    'vaccineSaved': 'Vaccine saved successfully',
+    'today': 'Today',
+    'patientNfcDevice': 'Patient NFC device',
+    'patientNfcDeviceSub': 'Tap the NFC device or enter the UID manually.',
+    'nfcUidRequired': 'You must scan or enter the NFC device UID.',
 
     // Patient form
     'identification': 'Identification',

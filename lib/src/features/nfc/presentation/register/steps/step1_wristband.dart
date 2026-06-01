@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../register_nfc_screen.dart';
 
 class Step1Wristband extends StatefulWidget {
@@ -45,7 +46,7 @@ class _Step1WristbandState extends State<Step1Wristband> {
       if (mounted) {
         setState(() {
           _scanning = false;
-          _error = 'NFC no disponible. Use el campo manual.';
+          _error = AppStrings.of(context).nfcNotAvailable;
         });
       }
     } on NfcSessionException catch (e) {
@@ -61,9 +62,7 @@ class _Step1WristbandState extends State<Step1Wristband> {
   void _accept() {
     final v = _ctrl.text.trim();
     if (v.isEmpty) {
-      setState(
-        () => _error = 'Debe escanear o ingresar el UID del dispositivo NFC.',
-      );
+      setState(() => _error = AppStrings.of(context).nfcUidRequired);
       return;
     }
     widget.draft.deviceUid = v;
@@ -72,21 +71,22 @@ class _Step1WristbandState extends State<Step1Wristband> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
       children: [
-        const Text(
-          'Dispositivo NFC del paciente',
-          style: TextStyle(
+        Text(
+          s.patientNfcDevice,
+          style: const TextStyle(
             fontSize: 19,
             fontWeight: FontWeight.w700,
             color: AppColors.textPrimary,
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Acerque el dispositivo NFC o ingrese el UID manualmente.',
-          style: TextStyle(
+        Text(
+          s.patientNfcDeviceSub,
+          style: const TextStyle(
             fontSize: 12,
             color: AppColors.textSecondary,
             height: 1.4,
@@ -167,9 +167,9 @@ class _Step1WristbandState extends State<Step1Wristband> {
                     color: AppColors.textSecondary,
                   ),
                   const SizedBox(width: 6),
-                  const Text(
-                    'UID manual del paciente (testing)',
-                    style: TextStyle(
+                  Text(
+                    s.manualUidHint,
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary,
@@ -187,7 +187,7 @@ class _Step1WristbandState extends State<Step1Wristband> {
                 ),
                 decoration: InputDecoration(
                   isDense: true,
-                  hintText: 'Ej. HWB-04:1A:2C:DE',
+                  hintText: s.manualPatientUidHint,
                   hintStyle: const TextStyle(
                     fontSize: 13,
                     color: AppColors.disabled,
@@ -263,9 +263,9 @@ class _Step1WristbandState extends State<Step1Wristband> {
               color: AppColors.white,
               size: 20,
             ),
-            label: const Text(
-              'Continuar',
-              style: TextStyle(
+            label: Text(
+              s.continueBtn,
+              style: const TextStyle(
                 color: AppColors.white,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,

@@ -13,9 +13,9 @@ import 'shared_read_nfc_header.dart';
 // ── Internal template for each vaccine in the session ──────────────────────────────
 class _VaccineEntry {
   _VaccineEntry()
-      : nameCtrl = TextEditingController(),
-        cvxCtrl = TextEditingController(),
-        dose = 1;
+    : nameCtrl = TextEditingController(),
+      cvxCtrl = TextEditingController(),
+      dose = 1;
 
   final TextEditingController nameCtrl;
   final TextEditingController cvxCtrl;
@@ -62,30 +62,6 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   final _atCtrl = TextEditingController();
   String _status = 'completed';
 
-  static const List<Map<String, String>> _commonVaccines = [
-    {'name': 'BCG (Tuberculosis)', 'code': '19'},
-    {'name': 'Hepatitis B', 'code': '08'},
-    {'name': 'Pentavalente (DPT+HB+Hib)', 'code': '01'},
-    {'name': 'Polio oral (VOP)', 'code': '02'},
-    {'name': 'Polio inactivada (VIP)', 'code': '10'},
-    {'name': 'Triple Viral (SRP)', 'code': '03'},
-    {'name': 'Varicela', 'code': '21'},
-    {'name': 'Influenza pediátrica', 'code': '141'},
-    {'name': 'Influenza adulto', 'code': '140'},
-    {'name': 'Neumococo (PCV13)', 'code': '133'},
-    {'name': 'Rotavirus', 'code': '116'},
-    {'name': 'Meningococo', 'code': '108'},
-    {'name': 'Fiebre amarilla', 'code': '37'},
-    {'name': 'COVID-19', 'code': '213'},
-    {'name': 'Otra (especificar)', 'code': ''},
-  ];
-
-  static const Map<String, String> _statusOpts = {
-    'completed': 'Administrada',
-    'refused': 'Rehusada por paciente',
-    'not_given': 'No administrada (justificar)',
-  };
-
   @override
   void initState() {
     super.initState();
@@ -129,6 +105,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   // ── NFC scan ──────────────────────────────────────────────────────────────
 
   Future<void> _scanPatient() async {
+    final s = AppStrings.of(context);
     setState(() {
       _scanning = true;
       _scanError = null;
@@ -139,11 +116,11 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
       final patient = await repo.scanDevice(uid);
       if (mounted) setState(() => _patient = patient);
     } on NfcNotAvailableException {
-      if (mounted) setState(() => _scanError = 'NFC no disponible.');
+      if (mounted) setState(() => _scanError = s.nfcNotAvailableHint);
     } on ApiException catch (e) {
       if (mounted) setState(() => _scanError = e.message);
     } catch (_) {
-      if (mounted) setState(() => _scanError = 'No se pudo leer el dispositivo.');
+      if (mounted) setState(() => _scanError = s.guardianNfcError);
     } finally {
       if (mounted) setState(() => _scanning = false);
     }
@@ -153,17 +130,23 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
 
   Future<void> _save() async {
     if (_patient == null) return;
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
     setState(() => _isSaving = true);
 
-    final newVaccines = _entries.map((e) => VaccinationRecordItem(
-      date: _formattedDate,
-      vaccineName: e.nameCtrl.text.trim(),
-      vaccineCode: e.cvxCtrl.text.trim(),
-      dose: e.dose,
-      administratedBy: _byCtrl.text.trim(),
-      administratedAt: _atCtrl.text.trim(),
-      status: _status,
-    )).toList();
+    final newVaccines = _entries
+        .map(
+          (e) => VaccinationRecordItem(
+            date: _formattedDate,
+            vaccineName: e.nameCtrl.text.trim(),
+            vaccineCode: e.cvxCtrl.text.trim(),
+            dose: e.dose,
+            administratedBy: _byCtrl.text.trim(),
+            administratedAt: _atCtrl.text.trim(),
+            status: _status,
+          ),
+        )
+        .toList();
 
     if (widget.returnToProfile) {
       if (mounted) Navigator.of(context).pop(newVaccines.first);
@@ -184,7 +167,6 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
 
     try {
       final scope = AppScope.of(context);
-      // 1. Save locally — instant, never blocks
       await scope.localDatabase.savePatient(updatedRecord);
 
       if (mounted) {
@@ -193,16 +175,16 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
           _isSaving = false;
         });
 
-        // 2. Fire-and-forget sync
         scope.syncEngine.syncAll().ignore();
 
-        // 3. Success snackbar
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               newVaccines.length == 1
-                  ? 'Vacuna guardada exitosamente'
-                  : '${newVaccines.length} vacunas guardadas exitosamente ✓',
+                  ? s.vaccineSaved
+                  : (isEs
+                        ? '${newVaccines.length} vacunas guardadas exitosamente ✓'
+                        : '${newVaccines.length} vaccines saved successfully ✓'),
             ),
             backgroundColor: AppColors.success,
             behavior: SnackBarBehavior.floating,
@@ -218,7 +200,11 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('No se pudo guardar. Intentalo de nuevo.'),
+            content: Text(
+              isEs
+                  ? 'No se pudo guardar. Inténtalo de nuevo.'
+                  : 'Could not save. Please try again.',
+            ),
             backgroundColor: Colors.red.shade700,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -252,8 +238,8 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                   child: _patient == null
                       ? _buildScanStep()
                       : _saved
-                          ? _buildSuccessStep()
-                          : _buildFormStep(),
+                      ? _buildSuccessStep()
+                      : _buildFormStep(),
                 ),
               ],
             ),
@@ -272,6 +258,9 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   // ── Step A: Scan ──────────────────────────────────────────────────────────
 
   Widget _buildScanStep() {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -279,19 +268,24 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
         children: [
           const Icon(Icons.vaccines, size: 64, color: AppColors.secondary),
           const SizedBox(height: 16),
-          const Text(
-            'Escanear paciente',
-            style: TextStyle(
+          Text(
+            isEs ? 'Escanear paciente' : 'Scan patient',
+            style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w600,
               color: AppColors.secondary,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Acerque el dispositivo NFC del paciente para registrar las vacunas.',
+          Text(
+            isEs
+                ? 'Acerque el dispositivo NFC del paciente para registrar las vacunas.'
+                : "Hold the patient's NFC device close to register vaccines.",
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 32),
           GestureDetector(
@@ -335,10 +329,14 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                 ),
                 side: const BorderSide(color: AppColors.primary),
               ),
-              icon: const Icon(Icons.search, size: 18, color: AppColors.primary),
-              label: const Text(
-                'Buscar paciente',
-                style: TextStyle(fontSize: 14, color: AppColors.primary),
+              icon: const Icon(
+                Icons.search,
+                size: 18,
+                color: AppColors.primary,
+              ),
+              label: Text(
+                s.searchPatient,
+                style: const TextStyle(fontSize: 14, color: AppColors.primary),
               ),
             ),
           ),
@@ -348,22 +346,23 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   }
 
   void _showManualSearchDialog() {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
     final uidCtrl = TextEditingController();
+
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Text('Buscar por UID'),
+        title: Text(isEs ? 'Buscar por UID' : 'Search by UID'),
         content: TextField(
           controller: uidCtrl,
-          decoration: const InputDecoration(
-            hintText: 'Ingrese UID del dispositivo NFC',
-          ),
+          decoration: InputDecoration(hintText: s.guardianNfcUidHint),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancelar'),
+            child: Text(s.cancel),
           ),
           TextButton(
             onPressed: () {
@@ -393,7 +392,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                     });
               }
             },
-            child: const Text('Buscar'),
+            child: Text(s.search),
           ),
         ],
       ),
@@ -404,12 +403,62 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
 
   Widget _buildFormStep() {
     final p = _patient!;
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
+    final List<Map<String, String>> commonVaccines = [
+      {
+        'name': isEs ? 'BCG (Tuberculosis)' : 'BCG (Tuberculosis)',
+        'code': '19',
+      },
+      {'name': isEs ? 'Hepatitis B' : 'Hepatitis B', 'code': '08'},
+      {
+        'name': isEs ? 'Pentavalente (DPT+HB+Hib)' : 'Pentavalent (DPT+HB+Hib)',
+        'code': '01',
+      },
+      {'name': isEs ? 'Polio oral (VOP)' : 'Oral Polio (OPV)', 'code': '02'},
+      {
+        'name': isEs ? 'Polio inactivada (VIP)' : 'Inactivated Polio (IPV)',
+        'code': '10',
+      },
+      {
+        'name': isEs ? 'Triple Viral (SRP)' : 'MMR (Measles, Mumps, Rubella)',
+        'code': '03',
+      },
+      {'name': isEs ? 'Varicela' : 'Varicella (Chickenpox)', 'code': '21'},
+      {
+        'name': isEs ? 'Influenza pediátrica' : 'Pediatric Influenza',
+        'code': '141',
+      },
+      {'name': isEs ? 'Influenza adulto' : 'Adult Influenza', 'code': '140'},
+      {
+        'name': isEs ? 'Neumococo (PCV13)' : 'Pneumococcal (PCV13)',
+        'code': '133',
+      },
+      {'name': isEs ? 'Rotavirus' : 'Rotavirus', 'code': '116'},
+      {'name': isEs ? 'Meningococo' : 'Meningococcal', 'code': '108'},
+      {'name': isEs ? 'Fiebre amarilla' : 'Yellow fever', 'code': '37'},
+      {'name': isEs ? 'COVID-19' : 'COVID-19', 'code': '213'},
+      {'name': isEs ? 'Otra (especificar)' : 'Other (specify)', 'code': ''},
+    ];
+
+    final statusOpts = {
+      'completed': s.medStatusCompleted,
+      'refused': isEs ? 'Rehusada por paciente' : 'Refused by patient',
+      'not_given': isEs
+          ? 'No administrada (justificar)'
+          : 'Not given (provide reason)',
+    };
+
+    final sexLabel = p.patientInfo.biologicalSex == 'M'
+        ? s.sexMale
+        : s.sexFemale;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 90),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
           // ── Patient badge ─────────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -438,7 +487,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                         ),
                       ),
                       Text(
-                        '${p.patientInfo.dob} - ${p.patientInfo.biologicalSex}',
+                        '${p.patientInfo.dob} - $sexLabel',
                         style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary,
@@ -461,9 +510,9 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                 color: AppColors.secondary,
               ),
               const SizedBox(width: 8),
-              const Text(
-                'Vacunas',
-                style: TextStyle(
+              Text(
+                s.vaccineLabelPlural,
+                style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: AppColors.secondary,
@@ -477,9 +526,9 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                   size: 16,
                   color: AppColors.secondary,
                 ),
-                label: const Text(
-                  'Agregar',
-                  style: TextStyle(
+                label: Text(
+                  s.add,
+                  style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: AppColors.secondary,
@@ -504,7 +553,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
               index: i,
               total: _entries.length,
               entry: entry,
-              commonVaccines: _commonVaccines,
+              commonVaccines: commonVaccines,
               onRemove: _entries.length > 1 ? () => _removeEntry(i) : null,
               onChanged: () => setState(() {}),
             );
@@ -515,10 +564,15 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
           // ── Administration section (shared for all) ────────────────
           _SectionCard(
             icon: Icons.event_available_outlined,
-            title: 'Administracion',
-            subtitle: 'Aplica a todas las vacunas de esta sesion',
+            title: isEs ? 'Administración' : 'Administration',
+            subtitle: isEs
+                ? 'Aplica a todas las vacunas de esta sesión'
+                : 'Applies to all vaccines in this session',
             children: [
-              _FieldLabel(label: 'Fecha de administracion', required: true),
+              _FieldLabel(
+                label: isEs ? 'Fecha de administración' : 'Administration date',
+                required: true,
+              ),
               const SizedBox(height: 6),
               InkWell(
                 onTap: () async {
@@ -529,7 +583,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                     lastDate: DateTime.now(),
                     builder: (context, child) => Theme(
                       data: Theme.of(context).copyWith(
-                        colorScheme: ColorScheme.light(
+                        colorScheme: const ColorScheme.light(
                           primary: AppColors.primary,
                         ),
                       ),
@@ -547,10 +601,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.white,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: AppColors.primary,
-                      width: 1.5,
-                    ),
+                    border: Border.all(color: AppColors.primary, width: 1.5),
                   ),
                   child: Row(
                     children: [
@@ -581,9 +632,9 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
               const SizedBox(height: 12),
 
               _StyledTextField(
-                label: 'Administrado por',
+                label: s.administeredBy,
                 controller: _byCtrl,
-                hint: 'Ej: Enf. Ana Ruiz',
+                hint: isEs ? 'Ej: Enf. Ana Ruiz' : 'e.g. Nurse Ana Ruiz',
                 required: true,
                 icon: Icons.person_outline,
                 onChanged: () => setState(() {}),
@@ -591,9 +642,11 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
               const SizedBox(height: 12),
 
               _StyledTextField(
-                label: 'Lugar de administracion',
+                label: s.administeredAt,
                 controller: _atCtrl,
-                hint: 'Ej: Brigada Frontera Cucuta',
+                hint: isEs
+                    ? 'Ej: Brigada Frontera Cúcuta'
+                    : 'e.g. Cucuta Border Campaign',
                 required: true,
                 icon: Icons.location_on_outlined,
                 onChanged: () => setState(() {}),
@@ -605,10 +658,10 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
           // ── Status ────────────────────────────────────────────────────────
           _SectionCard(
             icon: Icons.check_circle_outline,
-            title: 'Estado',
+            title: s.statusLabel,
             children: [
               Column(
-                children: _statusOpts.entries.map((e) {
+                children: statusOpts.entries.map((e) {
                   final sel = _status == e.key;
                   return GestureDetector(
                     onTap: () => setState(() => _status = e.key),
@@ -696,10 +749,12 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                     ),
               label: Text(
                 _isSaving
-                    ? 'Guardando...'
+                    ? s.saving
                     : _entries.length == 1
-                        ? 'Guardar vacuna'
-                        : 'Guardar ${_entries.length} vacunas',
+                    ? (isEs ? 'Guardar vacuna' : 'Save vaccine')
+                    : (isEs
+                          ? 'Guardar ${_entries.length} vacunas'
+                          : 'Save ${_entries.length} vaccines'),
                 style: const TextStyle(
                   color: AppColors.white,
                   fontSize: 16,
@@ -716,6 +771,9 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   // ── Step C: Success ───────────────────────────────────────────────────────
 
   Widget _buildSuccessStep() {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -733,8 +791,10 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
           const SizedBox(height: 20),
           Text(
             _entries.length == 1
-                ? 'Vacuna guardada exitosamente'
-                : '${_entries.length} vacunas guardadas exitosamente',
+                ? s.vaccineSaved
+                : (isEs
+                      ? '${_entries.length} vacunas guardadas exitosamente'
+                      : '${_entries.length} vaccines saved successfully'),
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
@@ -755,15 +815,15 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
           _StatusRow(
             icon: Icons.storage_outlined,
             color: AppColors.success,
-            label: 'Guardado local',
-            value: 'Exitoso',
+            label: isEs ? 'Guardado local' : 'Local database',
+            value: isEs ? 'Exitoso' : 'Successful',
           ),
           const SizedBox(height: 8),
           _StatusRow(
             icon: Icons.cloud_upload_outlined,
             color: const Color(0xFFFB8C00),
-            label: 'Sincronizacion',
-            value: 'En cola (segundo plano)',
+            label: s.syncTitle,
+            value: isEs ? 'En cola (segundo plano)' : 'Queued (background)',
           ),
           const SizedBox(height: 40),
           SizedBox(
@@ -794,10 +854,14 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                 ),
                 elevation: 0,
               ),
-              icon: const Icon(Icons.vaccines, size: 20, color: AppColors.white),
-              label: const Text(
-                'Registrar otra sesion',
-                style: TextStyle(color: AppColors.white, fontSize: 15),
+              icon: const Icon(
+                Icons.vaccines,
+                size: 20,
+                color: AppColors.white,
+              ),
+              label: Text(
+                isEs ? 'Registrar otra sesión' : 'Register another session',
+                style: const TextStyle(color: AppColors.white, fontSize: 15),
               ),
             ),
           ),
@@ -813,7 +877,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                 ),
                 side: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
               ),
-              child: const Text('Volver', style: TextStyle(fontSize: 14)),
+              child: Text(s.back, style: const TextStyle(fontSize: 14)),
             ),
           ),
         ],
@@ -851,6 +915,8 @@ class _VaccineEntryCard extends StatefulWidget {
 class _VaccineEntryCardState extends State<_VaccineEntryCard> {
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
     final entry = widget.entry;
     final hasName = entry.nameCtrl.text.trim().isNotEmpty;
 
@@ -904,7 +970,9 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
                   child: Text(
                     hasName
                         ? entry.nameCtrl.text.trim()
-                        : 'Vacuna ${widget.index + 1}',
+                        : (isEs
+                              ? 'Vacuna ${widget.index + 1}'
+                              : 'Vaccine ${widget.index + 1}'),
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -915,7 +983,6 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                // Botón eliminar (solo si hay más de una vacuna)
                 if (widget.onRemove != null)
                   IconButton(
                     onPressed: widget.onRemove,
@@ -924,7 +991,9 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
                       size: 20,
                       color: AppColors.error,
                     ),
-                    tooltip: 'Eliminar esta vacuna',
+                    tooltip: isEs
+                        ? 'Eliminar esta vacuna'
+                        : 'Remove this vaccine',
                   ),
               ],
             ),
@@ -938,9 +1007,11 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ── Vacunas frecuentes ──────────────────────────────────
-                const Text(
-                  'Seleccione una vacuna frecuente',
-                  style: TextStyle(
+                Text(
+                  isEs
+                      ? 'Seleccione una vacuna frecuente'
+                      : 'Select a frequent vaccine',
+                  style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
                   ),
@@ -984,9 +1055,7 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
                             color: sel
                                 ? AppColors.white
                                 : AppColors.textPrimary,
-                            fontWeight: sel
-                                ? FontWeight.w600
-                                : FontWeight.w400,
+                            fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
                           ),
                         ),
                       ),
@@ -997,9 +1066,9 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
 
                 // ── Vaccine name ───────────────────────────────────────
                 _StyledTextField(
-                  label: 'Nombre de la vacuna',
+                  label: s.vaccineName,
                   controller: entry.nameCtrl,
-                  hint: 'Ej: Triple Viral (SRP)',
+                  hint: isEs ? 'Ej: Triple Viral (SRP)' : 'e.g. MMR Vaccine',
                   required: true,
                   onChanged: () {
                     setState(() {});
@@ -1010,7 +1079,7 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
 
                 // ── CVX Code ──────────────────────────────────────────
                 _StyledTextField(
-                  label: 'Codigo CVX',
+                  label: s.cvxCode,
                   controller: entry.cvxCtrl,
                   hint: 'Ej: 03',
                   required: true,
@@ -1023,9 +1092,9 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
                 const SizedBox(height: 14),
 
                 // ── Dosis ───────────────────────────────────────────────
-                const Text(
-                  'Numero de dosis',
-                  style: TextStyle(
+                Text(
+                  isEs ? 'Número de dosis' : 'Dose number',
+                  style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,
@@ -1061,7 +1130,9 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
                             ),
                           ),
                           child: Text(
-                            i == 5 ? 'Refuerzo' : 'Dosis $i',
+                            i == 5
+                                ? (isEs ? 'Refuerzo' : 'Booster')
+                                : '${s.doseLabel} $i',
                             style: TextStyle(
                               fontSize: 13,
                               color: entry.dose == i
@@ -1175,10 +1246,7 @@ class _StyledTextField extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: AppColors.primary,
-                width: 2,
-              ),
+              borderSide: const BorderSide(color: AppColors.primary, width: 2),
             ),
           ),
         ),
@@ -1276,10 +1344,7 @@ class _StatusRow extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 14,
-            color: AppColors.textSecondary,
-          ),
+          style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
         ),
       ],
     );
