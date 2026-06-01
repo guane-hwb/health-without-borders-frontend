@@ -403,11 +403,12 @@ class _Step3State extends State<Step3PatientData> {
                     items: nat,
                     required: true,
                     onChanged: (v) {
-                      if (v != null)
+                      if (v != null) {
                         setState(() {
                           d.nationalityCode = v;
                           d.nationalityName = nat[v];
                         });
+                      }
                     },
                   ),
                   const SizedBox(height: 12),

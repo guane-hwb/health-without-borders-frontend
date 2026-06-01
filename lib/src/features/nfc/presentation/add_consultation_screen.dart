@@ -55,7 +55,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   final _providerNameCtrl = TextEditingController();
 
   // ── Payer (Res. 866 Elems. 15.1, 15.2) ───────────────────────────────────
-  late final _payerNameCtrl;
+  late final TextEditingController _payerNameCtrl;
 
   // ── Clinical evaluation ───────────────────────────────────────────────────
   final _historyCtrl = TextEditingController(); // historyOfCurrentIllness

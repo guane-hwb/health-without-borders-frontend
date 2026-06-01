@@ -147,11 +147,12 @@ class _Step2State extends State<Step2Guardian> {
     setState(() => _scanning2 = true);
     try {
       final uid = await NfcService.readDeviceUid();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _uid2.text = uid;
           _scanning2 = false;
         });
+      }
     } on NfcNotAvailableException {
       if (mounted) {
         setState(() => _scanning2 = false);
@@ -1736,10 +1737,6 @@ class _Guardian2Section extends StatelessWidget {
     final s = AppStrings.of(context);
     final isEs = s.welcome == 'Bienvenido';
     final deleteTooltip = isEs ? 'Eliminar guardián 2' : 'Remove guardian 2';
-    final nfcSubtitle2 = isEs
-        ? 'Para autenticación 2FA alternativa.'
-        : 'For alternative 2FA authentication.';
-
     final docTypes = {'CC': s.docTypeCC, 'CE': s.docTypeCE};
 
     final rels = {
@@ -1851,7 +1848,6 @@ class _Guardian2Section extends StatelessWidget {
                 FormSectionHeader(
                   icon: Icons.nfc,
                   title: '${s.guardianNfcDevice} 2',
-                  subtitle: nfcSubtitle2,
                 ),
                 const SizedBox(height: 12),
                 _NfcField(

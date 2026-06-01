@@ -118,16 +118,15 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         vaccinationRecord: _savedRecord!.vaccinationRecord,
       );
       await _persistLocally(updated);
-      _lastConsultationTime = _formatTimeNow(context);
-      if (mounted) {
-        final s = AppStrings.of(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(s.consultationSaved),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _lastConsultationTime = _formatTimeNow(context));
+      final s = AppStrings.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(s.consultationSaved),
+          backgroundColor: AppColors.success,
+        ),
+      );
     }
   }
 
@@ -152,16 +151,15 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         vaccinationRecord: [..._savedRecord!.vaccinationRecord, result],
       );
       await _persistLocally(updated);
-      _lastVaccineTime = _formatTimeNow(context);
-      if (mounted) {
-        final s = AppStrings.of(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(s.vaccineSaved),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _lastVaccineTime = _formatTimeNow(context));
+      final s = AppStrings.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(s.vaccineSaved),
+          backgroundColor: AppColors.success,
+        ),
+      );
     }
   }
 
