@@ -55,7 +55,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   final _providerNameCtrl = TextEditingController();
 
   // ── Payer (Res. 866 Elems. 15.1, 15.2) ───────────────────────────────────
-  final _payerNameCtrl = TextEditingController(text: 'No asegurado');
+  late final _payerNameCtrl;
 
   // ── Clinical evaluation ───────────────────────────────────────────────────
   final _historyCtrl = TextEditingController(); // historyOfCurrentIllness
@@ -70,53 +70,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   // ── Discharge disposition (Elem. 41) ─────────────────────────────────────
   String? _dischargeDisposition;
 
-  // ── Catalogs ──────────────────────────────────────────────────────────────
-  static const Map<String, String> _careModalityOpts = {
-    '01': 'Intramural',
-    '02': 'Extramural - Móvil',
-    '03': 'Extramural - Domiciliaria',
-    '04': 'Extramural - Jornada',
-    '05': 'Extramural - Prehospitalaria',
-    '06': 'Telemedicina interactiva',
-    '07': 'Telemedicina no interactiva',
-    '08': 'Telemedicina - Telexperticia',
-    '09': 'Telemedicina - Telemonitoreo',
-  };
-  static const Map<String, String> _serviceGroupOpts = {
-    '01': 'Consulta externa',
-    '02': 'Apoyo diagnóstico',
-    '03': 'Internación',
-    '04': 'Quirúrgico',
-    '05': 'Atención inmediata',
-  };
-  static const Map<String, String> _careEnvOpts = {
-    '01': 'Hogar',
-    '02': 'Comunitario',
-    '03': 'Escolar',
-    '04': 'Laboral',
-    '05': 'Institucional',
-  };
-  static const Map<String, String> _diagnosisTypeOpts = {
-    '01': 'Impresión diagnóstica',
-    '02': 'Confirmado nuevo',
-    '03': 'Confirmado repetido',
-  };
-  static const Map<String, String> _dischargeOpts = {
-    '': 'No aplica',
-    '01': 'Alta voluntaria',
-    '02': 'Paciente muerto',
-    '03': 'Remitido',
-    '04': 'Alta médica',
-  };
-  static const Map<String, String> _docTypeOpts = {
-    'CC': 'Cédula Ciudadanía',
-    'CE': 'Cédula Extranjería',
-    'PA': 'Pasaporte',
-    'TI': 'Tarjeta Identidad',
-    'RC': 'Registro Civil',
-    'MS': 'Sin identificación',
-  };
-
   @override
   void initState() {
     super.initState();
@@ -126,6 +79,16 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       _heightCtrl.text = _patient!.patientInfo.height?.toString() ?? '';
     }
     _historyCtrl.addListener(_onHistoryChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+    _payerNameCtrl = TextEditingController(
+      text: isEs ? 'No asegurado' : 'Uninsured',
+    );
   }
 
   void _onHistoryChanged() => setState(() {});
@@ -152,6 +115,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   // ── NFC scan ──────────────────────────────────────────────────────────────
 
   Future<void> _scanPatient() async {
+    final s = AppStrings.of(context);
     setState(() {
       _scanning = true;
       _scanError = null;
@@ -162,7 +126,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       final patient = await repo.scanDevice(uid);
       if (mounted) setState(() => _patient = patient);
     } on NfcNotAvailableException {
-      if (mounted) setState(() => _scanError = 'NFC no disponible.');
+      if (mounted) setState(() => _scanError = s.nfcNotAvailableHint);
     } on ApiException catch (e) {
       if (mounted) setState(() => _scanError = e.message);
     } catch (e) {
@@ -176,9 +140,10 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
   Future<void> _save() async {
     if (_patient == null) return;
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
     setState(() => _isSaving = true);
 
-    // Build PractitionerInfo only if name is provided
     final practDoc = _practitionerDocCtrl.text.trim();
     final practName = _practitionerNameCtrl.text.trim();
     final PractitionerInfo? practitioner = practName.isNotEmpty
@@ -263,7 +228,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
     try {
       final scope = AppScope.of(context);
-      // 1. Save locally — instant, never blocks
       await scope.localDatabase.savePatient(updatedRecord);
 
       if (mounted) {
@@ -272,24 +236,23 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           _isSaving = false;
         });
 
-        // 2. Fire-and-forget sync
         scope.syncEngine.syncAll().ignore();
 
-        // 3. Success snackbar
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Consulta guardada exitosamente ✓'),
+          SnackBar(
+            content: Text(s.consultationSaved),
             backgroundColor: AppColors.success,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
+        final errLabel = isEs ? 'Error al guardar' : 'Error saving';
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
+        ).showSnackBar(SnackBar(content: Text('$errLabel: $e')));
       }
     }
   }
@@ -334,6 +297,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   // ── Step A: Scan ──────────────────────────────────────────────────────────
 
   Widget _buildScanStep() {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -345,19 +311,24 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             color: AppColors.secondary,
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Escanear paciente',
-            style: TextStyle(
+          Text(
+            isEs ? 'Escanear paciente' : 'Scan patient',
+            style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w600,
               color: AppColors.secondary,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Acerque el dispositivo NFC del paciente para registrar la consulta.',
+          Text(
+            isEs
+                ? 'Acerque el dispositivo NFC del paciente para registrar la consulta.'
+                : "Hold the patient's NFC device close to register the consultation.",
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 32),
           GestureDetector(
@@ -406,9 +377,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                 size: 18,
                 color: AppColors.primary,
               ),
-              label: const Text(
-                'Buscar paciente',
-                style: TextStyle(fontSize: 14, color: AppColors.primary),
+              label: Text(
+                s.searchPatient,
+                style: const TextStyle(fontSize: 14, color: AppColors.primary),
               ),
             ),
           ),
@@ -418,21 +389,22 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   }
 
   void _showManualSearchDialog() {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
     final uidCtrl = TextEditingController();
+
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Buscar por UID'),
+        title: Text(isEs ? 'Buscar por UID' : 'Search by UID'),
         content: TextField(
           controller: uidCtrl,
-          decoration: const InputDecoration(
-            hintText: 'Ingrese UID del dispositivo NFC',
-          ),
+          decoration: InputDecoration(hintText: s.guardianNfcUidHint),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancelar'),
+            child: Text(s.cancel),
           ),
           TextButton(
             onPressed: () {
@@ -462,7 +434,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                     });
               }
             },
-            child: const Text('Buscar'),
+            child: Text(s.search),
           ),
         ],
       ),
@@ -473,32 +445,80 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
   Widget _buildFormStep() {
     final p = _patient!;
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
+    final careModalityOpts = {
+      '01': s.modIntramural,
+      '02': s.modExtramuralMobil,
+      '03': s.modDomiciliaria,
+      '04': s.modJornada,
+      '05': s.modPrehospitalaria,
+      '06': s.modTelemedicinaInteractiva,
+      '07': s.modNoInteractiva,
+      '08': s.modTelexperticia,
+      '09': s.modTelemonitoreo,
+    };
+    final serviceGroupOpts = {
+      '01': s.sgConsultaExterna,
+      '02': s.sgApoyoDiagnostico,
+      '03': s.sgInternacion,
+      '04': s.sgQuirurgico,
+      '05': s.sgAtencionInmediata,
+    };
+    final careEnvOpts = {
+      '01': s.ceHogar,
+      '02': s.ceComunitario,
+      '03': s.ceEscolar,
+      '04': s.ceLaboral,
+      '05': s.ceInstitucional,
+    };
+    final diagnosisTypeOpts = {
+      '01': s.dtImpresion,
+      '02': s.dtConfirmadoNuevo,
+      '03': s.dtConfirmadoRepetido,
+    };
+    final dischargeOpts = {
+      '': isEs ? 'No aplica' : 'Not applicable',
+      '01': s.ddAltaVoluntaria,
+      '02': s.ddFallecido,
+      '03': s.ddRemitido,
+      '04': s.ddAltaMedica,
+    };
+    final docTypeOpts = {
+      'CC': s.docTypeCC,
+      'CE': s.docTypeCE,
+      'PA': s.docTypePA,
+      'TI': s.docTypeTI,
+      'RC': s.docTypeRC,
+      'MS': s.docTypeMS,
+    };
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 80),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Patient badge ────────────────────────────────────────────────
           _PatientBadge(patient: p),
           const SizedBox(height: 16),
 
           // ── Vitals (weight + height saved on patientInfo) ────────────────
           _SectionCard(
             icon: Icons.monitor_heart_outlined,
-            title: 'Signos vitales',
+            title: s.editMeasurements,
             children: [
               Row(
                 children: [
                   Expanded(
                     child: _vitalField(
-                      'Peso (kg)',
+                      s.weightKg,
                       _weightCtrl,
                       Icons.monitor_weight_outlined,
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: _vitalField('Talla (cm)', _heightCtrl, Icons.height),
+                    child: _vitalField(s.heightCm, _heightCtrl, Icons.height),
                   ),
                 ],
               ),
@@ -509,16 +529,18 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           // ── Encounter date/time ──────────────────────────────────────────
           _SectionCard(
             icon: Icons.schedule,
-            title: 'Fecha y hora de atención',
+            title: s.dateTime,
             children: [
               _DateTimeRow(
-                label: 'Inicio de atención *',
+                label: isEs ? 'Inicio de atención *' : 'Encounter start *',
                 value: _startDateTime,
                 onPick: (dt) => setState(() => _startDateTime = dt),
               ),
               const SizedBox(height: 10),
               _DateTimeRow(
-                label: 'Fin de atención (opcional)',
+                label: isEs
+                    ? 'Fin de atención (opcional)'
+                    : 'Encounter end (optional)',
                 value: _endDateTime,
                 onPick: (dt) => setState(() => _endDateTime = dt),
                 allowClear: true,
@@ -531,30 +553,27 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           // ── Care context ─────────────────────────────────────────────────
           _SectionCard(
             icon: Icons.local_hospital_outlined,
-            title: 'Contexto de atención',
+            title: s.careContextSection,
             children: [
-              _dropdownField(
-                'Modalidad de atención',
-                _careModality,
-                _careModalityOpts,
-                (v) {
-                  if (v != null) setState(() => _careModality = v);
-                },
-              ),
+              _dropdownField(s.careModality, _careModality, careModalityOpts, (
+                v,
+              ) {
+                if (v != null) setState(() => _careModality = v);
+              }),
               const SizedBox(height: 10),
               _dropdownField(
-                'Grupo de servicios',
+                s.serviceGroupLabel,
                 _serviceGroup,
-                _serviceGroupOpts,
+                serviceGroupOpts,
                 (v) {
                   if (v != null) setState(() => _serviceGroup = v);
                 },
               ),
               const SizedBox(height: 10),
               _dropdownField(
-                'Entorno de atención',
+                s.environmentLabel,
                 _careEnvironment,
-                _careEnvOpts,
+                careEnvOpts,
                 (v) {
                   if (v != null) setState(() => _careEnvironment = v);
                 },
@@ -566,16 +585,16 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           // ── Practitioner ─────────────────────────────────────────────────
           _SectionCard(
             icon: Icons.badge_outlined,
-            title: 'Profesional de salud',
+            title: s.practitioner,
             children: [
               Row(
                 children: [
                   SizedBox(
                     width: 160,
                     child: _dropdownField(
-                      'Tipo doc.',
+                      s.documentTypeLabel,
                       _practitionerDocType,
-                      _docTypeOpts,
+                      docTypeOpts,
                       (v) {
                         if (v != null) setState(() => _practitionerDocType = v);
                       },
@@ -584,7 +603,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: _textField(
-                      'Nº documento',
+                      s.documentNumberLabel,
                       _practitionerDocCtrl,
                       Icons.badge,
                     ),
@@ -592,11 +611,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              _textField(
-                'Nombre del profesional',
-                _practitionerNameCtrl,
-                Icons.person_outline,
-              ),
+              _textField(s.name, _practitionerNameCtrl, Icons.person_outline),
             ],
           ),
           const SizedBox(height: 12),
@@ -604,16 +619,12 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           // ── Provider ─────────────────────────────────────────────────────
           _SectionCard(
             icon: Icons.apartment_outlined,
-            title: 'Prestador de servicios',
+            title: s.healthcareProvider,
             children: [
-              _textField(
-                'Código REPS del prestador',
-                _providerRepsCtrl,
-                Icons.tag,
-              ),
+              _textField(s.repsCode, _providerRepsCtrl, Icons.tag),
               const SizedBox(height: 10),
               _textField(
-                'Nombre del prestador / brigada',
+                s.providerName,
                 _providerNameCtrl,
                 Icons.business_outlined,
               ),
@@ -624,10 +635,12 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           // ── Payer ────────────────────────────────────────────────────────
           _SectionCard(
             icon: Icons.health_and_safety_outlined,
-            title: 'Entidad pagadora',
+            title: s.payerSection,
             children: [
               _textField(
-                'Nombre de la EAPB / aseguradora',
+                isEs
+                    ? 'Nombre de la EAPB / aseguradora'
+                    : 'Payer / Insurance name',
                 _payerNameCtrl,
                 Icons.shield_outlined,
               ),
@@ -638,32 +651,37 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           // ── Clinical evaluation ──────────────────────────────────────────
           _SectionCard(
             icon: Icons.edit_note_outlined,
-            title: 'Evaluación clínica',
+            title: s.clinicalEvaluation,
             children: [
               _textArea(
-                'Enfermedad actual / motivo de consulta *',
+                '${s.historyCurrentIllness} *',
                 _historyCtrl,
-                hint: 'Fiebre de 3 días de evolución, tos seca, rinorrea...',
+                hint: isEs
+                    ? 'Fiebre de 3 días de evolución, tos seca, rinorrea...'
+                    : 'Fever for 3 days, dry cough, rhinorrhea...',
                 required: true,
               ),
               const SizedBox(height: 10),
               _textArea(
-                'Examen físico general',
+                s.generalExam,
                 _physicalExamCtrl,
-                hint: 'T: 38.2°C, FC: 110, FR: 28. Faringe eritematosa...',
+                hint: 'T: 38.2°C, FC: 110, FR: 28...',
               ),
               const SizedBox(height: 10),
               _textArea(
-                'Revisión por sistemas',
+                s.systemsExam,
                 _systemsCtrl,
-                hint:
-                    'Pulmones: murmullo vesicular conservado sin agregados...',
+                hint: isEs
+                    ? 'Pulmones: murmullo vesicular conservado sin agregados...'
+                    : 'Lungs: clear breath sounds, no crackles...',
               ),
               const SizedBox(height: 10),
               _textArea(
-                'Plan de tratamiento y observaciones',
+                s.treatmentPlan,
                 _treatmentCtrl,
-                hint: 'Acetaminofén 15mg/kg cada 6h. Control en 72h...',
+                hint: isEs
+                    ? 'Acetaminofén 15mg/kg cada 6h. Control en 72h...'
+                    : 'Acetaminophen 15mg/kg every 6h. Return in 72h...',
               ),
             ],
           ),
@@ -672,21 +690,21 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           // ── Diagnosis type + discharge ────────────────────────────────────
           _SectionCard(
             icon: Icons.medical_information_outlined,
-            title: 'Diagnóstico y egreso',
+            title: '${s.diagnosisTitle} & ${s.dischargeSection}',
             children: [
               _dropdownField(
-                'Tipo de diagnóstico',
+                s.diagnosisType,
                 _diagnosisType,
-                _diagnosisTypeOpts,
+                diagnosisTypeOpts,
                 (v) {
                   if (v != null) setState(() => _diagnosisType = v);
                 },
               ),
               const SizedBox(height: 10),
               _dropdownField(
-                'Condición al egreso',
+                s.dischargeSection,
                 _dischargeDisposition ?? '',
-                _dischargeOpts,
+                dischargeOpts,
                 (v) {
                   setState(
                     () =>
@@ -723,7 +741,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                     )
                   : const Icon(Icons.save, size: 22, color: AppColors.white),
               label: Text(
-                _isSaving ? 'Guardando...' : 'Guardar consulta',
+                _isSaving ? s.saving : s.addConsultationButton,
                 style: const TextStyle(color: AppColors.white, fontSize: 16),
               ),
             ),
@@ -736,6 +754,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   // ── Step C: Success ───────────────────────────────────────────────────────
 
   Widget _buildSuccessStep() {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -751,9 +772,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             child: const Icon(Icons.check, size: 48, color: AppColors.white),
           ),
           const SizedBox(height: 20),
-          const Text(
-            'Consulta guardada exitosamente',
-            style: TextStyle(
+          Text(
+            s.consultationSaved,
+            style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
@@ -772,15 +793,15 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           _StatusRow(
             icon: Icons.storage_outlined,
             color: AppColors.success,
-            label: 'Guardado local',
-            value: 'Exitoso',
+            label: isEs ? 'Guardado local' : 'Local database',
+            value: isEs ? 'Exitoso' : 'Successful',
           ),
           const SizedBox(height: 8),
           _StatusRow(
             icon: Icons.cloud_upload_outlined,
             color: const Color(0xFFFB8C00),
-            label: 'Sincronización',
-            value: 'En cola (segundo plano)',
+            label: s.syncTitle,
+            value: isEs ? 'En cola (segundo plano)' : 'Queued (background)',
           ),
           if (_patient?.allergies.any((a) => a.category == '01') == true) ...[
             const SizedBox(height: 16),
@@ -793,14 +814,19 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                   color: AppColors.error.withValues(alpha: 0.3),
                 ),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.warning, size: 16, color: AppColors.error),
-                  SizedBox(width: 6),
+                  const Icon(Icons.warning, size: 16, color: AppColors.error),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Recuerde las alertas de alergia al entregar la prescripción.',
-                      style: TextStyle(fontSize: 12, color: AppColors.error),
+                      isEs
+                          ? 'Recuerde las alertas de alergia al entregar la prescripción.'
+                          : 'Please check allergy alerts when providing prescriptions.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.error,
+                      ),
                     ),
                   ),
                 ],
@@ -819,7 +845,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                 ),
                 side: const BorderSide(color: AppColors.divider),
               ),
-              child: const Text('Volver', style: TextStyle(fontSize: 14)),
+              child: Text(s.back),
             ),
           ),
         ],
@@ -1007,6 +1033,17 @@ class _PatientBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
+    final sexLabel =
+        {
+          'M': s.sexMale,
+          'F': s.sexFemale,
+          'I': s.sexIndeterminate,
+        }[patient.patientInfo.biologicalSex] ??
+        patient.patientInfo.biologicalSex;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -1031,7 +1068,7 @@ class _PatientBadge extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${patient.patientInfo.dob} · ${patient.patientInfo.biologicalSex}',
+                  '${patient.patientInfo.dob} · $sexLabel',
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
@@ -1057,7 +1094,9 @@ class _PatientBadge extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    '${patient.allergies.length} alergia(s)',
+                    patient.allergies.length == 1
+                        ? '1 ${isEs ? 'alergia' : 'allergy'}'
+                        : '${patient.allergies.length} ${isEs ? 'alergias' : 'allergies'}',
                     style: const TextStyle(
                       fontSize: 11,
                       color: AppColors.error,
@@ -1147,6 +1186,9 @@ class _DateTimeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1207,7 +1249,9 @@ class _DateTimeRow extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        value != null ? _format(value!) : '— no definido —',
+                        value != null
+                            ? _format(value!)
+                            : (isEs ? '— no definido —' : '— undefined —'),
                         style: TextStyle(
                           fontSize: 13,
                           color: value != null
