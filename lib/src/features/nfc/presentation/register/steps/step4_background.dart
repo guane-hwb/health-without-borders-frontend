@@ -5,6 +5,7 @@ import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../shared/widgets/form_widgets.dart';
 import '../../../domain/patient_record.dart';
 import '../register_nfc_screen.dart';
+import '../../../../../core/i18n/app_strings.dart';
 
 class Step4Background extends StatefulWidget {
   const Step4Background({
@@ -82,6 +83,9 @@ class _Step4State extends State<Step4Background> {
   @override
   Widget build(BuildContext context) {
     final d = widget.draft;
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     return Column(
       children: [
         Expanded(
@@ -94,14 +98,16 @@ class _Step4State extends State<Step4Background> {
                   Expanded(
                     child: FormSectionHeader(
                       icon: Icons.favorite_border,
-                      title: 'Condiciones crónicas',
-                      subtitle: 'Agregue cada condición.',
+                      title: s.chronicConditions,
+                      subtitle: isEs
+                          ? 'Agregue cada condición.'
+                          : 'Add each condition.',
                     ),
                   ),
                   TextButton.icon(
                     onPressed: _addChronicCondition,
                     icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Agregar'),
+                    label: Text(s.add),
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.primary,
                     ),
@@ -109,7 +115,11 @@ class _Step4State extends State<Step4Background> {
                 ],
               ),
               if (d.chronicConditions.isEmpty)
-                _EmptyCard(msg: 'Sin condiciones crónicas. Toque "Agregar".')
+                _EmptyCard(
+                  msg: isEs
+                      ? 'Sin condiciones crónicas. Toque "Agregar".'
+                      : 'No chronic conditions. Tap "Add".',
+                )
               else
                 Column(
                   children: List.generate(d.chronicConditions.length, (i) {
@@ -117,7 +127,9 @@ class _Step4State extends State<Step4Background> {
                     return _ItemCard(
                       icon: Icons.favorite_border,
                       title: it.chronicDescription,
-                      subtitle: 'Codificación automática por IA',
+                      subtitle: isEs
+                          ? 'Codificación automática por IA'
+                          : 'AI automatic encoding',
                       onRemove: () =>
                           setState(() => d.chronicConditions.removeAt(i)),
                     );
@@ -126,14 +138,18 @@ class _Step4State extends State<Step4Background> {
               const SizedBox(height: 22),
               FormSectionHeader(
                 icon: Icons.history_edu_outlined,
-                title: 'Historial personal',
-                subtitle: 'Antecedentes quirúrgicos, hospitalizaciones, etc.',
+                title: s.personalHistory,
+                subtitle: isEs
+                    ? 'Antecedentes quirúrgicos, hospitalizaciones, etc.'
+                    : 'Surgical history, hospitalizations, etc.',
               ),
               const SizedBox(height: 12),
               _StyledTextArea(
-                label: 'Historial personal',
+                label: s.personalHistory,
                 controller: _personal,
-                hint: 'Ej. Cirugía de adenoides 2021...',
+                hint: isEs
+                    ? 'Ej. Cirugía de adenoides 2021...'
+                    : 'e.g. Adenoid surgery 2021...',
                 maxLines: 3,
               ),
               const SizedBox(height: 22),
@@ -143,14 +159,16 @@ class _Step4State extends State<Step4Background> {
                   Expanded(
                     child: FormSectionHeader(
                       icon: Icons.medication_outlined,
-                      title: 'Medicamentos',
-                      subtitle: 'Medicamentos actuales del paciente.',
+                      title: s.medications,
+                      subtitle: isEs
+                          ? 'Medicamentos actuales del paciente.'
+                          : "Patient's current medications.",
                     ),
                   ),
                   TextButton.icon(
                     onPressed: _addMedication,
                     icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Agregar'),
+                    label: Text(s.add),
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.primary,
                     ),
@@ -159,7 +177,9 @@ class _Step4State extends State<Step4Background> {
               ),
               if (d.medications.isEmpty)
                 _EmptyCard(
-                  msg: 'Sin medicamentos registrados. Toque "Agregar".',
+                  msg: isEs
+                      ? 'Sin medicamentos registrados. Toque "Agregar".'
+                      : 'No medications registered. Tap "Add".',
                 )
               else
                 Column(
@@ -169,7 +189,7 @@ class _Step4State extends State<Step4Background> {
                       icon: Icons.medication_outlined,
                       title: it.medicationName,
                       subtitle:
-                          '${_medStatusLabel(it.status)}${it.dosage != null && it.dosage!.isNotEmpty ? ' · ${it.dosage}' : ''}',
+                          '${_medStatusLabel(context, it.status)}${it.dosage != null && it.dosage!.isNotEmpty ? ' · ${it.dosage}' : ''}',
                       onRemove: () => setState(() => d.medications.removeAt(i)),
                     );
                   }),
@@ -181,13 +201,13 @@ class _Step4State extends State<Step4Background> {
                   Expanded(
                     child: FormSectionHeader(
                       icon: Icons.diversity_3_outlined,
-                      title: 'Antecedentes familiares',
+                      title: s.familyHistory,
                     ),
                   ),
                   TextButton.icon(
                     onPressed: _addFamilyHistory,
                     icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Agregar'),
+                    label: Text(s.add),
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.primary,
                     ),
@@ -195,7 +215,11 @@ class _Step4State extends State<Step4Background> {
                 ],
               ),
               if (d.familyHistory.isEmpty)
-                _EmptyCard(msg: 'Sin antecedentes familiares. Toque "Agregar".')
+                _EmptyCard(
+                  msg: isEs
+                      ? 'Sin antecedentes familiares. Toque "Agregar".'
+                      : 'No family history entries yet. Tap "Add".',
+                )
               else
                 Column(
                   children: List.generate(d.familyHistory.length, (i) {
@@ -203,7 +227,7 @@ class _Step4State extends State<Step4Background> {
                     return _ItemCard(
                       icon: Icons.diversity_3,
                       title: it.conditionDescription,
-                      subtitle: _relLabel(it.relationship),
+                      subtitle: _relLabel(context, it.relationship),
                       onRemove: () =>
                           setState(() => d.familyHistory.removeAt(i)),
                     );
@@ -216,13 +240,13 @@ class _Step4State extends State<Step4Background> {
                   Expanded(
                     child: FormSectionHeader(
                       icon: Icons.warning_amber_rounded,
-                      title: 'Alergias',
+                      title: s.allergiesSheetTitle,
                     ),
                   ),
                   TextButton.icon(
                     onPressed: _addAllergy,
                     icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Agregar'),
+                    label: Text(s.add),
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.primary,
                     ),
@@ -230,7 +254,11 @@ class _Step4State extends State<Step4Background> {
                 ],
               ),
               if (d.allergies.isEmpty)
-                _EmptyCard(msg: 'Sin alergias registradas. Toque "Agregar".')
+                _EmptyCard(
+                  msg: isEs
+                      ? 'Sin alergias registradas. Toque "Agregar".'
+                      : 'No allergies registered. Tap "Add".',
+                )
               else
                 Column(
                   children: List.generate(d.allergies.length, (i) {
@@ -240,7 +268,7 @@ class _Step4State extends State<Step4Background> {
                       iconColor: AppColors.error,
                       title: it.allergen,
                       subtitle:
-                          '${_catLabel(it.category)}${it.reaction != null && it.reaction!.isNotEmpty ? ' · ${it.reaction}' : ''}',
+                          '${_catLabel(context, it.category)}${it.reaction != null && it.reaction!.isNotEmpty ? ' · ${it.reaction}' : ''}',
                       onRemove: () => setState(() => d.allergies.removeAt(i)),
                     );
                   }),
@@ -281,9 +309,9 @@ class _Step4State extends State<Step4Background> {
                       size: 18,
                       color: AppColors.textSecondary,
                     ),
-                    label: const Text(
-                      'Atrás',
-                      style: TextStyle(
+                    label: Text(
+                      s.back,
+                      style: const TextStyle(
                         fontSize: 15,
                         color: AppColors.textSecondary,
                         fontWeight: FontWeight.w500,
@@ -311,9 +339,9 @@ class _Step4State extends State<Step4Background> {
                       size: 18,
                       color: AppColors.white,
                     ),
-                    label: const Text(
-                      'Continuar',
-                      style: TextStyle(
+                    label: Text(
+                      s.continueBtn,
+                      style: const TextStyle(
                         color: AppColors.white,
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -373,6 +401,9 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
   }
 
   Future<void> _toggleListening() async {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     if (_isListening) {
       await _speech.stop();
       setState(() => _isListening = false);
@@ -381,15 +412,18 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
 
     if (!_speechAvailable) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Microfono no disponible en este dispositivo'),
+        SnackBar(
+          content: Text(
+            isEs
+                ? 'Micrófono no disponible en este dispositivo'
+                : 'Microphone not available on this device',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
       return;
     }
 
-    // Save the existing text to accumulate
     _baseText = widget.controller.text;
     if (_baseText.isNotEmpty && !_baseText.endsWith(' ')) {
       _baseText += ' ';
@@ -398,7 +432,7 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
     setState(() => _isListening = true);
 
     await _speech.listen(
-      localeId: 'es_CO',
+      localeId: isEs ? 'es_CO' : 'en_US',
       listenOptions: stt.SpeechListenOptions(
         cancelOnError: true,
         partialResults: true,
@@ -427,10 +461,12 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Label ──────────────────────────────────────────────────────────
         Row(
           children: [
             Text(
@@ -505,9 +541,11 @@ class _StyledTextAreaState extends State<_StyledTextArea> {
               children: [
                 _PulsingDot(),
                 const SizedBox(width: 6),
-                const Text(
-                  'Escuchando... toque el microfono para detener',
-                  style: TextStyle(
+                Text(
+                  isEs
+                      ? 'Escuchando... toque el micrófono para detener'
+                      : 'Listening... tap microphone to stop',
+                  style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.primary,
                     fontWeight: FontWeight.w500,
@@ -590,32 +628,42 @@ class _PulsingDotState extends State<_PulsingDot>
   }
 }
 
-String _relLabel(String c) =>
-    const {
-      '01': 'Padres',
-      '02': 'Hermanos',
-      '03': 'Tíos',
-      '04': 'Abuelos',
-    }[c] ??
-    c;
-String _catLabel(String c) =>
-    const {
-      '01': 'Medicamento',
-      '02': 'Alimento',
-      '03': 'Sust. ambiente',
-      '04': 'Sust. piel',
-      '05': 'Picadura',
-      '06': 'Otra',
-    }[c] ??
-    c;
-String _medStatusLabel(String c) =>
-    const {
-      'active': 'Activo',
-      'completed': 'Completado',
-      'stopped': 'Suspendido',
-      'unknown': 'Desconocido',
-    }[c] ??
-    c;
+// ── Helpers de internacionalización dinámica basados en el context ───────────
+
+String _relLabel(BuildContext context, String c) {
+  final s = AppStrings.of(context);
+  return {
+        '01': s.relParents,
+        '02': s.relSiblings,
+        '03': s.relUncles,
+        '04': s.relGrandparents,
+      }[c] ??
+      c;
+}
+
+String _catLabel(BuildContext context, String c) {
+  final s = AppStrings.of(context);
+  return {
+        '01': s.allergenMedication,
+        '02': s.allergenFood,
+        '03': s.allergenEnvironment,
+        '04': s.allergenSkin,
+        '05': s.allergenInsect,
+        '06': s.allergenOther,
+      }[c] ??
+      c;
+}
+
+String _medStatusLabel(BuildContext context, String c) {
+  final s = AppStrings.of(context);
+  return {
+        'active': s.medStatusActive,
+        'completed': s.medStatusCompleted,
+        'stopped': s.medStatusStopped,
+        'unknown': s.medStatusUnknown,
+      }[c] ??
+      c;
+}
 
 class _EmptyCard extends StatelessWidget {
   const _EmptyCard({required this.msg});
@@ -722,9 +770,10 @@ class _AddCCState extends State<_AddChronicConditionSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final ok = _ctrl.text.trim().isNotEmpty;
     return _Sheet(
-      title: 'Agregar condición crónica',
+      title: s.addChronicConditionTitle,
       canConfirm: ok,
       onConfirm: () {
         Navigator.of(
@@ -735,9 +784,9 @@ class _AddCCState extends State<_AddChronicConditionSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           LabeledTextField(
-            label: 'CONDICIÓN',
+            label: s.condition.toUpperCase(),
             controller: _ctrl,
-            hint: 'Ej. Diabetes mellitus tipo 2',
+            hint: s.chronicConditionHint,
             maxLines: 3,
             requiredField: true,
             onChanged: (_) => setState(() {}),
@@ -759,12 +808,7 @@ class _AddMedState extends State<_AddMedicationSheet> {
   final _dosage = TextEditingController();
   final _notes = TextEditingController();
   String _status = 'active';
-  static const _statuses = {
-    'active': 'Activo',
-    'completed': 'Completado',
-    'stopped': 'Suspendido',
-    'unknown': 'Desconocido',
-  };
+
   @override
   void dispose() {
     _name.dispose();
@@ -775,9 +819,18 @@ class _AddMedState extends State<_AddMedicationSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final ok = _name.text.trim().isNotEmpty;
+
+    final statuses = {
+      'active': s.medStatusActive,
+      'completed': s.medStatusCompleted,
+      'stopped': s.medStatusStopped,
+      'unknown': s.medStatusUnknown,
+    };
+
     return _Sheet(
-      title: 'Agregar medicamento',
+      title: s.addMedicationTitle,
       canConfirm: ok,
       onConfirm: () {
         Navigator.of(context).pop(
@@ -793,30 +846,30 @@ class _AddMedState extends State<_AddMedicationSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           LabeledTextField(
-            label: 'MEDICAMENTO',
+            label: s.medicationLabel.toUpperCase().replaceAll('*', '').trim(),
             controller: _name,
-            hint: 'Ej. Metformina 850mg',
+            hint: s.medicationHint,
             requiredField: true,
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 14),
           ChipSelector<String>(
-            label: 'ESTADO',
+            label: s.statusLabel.toUpperCase(),
             value: _status,
-            options: _statuses,
+            options: statuses,
             onChanged: (v) => setState(() => _status = v),
           ),
           const SizedBox(height: 14),
           LabeledTextField(
-            label: 'POSOLOGÍA',
+            label: s.dosageLabel.toUpperCase(),
             controller: _dosage,
-            hint: 'Ej. 1 tableta cada 12 horas',
+            hint: s.dosageHint,
           ),
           const SizedBox(height: 12),
           LabeledTextField(
-            label: 'NOTAS',
+            label: s.notesLabel.toUpperCase(),
             controller: _notes,
-            hint: 'Observaciones adicionales',
+            hint: s.notesHint,
             maxLines: 2,
           ),
         ],
@@ -834,12 +887,7 @@ class _AddFamilyHistorySheet extends StatefulWidget {
 class _AddFHState extends State<_AddFamilyHistorySheet> {
   final _ctrl = TextEditingController();
   String _rel = '01';
-  static const _rels = {
-    '01': 'Padres',
-    '02': 'Hermanos',
-    '03': 'Tíos',
-    '04': 'Abuelos',
-  };
+
   @override
   void dispose() {
     _ctrl.dispose();
@@ -848,9 +896,18 @@ class _AddFHState extends State<_AddFamilyHistorySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final ok = _ctrl.text.trim().isNotEmpty;
+
+    final rels = {
+      '01': s.relParents,
+      '02': s.relSiblings,
+      '03': s.relUncles,
+      '04': s.relGrandparents,
+    };
+
     return _Sheet(
-      title: 'Agregar antecedente familiar',
+      title: s.addFamilyHistory,
       canConfirm: ok,
       onConfirm: () {
         Navigator.of(context).pop(
@@ -864,16 +921,16 @@ class _AddFHState extends State<_AddFamilyHistorySheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ChipSelector<String>(
-            label: 'PARENTESCO',
+            label: s.guardianRelationship.toUpperCase(),
             value: _rel,
-            options: _rels,
+            options: rels,
             onChanged: (v) => setState(() => _rel = v),
           ),
           const SizedBox(height: 14),
           LabeledTextField(
-            label: 'CONDICIÓN',
+            label: s.condition.toUpperCase(),
             controller: _ctrl,
-            hint: 'Ej. Diabetes mellitus tipo 2',
+            hint: s.chronicConditionHint,
             maxLines: 3,
             onChanged: (_) => setState(() {}),
           ),
@@ -893,14 +950,7 @@ class _AddAlState extends State<_AddAllergySheet> {
   final _allergen = TextEditingController();
   final _reaction = TextEditingController();
   String _cat = '01';
-  static const _cats = {
-    '01': 'Medicamento',
-    '02': 'Alimento',
-    '03': 'Sust. ambiente',
-    '04': 'Sust. piel',
-    '05': 'Picadura',
-    '06': 'Otra',
-  };
+
   @override
   void dispose() {
     _allergen.dispose();
@@ -910,9 +960,20 @@ class _AddAlState extends State<_AddAllergySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final ok = _allergen.text.trim().isNotEmpty;
+
+    final cats = {
+      '01': s.allergenMedication,
+      '02': s.allergenFood,
+      '03': s.allergenEnvironment,
+      '04': s.allergenSkin,
+      '05': s.allergenInsect,
+      '06': s.allergenOther,
+    };
+
     return _Sheet(
-      title: 'Agregar alergia',
+      title: s.addAllergyBtn,
       canConfirm: ok,
       onConfirm: () {
         Navigator.of(context).pop(
@@ -929,24 +990,24 @@ class _AddAlState extends State<_AddAllergySheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ChipSelector<String>(
-            label: 'CATEGORÍA',
+            label: s.allergyCategoryLabel.toUpperCase(),
             value: _cat,
-            options: _cats,
+            options: cats,
             onChanged: (v) => setState(() => _cat = v),
           ),
           const SizedBox(height: 14),
           LabeledTextField(
-            label: 'ALÉRGENO',
+            label: s.allergenLabel.toUpperCase(),
             controller: _allergen,
-            hint: 'Ej. Penicilina, Maní...',
+            hint: s.allergenHint,
             requiredField: true,
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
           LabeledTextField(
-            label: 'REACCIÓN',
+            label: s.reactionLabel.toUpperCase().replaceAll(':', '').trim(),
             controller: _reaction,
-            hint: 'Ej. Erupción cutánea',
+            hint: s.reactionHint,
             maxLines: 2,
           ),
         ],
@@ -970,6 +1031,7 @@ class _Sheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -1055,9 +1117,9 @@ class _Sheet extends StatelessWidget {
                         size: 18,
                         color: AppColors.white,
                       ),
-                      label: const Text(
-                        'Agregar',
-                        style: TextStyle(
+                      label: Text(
+                        s.add,
+                        style: const TextStyle(
                           color: AppColors.white,
                           fontSize: 14,
                           fontWeight: FontWeight.w600,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../domain/patient_record.dart';
+import '../../../../../core/i18n/app_strings.dart';
 
 class Step6Success extends StatelessWidget {
   const Step6Success({
@@ -26,6 +27,9 @@ class Step6Success extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
     final hasConsultations = patient.medicalHistory.isNotEmpty;
     final hasVaccines = patient.vaccinationRecord.isNotEmpty;
 
@@ -75,8 +79,12 @@ class Step6Success extends StatelessWidget {
           icon: Icons.nfc,
           iconColor: AppColors.primary,
           bgColor: AppColors.primary.withValues(alpha: 0.1),
-          title: 'Datos de emergencia sellados en el dispositivo NFC',
-          subtitle: 'Cifrado AES-256-GCM · Solo legible por la app',
+          title: isEs
+              ? 'Datos de emergencia sellados en el dispositivo NFC'
+              : 'Emergency data sealed on the NFC device',
+          subtitle: isEs
+              ? 'Cifrado AES-256-GCM · Solo legible por la app'
+              : 'AES-256-GCM Encryption · Read-only by the app',
         ),
         const SizedBox(height: 10),
 
@@ -85,8 +93,10 @@ class Step6Success extends StatelessWidget {
           icon: Icons.save_outlined,
           iconColor: AppColors.success,
           bgColor: AppColors.success.withValues(alpha: 0.1),
-          title: 'Registro guardado localmente',
-          subtitle: 'Listo para sincronizar cuando haya conexión',
+          title: s.patientSavedSynced.split(' y ')[0],
+          subtitle: isEs
+              ? 'Listo para sincronizar cuando haya conexión'
+              : 'Ready to synchronize when connection is available',
         ),
 
         // ── Last consultation saved ──
@@ -96,8 +106,10 @@ class Step6Success extends StatelessWidget {
             icon: Icons.medical_services_outlined,
             iconColor: AppColors.secondary,
             bgColor: AppColors.secondary.withValues(alpha: 0.1),
-            title: 'Última consulta guardada',
-            subtitle: lastConsultationTime ?? _formatNow(),
+            title: isEs
+                ? 'Última consulta guardada'
+                : 'Last consultation saved',
+            subtitle: lastConsultationTime ?? _formatNow(isEs),
           ),
         ],
 
@@ -108,8 +120,8 @@ class Step6Success extends StatelessWidget {
             icon: Icons.vaccines_outlined,
             iconColor: const Color(0xFF6A1B9A),
             bgColor: const Color(0xFF6A1B9A).withValues(alpha: 0.1),
-            title: 'Última vacuna guardada',
-            subtitle: lastVaccineTime ?? _formatNow(),
+            title: isEs ? 'Última vacuna guardada' : 'Last vaccine saved',
+            subtitle: lastVaccineTime ?? _formatNow(isEs),
           ),
         ],
 
@@ -135,7 +147,11 @@ class Step6Success extends StatelessWidget {
                 size: 22,
               ),
               label: Text(
-                hasConsultations ? 'Añadir otra consulta' : 'Añadir consulta',
+                hasConsultations
+                    ? (isEs
+                          ? 'Añadir otra consulta'
+                          : 'Add another consultation')
+                    : s.addConsultation,
                 style: const TextStyle(
                   color: AppColors.white,
                   fontSize: 15,
@@ -164,7 +180,9 @@ class Step6Success extends StatelessWidget {
               size: 22,
             ),
             label: Text(
-              hasVaccines ? 'Añadir otra vacuna' : 'Añadir vacuna',
+              hasVaccines
+                  ? (isEs ? 'Añadir otra vacuna' : 'Add another vaccine')
+                  : s.addVaccineButton,
               style: const TextStyle(
                 color: AppColors.white,
                 fontSize: 15,
@@ -193,9 +211,9 @@ class Step6Success extends StatelessWidget {
               color: AppColors.white,
               size: 20,
             ),
-            label: const Text(
-              'Finalizar',
-              style: TextStyle(
+            label: Text(
+              isEs ? 'Finalizar' : 'Finish',
+              style: const TextStyle(
                 color: AppColors.white,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
@@ -204,11 +222,13 @@ class Step6Success extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        const Center(
+        Center(
           child: Text(
-            'Al finalizar, el registro se envía a la cola de sincronización.',
+            isEs
+                ? 'Al finalizar, el registro se envía a la cola de sincronización.'
+                : 'Upon completion, the record is sent to the synchronization queue.',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 11,
               color: AppColors.textSecondary,
               height: 1.4,
@@ -219,13 +239,20 @@ class Step6Success extends StatelessWidget {
     );
   }
 
-  static String _formatNow() {
+  static String _formatNow(bool isEs) {
     final n = DateTime.now();
     final h = n.hour;
     final m = n.minute.toString().padLeft(2, '0');
-    final period = h < 12 ? 'a.m.' : 'p.m.';
-    final h12 = h == 0 ? 12 : (h > 12 ? h - 12 : h);
-    return 'Hoy, $h12:$m $period';
+
+    if (isEs) {
+      final period = h < 12 ? 'a.m.' : 'p.m.';
+      final h12 = h == 0 ? 12 : (h > 12 ? h - 12 : h);
+      return 'Hoy, $h12:$m $period';
+    } else {
+      final period = h < 12 ? 'AM' : 'PM';
+      final h12 = h == 0 ? 12 : (h > 12 ? h - 12 : h);
+      return 'Today, $h12:$m $period';
+    }
   }
 }
 

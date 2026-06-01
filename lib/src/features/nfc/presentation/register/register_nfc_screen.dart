@@ -20,6 +20,7 @@ import 'steps/step3_patient_data.dart';
 import 'steps/step4_background.dart';
 import 'steps/step5_review.dart';
 import 'steps/step6_success.dart';
+import '../../../../core/i18n/app_strings.dart';
 
 class RegisterNfcScreen extends StatefulWidget {
   const RegisterNfcScreen({super.key});
@@ -117,11 +118,12 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         vaccinationRecord: _savedRecord!.vaccinationRecord,
       );
       await _persistLocally(updated);
-      _lastConsultationTime = _formatTimeNow();
+      _lastConsultationTime = _formatTimeNow(context);
       if (mounted) {
+        final s = AppStrings.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Consulta guardada exitosamente'),
+          SnackBar(
+            content: Text(s.consultationSaved),
             backgroundColor: AppColors.success,
           ),
         );
@@ -150,11 +152,12 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         vaccinationRecord: [..._savedRecord!.vaccinationRecord, result],
       );
       await _persistLocally(updated);
-      _lastVaccineTime = _formatTimeNow();
+      _lastVaccineTime = _formatTimeNow(context);
       if (mounted) {
+        final s = AppStrings.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Vacuna guardada exitosamente'),
+          SnackBar(
+            content: Text(s.vaccineSaved),
             backgroundColor: AppColors.success,
           ),
         );
@@ -176,17 +179,19 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  String _formatTimeNow() {
+  String _formatTimeNow(BuildContext context) {
+    final s = AppStrings.of(context);
     final n = DateTime.now();
     final h = n.hour;
     final m = n.minute.toString().padLeft(2, '0');
-    final period = h < 12 ? 'a.m.' : 'p.m.';
+    final period = h < 12 ? s.timeAm : s.timePm;
     final h12 = h == 0 ? 12 : (h > 12 ? h - 12 : h);
-    return 'Hoy, $h12:$m $period';
+    return '${s.today}, $h12:$m $period';
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final onSuccess = _step == 5;
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FB),
@@ -196,7 +201,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
             Column(
               children: [
                 _WizardHeader(
-                  title: 'Nuevo paciente',
+                  title: s.newPatient,
                   onBack: onSuccess ? null : _back,
                   stepText: onSuccess ? null : '${_step + 1}/5',
                 ),
