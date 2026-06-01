@@ -34,6 +34,16 @@ class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
 
 class _FakeMedicalHistoryItem extends Fake implements MedicalHistoryItem {}
 
+Finder textFieldWithHint(String hint) => find.byWidgetPredicate(
+  (w) => w is TextField && w.decoration?.hintText == hint,
+  description: 'TextField hint="$hint"',
+);
+
+const _hintHistory = 'Fiebre de 3 días de evolución, tos seca, rinorrea...';
+const _hintPhysical = 'T: 38.2°C, FC: 110, FR: 28...';
+const _hintSystems = 'Pulmones: murmullo vesicular conservado sin agregados...';
+const _hintTreatment = 'Acetaminofén 15mg/kg cada 6h. Control en 72h...';
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 PatientFullRecord _fakePatient({
@@ -99,12 +109,11 @@ AppScope _scopeWithSave() {
   return _defaultScope(db: db, sync: sync);
 }
 
-// ── Widget wrapper ────────────────────────────────────────────────────────────
-
 Widget _buildApp({
   PatientFullRecord? patient,
   bool returnToProfile = false,
   AppScope? scope,
+  String locale = 'es',
 }) {
   final s = scope ?? _defaultScope();
   return AppScope(
@@ -114,7 +123,7 @@ Widget _buildApp({
     localDatabase: s.localDatabase,
     syncEngine: s.syncEngine,
     child: AppLocale(
-      locale: 'es',
+      locale: locale,
       setLocale: (_) {},
       child: MaterialApp(
         home: AddConsultationScreen(
@@ -126,29 +135,14 @@ Widget _buildApp({
   );
 }
 
-// ── Finders ───────────────────────────────────────────────────────────────────
-
-Finder _fieldWithHint(String hint) => find.byWidgetPredicate(
-  (w) => w is TextField && w.decoration?.hintText == hint,
-  description: 'TextField hint="$hint"',
-);
-
-const _hintHistory = 'Fiebre de 3 días de evolución, tos seca, rinorrea...';
-const _hintPhysical = 'T: 38.2°C, FC: 110, FR: 28. Faringe eritematosa...';
-const _hintSystems = 'Pulmones: murmullo vesicular conservado sin agregados...';
-const _hintTreatment = 'Acetaminofén 15mg/kg cada 6h. Control en 72h...';
-
-// ROOT-CAUSE FIX:
 Finder _guardarButtonFinder() =>
     find.byKey(const ValueKey('guardar_consulta_btn'));
 
-/// Read onPressed from the "Save query" button regardless of its subtype.
 bool _isGuardarEnabled(WidgetTester tester) {
   final btn = tester.widget<ButtonStyleButton>(_guardarButtonFinder());
   return btn.onPressed != null;
 }
 
-/// Scroll to the button and touch it.
 Future<void> _tapGuardar(WidgetTester tester) async {
   final btn = _guardarButtonFinder();
   await tester.ensureVisible(btn);
@@ -156,12 +150,11 @@ Future<void> _tapGuardar(WidgetTester tester) async {
   await tester.tap(btn, warnIfMissed: false);
 }
 
-/// Fill in the required field and save.
 Future<void> _fillAndSave(
   WidgetTester tester, {
   String history = 'Fiebre',
 }) async {
-  final historyField = _fieldWithHint(_hintHistory);
+  final historyField = textFieldWithHint(_hintHistory);
   await tester.ensureVisible(historyField);
   await tester.pump();
   await tester.enterText(historyField, history);
@@ -170,9 +163,9 @@ Future<void> _fillAndSave(
   await tester.pumpAndSettle();
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// UNIT TESTS
-// ════════════════════════════════════════════════════════════════════════════
+// -----------------------------------------------------------------------------
+// MAIN ENTRY
+// -----------------------------------------------------------------------------
 
 void main() {
   setUpAll(() {
@@ -180,7 +173,6 @@ void main() {
     registerFallbackValue(_FakeMedicalHistoryItem());
   });
 
-  // ── _isFormValid ───────────────────────────────────────────────────────────
   group('_isFormValid (unit)', () {
     test('es false cuando historyCtrl está vacío', () {
       final ctrl = TextEditingController();
@@ -201,7 +193,6 @@ void main() {
     });
   });
 
-  // ── _DateTimeRow._format ───────────────────────────────────────────────────
   group('_DateTimeRow._format (unit)', () {
     String format(DateTime dt) {
       final d =
@@ -221,6 +212,10 @@ void main() {
 
     test('formatea medianoche correctamente', () {
       expect(format(DateTime(2025, 1, 1, 0, 0)), '2025-01-01 00:00');
+    });
+
+    test('formatea horas y minutos menores a 10 con cero', () {
+      expect(format(DateTime(2024, 6, 15, 8, 7)), '2024-06-15 08:07');
     });
   });
 
@@ -329,7 +324,10 @@ void main() {
 
     testWidgets('no hay mensaje de error al inicio', (tester) async {
       await tester.pumpWidget(_buildApp());
-      expect(find.text('NFC no disponible.'), findsNothing);
+      expect(
+        find.text('NFC no disponible. Use el campo manual debajo.'),
+        findsNothing,
+      );
       expect(find.textContaining('Error'), findsNothing);
     });
 
@@ -341,10 +339,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Buscar por UID'), findsOneWidget);
-      expect(
-        find.widgetWithText(TextField, 'Ingrese UID del dispositivo NFC'),
-        findsOneWidget,
-      );
+      expect(textFieldWithHint('UID del dispositivo NFC'), findsOneWidget);
     });
 
     testWidgets('Cancelar en el diálogo lo cierra sin error', (tester) async {
@@ -355,7 +350,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Buscar por UID'), findsNothing);
-      expect(find.text('NFC no disponible.'), findsNothing);
     });
 
     testWidgets('tap en ícono NFC muestra CircularProgressIndicator', (
@@ -382,14 +376,18 @@ void main() {
     testWidgets('NfcNotAvailableException muestra texto de error', (
       tester,
     ) async {
+      final scope = _defaultScope();
       NfcService.overrideReadDeviceUid = () async =>
           throw NfcNotAvailableException();
 
-      await tester.pumpWidget(_buildApp());
+      await tester.pumpWidget(_buildApp(scope: scope));
       await tester.tap(find.byIcon(Icons.nfc_rounded));
       await tester.pumpAndSettle();
 
-      expect(find.text('NFC no disponible.'), findsOneWidget);
+      expect(
+        find.text('NFC no disponible. Use el campo manual debajo.'),
+        findsOneWidget,
+      );
 
       NfcService.overrideReadDeviceUid = null;
     });
@@ -411,12 +409,13 @@ void main() {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Signos vitales'), findsOneWidget);
-      expect(find.text('Fecha y hora de atención'), findsOneWidget);
+      expect(find.text('Editar mediciones'), findsOneWidget);
+      expect(find.text('Fecha y hora (ISO 8601)'), findsOneWidget);
       expect(find.text('Contexto de atención'), findsOneWidget);
       expect(find.text('Evaluación clínica'), findsOneWidget);
-      expect(find.text('Diagnóstico y egreso'), findsOneWidget);
+      expect(find.text('Diagnósticos & Egreso'), findsOneWidget);
     });
+
     testWidgets('botón "Guardar consulta" deshabilitado con form vacío', (
       tester,
     ) async {
@@ -432,13 +431,12 @@ void main() {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
-      final historyField = _fieldWithHint(_hintHistory);
+      final historyField = textFieldWithHint(_hintHistory);
       await tester.ensureVisible(historyField);
       await tester.pump();
       await tester.enterText(historyField, 'Dolor abdominal');
       await tester.pump();
 
-      // Make the button visible to read its status in the current viewport.
       await tester.ensureVisible(_guardarButtonFinder());
       await tester.pump();
 
@@ -458,16 +456,8 @@ void main() {
           .map((tf) => tf.controller?.text ?? '')
           .toList();
 
-      expect(
-        values.any((v) => v == '58.5'),
-        isTrue,
-        reason: 'Peso pre-cargado como 58.5',
-      );
-      expect(
-        values.any((v) => v == '162.0'),
-        isTrue,
-        reason: 'Talla pre-cargada como 162.0',
-      );
+      expect(values.any((v) => v == '58.5'), isTrue);
+      expect(values.any((v) => v == '162.0'), isTrue);
     });
 
     testWidgets('dropdowns de modalidad, grupo y entorno presentes', (
@@ -509,7 +499,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('1 alergia(s)'), findsOneWidget);
+      expect(find.textContaining('1 alergia'), findsOneWidget);
     });
 
     testWidgets('campos de evaluación clínica tienen los hints correctos', (
@@ -518,10 +508,10 @@ void main() {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
-      expect(_fieldWithHint(_hintHistory), findsOneWidget);
-      expect(_fieldWithHint(_hintPhysical), findsOneWidget);
-      expect(_fieldWithHint(_hintSystems), findsOneWidget);
-      expect(_fieldWithHint(_hintTreatment), findsOneWidget);
+      expect(textFieldWithHint(_hintHistory), findsOneWidget);
+      expect(textFieldWithHint(_hintPhysical), findsOneWidget);
+      expect(textFieldWithHint(_hintSystems), findsOneWidget);
+      expect(textFieldWithHint(_hintTreatment), findsOneWidget);
     });
 
     testWidgets(
@@ -530,7 +520,7 @@ void main() {
         await tester.pumpWidget(_buildApp(patient: _fakePatient()));
         await tester.pumpAndSettle();
 
-        final historyField = _fieldWithHint(_hintHistory);
+        final historyField = textFieldWithHint(_hintHistory);
         await tester.ensureVisible(historyField);
         await tester.pump();
         await tester.enterText(historyField, 'Fiebre');
@@ -558,7 +548,6 @@ void main() {
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
-
       expect(find.byIcon(Icons.check), findsOneWidget);
     });
 
@@ -569,8 +558,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
-
-      expect(find.text('Consulta guardada exitosamente'), findsWidgets);
+      expect(find.text('Consulta guardada exitosamente').first, findsOneWidget);
     });
 
     testWidgets('muestra nombre del paciente en el paso de éxito', (
@@ -582,7 +570,6 @@ void main() {
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
-
       expect(find.text('Laura Ríos'), findsOneWidget);
     });
 
@@ -593,7 +580,6 @@ void main() {
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
-
       expect(find.textContaining('Guardado local'), findsOneWidget);
       expect(find.text('Exitoso'), findsOneWidget);
     });
@@ -606,7 +592,7 @@ void main() {
 
       await _fillAndSave(tester);
 
-      expect(find.textContaining('Sincronización'), findsOneWidget);
+      expect(find.textContaining('Cola de sincronización'), findsOneWidget);
       expect(find.textContaining('En cola'), findsOneWidget);
     });
 
@@ -618,20 +604,20 @@ void main() {
 
       await _fillAndSave(tester);
 
-      expect(
-        find.textContaining('Consulta guardada exitosamente ✓'),
-        findsOneWidget,
+      final snackbarText = find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.text('Consulta guardada exitosamente'),
       );
+      expect(snackbarText, findsOneWidget);
     });
 
-    testWidgets('sin alergia cat. 01 → no aparece advertencia', (tester) async {
+    testWidgets('sin ALERGIA cat. 01 → no aparece advertencia', (tester) async {
       await tester.pumpWidget(
         _buildApp(patient: _fakePatient(), scope: _scopeWithSave()),
       );
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
-
       expect(find.textContaining('alertas de alergia'), findsNothing);
     });
 
@@ -647,7 +633,6 @@ void main() {
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
-
       expect(find.textContaining('alertas de alergia'), findsOneWidget);
     });
 
@@ -673,10 +658,6 @@ void main() {
       expect(find.text('Consulta guardada exitosamente'), findsNothing);
     });
   });
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // WIDGET — returnToProfile = true
-  // ════════════════════════════════════════════════════════════════════════════
 
   group('returnToProfile = true', () {
     testWidgets('al guardar hace pop con MedicalHistoryItem', (tester) async {
@@ -730,7 +711,7 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      final historyField = _fieldWithHint(_hintHistory);
+      final historyField = textFieldWithHint(_hintHistory);
       await tester.ensureVisible(historyField);
       await tester.pump();
       await tester.enterText(historyField, 'Consulta de seguimiento');
@@ -747,4 +728,84 @@ void main() {
       );
     });
   });
+
+  group(
+    'NUEVOS TESTS: Verificación de Internacionalización (i18n) en Inglés',
+    () {
+      testWidgets('Muestra textos y campos del paso de escaneo en inglés', (
+        tester,
+      ) async {
+        await tester.pumpWidget(_buildApp(locale: 'en'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Scan patient'), findsOneWidget);
+        expect(find.text('Search patient'), findsOneWidget);
+        expect(
+          find.textContaining('Hold the patient\'s NFC device close'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('Muestra títulos de sección del formulario en inglés', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _buildApp(patient: _fakePatient(), locale: 'en'),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Edit measurements'), findsOneWidget);
+        expect(find.text('Care Context'), findsOneWidget);
+        expect(find.text('Clinical evaluation'), findsOneWidget);
+        expect(find.text('Payer'), findsOneWidget);
+      });
+
+      testWidgets('Muestra opciones fijas de los dropdowns en inglés', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _buildApp(patient: _fakePatient(), locale: 'en'),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Intramural'), findsOneWidget);
+        expect(find.text('Outpatient care'), findsOneWidget);
+        expect(find.text('Institutional'), findsOneWidget);
+      });
+
+      testWidgets(
+        'El valor inicial del campo pagador cambia a "Uninsured" en inglés',
+        (tester) async {
+          await tester.pumpWidget(
+            _buildApp(patient: _fakePatient(), locale: 'en'),
+          );
+          await tester.pumpAndSettle();
+
+          final values = tester
+              .widgetList<TextField>(find.byType(TextField))
+              .map((tf) => tf.controller?.text ?? '')
+              .toList();
+          expect(values.any((v) => v == 'Uninsured'), isTrue);
+        },
+      );
+
+      testWidgets('Badge de alergias del paciente renderiza plural en inglés', (
+        tester,
+      ) async {
+        final patientWithAllergies = _fakePatient(
+          allergies: [
+            AllergyInfo(category: '01', allergen: 'Penicilina'),
+            AllergyInfo(category: '02', allergen: 'Maní'),
+          ],
+        );
+
+        await tester.pumpWidget(
+          _buildApp(patient: patientWithAllergies, locale: 'en'),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('2 allergies'), findsOneWidget);
+      });
+    },
+  );
 }

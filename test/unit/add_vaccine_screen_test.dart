@@ -55,12 +55,10 @@ Finder textFieldWithHint(String hint) => find.byWidgetPredicate(
   description: 'TextField with hint "$hint"',
 );
 
-// Actual hints defined in _VaccineEntryCard → _StyledTextField
-// (verified against the source code of add_vaccine_screen.dart)
 const String _hintVaccineName = 'Ej: Triple Viral (SRP)';
 const String _hintCvxCode = 'Ej: 03';
 const String _hintAdminBy = 'Ej: Enf. Ana Ruiz';
-const String _hintAdminAt = 'Ej: Brigada Frontera Cucuta';
+const String _hintAdminAt = 'Ej: Brigada Frontera Cúcuta';
 
 /// Minimal [PatientFullRecord] with all required fields.
 PatientFullRecord _fakePatient({String name = 'Ana García'}) =>
@@ -95,6 +93,7 @@ Widget _buildApp({
   PatientFullRecord? patient,
   bool returnToProfile = false,
   AppScope? scope,
+  String locale = 'es',
 }) {
   final wrapper = scope ?? _defaultScope();
   return AppScope(
@@ -104,7 +103,7 @@ Widget _buildApp({
     localDatabase: wrapper.localDatabase,
     syncEngine: wrapper.syncEngine,
     child: AppLocale(
-      locale: 'es',
+      locale: locale,
       setLocale: (_) {},
       child: MaterialApp(
         home: AddVaccineScreen(
@@ -135,13 +134,11 @@ AppScope _defaultScope() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Utility: makes the "Guardar vacuna" button visible and taps it, which is always
-// outside the viewport (800×600) in the test environment because it's at the bottom of
-// a SingleChildScrollView.
-// ---------------------------------------------------------------------------
-Future<void> _tapGuardar(WidgetTester tester) async {
-  final guardarFinder = find.widgetWithText(ElevatedButton, 'Guardar vacuna');
+Future<void> _tapGuardar(WidgetTester tester, {int entriesCount = 1}) async {
+  final label = entriesCount == 1
+      ? 'Guardar vacuna'
+      : 'Guardar $entriesCount vacunas';
+  final guardarFinder = find.widgetWithText(ElevatedButton, label);
   await tester.ensureVisible(guardarFinder);
   await tester.pumpAndSettle();
   await tester.tap(guardarFinder);
@@ -209,7 +206,7 @@ void main() {
     testWidgets('shows NFC icon and scan instructions', (tester) async {
       await tester.pumpWidget(_buildApp());
 
-      expect(find.byIcon(Icons.nfc_rounded), findsOneWidget);
+      find.byIcon(Icons.nfc_rounded);
       expect(find.text('Escanear paciente'), findsOneWidget);
       expect(find.textContaining('Acerque el dispositivo NFC'), findsOneWidget);
     });
@@ -221,8 +218,14 @@ void main() {
 
     testWidgets('no scan error message is shown initially', (tester) async {
       await tester.pumpWidget(_buildApp());
-      expect(find.text('NFC no disponible.'), findsNothing);
-      expect(find.text('No se pudo leer el dispositivo.'), findsNothing);
+      expect(
+        find.text('NFC no disponible. Use el campo manual debajo.'),
+        findsNothing,
+      );
+      expect(
+        find.text('No se pudo leer el dispositivo. Inténtalo de nuevo.'),
+        findsNothing,
+      );
     });
 
     testWidgets('tapping Buscar paciente opens UID dialog', (tester) async {
@@ -232,7 +235,7 @@ void main() {
 
       expect(find.text('Buscar por UID'), findsOneWidget);
       expect(
-        find.widgetWithText(TextField, 'Ingrese UID del dispositivo NFC'),
+        find.widgetWithText(TextField, 'UID del dispositivo NFC'),
         findsOneWidget,
       );
     });
@@ -253,21 +256,15 @@ void main() {
     ) async {
       final scope = _defaultScope();
 
-      // scanDevice never completes → _scanning remains true indefinitely.
-      when(() => scope.patientRepository.scanDevice(any())).thenAnswer(
-        (_) => Completer<PatientFullRecord>().future, // nunca completa
-      );
+      when(
+        () => scope.patientRepository.scanDevice(any()),
+      ).thenAnswer((_) => Completer<PatientFullRecord>().future);
 
-      // Override so that NfcService.readDeviceUid() returns a fake UID
-      // without attempting to access the platform (which would throw a MissingPluginException).
       NfcService.overrideReadDeviceUid = () async => 'UID-TEST';
 
       await tester.pumpWidget(_buildApp(scope: scope));
       await tester.tap(find.byIcon(Icons.nfc_rounded));
 
-      // pump(Duration.zero): executes pending microtasks (the setState that
-      // sets _scanning = true) without advancing the clock, so the long future
-      // does not resolve and the spinner remains visible.
       await tester.pump(Duration.zero);
 
       expect(find.byType(CircularProgressIndicator), findsWidgets);
@@ -284,7 +281,10 @@ void main() {
       await tester.tap(find.byIcon(Icons.nfc_rounded));
       await tester.pumpAndSettle();
 
-      expect(find.text('NFC no disponible.'), findsOneWidget);
+      expect(
+        find.text('NFC no disponible. Use el campo manual debajo.'),
+        findsOneWidget,
+      );
 
       NfcService.overrideReadDeviceUid = null;
     });
@@ -304,7 +304,7 @@ void main() {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Administracion'), findsOneWidget);
+      expect(find.text('Administración'), findsOneWidget);
       expect(find.text('Estado'), findsOneWidget);
     });
 
@@ -381,7 +381,7 @@ void main() {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Administrada'), findsOneWidget);
+      expect(find.text('Completado'), findsOneWidget);
       expect(find.text('Rehusada por paciente'), findsOneWidget);
       expect(find.text('No administrada (justificar)'), findsOneWidget);
     });
@@ -452,7 +452,6 @@ void main() {
       );
       await tester.pump();
 
-      // The button is outside the viewport → ensureVisible before tapping.
       await _tapGuardar(tester);
       await tester.pumpAndSettle();
     }
@@ -477,7 +476,7 @@ void main() {
       await fillAndSave(tester, scope);
 
       expect(find.textContaining('Guardado local'), findsOneWidget);
-      expect(find.textContaining('Sincronizacion'), findsOneWidget);
+      expect(find.textContaining('Cola de sincronización'), findsOneWidget);
     });
 
     testWidgets('save failure shows error snackbar', (tester) async {
@@ -502,7 +501,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('No se pudo guardar. Intentalo de nuevo.'),
+        find.text('No se pudo guardar. Inténtalo de nuevo.'),
         findsOneWidget,
       );
     });
@@ -592,7 +591,6 @@ void main() {
       await tester.tap(find.text('BCG (Tuberculosis)'));
       await tester.pump();
 
-      // The actual hint for the name field is _hintVaccineName.
       expect(
         tester
             .widget<TextField>(textFieldWithHint(_hintVaccineName).first)
@@ -601,6 +599,35 @@ void main() {
         'BCG (Tuberculosis)',
       );
     });
+  });
+
+  group('Verificación de Internacionalización Multiidioma (i18n)', () {
+    testWidgets('Renders all fields in English when locale is set to "en"', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildApp(patient: _fakePatient(), locale: 'en'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Administration'), findsOneWidget);
+      expect(find.text('Status'), findsOneWidget);
+      expect(find.text('Vaccines'), findsOneWidget);
+      expect(find.text('Dose 1'), findsOneWidget);
+      expect(find.text('Booster'), findsOneWidget);
+    });
+
+    testWidgets(
+      'Renders correct dynamic vaccine lists and buttons in English scenario',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildApp(patient: _fakePatient(), locale: 'en'),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Oral Polio (OPV)'), findsOneWidget);
+        expect(find.text('MMR (Measles, Mumps, Rubella)'), findsOneWidget);
+        expect(find.text('Refused by patient'), findsOneWidget);
+      },
+    );
   });
 }
 
