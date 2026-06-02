@@ -9,6 +9,7 @@ import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
+import './profile/shared/voice_text_area.dart';
 
 /// Screen for adding a medical consultation (MedicalHistoryItem) to a patient.
 /// Covers every field of MedicalHistoryItem from patient.py.
@@ -653,35 +654,42 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             icon: Icons.edit_note_outlined,
             title: s.clinicalEvaluation,
             children: [
-              _textArea(
-                '${s.historyCurrentIllness} *',
-                _historyCtrl,
+              VoiceTextArea(
+                label: '${s.historyCurrentIllness} *',
+                controller: _historyCtrl,
                 hint: isEs
                     ? 'Fiebre de 3 días de evolución, tos seca, rinorrea...'
                     : 'Fever for 3 days, dry cough, rhinorrhea...',
-                required: true,
+                maxLines: 3,
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 10),
-              _textArea(
-                s.generalExam,
-                _physicalExamCtrl,
+              VoiceTextArea(
+                label: s.generalExam,
+                controller: _physicalExamCtrl,
                 hint: 'T: 38.2°C, FC: 110, FR: 28...',
+                maxLines: 3,
+                onChanged: (_) {},
               ),
               const SizedBox(height: 10),
-              _textArea(
-                s.systemsExam,
-                _systemsCtrl,
+              VoiceTextArea(
+                label: s.systemsExam,
+                controller: _systemsCtrl,
                 hint: isEs
                     ? 'Pulmones: murmullo vesicular conservado sin agregados...'
                     : 'Lungs: clear breath sounds, no crackles...',
+                maxLines: 3,
+                onChanged: (_) {},
               ),
               const SizedBox(height: 10),
-              _textArea(
-                s.treatmentPlan,
-                _treatmentCtrl,
+              VoiceTextArea(
+                label: s.treatmentPlan,
+                controller: _treatmentCtrl,
                 hint: isEs
                     ? 'Acetaminofén 15mg/kg cada 6h. Control en 72h...'
                     : 'Acetaminophen 15mg/kg every 6h. Return in 72h...',
+                maxLines: 3,
+                onChanged: (_) {},
               ),
             ],
           ),
@@ -917,55 +925,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           filled: true,
           fillColor: AppColors.white,
           prefixIcon: Icon(icon, size: 17, color: AppColors.secondary),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: AppColors.primary, width: 2),
-          ),
-        ),
-      ),
-    ],
-  );
-
-  Widget _textArea(
-    String label,
-    TextEditingController ctrl, {
-    String? hint,
-    bool required = false,
-  }) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          if (required)
-            const Text(
-              ' *',
-              style: TextStyle(fontSize: 12, color: AppColors.error),
-            ),
-        ],
-      ),
-      const SizedBox(height: 4),
-      TextField(
-        controller: ctrl,
-        maxLines: 3,
-        style: const TextStyle(fontSize: 13),
-        decoration: InputDecoration(
-          isDense: true,
-          hintText: hint,
-          hintStyle: const TextStyle(fontSize: 12, color: AppColors.disabled),
-          contentPadding: const EdgeInsets.all(12),
-          filled: true,
-          fillColor: AppColors.white,
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
