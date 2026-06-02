@@ -31,14 +31,12 @@ class _VoiceTextAreaState extends State<VoiceTextArea>
   bool _speechAvailable = false;
   String _baseText = '';
 
-  // Inicialización perezosa controlada para mitigar fugas en Widget Tests
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulseAnim;
 
   @override
   void initState() {
     super.initState();
-    // Se inicializa de forma segura dentro del ciclo de vida sincrónico
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),
@@ -71,7 +69,6 @@ class _VoiceTextAreaState extends State<VoiceTextArea>
         setState(() => _speechAvailable = available);
       }
     } catch (_) {
-      // Evita caídas silenciosas en entornos sin hardware de audio (como entornos CI/CD)
       if (mounted) {
         setState(() => _speechAvailable = false);
       }
