@@ -1,9 +1,9 @@
 // lib/src/features/nfc/presentation/profile/sheets/edit_chronic_personal_sheet.dart
 import 'package:flutter/material.dart';
 
-import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../shared/sheet_scaffold.dart';
+import '../shared/voice_text_area.dart';
 
 class EditChronicPersonalSheet extends StatefulWidget {
   const EditChronicPersonalSheet({
@@ -49,19 +49,12 @@ class _EditChronicPersonalSheetState extends State<EditChronicPersonalSheet> {
         widget.onConfirm(text.isEmpty ? null : text);
         Navigator.of(context).pop();
       },
-      child: TextField(
+      child: VoiceTextArea(
+        label: widget.title,
         controller: _ctrl,
+        hint: s.editChronicPersonalHint,
         maxLines: 8,
-        style: const TextStyle(fontSize: 14, height: 1.4),
-        decoration: InputDecoration(
-          hintText: s.editChronicPersonalHint,
-          hintStyle: const TextStyle(fontSize: 13, color: AppColors.disabled),
-          contentPadding: const EdgeInsets.all(12),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: AppColors.divider),
-          ),
-        ),
+        onChanged: (_) => setState(() {}),
       ),
     );
   }

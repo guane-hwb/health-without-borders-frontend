@@ -1,11 +1,11 @@
 // lib/src/features/nfc/presentation/register/steps/step4_background.dart
 import 'package:flutter/material.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../shared/widgets/form_widgets.dart';
 import '../../../domain/patient_record.dart';
 import '../register_nfc_screen.dart';
 import '../../../../../core/i18n/app_strings.dart';
+import '../../profile/shared/voice_text_area.dart';
 
 class Step4Background extends StatefulWidget {
   const Step4Background({
@@ -127,9 +127,7 @@ class _Step4State extends State<Step4Background> {
                     return _ItemCard(
                       icon: Icons.favorite_border,
                       title: it.chronicDescription,
-                      subtitle: isEs
-                          ? 'Codificación automática por IA'
-                          : 'AI automatic encoding',
+                      subtitle: '',
                       onRemove: () =>
                           setState(() => d.chronicConditions.removeAt(i)),
                     );
@@ -144,13 +142,14 @@ class _Step4State extends State<Step4Background> {
                     : 'Surgical history, hospitalizations, etc.',
               ),
               const SizedBox(height: 12),
-              _StyledTextArea(
+              VoiceTextArea(
                 label: s.personalHistory,
                 controller: _personal,
                 hint: isEs
                     ? 'Ej. Cirugía de adenoides 2021...'
                     : 'e.g. Adenoid surgery 2021...',
                 maxLines: 3,
+                onChanged: (_) {},
               ),
               const SizedBox(height: 22),
               // Medications
@@ -358,276 +357,6 @@ class _Step4State extends State<Step4Background> {
   }
 }
 
-// ── Styled text area with voice dictation ─────────────────────────────────────
-class _StyledTextArea extends StatefulWidget {
-  const _StyledTextArea({
-    required this.label,
-    required this.controller,
-    required this.hint,
-    this.maxLines = 3,
-  });
-  final String label;
-  final TextEditingController controller;
-  final String hint;
-  final int maxLines;
-
-  @override
-  State<_StyledTextArea> createState() => _StyledTextAreaState();
-}
-
-class _StyledTextAreaState extends State<_StyledTextArea> {
-  final stt.SpeechToText _speech = stt.SpeechToText();
-  bool _isListening = false;
-  bool _speechAvailable = false;
-  String _baseText = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _initSpeech();
-  }
-
-  Future<void> _initSpeech() async {
-    final available = await _speech.initialize(
-      onError: (_) => setState(() => _isListening = false),
-      onStatus: (status) {
-        if (status == stt.SpeechToText.doneStatus ||
-            status == stt.SpeechToText.notListeningStatus) {
-          if (mounted) setState(() => _isListening = false);
-        }
-      },
-    );
-    if (mounted) setState(() => _speechAvailable = available);
-  }
-
-  Future<void> _toggleListening() async {
-    final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
-
-    if (_isListening) {
-      await _speech.stop();
-      setState(() => _isListening = false);
-      return;
-    }
-
-    if (!_speechAvailable) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isEs
-                ? 'Micrófono no disponible en este dispositivo'
-                : 'Microphone not available on this device',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    _baseText = widget.controller.text;
-    if (_baseText.isNotEmpty && !_baseText.endsWith(' ')) {
-      _baseText += ' ';
-    }
-
-    setState(() => _isListening = true);
-
-    await _speech.listen(
-      localeId: isEs ? 'es_CO' : 'en_US',
-      listenOptions: stt.SpeechListenOptions(
-        cancelOnError: true,
-        partialResults: true,
-      ),
-      onResult: (result) {
-        final recognized = result.recognizedWords;
-        setState(() {
-          widget.controller.text = _baseText + recognized;
-          widget.controller.selection = TextSelection.fromPosition(
-            TextPosition(offset: widget.controller.text.length),
-          );
-        });
-        if (result.finalResult) {
-          _baseText = widget.controller.text;
-          if (mounted) setState(() => _isListening = false);
-        }
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _speech.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              widget.label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        // ── Stack: TextField + overlaid microphone button ─────────────────
-        Stack(
-          children: [
-            TextField(
-              controller: widget.controller,
-              maxLines: widget.maxLines,
-              style: const TextStyle(
-                fontSize: 15,
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w500,
-              ),
-              decoration: InputDecoration(
-                hintText: widget.hint,
-                hintStyle: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                ),
-                filled: true,
-                fillColor: AppColors.white,
-                contentPadding: const EdgeInsets.only(
-                  left: 14,
-                  right: 14,
-                  top: 14,
-                  bottom: 44,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(
-                    color: _isListening
-                        ? AppColors.primary
-                        : const Color(0xFFB0B8C4),
-                    width: _isListening ? 2 : 1.5,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: AppColors.primary,
-                    width: 2,
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              right: 8,
-              bottom: 8,
-              child: _MicButton(
-                isListening: _isListening,
-                onTap: _toggleListening,
-              ),
-            ),
-          ],
-        ),
-        // ── "Listening..." indicator ───────────────────────────────────────
-        if (_isListening)
-          Padding(
-            padding: const EdgeInsets.only(top: 5, left: 4),
-            child: Row(
-              children: [
-                _PulsingDot(),
-                const SizedBox(width: 6),
-                Text(
-                  isEs
-                      ? 'Escuchando... toque el micrófono para detener'
-                      : 'Listening... tap microphone to stop',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-// ── Microphone button ────────────────────────────────────────────────────────
-class _MicButton extends StatelessWidget {
-  const _MicButton({required this.isListening, required this.onTap});
-  final bool isListening;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: isListening
-              ? AppColors.primary
-              : AppColors.primary.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          isListening ? Icons.stop_rounded : Icons.mic_none_rounded,
-          size: 18,
-          color: isListening ? AppColors.white : AppColors.primary,
-        ),
-      ),
-    );
-  }
-}
-
-// ── Pulsing dot while listening ──────────────────────────────────────────
-class _PulsingDot extends StatefulWidget {
-  @override
-  State<_PulsingDot> createState() => _PulsingDotState();
-}
-
-class _PulsingDotState extends State<_PulsingDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 700),
-  )..repeat(reverse: true);
-  late final Animation<double> _anim = Tween<double>(
-    begin: 0.4,
-    end: 1.0,
-  ).animate(_ctrl);
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _anim,
-      child: Container(
-        width: 7,
-        height: 7,
-        decoration: const BoxDecoration(
-          color: AppColors.primary,
-          shape: BoxShape.circle,
-        ),
-      ),
-    );
-  }
-}
-
 // ── Helpers de internacionalización dinámica basados en el context ───────────
 
 String _relLabel(BuildContext context, String c) {
@@ -783,12 +512,11 @@ class _AddCCState extends State<_AddChronicConditionSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LabeledTextField(
+          VoiceTextArea(
             label: s.condition.toUpperCase(),
             controller: _ctrl,
             hint: s.chronicConditionHint,
             maxLines: 3,
-            requiredField: true,
             onChanged: (_) => setState(() {}),
           ),
         ],
@@ -866,11 +594,12 @@ class _AddMedState extends State<_AddMedicationSheet> {
             hint: s.dosageHint,
           ),
           const SizedBox(height: 12),
-          LabeledTextField(
+          VoiceTextArea(
             label: s.notesLabel.toUpperCase(),
             controller: _notes,
             hint: s.notesHint,
             maxLines: 2,
+            onChanged: (_) {},
           ),
         ],
       ),
@@ -927,7 +656,7 @@ class _AddFHState extends State<_AddFamilyHistorySheet> {
             onChanged: (v) => setState(() => _rel = v),
           ),
           const SizedBox(height: 14),
-          LabeledTextField(
+          VoiceTextArea(
             label: s.condition.toUpperCase(),
             controller: _ctrl,
             hint: s.chronicConditionHint,
@@ -1004,11 +733,12 @@ class _AddAlState extends State<_AddAllergySheet> {
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
-          LabeledTextField(
+          VoiceTextArea(
             label: s.reactionLabel.toUpperCase().replaceAll(':', '').trim(),
             controller: _reaction,
             hint: s.reactionHint,
             maxLines: 2,
+            onChanged: (_) {},
           ),
         ],
       ),

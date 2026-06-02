@@ -5,6 +5,7 @@ import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/sheet_scaffold.dart';
+import '../shared/voice_text_area.dart';
 
 class AddFamilyHistorySheet extends StatefulWidget {
   const AddFamilyHistorySheet({super.key, required this.onAdd});
@@ -99,32 +100,12 @@ class _AddFamilyHistorySheetState extends State<AddFamilyHistorySheet> {
             }).toList(),
           ),
           const SizedBox(height: 14),
-          Text(
-            s.condition,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          TextField(
+          VoiceTextArea(
+            label: s.condition,
             controller: _ctrl,
+            hint: s.chronicConditionHint,
             maxLines: 3,
-            style: const TextStyle(fontSize: 14),
             onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: s.chronicConditionHint,
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: AppColors.disabled,
-              ),
-              contentPadding: const EdgeInsets.all(12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.divider),
-              ),
-            ),
           ),
         ],
       ),

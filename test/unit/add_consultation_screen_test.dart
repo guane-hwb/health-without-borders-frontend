@@ -808,4 +808,86 @@ void main() {
       });
     },
   );
+
+  group('COBERTURA COMPLETA: Flujos de Datos y Reactividad por Voz', () {
+    testWidgets(
+      'Inyección de texto por voz en campo obligatorio habilita reactivamente el botón de Guardar',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1800);
+        tester.view.devicePixelRatio = 1.0;
+
+        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(_isGuardarEnabled(tester), isFalse);
+
+        final historyField = textFieldWithHint(_hintHistory);
+        await tester.ensureVisible(historyField);
+        await tester.pump();
+        await tester.enterText(
+          historyField,
+          'Paciente presenta cuadro febril agudo',
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+
+        await tester.ensureVisible(_guardarButtonFinder());
+        await tester.pump();
+        expect(_isGuardarEnabled(tester), isTrue);
+
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      },
+    );
+
+    testWidgets(
+      'Mapeo y persistencia final de los 4 campos de VoiceTextArea al invocar _save',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1800);
+        tester.view.devicePixelRatio = 1.0;
+
+        final db = _MockLocalDatabase();
+        final sync = _MockSyncEngine();
+        when(() => db.savePatient(any())).thenAnswer((_) async {});
+        when(() => sync.syncAll()).thenAnswer((_) async {});
+
+        await tester.pumpWidget(
+          _buildApp(
+            patient: _fakePatient(),
+            scope: _defaultScope(db: db, sync: sync),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+
+        await tester.enterText(textFieldWithHint(_hintHistory), 'Dolor lumbar');
+        await tester.enterText(textFieldWithHint(_hintPhysical), 'PA: 120/80');
+        await tester.enterText(
+          textFieldWithHint(_hintSystems),
+          'Ruidos cardíacos rítmicos',
+        );
+        await tester.enterText(
+          textFieldWithHint(_hintTreatment),
+          'Reposo 24 horas',
+        );
+        await tester.pump();
+
+        // Presionamos guardar consulta
+        await _tapGuardar(tester);
+        await tester.pump(const Duration(milliseconds: 500));
+
+        final verifyRecord =
+            verify(() => db.savePatient(captureAny())).captured.first
+                as PatientFullRecord;
+        final clinicalEval =
+            verifyRecord.medicalHistory.first.clinicalEvaluation;
+
+        expect(clinicalEval.historyOfCurrentIllness, 'Dolor lumbar');
+        expect(clinicalEval.generalPhysicalExamination, 'PA: 120/80');
+        expect(clinicalEval.systemsExamination, 'Ruidos cardíacos rítmicos');
+        expect(clinicalEval.treatmentPlanObservations, 'Reposo 24 horas');
+
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      },
+    );
+  });
 }
