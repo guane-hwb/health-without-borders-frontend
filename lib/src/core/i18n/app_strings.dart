@@ -361,7 +361,6 @@ class AppStrings {
   String get scanPatientHeadline => _get('scanPatientHeadline');
   String get scanPatientHint => _get('scanPatientHint');
   String get scanGuardianHeadline => _get('scanGuardianHeadline');
-  String get scanGuardianHint => _get('scanGuardianHint');
   String get patientWristbandReady => _get('patientWristbandReady');
   String get nfcNotAvailableHint => _get('nfcNotAvailableHint');
   String get manualPatientUidLabel => _get('manualPatientUidLabel');
@@ -451,7 +450,6 @@ class AppStrings {
   String get notesHint => _get('notesHint');
 
   // ── Edit chronic / personal sheet ────────────────────────────────────────
-  String get editChronicPersonalSubtitle => _get('editChronicPersonalSubtitle');
   String get editChronicPersonalHint => _get('editChronicPersonalHint');
 
   // ── Allergies tab ────────────────────────────────────────────────────────
@@ -851,8 +849,6 @@ class AppStrings {
     'scanPatientHeadline': 'Acerque el dispositivo NFC',
     'scanPatientHint': 'Acerque el dispositivo NFC del paciente',
     'scanGuardianHeadline': 'Acerque el dispositivo NFC del guardián',
-    'scanGuardianHint':
-        'Para acceder al historial de menores se requiere autenticación 2FA',
     'patientWristbandReady': 'dispositivo NFC del paciente leída',
     'nfcNotAvailableHint': 'NFC no disponible. Use el campo manual debajo.',
     'manualPatientUidLabel': 'UID manual del paciente (testing)',
@@ -964,8 +960,6 @@ class AppStrings {
     'notesHint': 'Observaciones adicionales',
 
     // Edit chronic / personal sheet
-    'editChronicPersonalSubtitle':
-        'Texto libre — el sistema codifica automáticamente',
     'editChronicPersonalHint': 'Describa la información en texto libre...',
 
     // Allergies tab
@@ -1355,8 +1349,6 @@ class AppStrings {
     'scanPatientHeadline': 'Tap to scan the device',
     'scanPatientHint': "Hold the device close to the patient's NFC device",
     'scanGuardianHeadline': "Tap to scan the guardian's device",
-    'scanGuardianHint':
-        '2FA authentication is required to access minors records',
     'patientWristbandReady': 'Patient device ready',
     'nfcNotAvailableHint': 'NFC unavailable. Use manual entry below.',
     'manualPatientUidLabel': 'Manual patient UID (testing)',
@@ -1453,8 +1445,6 @@ class AppStrings {
     'notesHint': 'Additional observations',
 
     // Edit chronic / personal sheet
-    'editChronicPersonalSubtitle':
-        'Free text — the system encodes automatically',
     'editChronicPersonalHint': 'Describe the information in free text...',
 
     // Allergies tab

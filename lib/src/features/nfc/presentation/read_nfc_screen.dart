@@ -338,15 +338,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            s.scanGuardianHint,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              height: 1.4,
-            ),
-          ),
 
           if (_errorMessage != null) ...[
             const SizedBox(height: 16),
