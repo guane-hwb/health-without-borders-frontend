@@ -232,16 +232,15 @@ class _Step2State extends State<Step2Guardian> {
       if (_phone.text.trim().isEmpty) missing.add(s.guardianPhoneLabel);
       if (_uid.text.trim().isEmpty) missing.add(s.guardianNfcDevice);
       if (_docNumber.text.trim().isEmpty) missing.add(s.documentNumberLabel);
-      if (_email.text.trim().isEmpty) missing.add(s.email);
       if (_signatureStrokes.isEmpty) missing.add(bioSigLabel);
     }
 
-    if (_email.text.trim().isNotEmpty || _signatureStrokes.isNotEmpty) {
+    if (_signatureStrokes.isNotEmpty) {
       if (!_authAccepted) missing.add(s.confirmChanges);
     }
 
     if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
-      if (_email2.text.trim().isNotEmpty || _signatureStrokes2.isNotEmpty) {
+      if (_signatureStrokes2.isNotEmpty) {
         if (!_auth2Accepted) missing.add(auth2Label);
       }
     }
@@ -317,9 +316,9 @@ class _Step2State extends State<Step2Guardian> {
   Widget build(BuildContext context) {
     final d = widget.draft;
     final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
 
     final docTypes = {'CC': s.docTypeCC, 'CE': s.docTypeCE};
-
     final rels = {
       '01': s.relParents,
       '02': s.relSiblings,
@@ -336,88 +335,196 @@ class _Step2State extends State<Step2Guardian> {
               _NoticeBanner(requiredForMinor: widget.requiredForMinor),
               const SizedBox(height: 20),
 
-              // ── Guardian section ────────────────
-              FormSectionHeader(
-                icon: Icons.family_restroom,
-                title: s.editGuardianTitle,
+              Row(
+                children: [
+                  const Icon(
+                    Icons.family_restroom,
+                    color: AppColors.textPrimary,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isEs ? 'Información del guardián' : 'Guardian information',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (!_hasGuardian2)
+                    TextButton.icon(
+                      onPressed: () => setState(() => _hasGuardian2 = true),
+                      icon: const Icon(
+                        Icons.add,
+                        size: 16,
+                        color: AppColors.primary,
+                      ),
+                      label: Text(
+                        isEs ? 'Agregar' : 'Add',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 14),
 
-              _StyledTextField(
-                label: s.guardianFullName,
-                controller: _name,
-                hint: s.guardianFullNameHint,
-                required: widget.requiredForMinor,
-                icon: Icons.person_outline,
-                keyboardType: TextInputType.name,
-                textCapitalization: TextCapitalization.words,
-              ),
-              const SizedBox(height: 14),
-
-              _RelChipSelector(
-                label: s.guardianRelationship,
-                required: widget.requiredForMinor,
-                value: d.guardianRelationship ?? '01',
-                options: rels,
-                onChanged: (v) => setState(() => d.guardianRelationship = v),
-              ),
-              const SizedBox(height: 14),
-
-              _StyledTextField(
-                label: s.guardianPhoneLabel,
-                controller: _phone,
-                hint: s.guardianPhoneHint,
-                required: widget.requiredForMinor,
-                icon: Icons.phone_outlined,
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 14),
-
-              // ── Document Type ────────
-              _DocTypeSelector(
-                label: s.documentTypeLabel,
-                required: widget.requiredForMinor,
-                value: _selectedDocType,
-                options: docTypes,
-                onChanged: (v) => setState(() => _selectedDocType = v),
-              ),
-              const SizedBox(height: 14),
-
-              // ── Document Number ───────
-              _StyledTextField(
-                label: s.documentNumberLabel,
-                controller: _docNumber,
-                hint: 'Ej. 1234567890',
-                required: widget.requiredForMinor,
-                icon: Icons.badge_outlined,
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 22),
-
-              // ── NFC ─────────────────────────────
-              FormSectionHeader(
-                icon: Icons.nfc,
-                title: s.guardianNfcDevice,
-                subtitle: s.scanGuardianHint,
-              ),
-              const SizedBox(height: 12),
-
-              _NfcField(
-                controller: _uid,
-                scanning: _scanning,
-                onScan: _scanNfc,
-                onChanged: () => setState(() {}),
-              ),
-              const SizedBox(height: 26),
-
-              if (!_hasGuardian2)
-                _AddGuardianButton(
-                  onTap: () => setState(() => _hasGuardian2 = true),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFB0B8C4),
+                    width: 1.5,
+                  ),
                 ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.10),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Center(
+                              child: Text(
+                                '1',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            isEs ? 'Editar guardián 1' : 'Edit guardian 1',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(
+                      height: 18,
+                      thickness: 1,
+                      color: Color(0xFFF0F0F0),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _StyledTextField(
+                            label: s.guardianFullName,
+                            controller: _name,
+                            hint: s.guardianFullNameHint,
+                            required: widget.requiredForMinor,
+                            icon: Icons.person_outline,
+                            keyboardType: TextInputType.name,
+                            textCapitalization: TextCapitalization.words,
+                          ),
+                          const SizedBox(height: 12),
+                          _RelChipSelector(
+                            label: s.guardianRelationship,
+                            required: widget.requiredForMinor,
+                            value: d.guardianRelationship ?? '01',
+                            options: rels,
+                            onChanged: (v) =>
+                                setState(() => d.guardianRelationship = v),
+                          ),
+                          const SizedBox(height: 12),
+                          _StyledTextField(
+                            label: s.guardianPhoneLabel,
+                            controller: _phone,
+                            hint: s.guardianPhoneHint,
+                            required: widget.requiredForMinor,
+                            icon: Icons.phone_outlined,
+                            keyboardType: TextInputType.phone,
+                          ),
+                          const SizedBox(height: 12),
+                          _DocTypeSelector(
+                            label: s.documentTypeLabel,
+                            required: widget.requiredForMinor,
+                            value: _selectedDocType,
+                            options: docTypes,
+                            onChanged: (v) =>
+                                setState(() => _selectedDocType = v),
+                          ),
+                          const SizedBox(height: 12),
+                          _StyledTextField(
+                            label: s.documentNumberLabel,
+                            controller: _docNumber,
+                            hint: 'Ej. 1234567890',
+                            required: widget.requiredForMinor,
+                            icon: Icons.badge_outlined,
+                            keyboardType: TextInputType.number,
+                          ),
+                          const SizedBox(height: 16),
+                          FormSectionHeader(
+                            icon: Icons.nfc,
+                            title: s.guardianNfcDevice,
+                          ),
+                          const SizedBox(height: 12),
+                          _NfcField(
+                            controller: _uid,
+                            scanning: _scanning,
+                            onScan: _scanNfc,
+                            onChanged: () => setState(() {}),
+                          ),
+                          const SizedBox(height: 16),
+                          _AuthSection(
+                            accepted: _authAccepted,
+                            emailController: _email,
+                            emailRequired: false,
+                            signatureStrokes: _signatureStrokes,
+                            currentStroke: _currentStroke,
+                            onAcceptedChanged: (v) =>
+                                setState(() => _authAccepted = v),
+                            onPrivacyTap: _showPrivacyPolicy,
+                            onSignatureStart: (offset) {
+                              setState(() {
+                                _currentStroke = [offset];
+                                _signatureStrokes.add(_currentStroke!);
+                              });
+                            },
+                            onSignatureUpdate: (offset) {
+                              setState(() => _currentStroke?.add(offset));
+                            },
+                            onSignatureEnd: () =>
+                                setState(() => _currentStroke = null),
+                            onClearSignature: _clearSignature,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
               // ── Section guardian 2 ────────────────────────────────────────
               if (_hasGuardian2) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: 16),
                 _Guardian2Section(
                   nameCtrl: _name2,
                   phoneCtrl: _phone2,
@@ -471,30 +578,7 @@ class _Step2State extends State<Step2Guardian> {
                   },
                   onNfcFieldChanged: () => setState(() {}),
                 ),
-                const SizedBox(height: 10),
               ],
-
-              const SizedBox(height: 26),
-
-              _AuthSection(
-                accepted: _authAccepted,
-                emailController: _email,
-                signatureStrokes: _signatureStrokes,
-                currentStroke: _currentStroke,
-                onAcceptedChanged: (v) => setState(() => _authAccepted = v),
-                onPrivacyTap: _showPrivacyPolicy,
-                onSignatureStart: (offset) {
-                  setState(() {
-                    _currentStroke = [offset];
-                    _signatureStrokes.add(_currentStroke!);
-                  });
-                },
-                onSignatureUpdate: (offset) {
-                  setState(() => _currentStroke?.add(offset));
-                },
-                onSignatureEnd: () => setState(() => _currentStroke = null),
-                onClearSignature: _clearSignature,
-              ),
 
               if (_err != null) ...[
                 const SizedBox(height: 16),
@@ -619,6 +703,7 @@ class _AuthSection extends StatelessWidget {
     required this.onSignatureUpdate,
     required this.onSignatureEnd,
     required this.onClearSignature,
+    this.emailRequired = false,
   });
 
   final bool accepted;
@@ -631,6 +716,7 @@ class _AuthSection extends StatelessWidget {
   final ValueChanged<Offset> onSignatureUpdate;
   final VoidCallback onSignatureEnd;
   final VoidCallback onClearSignature;
+  final bool emailRequired;
 
   @override
   Widget build(BuildContext context) {
@@ -675,14 +761,15 @@ class _AuthSection extends StatelessWidget {
                   color: AppColors.textPrimary,
                 ),
               ),
-              const Text(
-                ' *',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+              if (emailRequired)
+                const Text(
+                  ' *',
+                  style: TextStyle(
+                    color: AppColors.error,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -1010,7 +1097,6 @@ class _PrivacyPolicyDialog extends StatelessWidget {
             ),
           ),
           const Divider(height: 16),
-
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
@@ -1056,7 +1142,6 @@ class _PrivacyPolicyDialog extends StatelessWidget {
                           body:
                               'Los datos se utilizarán exclusivamente para identificación médica, asistencia de emergencia y comunicación con el guardián legal del menor registrado en la plataforma.',
                         ),
-                        SizedBox(height: 8),
                       ]
                     : const [
                         _PolicyTitle(
@@ -1097,12 +1182,10 @@ class _PrivacyPolicyDialog extends StatelessWidget {
                           body:
                               'The data will be used exclusively for medical identification, emergency assistance, and communication with the legal guardian of the minor registered on the platform.',
                         ),
-                        SizedBox(height: 8),
                       ],
               ),
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
             child: SizedBox(
@@ -1158,7 +1241,6 @@ class _PolicySection extends StatelessWidget {
     required this.body,
     this.bullets = const [],
   });
-
   final String title;
   final String body;
   final List<String> bullets;
@@ -1621,64 +1703,6 @@ class _NfcField extends StatelessWidget {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  Button + Add guardian 2
-// ═════════════════════════════════════════════════════════════════════════════
-class _AddGuardianButton extends StatelessWidget {
-  const _AddGuardianButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
-    final addLabel = isEs ? 'Agregar' : 'Add';
-
-    return Row(
-      children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Icon(
-            Icons.family_restroom,
-            size: 18,
-            color: AppColors.primary,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          '${isEs ? 'Guardián' : 'Guardian'} 2',
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const Spacer(),
-        TextButton.icon(
-          onPressed: onTap,
-          icon: const Icon(Icons.add, size: 16, color: AppColors.primary),
-          label: Text(
-            addLabel,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primary,
-            ),
-          ),
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
 //  Section guardian 2
 // ═════════════════════════════════════════════════════════════════════════════
 class _Guardian2Section extends StatelessWidget {
@@ -1699,7 +1723,7 @@ class _Guardian2Section extends StatelessWidget {
     required this.onRelationshipChanged,
     required this.onRemove,
     required this.onScanNfc,
-    required this.onAuthChanged, // Mapeado correctamente de la llamada en _Step2State
+    required this.onAuthChanged,
     required this.onPrivacyTap,
     required this.onSignatureStart,
     required this.onSignatureUpdate,
@@ -1724,7 +1748,7 @@ class _Guardian2Section extends StatelessWidget {
   final ValueChanged<String> onRelationshipChanged;
   final VoidCallback onRemove;
   final VoidCallback onScanNfc;
-  final ValueChanged<bool> onAuthChanged; // Tipo de dato e interfaz correctas
+  final ValueChanged<bool> onAuthChanged;
   final VoidCallback onPrivacyTap;
   final ValueChanged<Offset> onSignatureStart;
   final ValueChanged<Offset> onSignatureUpdate;
@@ -1844,7 +1868,6 @@ class _Guardian2Section extends StatelessWidget {
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),
-
                 FormSectionHeader(
                   icon: Icons.nfc,
                   title: '${s.guardianNfcDevice} 2',
@@ -1857,14 +1880,13 @@ class _Guardian2Section extends StatelessWidget {
                   onChanged: onNfcFieldChanged,
                 ),
                 const SizedBox(height: 16),
-
                 _AuthSection(
                   accepted: authAccepted,
                   emailController: emailCtrl,
+                  emailRequired: false,
                   signatureStrokes: signatureStrokes,
                   currentStroke: currentStroke,
-                  onAcceptedChanged:
-                      onAuthChanged, // Usa de forma correcta el callback asignado
+                  onAcceptedChanged: onAuthChanged,
                   onPrivacyTap: onPrivacyTap,
                   onSignatureStart: onSignatureStart,
                   onSignatureUpdate: onSignatureUpdate,
