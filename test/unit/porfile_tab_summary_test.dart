@@ -67,7 +67,7 @@ ProfileTabSummary _makeWidget({
     canEdit: canEdit,
     onEditVitalSigns: () {},
     onEditAddress: () {},
-    onEditGuardian: () {},
+    onEditGuardian: (_) {},
     onOpenAllergies: () {},
     onOpenBackground: () {},
   );
