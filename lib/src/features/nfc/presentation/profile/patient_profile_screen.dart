@@ -147,23 +147,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     _saveAndPendingSync();
   }
 
-  void _updateGuardian(GuardianInfo guardian) {
-    setState(() {
-      _draft = PatientFullRecord(
-        patientId: _draft.patientId,
-        deviceUid: _draft.deviceUid,
-        patientInfo: _draft.patientInfo,
-        guardianInfo: guardian,
-        guardian2Info: _draft.guardian2Info,
-        backgroundHistory: _draft.backgroundHistory,
-        allergies: _draft.allergies,
-        medicalHistory: _draft.medicalHistory,
-        vaccinationRecord: _draft.vaccinationRecord,
-      );
-    });
-    _saveAndPendingSync();
-  }
-
   void _updateBackground({
     List<ChronicConditionItem>? chronicConditions,
     String? personalHistory,
@@ -480,14 +463,40 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     );
   }
 
-  Future<void> _openGuardianSheet() async {
-    final current = _draft.guardianInfo;
+  Future<void> _openGuardianSheet(int guardianIndex) async {
+    final current = guardianIndex == 1
+        ? _draft.guardianInfo
+        : _draft.guardian2Info;
+    if (current == null) return;
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) =>
-          EditGuardianSheet(guardian: current, onConfirm: _updateGuardian),
+      builder: (_) => EditGuardianSheet(
+        guardian: current,
+        guardianIndex: guardianIndex,
+        onConfirm: (updatedGuardian) {
+          setState(() {
+            _draft = PatientFullRecord(
+              patientId: _draft.patientId,
+              deviceUid: _draft.deviceUid,
+              patientInfo: _draft.patientInfo,
+              guardianInfo: guardianIndex == 1
+                  ? updatedGuardian
+                  : _draft.guardianInfo,
+              guardian2Info: guardianIndex == 2
+                  ? updatedGuardian
+                  : _draft.guardian2Info,
+              backgroundHistory: _draft.backgroundHistory,
+              allergies: _draft.allergies,
+              medicalHistory: _draft.medicalHistory,
+              vaccinationRecord: _draft.vaccinationRecord,
+            );
+          });
+          _saveAndPendingSync();
+        },
+      ),
     );
   }
 

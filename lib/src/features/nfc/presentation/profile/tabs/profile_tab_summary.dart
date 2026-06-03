@@ -25,7 +25,7 @@ class ProfileTabSummary extends StatelessWidget {
   final bool canEdit;
   final VoidCallback onEditVitalSigns;
   final VoidCallback onEditAddress;
-  final VoidCallback onEditGuardian;
+  final void Function(int guardianIndex) onEditGuardian;
   final VoidCallback onOpenAllergies;
   final VoidCallback onOpenBackground;
 
@@ -71,12 +71,28 @@ class ProfileTabSummary extends StatelessWidget {
   bool get addressChanged => _addressChanged;
 
   bool get _guardianChanged {
-    final dg = draft.guardianInfo;
-    final og = original.guardianInfo;
-    return dg.name != og.name ||
-        dg.phone != og.phone ||
-        dg.relationship != og.relationship ||
-        dg.deviceUid != og.deviceUid;
+    final dg1 = draft.guardianInfo;
+    final og1 = original.guardianInfo;
+
+    final g1Changed =
+        dg1.name != og1.name ||
+        dg1.phone != og1.phone ||
+        dg1.relationship != og1.relationship ||
+        dg1.deviceUid != og1.deviceUid;
+
+    final dg2 = draft.guardian2Info;
+    final og2 = original.guardian2Info;
+
+    if (dg2 == null && og2 == null) return g1Changed;
+    if (dg2 == null || og2 == null) return true;
+
+    final g2Changed =
+        dg2.name != og2.name ||
+        dg2.phone != og2.phone ||
+        dg2.relationship != og2.relationship ||
+        dg2.deviceUid != og2.deviceUid;
+
+    return g1Changed || g2Changed;
   }
 
   @visibleForTesting
@@ -87,6 +103,7 @@ class ProfileTabSummary extends StatelessWidget {
     final s = AppStrings.of(context);
     final p = draft.patientInfo;
     final bg = draft.backgroundHistory;
+    final isEs = s.welcome == 'Bienvenido';
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 60),
@@ -188,6 +205,7 @@ class ProfileTabSummary extends StatelessWidget {
           title: s.editMeasurements.toUpperCase(),
           actionLabel: canEdit ? s.editUpdate.split('/')[0].trim() : null,
           onAction: canEdit ? onEditVitalSigns : null,
+          key: const ValueKey('measurements_header'),
         ),
         const SizedBox(height: 8),
         ProfileCard(
@@ -325,24 +343,111 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 18),
 
-        // ══ GUARDIAN (editable) ═════════════════════════════════
-        if (draft.guardianInfo.name.isNotEmpty) ...[
+        // ══ GUARDIANS (editable) ═══════════════════════════════
+        if (draft.guardianInfo.name.isNotEmpty ||
+            (draft.guardian2Info != null &&
+                draft.guardian2Info!.name.isNotEmpty)) ...[
           ProfileSectionHeader(
             icon: Icons.family_restroom,
-            title: s.guardian.toUpperCase(),
-            actionLabel: canEdit ? s.editUpdate.split('/')[0].trim() : null,
-            onAction: canEdit ? onEditGuardian : null,
+            title: isEs ? 'GUARDIANES' : 'GUARDIANS',
+            actionLabel: null,
+            onAction: null,
           ),
           const SizedBox(height: 8),
-          ProfileCard(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (_guardianChanged) _OrangeDot(),
-                Expanded(child: _GuardianContent(guardian: draft.guardianInfo)),
-              ],
+
+          if (draft.guardianInfo.name.isNotEmpty) ...[
+            ProfileCard(
+              child: Stack(
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_guardianChanged) _OrangeDot(),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isEs ? 'Guardián Principal' : 'Primary Guardian',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            _GuardianContent(guardian: draft.guardianInfo),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (canEdit)
+                    Positioned(
+                      top: -6,
+                      right: -6,
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.edit_outlined,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                        onPressed: () => onEditGuardian(1),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
+          ],
+
+          if (draft.guardian2Info != null &&
+              draft.guardian2Info!.name.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ProfileCard(
+              child: Stack(
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_guardianChanged) _OrangeDot(),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isEs
+                                  ? 'Guardián Secundario'
+                                  : 'Secondary Guardian',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            _GuardianContent(guardian: draft.guardian2Info!),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (canEdit)
+                    Positioned(
+                      top: -6,
+                      right: -6,
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.edit_outlined,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                        onPressed: () => onEditGuardian(2),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
       ],
     );
@@ -384,12 +489,10 @@ class ProfileTabSummary extends StatelessWidget {
 
   String? _genderLabel(BuildContext context, String? c) {
     if (c == null) return null;
-    final s = AppStrings.of(context);
     return {
-      '01': s.sexMale,
-      '02': s.sexFemale,
-      '03':
-          'Transgénero', // Si no están en app_strings se mantienen, idealmente agregarlos ahí
+      '01': AppStrings.of(context).sexMale,
+      '02': AppStrings.of(context).sexFemale,
+      '03': 'Transgénero',
       '04': 'No binario',
     }[c];
   }
@@ -419,8 +522,6 @@ class ProfileTabSummary extends StatelessWidget {
     return '${int.parse(p[2])} de ${mEs[mi - 1]} de ${p[0]}';
   }
 }
-
-// ── Clickable section card (Alergias, Antecedentes) ──────────────────────
 
 class _ClickableSection extends StatelessWidget {
   const _ClickableSection({
@@ -538,8 +639,6 @@ class _MiniRow extends StatelessWidget {
   }
 }
 
-// ── Orange change indicator dot ──────────────────────────────────────────
-
 class _OrangeDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -554,8 +653,6 @@ class _OrangeDot extends StatelessWidget {
     );
   }
 }
-
-// ── Vital cell ──────────────────────────────────────────────────────────
 
 class _VitalCell extends StatelessWidget {
   const _VitalCell({
@@ -669,6 +766,9 @@ class _GuardianContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isUidValid =
+        guardian.deviceUid != null && guardian.deviceUid!.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -711,6 +811,28 @@ class _GuardianContent extends StatelessWidget {
                       color: AppColors.textSecondary,
                     ),
                   ),
+                  if (isUidValid) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.nfc_outlined,
+                          size: 12,
+                          color: AppColors.success,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'UID: ${guardian.deviceUid}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontFamily: 'monospace',
+                            color: AppColors.success,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

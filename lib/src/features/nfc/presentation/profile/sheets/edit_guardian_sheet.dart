@@ -11,10 +11,12 @@ class EditGuardianSheet extends StatefulWidget {
   const EditGuardianSheet({
     super.key,
     required this.guardian,
+    required this.guardianIndex,
     required this.onConfirm,
   });
 
   final GuardianInfo guardian;
+  final int guardianIndex;
   final ValueChanged<GuardianInfo> onConfirm;
 
   @override
@@ -96,9 +98,14 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
+    final dynamicTitle = widget.guardianIndex == 1
+        ? (isEs ? 'Editar Guardián Principal' : 'Edit Primary Guardian')
+        : (isEs ? 'Editar Guardián Secundario' : 'Edit Secondary Guardian');
 
     return SheetScaffold(
-      title: s.editGuardianTitle,
+      title: dynamicTitle,
       onConfirm: () {
         widget.onConfirm(
           GuardianInfo(
@@ -108,6 +115,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
             deviceUid: _uidCtrl.text.trim().isEmpty
                 ? null
                 : _uidCtrl.text.trim(),
+            consent: widget.guardian.consent,
           ),
         );
         Navigator.of(context).pop();
