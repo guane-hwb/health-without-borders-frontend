@@ -20,19 +20,9 @@ import 'sheets/edit_vital_signs_sheet.dart';
 import 'tabs/profile_tab_consultations.dart';
 import 'tabs/profile_tab_summary.dart';
 import 'tabs/profile_tab_vaccines.dart';
+import '../../../home/presentation/home_screen.dart';
 
 /// Canonical patient profile screen.
-///
-/// Shows after:
-///  • A successful NFC scan (read flow).
-///  • A successful identity search (loss-of-wristband flow).
-///  • A successful patient registration.
-///
-/// Displays a tab navigator (Resumen / Antecedentes / Consultas / Vacunas /
-/// Alergias). The screen holds a *draft* of the patient record. All edits
-/// (vital signs, allergies, vaccines, consultations, etc.) mutate this draft
-/// in memory only. The user must tap "Sincronizar" to persist changes via
-/// `POST /api/v1/patients/sync`.
 class PatientProfileScreen extends StatefulWidget {
   const PatientProfileScreen({
     super.key,
@@ -69,7 +59,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   bool get _hasUnsyncedChanges {
-    // Compare JSON of draft vs original
     return _draft.toJson().toString() != _original.toJson().toString();
   }
 
@@ -340,13 +329,11 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     });
     try {
       final scope = AppScope.of(context);
-      // Save locally (offline-first)
       await scope.localDatabase.savePatient(_draft);
-      // Fire-and-forget sync — user doesn't wait
       scope.syncEngine.syncAll().ignore();
       if (!mounted) return;
       setState(() {
-        _original = _draft; // baseline reset → no more diff
+        _original = _draft;
         _isSyncing = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -363,13 +350,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      setState(() {
-        _isSyncing = false;
-      });
     }
   }
 
-  // ── Navigation: add consultation ──────────────────────────────────────────
+  // ── Navigation ───────────────────────────────────────────────────────────
 
   Future<void> _navigateAddConsultation() async {
     if (!_currentRole.canAddConsultation) {
@@ -495,7 +479,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     );
   }
 
-  /// Opens a full bottom sheet for viewing/editing allergies list.
   void _openAllergiesSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -515,7 +498,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     );
   }
 
-  /// Opens a full bottom sheet for viewing/editing background (chronic, personal, family).
   void _openBackgroundSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -620,7 +602,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   Future<void> _confirmExit() async {
     if (!_hasUnsyncedChanges) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        (route) => false,
+      );
       return;
     }
     final confirmed = await showDialog<bool>(
@@ -644,7 +629,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       ),
     );
     if (confirmed == true && mounted) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        (route) => false,
+      );
     }
   }
 }
@@ -747,7 +735,6 @@ class _ProfileHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row: back arrow, lang toggle, menu
           Row(
             children: [
               IconButton(
@@ -760,7 +747,6 @@ class _ProfileHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          // Identity card
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
@@ -803,10 +789,7 @@ class _ProfileHeader extends StatelessWidget {
               ],
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // Sync status row
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
@@ -1384,7 +1367,6 @@ class _BackgroundManageSheet extends StatelessWidget {
                 controller: sc,
                 padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
                 children: [
-                  // Chronic conditions (list)
                   Row(
                     children: [
                       Text(
@@ -1463,14 +1445,12 @@ class _BackgroundManageSheet extends StatelessWidget {
                         ),
                       ),
                   const SizedBox(height: 12),
-                  // Personal
                   _BgSection(
                     title: AppStrings.of(context).personalHistoryTitle,
                     value: bg?.personalHistory,
                     onEdit: onEditPersonal,
                   ),
                   const SizedBox(height: 12),
-                  // Medications (list)
                   Row(
                     children: [
                       Text(
@@ -1551,7 +1531,6 @@ class _BackgroundManageSheet extends StatelessWidget {
                         ),
                       ),
                   const SizedBox(height: 12),
-                  // Family history
                   Row(
                     children: [
                       Text(

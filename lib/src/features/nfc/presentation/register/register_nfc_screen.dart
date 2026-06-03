@@ -21,6 +21,7 @@ import 'steps/step4_background.dart';
 import 'steps/step5_review.dart';
 import 'steps/step6_success.dart';
 import '../../../../core/i18n/app_strings.dart';
+import '../../../home/presentation/home_screen.dart';
 
 class RegisterNfcScreen extends StatefulWidget {
   const RegisterNfcScreen({super.key});
@@ -51,21 +52,25 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     if (_step < 5) setState(() => _step++);
   }
 
-  void _back() {
+  void _stepBack() {
     if (_step > 0) {
       setState(() => _step--);
     } else {
-      Navigator.of(context).pop();
+      _goToHomeDirectly();
     }
+  }
+
+  void _goToHomeDirectly() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const HomeScreen()),
+      (route) => false,
+    );
   }
 
   Future<void> _confirmRegistration() async {
     final record = _draft.toRecord();
     final scope = AppScope.of(context);
-    // Save locally only — don't sync yet. The user may add consultations/vaccines.
-    // Sync happens when the user taps "Finalizar".
     await scope.localDatabase.savePatient(record);
-    // Write encrypted triage data to patient's NFC wristband
     try {
       final nfcKey = await scope.authRepository.getNfcEncryptionKey();
       if (nfcKey != null && nfcKey.isNotEmpty) {
@@ -169,12 +174,10 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     if (mounted) setState(() => _savedRecord = record);
   }
 
-  /// Called when user taps "Finalizar" — queues the sync and goes back to home.
   Future<void> _finalize() async {
     final scope = AppScope.of(context);
-    // Trigger sync in background — non-blocking
     unawaited(scope.syncEngine.syncAll());
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) _goToHomeDirectly();
   }
 
   String _formatTimeNow(BuildContext context) {
@@ -200,7 +203,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
               children: [
                 _WizardHeader(
                   title: s.newPatient,
-                  onBack: onSuccess ? null : _back,
+                  onBack: onSuccess ? null : _goToHomeDirectly,
                   stepText: onSuccess ? null : '${_step + 1}/5',
                 ),
                 if (!onSuccess) _ProgressBar(step: _step, total: 5),
@@ -227,21 +230,25 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         return Step2Guardian(
           draft: _draft,
           requiredForMinor: _isMinor,
-          onBack: _back,
+          onBack: _stepBack,
           onContinue: _next,
         );
       case 2:
         return Step3PatientData(
           draft: _draft,
-          onBack: _back,
+          onBack: _stepBack,
           onContinue: _next,
         );
       case 3:
-        return Step4Background(draft: _draft, onBack: _back, onContinue: _next);
+        return Step4Background(
+          draft: _draft,
+          onBack: _stepBack,
+          onContinue: _next,
+        );
       case 4:
         return Step5Review(
           draft: _draft,
-          onBack: _back,
+          onBack: _stepBack,
           onConfirm: _confirmRegistration,
         );
       case 5:
