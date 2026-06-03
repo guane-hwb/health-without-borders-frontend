@@ -43,7 +43,6 @@ class _EditChronicPersonalSheetState extends State<EditChronicPersonalSheet> {
 
     return SheetScaffold(
       title: widget.title,
-      subtitle: s.editChronicPersonalSubtitle,
       onConfirm: () {
         final text = _ctrl.text.trim();
         widget.onConfirm(text.isEmpty ? null : text);

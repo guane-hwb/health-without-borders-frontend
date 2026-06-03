@@ -1,5 +1,7 @@
 // lib/src/features/nfc/presentation/profile/patient_profile_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../../core/di/app_scope.dart';
 import '../../../../core/i18n/app_strings.dart';
@@ -20,19 +22,9 @@ import 'sheets/edit_vital_signs_sheet.dart';
 import 'tabs/profile_tab_consultations.dart';
 import 'tabs/profile_tab_summary.dart';
 import 'tabs/profile_tab_vaccines.dart';
+import '../../../home/presentation/home_screen.dart';
 
 /// Canonical patient profile screen.
-///
-/// Shows after:
-///  • A successful NFC scan (read flow).
-///  • A successful identity search (loss-of-wristband flow).
-///  • A successful patient registration.
-///
-/// Displays a tab navigator (Resumen / Antecedentes / Consultas / Vacunas /
-/// Alergias). The screen holds a *draft* of the patient record. All edits
-/// (vital signs, allergies, vaccines, consultations, etc.) mutate this draft
-/// in memory only. The user must tap "Sincronizar" to persist changes via
-/// `POST /api/v1/patients/sync`.
 class PatientProfileScreen extends StatefulWidget {
   const PatientProfileScreen({
     super.key,
@@ -51,8 +43,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   late PatientFullRecord _draft;
-  late PatientFullRecord _original; // for change detection
+  late PatientFullRecord _original;
   bool _isSyncing = false;
+  bool _hasInternet = true;
+  late StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
 
   @override
   void initState() {
@@ -60,23 +54,62 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     _tabController = TabController(length: 3, vsync: this);
     _draft = widget.patient;
     _original = widget.patient;
+
+    _checkInitialConnectivity();
+    _subscribeToConnectivity();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _connectivitySubscription.cancel();
     super.dispose();
   }
 
+  Future<void> _checkInitialConnectivity() async {
+    final result = await Connectivity().checkConnectivity();
+    _updateConnectivityStatus(result);
+  }
+
+  void _subscribeToConnectivity() {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) {
+      _updateConnectivityStatus(results);
+    });
+  }
+
+  void _updateConnectivityStatus(List<ConnectivityResult> results) {
+    final hasNet = !results.contains(ConnectivityResult.none);
+    if (_hasInternet != hasNet) {
+      setState(() {
+        _hasInternet = hasNet;
+      });
+      if (_hasInternet && _hasUnsyncedChanges) {
+        _sync(silent: true);
+      }
+    }
+  }
+
   bool get _hasUnsyncedChanges {
-    // Compare JSON of draft vs original
     return _draft.toJson().toString() != _original.toJson().toString();
   }
 
   UserRole get _currentRole =>
       AppScope.of(context).authRepository.currentUser?.role ?? UserRole.doctor;
 
-  // ── Mutators (called by tabs/sheets) ─────────────────────────────────────
+  Future<void> _saveAndPendingSync() async {
+    try {
+      final scope = AppScope.of(context);
+      await scope.localDatabase.savePatient(_draft);
+
+      if (_hasInternet) {
+        await _sync(silent: true);
+      }
+    } catch (e) {
+      debugPrint("Error en persistencia local preventiva: $e");
+    }
+  }
 
   void _updateVitalSigns({double? weight, double? height}) {
     setState(() {
@@ -84,6 +117,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         _draft.patientInfo.copyWith(weight: weight, height: height),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _updateAddress(Address address) {
@@ -110,22 +144,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
-  }
-
-  void _updateGuardian(GuardianInfo guardian) {
-    setState(() {
-      _draft = PatientFullRecord(
-        patientId: _draft.patientId,
-        deviceUid: _draft.deviceUid,
-        patientInfo: _draft.patientInfo,
-        guardianInfo: guardian,
-        guardian2Info: _draft.guardian2Info,
-        backgroundHistory: _draft.backgroundHistory,
-        allergies: _draft.allergies,
-        medicalHistory: _draft.medicalHistory,
-        vaccinationRecord: _draft.vaccinationRecord,
-      );
-    });
+    _saveAndPendingSync();
   }
 
   void _updateBackground({
@@ -144,6 +163,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _addChronicCondition(ChronicConditionItem item) {
@@ -159,6 +179,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _removeChronicCondition(int index) {
@@ -175,6 +196,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _addMedication(MedicationStatementItem item) {
@@ -190,6 +212,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _removeMedication(int index) {
@@ -206,6 +229,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _addFamilyHistory(FamilyHistoryItem item) {
@@ -221,6 +245,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _removeFamilyHistory(int index) {
@@ -237,6 +262,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _addAllergy(AllergyInfo allergy) {
@@ -253,6 +279,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         vaccinationRecord: _draft.vaccinationRecord,
       );
     });
+    _saveAndPendingSync();
   }
 
   void _removeAllergy(int index) {
@@ -270,6 +297,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         vaccinationRecord: _draft.vaccinationRecord,
       );
     });
+    _saveAndPendingSync();
   }
 
   void _addVaccine(VaccinationRecordItem vaccine) {
@@ -286,6 +314,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         vaccinationRecord: [..._draft.vaccinationRecord, vaccine],
       );
     });
+    _saveAndPendingSync();
   }
 
   void _addConsultation(MedicalHistoryItem consultation) {
@@ -302,6 +331,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         vaccinationRecord: _draft.vaccinationRecord,
       );
     });
+    _saveAndPendingSync();
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -333,43 +363,44 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   // ── Sync ─────────────────────────────────────────────────────────────────
 
-  Future<void> _sync() async {
+  Future<void> _sync({bool silent = false}) async {
     if (_isSyncing) return;
-    setState(() {
-      _isSyncing = true;
-    });
+    if (!silent) {
+      setState(() {
+        _isSyncing = true;
+      });
+    }
     try {
       final scope = AppScope.of(context);
-      // Save locally (offline-first)
       await scope.localDatabase.savePatient(_draft);
-      // Fire-and-forget sync — user doesn't wait
-      scope.syncEngine.syncAll().ignore();
+      await scope.syncEngine.syncAll();
       if (!mounted) return;
       setState(() {
-        _original = _draft; // baseline reset → no more diff
+        _original = _draft;
         _isSyncing = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppStrings.of(context).savedChangesMsg),
-          backgroundColor: AppColors.success,
-        ),
-      );
+      if (!silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppStrings.of(context).savedChangesMsg),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isSyncing = false;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      setState(() {
-        _isSyncing = false;
-      });
+      if (!silent) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 
-  // ── Navigation: add consultation ──────────────────────────────────────────
+  // ── Navigation ───────────────────────────────────────────────────────────
 
   Future<void> _navigateAddConsultation() async {
     if (!_currentRole.canAddConsultation) {
@@ -432,14 +463,40 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     );
   }
 
-  Future<void> _openGuardianSheet() async {
-    final current = _draft.guardianInfo;
+  Future<void> _openGuardianSheet(int guardianIndex) async {
+    final current = guardianIndex == 1
+        ? _draft.guardianInfo
+        : _draft.guardian2Info;
+    if (current == null) return;
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) =>
-          EditGuardianSheet(guardian: current, onConfirm: _updateGuardian),
+      builder: (_) => EditGuardianSheet(
+        guardian: current,
+        guardianIndex: guardianIndex,
+        onConfirm: (updatedGuardian) {
+          setState(() {
+            _draft = PatientFullRecord(
+              patientId: _draft.patientId,
+              deviceUid: _draft.deviceUid,
+              patientInfo: _draft.patientInfo,
+              guardianInfo: guardianIndex == 1
+                  ? updatedGuardian
+                  : _draft.guardianInfo,
+              guardian2Info: guardianIndex == 2
+                  ? updatedGuardian
+                  : _draft.guardian2Info,
+              backgroundHistory: _draft.backgroundHistory,
+              allergies: _draft.allergies,
+              medicalHistory: _draft.medicalHistory,
+              vaccinationRecord: _draft.vaccinationRecord,
+            );
+          });
+          _saveAndPendingSync();
+        },
+      ),
     );
   }
 
@@ -495,7 +552,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     );
   }
 
-  /// Opens a full bottom sheet for viewing/editing allergies list.
   void _openAllergiesSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -515,7 +571,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     );
   }
 
-  /// Opens a full bottom sheet for viewing/editing background (chronic, personal, family).
   void _openBackgroundSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -569,11 +624,11 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
               children: [
                 _ProfileHeader(
                   patient: p,
-                  hasUnsyncedChanges: _hasUnsyncedChanges,
+                  hasUnsyncedChanges: !_hasInternet && _hasUnsyncedChanges,
                   isSyncing: _isSyncing,
                   lastSyncedAt: widget.lastSyncedAt,
                   onBack: () => _confirmExit(),
-                  onSync: _sync,
+                  onSync: () => _sync(silent: false),
                 ),
                 _ProfileTabsBar(controller: _tabController, draft: _draft),
                 Expanded(
@@ -619,8 +674,11 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   Future<void> _confirmExit() async {
-    if (!_hasUnsyncedChanges) {
-      Navigator.of(context).pop();
+    if (!_hasUnsyncedChanges || _hasInternet) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        (route) => false,
+      );
       return;
     }
     final confirmed = await showDialog<bool>(
@@ -644,7 +702,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       ),
     );
     if (confirmed == true && mounted) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        (route) => false,
+      );
     }
   }
 }
@@ -747,7 +808,6 @@ class _ProfileHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row: back arrow, lang toggle, menu
           Row(
             children: [
               IconButton(
@@ -760,7 +820,6 @@ class _ProfileHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          // Identity card
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
@@ -804,49 +863,39 @@ class _ProfileHeader extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 12),
-
-          // Sync status row
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              children: [
-                Container(
-                  width: 11,
-                  height: 11,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: hasUnsyncedChanges
-                        ? const Color(0xFFFFB300)
-                        : const Color(0xFF00E676),
-                    boxShadow: [
-                      BoxShadow(
-                        color:
-                            (hasUnsyncedChanges
-                                    ? const Color(0xFFFFB300)
-                                    : const Color(0xFF00E676))
-                                .withValues(alpha: 0.55),
-                        blurRadius: 5,
-                        spreadRadius: 1,
-                      ),
-                    ],
+          if (hasUnsyncedChanges) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  Container(
+                    width: 11,
+                    height: 11,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFFFFB300),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(
+                            0xFFFFB300,
+                          ).withValues(alpha: 0.55),
+                          blurRadius: 5,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  hasUnsyncedChanges
-                      ? s.unsyncedChanges
-                      : (lastSyncedAt != null
-                            ? s.syncedAt.replaceAll('{time}', lastSyncedAt!)
-                            : s.synced),
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                  const SizedBox(width: 8),
+                  Text(
+                    s.unsyncedChanges,
+                    style: const TextStyle(
+                      color: AppColors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-                const Spacer(),
-                if (hasUnsyncedChanges)
+                  const Spacer(),
                   ElevatedButton.icon(
                     onPressed: isSyncing ? null : onSync,
                     style: ElevatedButton.styleFrom(
@@ -883,9 +932,10 @@ class _ProfileHeader extends StatelessWidget {
                       ),
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1384,7 +1434,6 @@ class _BackgroundManageSheet extends StatelessWidget {
                 controller: sc,
                 padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
                 children: [
-                  // Chronic conditions (list)
                   Row(
                     children: [
                       Text(
@@ -1463,14 +1512,12 @@ class _BackgroundManageSheet extends StatelessWidget {
                         ),
                       ),
                   const SizedBox(height: 12),
-                  // Personal
                   _BgSection(
                     title: AppStrings.of(context).personalHistoryTitle,
                     value: bg?.personalHistory,
                     onEdit: onEditPersonal,
                   ),
                   const SizedBox(height: 12),
-                  // Medications (list)
                   Row(
                     children: [
                       Text(
@@ -1551,7 +1598,6 @@ class _BackgroundManageSheet extends StatelessWidget {
                         ),
                       ),
                   const SizedBox(height: 12),
-                  // Family history
                   Row(
                     children: [
                       Text(
