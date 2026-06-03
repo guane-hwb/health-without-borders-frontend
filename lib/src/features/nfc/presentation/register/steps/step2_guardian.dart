@@ -75,7 +75,7 @@ class _Step2State extends State<Step2Guardian> {
     _name2 = TextEditingController(text: d.guardian2Name ?? '');
     _phone2 = TextEditingController(text: d.guardian2Phone ?? '');
     _docNumber2 = TextEditingController(text: d.guardian2DocNumber ?? '');
-    _uid2 = TextEditingController();
+    _uid2 = TextEditingController(text: d.guardian2DeviceUid ?? '');
     _email2 = TextEditingController(text: d.guardian2Email ?? '');
     _selectedDocType2 = d.guardian2DocType ?? 'CC';
     _guardian2Relationship = d.guardian2Relationship ?? '01';
@@ -274,6 +274,9 @@ class _Step2State extends State<Step2Guardian> {
       d.guardian2Phone = _phone2.text.trim().isEmpty
           ? null
           : _phone2.text.trim();
+      d.guardian2DeviceUid = _uid2.text.trim().isEmpty
+          ? null
+          : _uid2.text.trim();
       d.guardian2DocType = _selectedDocType2;
       d.guardian2DocNumber = _docNumber2.text.trim().isEmpty
           ? null
@@ -287,6 +290,7 @@ class _Step2State extends State<Step2Guardian> {
     } else {
       d.guardian2Name = null;
       d.guardian2Phone = null;
+      d.guardian2DeviceUid = null;
       d.guardian2DocNumber = null;
       d.guardian2Relationship = null;
       d.guardian2AuthAccepted = null;

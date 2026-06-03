@@ -410,6 +410,7 @@ class RegisterDraft {
   String? guardian2Name;
   String? guardian2Relationship;
   String? guardian2Phone;
+  String? guardian2DeviceUid;
   String? guardian2DocType;
   String? guardian2DocNumber;
   bool? guardian2AuthAccepted;
@@ -479,6 +480,7 @@ class RegisterDraft {
               name: guardian2Name!,
               relationship: guardian2Relationship ?? '01',
               phone: guardian2Phone ?? '',
+              deviceUid: guardian2DeviceUid,
               documentType: guardian2DocType,
               documentNumber: guardian2DocNumber,
               consent: (guardian2AuthAccepted == true)
