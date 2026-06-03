@@ -1,5 +1,7 @@
 // lib/src/features/nfc/presentation/profile/patient_profile_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../../core/di/app_scope.dart';
 import '../../../../core/i18n/app_strings.dart';
@@ -41,8 +43,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   late PatientFullRecord _draft;
-  late PatientFullRecord _original; // for change detection
+  late PatientFullRecord _original;
   bool _isSyncing = false;
+  bool _hasInternet = true;
+  late StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
 
   @override
   void initState() {
@@ -50,12 +54,41 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     _tabController = TabController(length: 3, vsync: this);
     _draft = widget.patient;
     _original = widget.patient;
+
+    _checkInitialConnectivity();
+    _subscribeToConnectivity();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _connectivitySubscription.cancel();
     super.dispose();
+  }
+
+  Future<void> _checkInitialConnectivity() async {
+    final result = await Connectivity().checkConnectivity();
+    _updateConnectivityStatus(result);
+  }
+
+  void _subscribeToConnectivity() {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) {
+      _updateConnectivityStatus(results);
+    });
+  }
+
+  void _updateConnectivityStatus(List<ConnectivityResult> results) {
+    final hasNet = !results.contains(ConnectivityResult.none);
+    if (_hasInternet != hasNet) {
+      setState(() {
+        _hasInternet = hasNet;
+      });
+      if (_hasInternet && _hasUnsyncedChanges) {
+        _sync(silent: true);
+      }
+    }
   }
 
   bool get _hasUnsyncedChanges {
@@ -65,7 +98,18 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   UserRole get _currentRole =>
       AppScope.of(context).authRepository.currentUser?.role ?? UserRole.doctor;
 
-  // ── Mutators (called by tabs/sheets) ─────────────────────────────────────
+  Future<void> _saveAndPendingSync() async {
+    try {
+      final scope = AppScope.of(context);
+      await scope.localDatabase.savePatient(_draft);
+
+      if (_hasInternet) {
+        await _sync(silent: true);
+      }
+    } catch (e) {
+      debugPrint("Error en persistencia local preventiva: $e");
+    }
+  }
 
   void _updateVitalSigns({double? weight, double? height}) {
     setState(() {
@@ -73,6 +117,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         _draft.patientInfo.copyWith(weight: weight, height: height),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _updateAddress(Address address) {
@@ -99,6 +144,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _updateGuardian(GuardianInfo guardian) {
@@ -115,6 +161,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         vaccinationRecord: _draft.vaccinationRecord,
       );
     });
+    _saveAndPendingSync();
   }
 
   void _updateBackground({
@@ -133,6 +180,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _addChronicCondition(ChronicConditionItem item) {
@@ -148,6 +196,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _removeChronicCondition(int index) {
@@ -164,6 +213,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _addMedication(MedicationStatementItem item) {
@@ -179,6 +229,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _removeMedication(int index) {
@@ -195,6 +246,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _addFamilyHistory(FamilyHistoryItem item) {
@@ -210,6 +262,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _removeFamilyHistory(int index) {
@@ -226,6 +279,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       );
     });
+    _saveAndPendingSync();
   }
 
   void _addAllergy(AllergyInfo allergy) {
@@ -242,6 +296,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         vaccinationRecord: _draft.vaccinationRecord,
       );
     });
+    _saveAndPendingSync();
   }
 
   void _removeAllergy(int index) {
@@ -259,6 +314,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         vaccinationRecord: _draft.vaccinationRecord,
       );
     });
+    _saveAndPendingSync();
   }
 
   void _addVaccine(VaccinationRecordItem vaccine) {
@@ -275,6 +331,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         vaccinationRecord: [..._draft.vaccinationRecord, vaccine],
       );
     });
+    _saveAndPendingSync();
   }
 
   void _addConsultation(MedicalHistoryItem consultation) {
@@ -291,6 +348,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         vaccinationRecord: _draft.vaccinationRecord,
       );
     });
+    _saveAndPendingSync();
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -322,34 +380,40 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   // ── Sync ─────────────────────────────────────────────────────────────────
 
-  Future<void> _sync() async {
+  Future<void> _sync({bool silent = false}) async {
     if (_isSyncing) return;
-    setState(() {
-      _isSyncing = true;
-    });
+    if (!silent) {
+      setState(() {
+        _isSyncing = true;
+      });
+    }
     try {
       final scope = AppScope.of(context);
       await scope.localDatabase.savePatient(_draft);
-      scope.syncEngine.syncAll().ignore();
+      await scope.syncEngine.syncAll();
       if (!mounted) return;
       setState(() {
         _original = _draft;
         _isSyncing = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppStrings.of(context).savedChangesMsg),
-          backgroundColor: AppColors.success,
-        ),
-      );
+      if (!silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppStrings.of(context).savedChangesMsg),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isSyncing = false;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (!silent) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 
@@ -551,11 +615,11 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
               children: [
                 _ProfileHeader(
                   patient: p,
-                  hasUnsyncedChanges: _hasUnsyncedChanges,
+                  hasUnsyncedChanges: !_hasInternet && _hasUnsyncedChanges,
                   isSyncing: _isSyncing,
                   lastSyncedAt: widget.lastSyncedAt,
                   onBack: () => _confirmExit(),
-                  onSync: _sync,
+                  onSync: () => _sync(silent: false),
                 ),
                 _ProfileTabsBar(controller: _tabController, draft: _draft),
                 Expanded(
@@ -601,7 +665,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   Future<void> _confirmExit() async {
-    if (!_hasUnsyncedChanges) {
+    if (!_hasUnsyncedChanges || _hasInternet) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const HomeScreen()),
         (route) => false,
@@ -789,47 +853,40 @@ class _ProfileHeader extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              children: [
-                Container(
-                  width: 11,
-                  height: 11,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: hasUnsyncedChanges
-                        ? const Color(0xFFFFB300)
-                        : const Color(0xFF00E676),
-                    boxShadow: [
-                      BoxShadow(
-                        color:
-                            (hasUnsyncedChanges
-                                    ? const Color(0xFFFFB300)
-                                    : const Color(0xFF00E676))
-                                .withValues(alpha: 0.55),
-                        blurRadius: 5,
-                        spreadRadius: 1,
-                      ),
-                    ],
+
+          if (hasUnsyncedChanges) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  Container(
+                    width: 11,
+                    height: 11,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFFFFB300),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(
+                            0xFFFFB300,
+                          ).withValues(alpha: 0.55),
+                          blurRadius: 5,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  hasUnsyncedChanges
-                      ? s.unsyncedChanges
-                      : (lastSyncedAt != null
-                            ? s.syncedAt.replaceAll('{time}', lastSyncedAt!)
-                            : s.synced),
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                  const SizedBox(width: 8),
+                  Text(
+                    s.unsyncedChanges,
+                    style: const TextStyle(
+                      color: AppColors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-                const Spacer(),
-                if (hasUnsyncedChanges)
+                  const Spacer(),
                   ElevatedButton.icon(
                     onPressed: isSyncing ? null : onSync,
                     style: ElevatedButton.styleFrom(
@@ -866,9 +923,10 @@ class _ProfileHeader extends StatelessWidget {
                       ),
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
