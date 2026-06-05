@@ -205,7 +205,7 @@ void main() {
     });
 
     test('null values initialize safely into an empty string', () {
-      final ctrl = TextEditingController(text: null ?? '');
+      final ctrl = TextEditingController(text: null);
       expect(ctrl.text, equals(''));
       ctrl.dispose();
     });
