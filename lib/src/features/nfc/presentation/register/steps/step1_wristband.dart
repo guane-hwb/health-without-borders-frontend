@@ -5,14 +5,20 @@ import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../register_nfc_screen.dart';
 
+typedef ReadUidFn = Future<String> Function();
+
 class Step1Wristband extends StatefulWidget {
   const Step1Wristband({
     super.key,
     required this.draft,
     required this.onContinue,
+    this.readUid,
   });
+
   final RegisterDraft draft;
   final VoidCallback onContinue;
+  final ReadUidFn? readUid;
+
   @override
   State<Step1Wristband> createState() => _Step1WristbandState();
 }
@@ -36,7 +42,7 @@ class _Step1WristbandState extends State<Step1Wristband> {
       _error = null;
     });
     try {
-      final uid = await NfcService.readDeviceUid();
+      final uid = await (widget.readUid ?? NfcService.readDeviceUid)();
       _ctrl.text = uid;
       widget.draft.deviceUid = uid;
       if (mounted) {
@@ -93,7 +99,6 @@ class _Step1WristbandState extends State<Step1Wristband> {
           ),
         ),
         const SizedBox(height: 24),
-        // NFC button
         Center(
           child: GestureDetector(
             onTap: _scanning ? null : _scan,
@@ -148,7 +153,6 @@ class _Step1WristbandState extends State<Step1Wristband> {
           ),
         ),
         const SizedBox(height: 22),
-        // Manual UID
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -250,7 +254,7 @@ class _Step1WristbandState extends State<Step1Wristband> {
           width: double.infinity,
           height: 48,
           child: ElevatedButton.icon(
-            onPressed: _accept,
+            onPressed: _scanning ? null : _accept,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               shape: RoundedRectangleBorder(
