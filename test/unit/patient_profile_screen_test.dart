@@ -87,74 +87,109 @@ int avatarColorIndex(String initials) {
   return hash.abs() % colorsLength;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
+String sexLabel(String biologicalSex) {
+  switch (biologicalSex) {
+    case 'M':
+      return 'Masculino';
+    case 'F':
+      return 'Femenino';
+    default:
+      return 'Indeterminado';
+  }
+}
+
+String docTypeLabel(String documentType) {
+  switch (documentType) {
+    case 'RC':
+      return 'Registro Civil';
+    case 'TI':
+      return 'Tarjeta de Identidad';
+    case 'CC':
+      return 'Cédula de Ciudadanía';
+    case 'CE':
+      return 'Cédula de Extranjería';
+    case 'PA':
+      return 'Pasaporte';
+    case 'PE':
+      return 'Permiso Especial';
+    case 'PT':
+      return 'Permiso Temporal';
+    case 'MS':
+      return 'Menor sin Identificación';
+    case 'AS':
+      return 'Adulto sin Identificación';
+    default:
+      return documentType;
+  }
+}
+
+bool resolveHasInternet(List<String> results) {
+  return !results.contains('none');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TESTS
-// ════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 
 void main() {
   // ── computeAge ─────────────────────────────────────────────────────────────
   group('computeAge', () {
-    test('calcula correctamente la edad exacta en el cumpleaños', () {
-      final now = DateTime(2025, 6, 15);
-      expect(computeAge('1990-06-15', now), 35);
+    test('edad exacta en el día del cumpleaños', () {
+      expect(computeAge('1990-06-15', DateTime(2025, 6, 15)), 35);
     });
 
-    test(
-      'resta un año cuando el cumpleaños aún no ha pasado en el año actual',
-      () {
-        final now = DateTime(2025, 3, 10);
-        expect(computeAge('1990-06-15', now), 34);
-      },
-    );
-
-    test('resta un año cuando el mes es igual pero el día aún no llegó', () {
-      final now = DateTime(2025, 6, 14);
-      expect(computeAge('1990-06-15', now), 34);
+    test('resta 1 cuando el cumpleaños aún no ha llegado (mes anterior)', () {
+      expect(computeAge('1990-06-15', DateTime(2025, 3, 10)), 34);
     });
 
-    test('no resta el año cuando ya pasó el cumpleaños', () {
-      final now = DateTime(2025, 6, 16);
-      expect(computeAge('1990-06-15', now), 35);
+    test('resta 1 cuando mismo mes pero día anterior al cumpleaños', () {
+      expect(computeAge('1990-06-15', DateTime(2025, 6, 14)), 34);
     });
 
-    test('devuelve null para formato inválido (sin guiones)', () {
-      expect(computeAge('19900615', DateTime(2025, 1, 1)), null);
+    test('no resta 1 cuando el cumpleaños ya pasó', () {
+      expect(computeAge('1990-06-15', DateTime(2025, 6, 16)), 35);
+    });
+
+    test('devuelve null para formato sin guiones', () {
+      expect(computeAge('19900615', DateTime(2025, 1, 1)), isNull);
     });
 
     test('devuelve null para cadena vacía', () {
-      expect(computeAge('', DateTime(2025, 1, 1)), null);
+      expect(computeAge('', DateTime(2025, 1, 1)), isNull);
     });
 
-    test('devuelve null para fecha con partes no numéricas', () {
-      expect(computeAge('YYYY-MM-DD', DateTime(2025, 1, 1)), null);
+    test('devuelve null para partes no numéricas', () {
+      expect(computeAge('YYYY-MM-DD', DateTime(2025, 1, 1)), isNull);
     });
 
-    test('maneja correctamente recién nacido (edad 0)', () {
-      final now = DateTime(2025, 1, 1);
-      expect(computeAge('2024-12-31', now), 0);
+    test('edad 0 para recién nacido (día anterior)', () {
+      expect(computeAge('2024-12-31', DateTime(2025, 1, 1)), 0);
     });
 
-    test('maneja paciente recién nacido el mismo día', () {
-      final now = DateTime(2025, 6, 15);
-      expect(computeAge('2025-06-15', now), 0);
+    test('edad 0 para nacido el mismo día', () {
+      expect(computeAge('2025-06-15', DateTime(2025, 6, 15)), 0);
+    });
+
+    test('devuelve null si sólo hay dos partes separadas por guión', () {
+      expect(computeAge('1990-06', DateTime(2025, 1, 1)), isNull);
     });
   });
 
   // ── computeInitials ────────────────────────────────────────────────────────
   group('computeInitials', () {
-    test('dos palabras devuelve las dos primeras letras en mayúscula', () {
+    test('dos palabras → dos primeras letras en mayúscula', () {
       expect(computeInitials('Juan Pérez'), 'JP');
     });
 
-    test('una sola palabra devuelve la primera letra', () {
+    test('una sola palabra → primera letra en mayúscula', () {
       expect(computeInitials('Carlos'), 'C');
     });
 
-    test('tres palabras usa solo las dos primeras', () {
+    test('tres palabras → usa sólo las dos primeras', () {
       expect(computeInitials('María Fernanda López'), 'MF');
     });
 
-    test('nombre con espacios extra al inicio y final', () {
+    test('espacios extra al inicio y al final se recortan', () {
       expect(computeInitials('  Ana Torres  '), 'AT');
     });
 
@@ -162,51 +197,48 @@ void main() {
       expect(computeInitials('luisa martínez'), 'LM');
     });
 
-    test('nombre vacío devuelve ?', () {
+    test('nombre vacío → ?', () {
       expect(computeInitials(''), '?');
     });
 
-    test('nombre con solo espacios devuelve ?', () {
+    test('sólo espacios → ?', () {
       expect(computeInitials('   '), '?');
     });
   });
 
   // ── relLabel ──────────────────────────────────────────────────────────────
   group('relLabel', () {
-    test('01 mapea a Padres', () => expect(relLabel('01'), 'Padres'));
-    test('02 mapea a Hermanos', () => expect(relLabel('02'), 'Hermanos'));
-    test('03 mapea a Tíos', () => expect(relLabel('03'), 'Tíos'));
-    test('04 mapea a Abuelos', () => expect(relLabel('04'), 'Abuelos'));
-    test('código desconocido devuelve el mismo código', () {
+    test('01 → Padres', () => expect(relLabel('01'), 'Padres'));
+    test('02 → Hermanos', () => expect(relLabel('02'), 'Hermanos'));
+    test('03 → Tíos', () => expect(relLabel('03'), 'Tíos'));
+    test('04 → Abuelos', () => expect(relLabel('04'), 'Abuelos'));
+    test('código desconocido → mismo valor', () {
       expect(relLabel('99'), '99');
     });
-    test('cadena vacía devuelve cadena vacía', () {
+    test('cadena vacía → cadena vacía', () {
       expect(relLabel(''), '');
     });
   });
 
   // ── medStatusLabel ────────────────────────────────────────────────────────
   group('medStatusLabel', () {
+    test('active → Activo', () => expect(medStatusLabel('active'), 'Activo'));
     test(
-      'active mapea a Activo',
-      () => expect(medStatusLabel('active'), 'Activo'),
-    );
-    test(
-      'completed mapea a Completado',
+      'completed → Completado',
       () => expect(medStatusLabel('completed'), 'Completado'),
     );
     test(
-      'stopped mapea a Suspendido',
+      'stopped → Suspendido',
       () => expect(medStatusLabel('stopped'), 'Suspendido'),
     );
     test(
-      'unknown mapea a Desconocido',
+      'unknown → Desconocido',
       () => expect(medStatusLabel('unknown'), 'Desconocido'),
     );
-    test('estado arbitrario devuelve el mismo valor', () {
+    test('estado arbitrario → mismo valor', () {
       expect(medStatusLabel('on-hold'), 'on-hold');
     });
-    test('cadena vacía devuelve cadena vacía', () {
+    test('cadena vacía → cadena vacía', () {
       expect(medStatusLabel(''), '');
     });
   });
@@ -215,80 +247,142 @@ void main() {
   group('hasUnsyncedChanges', () {
     final base = <String, dynamic>{'id': '1', 'name': 'Juan'};
 
-    test('devuelve false cuando draft y original son iguales', () {
-      final draft = Map<String, dynamic>.from(base);
-      final original = Map<String, dynamic>.from(base);
-      expect(hasUnsyncedChanges(draft, original), false);
+    test('false cuando draft y original son idénticos', () {
+      expect(
+        hasUnsyncedChanges(
+          Map<String, dynamic>.from(base),
+          Map<String, dynamic>.from(base),
+        ),
+        false,
+      );
     });
 
-    test('devuelve true cuando el draft tiene un campo distinto', () {
+    test('true cuando un campo del draft difiere', () {
       final draft = Map<String, dynamic>.from(base)..['name'] = 'Pedro';
-      final original = Map<String, dynamic>.from(base);
-      expect(hasUnsyncedChanges(draft, original), true);
+      expect(hasUnsyncedChanges(draft, Map<String, dynamic>.from(base)), true);
     });
 
-    test('devuelve true cuando el draft tiene un campo adicional', () {
+    test('true cuando el draft tiene un campo extra', () {
       final draft = Map<String, dynamic>.from(base)..['extra'] = 'valor';
-      final original = Map<String, dynamic>.from(base);
-      expect(hasUnsyncedChanges(draft, original), true);
+      expect(hasUnsyncedChanges(draft, Map<String, dynamic>.from(base)), true);
     });
 
-    test('devuelve false con dos mapas vacíos', () {
+    test('false con dos mapas vacíos', () {
       expect(hasUnsyncedChanges({}, {}), false);
+    });
+
+    test('true cuando original tiene un campo que draft no tiene', () {
+      final original = Map<String, dynamic>.from(base)..['extra'] = 'valor';
+      expect(
+        hasUnsyncedChanges(Map<String, dynamic>.from(base), original),
+        true,
+      );
     });
   });
 
   // ── avatarColorIndex ──────────────────────────────────────────────────────
   group('avatarColorIndex', () {
-    test('siempre devuelve un índice entre 0 y 7 (inclusive)', () {
-      final inputs = ['AB', 'ZZ', 'MF', 'JP', 'CC', 'LM', 'AT', '??', 'A', ''];
+    test('siempre devuelve índice entre 0 y 7 (inclusive)', () {
+      const inputs = ['AB', 'ZZ', 'MF', 'JP', 'CC', 'LM', 'AT', '??', 'A', ''];
       for (final input in inputs) {
-        final index = avatarColorIndex(input);
-        expect(index, greaterThanOrEqualTo(0));
-        expect(index, lessThan(8));
+        final idx = avatarColorIndex(input);
+        expect(
+          idx,
+          greaterThanOrEqualTo(0),
+          reason: 'falla con input "$input"',
+        );
+        expect(idx, lessThan(8), reason: 'falla con input "$input"');
       }
     });
 
-    test(
-      'mismas iniciales producen siempre el mismo índice (determinista)',
-      () {
-        expect(avatarColorIndex('AB'), avatarColorIndex('AB'));
-      },
-    );
-
-    test('iniciales distintas pueden producir índices distintos', () {
-      final a = avatarColorIndex('AB');
-      final b = avatarColorIndex('ZZ');
-      expect(a, inInclusiveRange(0, 7));
-      expect(b, inInclusiveRange(0, 7));
+    test('determinista: mismas iniciales → mismo índice', () {
+      expect(avatarColorIndex('MF'), avatarColorIndex('MF'));
     });
 
     test('cadena vacía no lanza excepción', () {
       expect(() => avatarColorIndex(''), returnsNormally);
     });
+
+    test('índices para iniciales distintas están en rango válido', () {
+      expect(avatarColorIndex('AB'), inInclusiveRange(0, 7));
+      expect(avatarColorIndex('ZZ'), inInclusiveRange(0, 7));
+    });
   });
 
-  // ── _updateConnectivityStatus: business logic ──────────────────────────
-  group('lógica de conectividad', () {
-    test('hasNet es true cuando los resultados no contienen "none"', () {
-      const results = ['wifi'];
-      final hasNet = !results.contains('none');
-      expect(hasNet, true);
+  // ── sexLabel ──────────────────────────────────────────────────────────────
+  group('sexLabel', () {
+    test('M → Masculino', () => expect(sexLabel('M'), 'Masculino'));
+    test('F → Femenino', () => expect(sexLabel('F'), 'Femenino'));
+    test('valor desconocido → Indeterminado', () {
+      expect(sexLabel('X'), 'Indeterminado');
+    });
+    test('cadena vacía → Indeterminado', () {
+      expect(sexLabel(''), 'Indeterminado');
+    });
+  });
+
+  // ── docTypeLabel ──────────────────────────────────────────────────────────
+  group('docTypeLabel', () {
+    test('RC → Registro Civil', () {
+      expect(docTypeLabel('RC'), 'Registro Civil');
+    });
+    test('TI → Tarjeta de Identidad', () {
+      expect(docTypeLabel('TI'), 'Tarjeta de Identidad');
+    });
+    test('CC → Cédula de Ciudadanía', () {
+      expect(docTypeLabel('CC'), 'Cédula de Ciudadanía');
+    });
+    test('CE → Cédula de Extranjería', () {
+      expect(docTypeLabel('CE'), 'Cédula de Extranjería');
+    });
+    test('PA → Pasaporte', () => expect(docTypeLabel('PA'), 'Pasaporte'));
+    test('PE → Permiso Especial', () {
+      expect(docTypeLabel('PE'), 'Permiso Especial');
+    });
+    test('PT → Permiso Temporal', () {
+      expect(docTypeLabel('PT'), 'Permiso Temporal');
+    });
+    test('MS → Menor sin Identificación', () {
+      expect(docTypeLabel('MS'), 'Menor sin Identificación');
+    });
+    test('AS → Adulto sin Identificación', () {
+      expect(docTypeLabel('AS'), 'Adulto sin Identificación');
+    });
+    test('código desconocido → mismo valor', () {
+      expect(docTypeLabel('XX'), 'XX');
+    });
+    test('cadena vacía → cadena vacía', () {
+      expect(docTypeLabel(''), '');
+    });
+  });
+
+  // ── resolveHasInternet ────────────────────────────────────────────────────
+  group('resolveHasInternet (lógica de _updateConnectivityStatus)', () {
+    test('true cuando hay wifi', () {
+      expect(resolveHasInternet(['wifi']), true);
     });
 
-    test('hasNet es false cuando los resultados contienen "none"', () {
-      const results = ['none'];
-      final hasNet = !results.contains('none');
-      expect(hasNet, false);
+    test('true cuando hay mobile', () {
+      expect(resolveHasInternet(['mobile']), true);
+    });
+
+    test('false cuando contiene none', () {
+      expect(resolveHasInternet(['none']), false);
+    });
+
+    test('false cuando hay varios resultados y uno es none', () {
+      expect(resolveHasInternet(['wifi', 'none']), false);
     });
 
     test(
-      'lista vacía se interpreta como sin conexión (no contiene wifi/mobile)',
+      'lista vacía se interpreta como con internet (sin none explícito)',
       () {
-        const results = <String>[];
-        final hasNet = !results.contains('none');
-        expect(hasNet, true);
+        expect(resolveHasInternet([]), true);
       },
     );
+
+    test('múltiples tipos sin none → true', () {
+      expect(resolveHasInternet(['wifi', 'ethernet']), true);
+    });
   });
 }
