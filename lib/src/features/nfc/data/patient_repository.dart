@@ -37,19 +37,22 @@ class PatientRepository {
   /// If the patient is a minor (<18), the backend returns 403 with
   /// "Guardian bracelet scan required for minors."  In that case, the
   /// caller should prompt for the guardian's NFC scan and call this
-  /// method again with [guardianDeviceUid].
+  /// method again with [guardianDeviceUid] (sent as the X-Guardian-Device-UID header).
   Future<PatientFullRecord> scanDevice(
     String deviceUid, {
     String? guardianDeviceUid,
   }) async {
-    String path = '/api/v1/patients/scan/$deviceUid';
+    // The guardian UID is a second authentication factor for minors. It is
+    // sent as a header (not a query parameter) so it never leaks into access
+    // logs, proxy logs, or browser history.
+    final Map<String, String> headers = await _authHeaders();
     if (guardianDeviceUid != null && guardianDeviceUid.isNotEmpty) {
-      path += '?guardian_device_uid=$guardianDeviceUid';
+      headers['X-Guardian-Device-UID'] = guardianDeviceUid;
     }
 
     final Map<String, dynamic> data = await _apiClient.getJson(
-      path: path,
-      headers: await _authHeaders(),
+      path: '/api/v1/patients/scan/$deviceUid',
+      headers: headers,
     );
     return PatientFullRecord.fromJson(data);
   }
