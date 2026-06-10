@@ -12,6 +12,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cbor/cbor.dart' as cbor;
+import 'package:cryptography/cryptography.dart' as crypto;
 
 /// Overhead added by AES-256-GCM: 12-byte nonce + 16-byte auth tag = 28 bytes.
 const int _kAesGcmOverhead = 28;
@@ -39,6 +40,9 @@ class NfcPayloadCodec {
 
   final Uint8List _keyBytes;
 
+  // Primitiva algorítmica estándar de la industria (AES-GCM con llaves de 256 bits)
+  final _algorithm = crypto.AesGcm.with256bits();
+
   // ── Public API ──────────────────────────────────────────────────────────
 
   /// Encodes a JSON-serializable map into an encrypted byte array
@@ -53,8 +57,8 @@ class NfcPayloadCodec {
     // Step 2: CBOR → DEFLATE (zlib level 9)
     final deflated = _deflate(cborBytes);
 
-    // Step 3: DEFLATE → AES-256-GCM
-    final encrypted = _encrypt(deflated);
+    // Step 3: DEFLATE → AES-256-GCM (Asíncrono real)
+    final encrypted = await _encrypt(deflated);
 
     return encrypted;
   }
@@ -64,8 +68,9 @@ class NfcPayloadCodec {
   /// Returns null if decryption fails (wrong key, tampered data).
   Future<Map<String, dynamic>?> decode(Uint8List encrypted) async {
     try {
-      // Step 1: AES-256-GCM → DEFLATE
-      final deflated = _decrypt(encrypted);
+      // Step 1: AES-256-GCM → DEFLATE (Asíncrono real)
+      final deflated = await _decrypt(encrypted);
+      if (deflated == null) return null;
 
       // Step 2: INFLATE → CBOR
       final cborBytes = _inflate(deflated);
@@ -132,41 +137,32 @@ class NfcPayloadCodec {
     return Uint8List.fromList(decoder.convert(data));
   }
 
-  // ── AES-256-GCM ───────────────────────────────────────────────────────
-  //
-  // We use a pure-Dart AES-GCM implementation to avoid native plugin
-  // dependencies. The `pointycastle` package is heavy; instead we use
-  // the `cryptography` package which is already a transitive dependency
-  // of flutter_secure_storage on some platforms.
-  //
-  // However, to keep this self-contained and avoid import conflicts,
-  // we implement AES-GCM using dart:typed_data and the `encrypt` package.
-  //
-  // For the MVP/testing phase, we use a simplified approach:
-  // We rely on the `encrypt` package (already in pubspec or to be added).
+  // ── AES-256-GCM REAL IMPLEMENTATION ────────────────────────────────────
   //
   // Wire format: [12-byte nonce][ciphertext][16-byte auth tag]
 
-  Uint8List _encrypt(Uint8List plaintext) {
-    // Generate random 12-byte nonce
+  Future<Uint8List> _encrypt(Uint8List plaintext) async {
+    // Generar un nonce seguro y aleatorio de 12 bytes
     final nonce = _secureRandom(_kNonceLength);
 
-    // AES-GCM encrypt
-    final result = _aesGcmEncrypt(
-      key: _keyBytes,
+    // Cifrado simétrico de alta seguridad utilizando el paquete oficial
+    final secretBox = await _algorithm.encrypt(
+      plaintext,
+      secretKey: crypto.SecretKey(_keyBytes),
       nonce: nonce,
-      plaintext: plaintext,
     );
 
-    // Pack: nonce + ciphertext + tag
+    // Empaquetar la estructura binaria final para el chip NFC
     final output = BytesBuilder(copy: false);
     output.add(nonce);
-    output.add(result.ciphertext);
-    output.add(result.tag);
+    output.add(secretBox.cipherText);
+    output.add(
+      secretBox.mac.bytes,
+    ); // El tag de autenticación de 16 bytes (GCM)
     return output.toBytes();
   }
 
-  Uint8List _decrypt(Uint8List packed) {
+  Future<Uint8List?> _decrypt(Uint8List packed) async {
     if (packed.length < _kAesGcmOverhead) {
       throw FormatException(
         'Encrypted payload too short: ${packed.length} bytes '
@@ -174,6 +170,7 @@ class NfcPayloadCodec {
       );
     }
 
+    // Desmenuzar el payload binario
     final nonce = Uint8List.sublistView(packed, 0, _kNonceLength);
     final tag = Uint8List.sublistView(packed, packed.length - _kTagLength);
     final ciphertext = Uint8List.sublistView(
@@ -182,127 +179,26 @@ class NfcPayloadCodec {
       packed.length - _kTagLength,
     );
 
-    return _aesGcmDecrypt(
-      key: _keyBytes,
-      nonce: nonce,
-      ciphertext: ciphertext,
-      tag: tag,
-    );
-  }
+    try {
+      // Reconstruir la caja criptográfica estructurada
+      final secretBox = crypto.SecretBox(
+        ciphertext,
+        nonce: nonce,
+        mac: crypto.Mac(tag),
+      );
 
-  // ── AES-GCM core (using pointycastle-compatible logic) ────────────────
-  //
-  // NOTE: This is a placeholder that will be replaced by the actual
-  // cryptography implementation. For the initial testing phase with
-  // NTAG 215, we use a lightweight approach.
-  //
-  // In production, this should use:
-  //   import 'package:cryptography/cryptography.dart';
-  //   final algorithm = AesGcm.with256bits();
+      // Desencriptado. Si los datos fueron alterados o la clave está mal,
+      // el algoritmo arrojará una excepción matemática inmediatamente.
+      final clearText = await _algorithm.decrypt(
+        secretBox,
+        secretKey: crypto.SecretKey(_keyBytes),
+      );
 
-  static _AesGcmResult _aesGcmEncrypt({
-    required Uint8List key,
-    required Uint8List nonce,
-    required Uint8List plaintext,
-  }) {
-    // TODO: Replace with real AES-GCM from `cryptography` package.
-    // For now, XOR with key-derived stream + HMAC tag for testing.
-    // This allows the full pipeline to be tested end-to-end on real NFC
-    // chips while the crypto is swapped in later.
-    final stream = _deriveStream(key, nonce, plaintext.length);
-    final ciphertext = Uint8List(plaintext.length);
-    for (var i = 0; i < plaintext.length; i++) {
-      ciphertext[i] = plaintext[i] ^ stream[i];
+      return Uint8List.fromList(clearText);
+    } catch (_) {
+      // Retornar nulo si la firma o autenticidad fallaron (datos manipulados)
+      return null;
     }
-    final tag = _computeTag(key, nonce, ciphertext);
-    return _AesGcmResult(ciphertext: ciphertext, tag: tag);
-  }
-
-  static Uint8List _aesGcmDecrypt({
-    required Uint8List key,
-    required Uint8List nonce,
-    required Uint8List ciphertext,
-    required Uint8List tag,
-  }) {
-    // Verify tag
-    final expectedTag = _computeTag(key, nonce, ciphertext);
-    if (!_constantTimeEquals(tag, expectedTag)) {
-      throw FormatException('AES-GCM authentication failed — data tampered');
-    }
-    final stream = _deriveStream(key, nonce, ciphertext.length);
-    final plaintext = Uint8List(ciphertext.length);
-    for (var i = 0; i < ciphertext.length; i++) {
-      plaintext[i] = ciphertext[i] ^ stream[i];
-    }
-    return plaintext;
-  }
-
-  /// Derives a pseudo-random byte stream from key + nonce.
-  /// This is a TESTING placeholder — NOT real AES-GCM.
-  static Uint8List _deriveStream(Uint8List key, Uint8List nonce, int length) {
-    final result = Uint8List(length);
-    var counter = 0;
-    var offset = 0;
-    while (offset < length) {
-      // Simple block derivation: hash(key + nonce + counter)
-      final block = _simpleHash(key, nonce, counter);
-      for (var i = 0; i < block.length && offset < length; i++, offset++) {
-        result[offset] = block[i];
-      }
-      counter++;
-    }
-    return result;
-  }
-
-  /// Simple keyed hash for testing. NOT cryptographically secure.
-  static Uint8List _simpleHash(Uint8List key, Uint8List nonce, int counter) {
-    // Use a basic mixing function for testing purposes
-    final input = BytesBuilder();
-    input.add(key);
-    input.add(nonce);
-    input.addByte((counter >> 24) & 0xFF);
-    input.addByte((counter >> 16) & 0xFF);
-    input.addByte((counter >> 8) & 0xFF);
-    input.addByte(counter & 0xFF);
-    final bytes = input.toBytes();
-
-    // Simple 32-byte hash via repeated XOR-fold
-    final hash = Uint8List(32);
-    for (var i = 0; i < bytes.length; i++) {
-      hash[i % 32] ^= bytes[i];
-      hash[i % 32] = (hash[i % 32] * 31 + 17) & 0xFF;
-    }
-    return hash;
-  }
-
-  /// Computes a 16-byte authentication tag.
-  static Uint8List _computeTag(
-    Uint8List key,
-    Uint8List nonce,
-    Uint8List ciphertext,
-  ) {
-    final input = BytesBuilder();
-    input.add(key);
-    input.add(nonce);
-    input.add(ciphertext);
-    final bytes = input.toBytes();
-
-    final tag = Uint8List(_kTagLength);
-    for (var i = 0; i < bytes.length; i++) {
-      tag[i % _kTagLength] ^= bytes[i];
-      tag[i % _kTagLength] = (tag[i % _kTagLength] * 37 + 23) & 0xFF;
-    }
-    return tag;
-  }
-
-  /// Constant-time comparison to prevent timing attacks.
-  static bool _constantTimeEquals(Uint8List a, Uint8List b) {
-    if (a.length != b.length) return false;
-    var result = 0;
-    for (var i = 0; i < a.length; i++) {
-      result |= a[i] ^ b[i];
-    }
-    return result == 0;
   }
 
   // ── Utilities ──────────────────────────────────────────────────────────
@@ -324,10 +220,4 @@ class NfcPayloadCodec {
         int.parse(clean.substring(i, i + 2), radix: 16),
     ]);
   }
-}
-
-class _AesGcmResult {
-  _AesGcmResult({required this.ciphertext, required this.tag});
-  final Uint8List ciphertext;
-  final Uint8List tag;
 }

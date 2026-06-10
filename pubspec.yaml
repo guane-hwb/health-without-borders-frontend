@@ -17,6 +17,9 @@ dependencies:
   http: ^1.6.0
   connectivity_plus: ^6.1.4
 
+  # ── cryptography ──
+  cryptography: ^2.5.0
+
   # ── Config ──
   flutter_dotenv: ^6.0.0
 
