@@ -6,8 +6,8 @@ class PatientRepository {
   PatientRepository({
     required ApiClient apiClient,
     required AuthRepository authRepository,
-  })  : _apiClient = apiClient,
-        _authRepository = authRepository;
+  }) : _apiClient = apiClient,
+       _authRepository = authRepository;
 
   final ApiClient _apiClient;
   final AuthRepository _authRepository;
@@ -42,16 +42,15 @@ class PatientRepository {
     String deviceUid, {
     String? guardianDeviceUid,
   }) async {
-    // The guardian UID is a second authentication factor for minors. It is
-    // sent as a header (not a query parameter) so it never leaks into access
-    // logs, proxy logs, or browser history.
     final Map<String, String> headers = await _authHeaders();
     if (guardianDeviceUid != null && guardianDeviceUid.isNotEmpty) {
-      headers['X-Guardian-Device-UID'] = guardianDeviceUid;
+      headers['X-Guardian-Device-UID'] = guardianDeviceUid.trim();
     }
 
+    final String safeDeviceUid = Uri.encodeComponent(deviceUid.trim());
+
     final Map<String, dynamic> data = await _apiClient.getJson(
-      path: '/api/v1/patients/scan/$deviceUid',
+      path: '/api/v1/patients/scan/$safeDeviceUid',
       headers: headers,
     );
     return PatientFullRecord.fromJson(data);
