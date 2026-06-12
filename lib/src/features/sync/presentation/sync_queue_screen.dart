@@ -1,22 +1,13 @@
-// lib/src/features/sync/presentation/sync_queue_screen.dart
-
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
+import '../../../core/i18n/app_strings.dart';
 import '../../../core/storage/local_database.dart';
 import '../../../design/tokens/app_colors.dart';
-import '../../../shared/widgets/hwb_logo.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
-import '../../nfc/domain/patient_record.dart';
+import '../../nfc/presentation/read_nfc_guardian_screen.dart';
+import '../../nfc/presentation/shared_read_nfc_header.dart';
 
-/// "Pendientes por sincronizar" — shows all local records queued for sync.
-///
-/// Key behavior:
-///   • No manual "Sync" buttons — sync happens automatically in the
-///     background whenever the device detects connectivity.
-///   • "Ver resumen" opens a read-only summary of the patient data.
-///   • Records with errors show the error message and can be deleted.
-///   • Successfully synced records are removed from this list.
 class SyncQueueScreen extends StatefulWidget {
   const SyncQueueScreen({super.key});
   @override
@@ -25,7 +16,7 @@ class SyncQueueScreen extends StatefulWidget {
 
 class _SyncQueueScreenState extends State<SyncQueueScreen> {
   List<LocalPatientEntry> _entries = [];
-  bool _isLoading = true;
+  bool _loading = true, _syncing = false;
 
   @override
   void initState() {
@@ -34,164 +25,186 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _isLoading = true);
-    final entries = await AppScope.of(
-      context,
-    ).localDatabase.getUnsyncedRecords();
+    setState(() => _loading = true);
+    final e = await AppScope.of(context).localDatabase.getUnsyncedRecords();
+
     if (mounted) {
       setState(() {
-        _entries = entries;
-        _isLoading = false;
+        _entries = e;
+        _loading = false;
       });
     }
   }
 
-  Future<void> _deleteRecord(LocalPatientEntry entry) async {
-    final confirm = await showDialog<bool>(
+  Future<void> _syncAll() async {
+    setState(() => _syncing = true);
+    await AppScope.of(context).syncEngine.syncAll();
+    await _load();
+    if (mounted) {
+      setState(() => _syncing = false);
+    }
+  }
+
+  Future<void> _syncOne(String id) async {
+    final ok = await AppScope.of(context).syncEngine.syncOne(id);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? AppStrings.of(context).syncedSuccessfully
+                : AppStrings.of(context).syncFailedRetry,
+          ),
+          backgroundColor: ok ? AppColors.success : AppColors.error,
+        ),
+      );
+      _load();
+    }
+  }
+
+  void _review(LocalPatientEntry e) {
+    final r = e.toPatientRecord();
+    if (r == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ReadNfcGuardianScreen(patient: r)),
+    );
+  }
+
+  Future<void> _delete(LocalPatientEntry e) async {
+    final s = AppStrings.of(context);
+    final db = AppScope.of(context).localDatabase;
+    final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar registro'),
-        content: Text(
-          '¿Eliminar el registro local de ${entry.patientName}? '
-          'Si no ha sido sincronizado, se perderán los datos.',
-        ),
+        title: Text(s.deleteRecord),
+        content: Text('${s.deleteRecordConfirm}\n\n${e.maskedName}'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
+            child: Text(s.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text(
-              'Eliminar',
-              style: TextStyle(color: AppColors.error),
+            child: Text(
+              s.delete,
+              style: const TextStyle(color: AppColors.error),
             ),
           ),
         ],
       ),
     );
-    if (confirm == true && mounted) {
-      await AppScope.of(context).localDatabase.deleteRecord(entry.patientId);
+    if (ok == true && mounted) {
+      await db.deleteRecord(e.patientId);
       _load();
     }
   }
 
-  void _reviewRecord(LocalPatientEntry entry) {
-    final record = entry.toPatientRecord();
-    if (record == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Los datos del registro no están disponibles.'),
-        ),
-      );
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _ReviewSummaryScreen(
-          patient: record,
-          createdAt: entry.createdAt,
-          syncError: entry.syncError,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FB),
+      backgroundColor: const Color(0xFFEBF2F8),
       body: SafeArea(
         child: Stack(
           children: [
             Column(
               children: [
-                // ── Header ──
-                Container(
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(20),
-                    ),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
+                SharedReadNfcHeader(
+                  title: s.syncTitle,
+                  onBack: () => Navigator.of(context).pop(),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
                   child: Row(
                     children: [
-                      Material(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(10),
-                        child: InkWell(
-                          onTap: () => Navigator.of(context).pop(),
-                          borderRadius: BorderRadius.circular(10),
-                          child: const SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: Icon(
-                              Icons.arrow_back,
-                              color: AppColors.white,
-                              size: 20,
+                      const SizedBox(),
+                      const Spacer(),
+                      if (_entries.isNotEmpty)
+                        SizedBox(
+                          height: 33,
+                          child: ElevatedButton.icon(
+                            onPressed: _syncing ? null : _syncAll,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              disabledBackgroundColor: AppColors.disabled,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
+                            ),
+                            icon: _syncing
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.white,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.cloud_upload,
+                                    size: 18,
+                                    color: AppColors.white,
+                                  ),
+                            label: Text(
+                              s.syncAll,
+                              style: const TextStyle(
+                                color: AppColors.white,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      const HwbLogo(size: 38, onDark: true),
-                      const Expanded(
-                        child: Center(
-                          child: Text(
-                            'Pendientes por sincronizar',
-                            style: TextStyle(
-                              color: AppColors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 48),
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 14),
-
-                // ── Info banner ──
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Container(
-                    padding: const EdgeInsets.all(11),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          size: 16,
-                          color: AppColors.primary,
-                        ),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Los registros se sincronizan automáticamente cuando '
-                            'se detecta conexión a internet. No se requiere acción manual.',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: AppColors.textPrimary,
-                              height: 1.4,
-                            ),
+                Expanded(
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _entries.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.cloud_done,
+                                size: 80,
+                                color: AppColors.success.withValues(alpha: 0.6),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                s.allSynced,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                s.noRecordsPending,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(18, 0, 18, 60),
+                          itemCount: _entries.length,
+                          itemBuilder: (_, i) => _SyncCard(
+                            entry: _entries[i],
+                            s: s,
+                            onSync: () => _syncOne(_entries[i].patientId),
+                            onReview: () => _review(_entries[i]),
+                            onDelete: () => _delete(_entries[i]),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
                 ),
-
-                const SizedBox(height: 14),
-
-                // ── Content ──
-                Expanded(child: _buildContent()),
               ],
             ),
             const Positioned(
@@ -205,90 +218,39 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
       ),
     );
   }
-
-  Widget _buildContent() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_entries.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cloud_done,
-              size: 80,
-              color: AppColors.success.withValues(alpha: 0.6),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Todo sincronizado',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'No hay registros pendientes por enviar.',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 60),
-        itemCount: _entries.length,
-        itemBuilder: (_, i) => _QueueCard(
-          entry: _entries[i],
-          onReview: () => _reviewRecord(_entries[i]),
-          onDelete: () => _deleteRecord(_entries[i]),
-        ),
-      ),
-    );
-  }
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// Queue card — one per pending record
-// ═════════════════════════════════════════════════════════════════════════════
-
-class _QueueCard extends StatelessWidget {
-  const _QueueCard({
+class _SyncCard extends StatelessWidget {
+  const _SyncCard({
     required this.entry,
+    required this.s,
+    required this.onSync,
     required this.onReview,
     required this.onDelete,
   });
-
   final LocalPatientEntry entry;
-  final VoidCallback onReview;
-  final VoidCallback onDelete;
+  final AppStrings s;
+  final VoidCallback onSync, onReview, onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final hasError = entry.syncError != null && entry.syncError!.isNotEmpty;
-    final dateStr = entry.createdAt.contains('T')
+    final hasErr = entry.syncError?.isNotEmpty == true;
+    final date = entry.createdAt.contains('T')
         ? entry.createdAt.split('T').first
         : entry.createdAt;
-
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(14),
-        border: hasError
-            ? Border.all(color: AppColors.error.withValues(alpha: 0.3))
+        border: hasErr
+            ? Border.all(color: AppColors.error.withValues(alpha: 0.4))
             : null,
         boxShadow: const [
           BoxShadow(
-            color: Color(0x12000000),
-            blurRadius: 6,
-            offset: Offset(0, 2),
+            color: Color(0x18000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
           ),
         ],
       ),
@@ -299,24 +261,10 @@ class _QueueCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
             child: Row(
               children: [
-                // Avatar
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Center(
-                    child: Text(
-                      _initials(entry.patientName),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
+                const CircleAvatar(
+                  radius: 18,
+                  backgroundColor: Color(0xFF90CAF9),
+                  child: Icon(Icons.person, size: 22, color: Color(0xFF1A237E)),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -324,16 +272,15 @@ class _QueueCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        entry.patientName,
+                        entry.maskedName,
                         style: const TextStyle(
-                          fontSize: 14,
+                          fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
+                          color: AppColors.primary,
                         ),
                       ),
-                      const SizedBox(height: 2),
                       Text(
-                        'Creado: $dateStr',
+                        date,
                         style: const TextStyle(
                           fontSize: 11,
                           color: AppColors.textSecondary,
@@ -342,52 +289,32 @@ class _QueueCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Status chip
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: hasError
-                        ? AppColors.error.withValues(alpha: 0.1)
-                        : AppColors.accent.withValues(alpha: 0.2),
+                    color: hasErr
+                        ? const Color(0xFFFEE2E2)
+                        : const Color(0xFFFFF3CD),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        hasError
-                            ? Icons.error_outline
-                            : Icons.cloud_upload_outlined,
-                        size: 12,
-                        color: hasError
-                            ? AppColors.error
-                            : const Color(0xFFB8800F),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        hasError ? 'Error' : 'En cola',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: hasError
-                              ? AppColors.error
-                              : const Color(0xFFB8800F),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    hasErr ? s.error : s.pending,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: hasErr ? AppColors.error : const Color(0xFF856404),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-
-          // Error message
-          if (hasError)
+          if (hasErr)
             Padding(
-              padding: const EdgeInsets.fromLTRB(64, 6, 14, 0),
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
               child: Text(
                 entry.syncError!,
                 style: const TextStyle(fontSize: 11, color: AppColors.error),
@@ -395,64 +322,24 @@ class _QueueCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-
           const SizedBox(height: 10),
-
-          // Action buttons
+          const Divider(height: 1),
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
             child: Row(
               children: [
-                // "Ver resumen" button
-                Expanded(
-                  child: SizedBox(
-                    height: 36,
-                    child: OutlinedButton.icon(
-                      onPressed: onReview,
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                          color: AppColors.primary,
-                          width: 1.2,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      icon: const Icon(
-                        Icons.visibility_outlined,
-                        size: 16,
-                        color: AppColors.primary,
-                      ),
-                      label: const Text(
-                        'Ver resumen',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+                _btn(Icons.cloud_upload, s.syncNow, AppColors.primary, onSync),
+                const SizedBox(width: 8),
+                _btn(Icons.visibility, s.review, AppColors.secondary, onReview),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 20,
+                    color: AppColors.error,
                   ),
-                ),
-                const SizedBox(width: 10),
-                // Delete button
-                SizedBox(
-                  height: 36,
-                  width: 36,
-                  child: IconButton(
-                    onPressed: onDelete,
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      size: 18,
-                      color: AppColors.error,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.error.withValues(alpha: 0.08),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
+                  onPressed: onDelete,
+                  tooltip: s.delete,
                 ),
               ],
             ),
@@ -462,391 +349,23 @@ class _QueueCard extends StatelessWidget {
     );
   }
 
-  static String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Review summary — read-only view of the patient record (like Step 5)
-// ═════════════════════════════════════════════════════════════════════════════
-
-class _ReviewSummaryScreen extends StatelessWidget {
-  const _ReviewSummaryScreen({
-    required this.patient,
-    required this.createdAt,
-    this.syncError,
-  });
-
-  final PatientFullRecord patient;
-  final String createdAt;
-  final String? syncError;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = patient.patientInfo;
-    final g = patient.guardianInfo;
-    final bg = patient.backgroundHistory;
-    final dateStr = createdAt.contains('T')
-        ? createdAt.split('T').first
-        : createdAt;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FB),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            Container(
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.vertical(
-                  bottom: Radius.circular(20),
-                ),
-              ),
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
-              child: Row(
-                children: [
-                  Material(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(10),
-                    child: InkWell(
-                      onTap: () => Navigator.of(context).pop(),
-                      borderRadius: BorderRadius.circular(10),
-                      child: const SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Icon(
-                          Icons.arrow_back,
-                          color: AppColors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const HwbLogo(size: 28),
-                  const Expanded(
-                    child: Center(
-                      child: Text(
-                        'Resumen del registro',
-                        style: TextStyle(
-                          color: AppColors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 48),
-                ],
-              ),
+  Widget _btn(IconData icon, String label, Color color, VoidCallback onTap) =>
+      SizedBox(
+        height: 30,
+        child: ElevatedButton.icon(
+          onPressed: onTap,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
             ),
-
-            // Content
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
-                children: [
-                  // Status pill
-                  Row(
-                    children: [
-                      Icon(
-                        syncError != null
-                            ? Icons.error_outline
-                            : Icons.cloud_upload_outlined,
-                        size: 16,
-                        color: syncError != null
-                            ? AppColors.error
-                            : const Color(0xFFB8800F),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        syncError != null
-                            ? 'Error de sincronización'
-                            : 'Pendiente de sincronización',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: syncError != null
-                              ? AppColors.error
-                              : const Color(0xFFB8800F),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '· $dateStr',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  if (syncError != null) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.error.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        syncError!,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.error,
-                        ),
-                      ),
-                    ),
-                  ],
-
-                  const SizedBox(height: 16),
-
-                  // ── Dispositivo NFC ──
-                  _SummaryCard(
-                    icon: Icons.nfc,
-                    title: 'Dispositivo NFC',
-                    rows: [MapEntry('UID', patient.deviceUid)],
-                  ),
-                  const SizedBox(height: 10),
-
-                  // ── Paciente ──
-                  _SummaryCard(
-                    icon: Icons.person_outline,
-                    title: 'Paciente',
-                    rows: [
-                      MapEntry('Nombre', p.fullName),
-                      MapEntry(
-                        'Documento',
-                        '${p.identification.documentType} ${p.identification.documentNumber}',
-                      ),
-                      MapEntry('F. nacimiento', p.dob),
-                      MapEntry('Sexo', _sexLabel(p.biologicalSex)),
-                      MapEntry(
-                        'Nacionalidad',
-                        p.nationalityName ?? p.nationalityCode,
-                      ),
-                      if (p.bloodType != null) MapEntry('Sangre', p.bloodType!),
-                      MapEntry(
-                        'Dirección',
-                        [
-                          p.address.street,
-                          p.address.city,
-                          p.address.state,
-                          p.address.zone == 'R' ? 'Rural' : 'Urbana',
-                        ].where((s) => s != null && s.isNotEmpty).join(', '),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-
-                  // ── Guardián ──
-                  _SummaryCard(
-                    icon: Icons.family_restroom,
-                    title: 'Guardián',
-                    rows: g.name.isEmpty
-                        ? [const MapEntry('—', 'Sin guardián')]
-                        : [
-                            MapEntry('Nombre', g.name),
-                            MapEntry('Parentesco', _relLabel(g.relationship)),
-                            MapEntry(
-                              'Teléfono',
-                              g.phone.isEmpty ? '—' : g.phone,
-                            ),
-                            MapEntry('NFC', g.deviceUid ?? 'No registrada'),
-                          ],
-                  ),
-                  const SizedBox(height: 10),
-
-                  // ── Antecedentes ──
-                  _SummaryCard(
-                    icon: Icons.history_edu_outlined,
-                    title: 'Antecedentes',
-                    rows: [
-                      MapEntry(
-                        'Crónicas',
-                        bg == null || bg.chronicConditions.isEmpty
-                            ? '—'
-                            : '${bg.chronicConditions.length} ítems',
-                      ),
-                      MapEntry('Personal', bg?.personalHistory ?? '—'),
-                      MapEntry(
-                        'Medicam.',
-                        bg == null || bg.medications.isEmpty
-                            ? '—'
-                            : '${bg.medications.length} ítems',
-                      ),
-                      MapEntry(
-                        'Familiares',
-                        bg == null || bg.familyHistory.isEmpty
-                            ? '—'
-                            : '${bg.familyHistory.length} ítems',
-                      ),
-                      MapEntry(
-                        'Alergias',
-                        patient.allergies.isEmpty
-                            ? '—'
-                            : '${patient.allergies.length} ítems',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-
-                  // ── Consultas ──
-                  if (patient.medicalHistory.isNotEmpty)
-                    _SummaryCard(
-                      icon: Icons.medical_services_outlined,
-                      title: 'Consultas',
-                      rows: [
-                        MapEntry('Total', '${patient.medicalHistory.length}'),
-                        for (final c in patient.medicalHistory)
-                          MapEntry(
-                            c.startDateTime.contains('T')
-                                ? c.startDateTime.split('T').first
-                                : c.startDateTime,
-                            c.clinicalEvaluation.historyOfCurrentIllness ?? '—',
-                          ),
-                      ],
-                    ),
-                  if (patient.medicalHistory.isNotEmpty)
-                    const SizedBox(height: 10),
-
-                  // ── Vacunas ──
-                  if (patient.vaccinationRecord.isNotEmpty)
-                    _SummaryCard(
-                      icon: Icons.vaccines_outlined,
-                      title: 'Vacunas',
-                      rows: [
-                        MapEntry(
-                          'Total',
-                          '${patient.vaccinationRecord.length}',
-                        ),
-                        for (final v in patient.vaccinationRecord)
-                          MapEntry(
-                            v.vaccineName,
-                            'Dosis ${v.dose} · ${v.date}',
-                          ),
-                      ],
-                    ),
-                ],
-              ),
-            ),
-          ],
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+          ),
+          icon: Icon(icon, size: 14, color: AppColors.white),
+          label: Text(
+            label,
+            style: const TextStyle(color: AppColors.white, fontSize: 11),
+          ),
         ),
-      ),
-    );
-  }
-
-  static String _sexLabel(String c) {
-    switch (c) {
-      case 'M':
-        return 'Masculino';
-      case 'F':
-        return 'Femenino';
-      default:
-        return 'Indeterminado';
-    }
-  }
-
-  static String _relLabel(String c) {
-    switch (c) {
-      case '01':
-        return 'Padres';
-      case '02':
-        return 'Hermanos';
-      case '03':
-        return 'Tíos';
-      case '04':
-        return 'Abuelos';
-      default:
-        return c;
-    }
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.icon,
-    required this.title,
-    required this.rows,
-  });
-  final IconData icon;
-  final String title;
-  final List<MapEntry<String, String>> rows;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE3E5EA)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 16, color: AppColors.primary),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ...rows.map(
-            (kv) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 100,
-                    child: Text(
-                      kv.key,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      kv.value.isEmpty ? '—' : kv.value,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.textPrimary,
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+      );
 }

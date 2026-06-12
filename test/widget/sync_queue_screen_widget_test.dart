@@ -11,7 +11,7 @@ import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/presentation/sync_queue_screen.dart';
+import 'package:health_without_borders_frontend/src/features/sync/presentation/sync_queue_screen.dart';
 import 'package:health_without_borders_frontend/src/shared/widgets/screen_bottom_handle.dart';
 
 class MockLocalDatabase extends Mock implements LocalDatabase {}
