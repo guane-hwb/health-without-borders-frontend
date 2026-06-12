@@ -70,7 +70,12 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   Future<void> _confirmRegistration() async {
     final record = _draft.toRecord();
     final scope = AppScope.of(context);
+    final s = AppStrings.of(context);
+
     await scope.localDatabase.savePatient(record);
+
+    bool nfcWriteSuccess = true;
+
     try {
       final nfcKey = await scope.authRepository.getNfcEncryptionKey();
       if (nfcKey != null && nfcKey.isNotEmpty) {
@@ -91,9 +96,73 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         }
       }
     } catch (e) {
-      debugPrint('NFC write failed (non-blocking): $e');
+      nfcWriteSuccess = false;
+      debugPrint('NFC write critically failed: $e');
     }
+
     if (!mounted) return;
+
+    if (!nfcWriteSuccess) {
+      final isEs = s.welcome == 'Bienvenido';
+      final alertTitle = isEs ? 'Error de escritura NFC' : 'NFC Write Error';
+      final alertContent = isEs
+          ? 'Los datos se guardaron localmente, pero NO se pudieron grabar en la el dispositivo.\n\n'
+                'Por favor, asegúrese de no retirar el dispositivoy vuelva a intentarlo para evitar entregar un dispositivo vacío.'
+          : 'Data saved locally, but COULD NOT be written to the device.\n\n'
+                'Please verify the device contact and try again to avoid releasing an empty device.';
+      final retryBtn = isEs ? 'Reintentar escritura' : 'Retry writing';
+      final forceBtn = isEs ? 'Omitir y continuar' : 'Skip & continue';
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.gpp_bad_rounded, color: AppColors.error),
+                const SizedBox(width: 10),
+                Text(
+                  alertTitle,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            content: Text(alertContent),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  _confirmRegistration();
+                },
+                child: Text(
+                  retryBtn,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  setState(() {
+                    _savedRecord = record;
+                    _step = 5;
+                  });
+                },
+                child: Text(
+                  forceBtn,
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
     setState(() {
       _savedRecord = record;
       _step = 5;
