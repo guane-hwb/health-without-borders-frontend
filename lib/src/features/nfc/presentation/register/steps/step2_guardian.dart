@@ -235,11 +235,74 @@ class _Step2State extends State<Step2Guardian> {
       if (_signatureStrokes.isEmpty) missing.add(bioSigLabel);
     }
 
+    final String cleanDoc = _docNumber.text.trim();
+    if (cleanDoc.isNotEmpty) {
+      final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
+      if (!docRegex.hasMatch(cleanDoc)) {
+        missing.add(
+          isEs
+              ? 'Documento de guardián inválido (Mínimo 5 caracteres sin símbolos)'
+              : 'Invalid Guardian Document format',
+        );
+      }
+    }
+
+    final String cleanPhone = _phone.text.trim();
+    if (cleanPhone.isNotEmpty) {
+      final phoneRegex = RegExp(r'^\+?[0-9]{7,15}$');
+      if (!phoneRegex.hasMatch(cleanPhone)) {
+        missing.add(
+          isEs
+              ? 'Teléfono inválido (mínimo 7 dígitos)'
+              : 'Invalid Phone format',
+        );
+      }
+    }
+
+    final String cleanEmail = _email.text.trim();
+    if (cleanEmail.isNotEmpty) {
+      final emailRegex = RegExp(
+        r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+      );
+      if (!emailRegex.hasMatch(cleanEmail)) {
+        missing.add(
+          isEs ? 'Correo electrónico inválido' : 'Invalid Email format',
+        );
+      }
+    }
+
     if (_signatureStrokes.isNotEmpty) {
       if (!_authAccepted) missing.add(s.confirmChanges);
     }
 
     if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
+      final String cleanDoc2 = _docNumber2.text.trim();
+      final String cleanPhone2 = _phone2.text.trim();
+      final String cleanEmail2 = _email2.text.trim();
+
+      if (cleanDoc2.isNotEmpty &&
+          !RegExp(r'^[a-zA-Z0-9-]{5,20}$').hasMatch(cleanDoc2)) {
+        missing.add(
+          isEs
+              ? 'Documento de Guardián 2 inválido'
+              : 'Invalid Guardian 2 Document',
+        );
+      }
+      if (cleanPhone2.isNotEmpty &&
+          !RegExp(r'^\+?[0-9]{7,15}$').hasMatch(cleanPhone2)) {
+        missing.add(
+          isEs ? 'Teléfono de Guardián 2 inválido' : 'Invalid Guardian 2 Phone',
+        );
+      }
+      if (cleanEmail2.isNotEmpty &&
+          !RegExp(
+            r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+          ).hasMatch(cleanEmail2)) {
+        missing.add(
+          isEs ? 'Correo de Guardián 2 inválido' : 'Invalid Guardian 2 Email',
+        );
+      }
+
       if (_signatureStrokes2.isNotEmpty) {
         if (!_auth2Accepted) missing.add(auth2Label);
       }
