@@ -41,6 +41,22 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp> {
     localDatabase: _localDatabase,
   );
 
+  // 🚀 Inicializa el estado global de la aplicación
+  @override
+  void initState() {
+    super.initState();
+    // Enciende el motor automático para escuchar cambios de red e iniciar sincronizaciones
+    _syncEngine.start();
+  }
+
+  // 🧹 Limpia los recursos cuando la aplicación se destruye o se recarga
+  @override
+  void dispose() {
+    // Apaga los listeners de conectividad para evitar fugas de memoria (memory leaks)
+    _syncEngine.stop();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppLocale(

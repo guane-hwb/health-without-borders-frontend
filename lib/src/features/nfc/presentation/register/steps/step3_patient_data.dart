@@ -98,6 +98,18 @@ class _Step3State extends State<Step3PatientData> {
     if (_city.text.trim().isEmpty) missing.add(s.municipality);
     if (_stateCtrl.text.trim().isEmpty) missing.add(s.department);
 
+    final String cleanDoc = _docNum.text.trim();
+    if (cleanDoc.isNotEmpty) {
+      final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
+      if (!docRegex.hasMatch(cleanDoc)) {
+        missing.add(
+          isEs
+              ? 'Número de documento inválido (Mínimo 5 caracteres alfanuméricos sin símbolos)'
+              : 'Invalid Document format',
+        );
+      }
+    }
+
     if (missing.isNotEmpty) {
       final errPrefix = isEs ? 'Campos requeridos' : 'Required fields';
       setState(() => _err = '$errPrefix: ${missing.join(', ')}');

@@ -409,9 +409,9 @@ void main() {
       bool continueCalled = false;
       final draft = RegisterDraft()
         ..guardianName = 'Ana'
-        ..guardianPhone = '300'
+        ..guardianPhone = '3007253964'
         ..guardianDeviceUid = 'UID'
-        ..guardianDocNumber = '123';
+        ..guardianDocNumber = '1234567891';
 
       await tester.pumpWidget(
         buildSubject(
