@@ -591,8 +591,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await _fillAndSave(tester);
-
-      expect(find.textContaining('Cola de sincronización'), findsOneWidget);
+      expect(find.textContaining('Pendientes por sincronizar'), findsOneWidget);
       expect(find.textContaining('En cola'), findsOneWidget);
     });
 

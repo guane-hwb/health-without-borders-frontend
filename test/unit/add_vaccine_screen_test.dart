@@ -476,7 +476,7 @@ void main() {
       await fillAndSave(tester, scope);
 
       expect(find.textContaining('Guardado local'), findsOneWidget);
-      expect(find.textContaining('Cola de sincronización'), findsOneWidget);
+      expect(find.textContaining('Pendientes por sincronizar'), findsOneWidget);
     });
 
     testWidgets('save failure shows error snackbar', (tester) async {

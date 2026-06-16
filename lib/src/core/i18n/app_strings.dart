@@ -762,7 +762,7 @@ class AppStrings {
         'Número de documento, fecha de nacimiento, nombre y apellido son requeridos.',
 
     // Sync
-    'syncTitle': 'Cola de sincronización',
+    'syncTitle': 'Pendientes por sincronizar',
     'syncAll': 'Sincronizar todo',
     'syncNow': 'Sync ahora',
     'review': 'Revisar',
