@@ -673,28 +673,38 @@ class _VitalCell extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 12, color: AppColors.textSecondary),
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Icon(icon, size: 12, color: AppColors.textSecondary),
+              ),
               const SizedBox(width: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                  letterSpacing: 0.5,
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                    letterSpacing: 0.5,
+                    height: 1.1,
+                  ),
                 ),
               ),
               if (changed) ...[const SizedBox(width: 4), _OrangeDot()],
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
             ),
           ),
         ],
@@ -708,7 +718,7 @@ class _VitalDivider extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: 1,
     height: 32,
-    margin: const EdgeInsets.symmetric(horizontal: 20),
+    margin: const EdgeInsets.symmetric(horizontal: 12),
     color: AppColors.divider,
   );
 }
@@ -722,7 +732,7 @@ class _IdRow extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Expanded(child: left),
-      const SizedBox(width: 12),
+      const SizedBox(width: 8),
       Expanded(child: right),
     ],
   );
