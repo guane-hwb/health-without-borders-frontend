@@ -108,14 +108,15 @@ class ProfileTabSummary extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 60),
       children: [
-        // ══ ALLERGIES (clickable) ══════════════════════════════════
+        // ══ ALLERGIES (clickable only if canEdit is true) ══════════════════════════════════
         _ClickableSection(
           icon: Icons.warning_amber_rounded,
           iconColor: AppColors.error,
           title: s.allergiesSheetTitle.toUpperCase(),
           badge: draft.allergies.length,
           hasChanges: _allergiesChanged,
-          onTap: onOpenAllergies,
+          onTap: canEdit ? onOpenAllergies : null,
+          showArrow: canEdit,
           child: draft.allergies.isEmpty
               ? Text(
                   s.noAllergiesRegistered,
@@ -162,12 +163,13 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 14),
 
-        // ══ BACKGROUND (clickable) ═════════════════════════════
+        // ══ BACKGROUND (clickable only if canEdit is true) ═════════════════════════
         _ClickableSection(
           icon: Icons.history_edu_outlined,
           title: s.backgroundSheetTitle.toUpperCase(),
           hasChanges: _backgroundChanged,
-          onTap: onOpenBackground,
+          onTap: canEdit ? onOpenBackground : null,
+          showArrow: canEdit,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -532,14 +534,16 @@ class _ClickableSection extends StatelessWidget {
     this.badge = 0,
     this.hasChanges = false,
     this.iconColor = AppColors.primary,
+    this.showArrow = true,
   });
   final IconData icon;
   final Color iconColor;
   final String title;
   final int badge;
   final bool hasChanges;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final Widget child;
+  final bool showArrow;
 
   @override
   Widget build(BuildContext context) {
@@ -586,11 +590,12 @@ class _ClickableSection extends StatelessWidget {
                 ],
                 if (hasChanges) ...[const SizedBox(width: 6), _OrangeDot()],
                 const Spacer(),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 14,
-                  color: AppColors.disabled,
-                ),
+                if (showArrow)
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 14,
+                    color: AppColors.disabled,
+                  ),
               ],
             ),
             const SizedBox(height: 8),

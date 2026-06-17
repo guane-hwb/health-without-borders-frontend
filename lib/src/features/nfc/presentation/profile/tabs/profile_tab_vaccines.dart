@@ -10,10 +10,12 @@ class ProfileTabVaccines extends StatelessWidget {
   const ProfileTabVaccines({
     super.key,
     required this.draft,
+    required this.canEdit,
     required this.onAdd,
   });
 
   final PatientFullRecord draft;
+  final bool canEdit;
   final VoidCallback onAdd;
 
   @override
@@ -25,7 +27,7 @@ class ProfileTabVaccines extends StatelessWidget {
     return Stack(
       children: [
         ListView(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 90),
+          padding: EdgeInsets.fromLTRB(14, 14, 14, canEdit ? 90 : 24),
           children: [
             Row(
               children: [
@@ -73,33 +75,35 @@ class ProfileTabVaccines extends StatelessWidget {
               ],
           ],
         ),
-        Positioned(
-          left: 14,
-          right: 14,
-          bottom: 30,
-          child: SizedBox(
-            height: 48,
-            child: ElevatedButton.icon(
-              onPressed: onAdd,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+
+        if (canEdit)
+          Positioned(
+            left: 14,
+            right: 14,
+            bottom: 30,
+            child: SizedBox(
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: onAdd,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
                 ),
-                elevation: 0,
-              ),
-              icon: const Icon(Icons.add, size: 22, color: AppColors.white),
-              label: Text(
-                s.addVaccineButton,
-                style: const TextStyle(
-                  color: AppColors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+                icon: const Icon(Icons.add, size: 22, color: AppColors.white),
+                label: Text(
+                  s.addVaccineButton,
+                  style: const TextStyle(
+                    color: AppColors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
       ],
     );
   }
