@@ -286,54 +286,25 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
     super.dispose();
   }
 
-  // ── Step 1: crear organización ────────────────────────────────────────────
-
-  Future<void> _submitStep1() async {
+  void _submitStep1() {
     final name = _orgNameCtrl.text.trim();
     if (name.isEmpty) {
       setState(() => _error = 'El nombre de la organización es obligatorio.');
       return;
     }
     setState(() {
-      _saving = true;
       _error = null;
+      _step = 2;
     });
-    try {
-      final org = await AppScope.of(
-        context,
-      ).userRepository.createOrganization(name);
-      if (mounted) {
-        setState(() {
-          _createdOrg = org;
-          _step = 2;
-          _saving = false;
-        });
-      }
-    } on ApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.message;
-          _saving = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _saving = false;
-        });
-      }
-    }
   }
 
-  // ── Step 2: crear org_admin ───────────────────────────────────────────────
-
   Future<void> _submitStep2() async {
-    final name = _adminNameCtrl.text.trim();
+    final orgName = _orgNameCtrl.text.trim();
+    final adminName = _adminNameCtrl.text.trim();
     final email = _adminEmailCtrl.text.trim();
     final pass = _adminPassCtrl.text;
 
-    if (name.isEmpty || email.isEmpty || pass.isEmpty) {
+    if (adminName.isEmpty || email.isEmpty || pass.isEmpty) {
       setState(() => _error = 'Todos los campos son obligatorios.');
       return;
     }
@@ -347,15 +318,22 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
       _saving = true;
       _error = null;
     });
+
     try {
-      await AppScope.of(context).userRepository.createOrgAdminUser(
-        fullName: name,
+      final userRepo = AppScope.of(context).userRepository;
+
+      final org = await userRepo.createOrganization(orgName);
+      _createdOrg = org;
+
+      await userRepo.createOrgAdminUser(
+        fullName: adminName,
         email: email,
         password: pass,
-        organizationId: _createdOrg!.id,
+        organizationId: org.id,
       );
+
       if (mounted) {
-        widget.onCreated(_createdOrg!);
+        widget.onCreated(org);
         setState(() {
           _step = 3;
           _saving = false;
@@ -438,7 +416,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Paso 1 — ${s.orgsFieldNameLabel.replaceAll(" *", "")}',
+          '${s.step} 1 — ${s.orgsFieldNameLabel.replaceAll(" *", "")}',
           style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 14),
@@ -455,14 +433,14 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
         if (_error != null) _errorWidget(_error!),
         const SizedBox(height: 20),
         _primaryBtn(
-          label: _step == 3 ? s.save : 'Continue',
+          label: 'Continue',
           icon: Icons.arrow_forward,
           onTap: _saving ? null : _submitStep1,
           loading: _saving,
         ),
         const SizedBox(height: 8),
         _secondaryBtn(
-          label: 'Cancelar',
+          label: s.cancel,
           onTap: () => Navigator.of(context).pop(),
         ),
       ],
@@ -475,7 +453,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Paso 2 — Administrador de "${_createdOrg?.name ?? ''}"',
+          '${s.step} 2 — ${s.roleOrgAdmin}',
           style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 14),
@@ -484,10 +462,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
           controller: _adminNameCtrl,
           textCapitalization: TextCapitalization.words,
           style: const TextStyle(fontSize: 14),
-          decoration: _inputDeco(
-            hint: 'Nombre del administrador',
-            icon: Icons.person,
-          ),
+          decoration: _inputDeco(hint: s.labelNameAdmin, icon: Icons.person),
         ),
         const SizedBox(height: 12),
         _fieldLabel(s.orgsFieldAdminEmailLabel),
@@ -527,7 +502,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
         ),
         const SizedBox(height: 8),
         _secondaryBtn(
-          label: '← Volver',
+          label: s.back,
           onTap: _saving
               ? null
               : () => setState(() {
@@ -541,6 +516,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
 
   Widget _buildSuccess() {
     final s = AppStrings.of(context);
+    final isEs = s.save == 'Guardar';
     return Column(
       children: [
         const SizedBox(height: 8),
@@ -560,9 +536,9 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
           ),
         ),
         const SizedBox(height: 16),
-        const Text(
-          '¡Organización creada!',
-          style: TextStyle(
+        Text(
+          isEs ? '¡Organización creada!' : 'Organization created!',
+          style: const TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w600,
             color: AppColors.textPrimary,
@@ -580,10 +556,12 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
-        const Text(
-          'El administrador ya puede iniciar sesión\ncon las credenciales proporcionadas.',
+        Text(
+          isEs
+              ? 'El administrador ya puede iniciar sesión\ncon las credenciales proporcionadas.'
+              : 'The administrator can now sign in\nwith the provided credentials.',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 24),
         _primaryBtn(

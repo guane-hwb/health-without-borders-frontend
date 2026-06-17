@@ -612,6 +612,8 @@ class AppStrings {
   String get orgsLabelAdministrator => _get('orgsLabelAdministrator');
   String get orgsLabelAdminEmail => _get('orgsLabelAdminEmail');
   String get orgsLabelProvisionalPass => _get('orgsLabelProvisionalPass');
+  String get step => _get('step');
+  String get labelNameAdmin => _get('labelNameAdmin');
 
   // ══════════════════════════════════════════════════════════════════════════
   // TRANSLATIONS
@@ -1161,6 +1163,8 @@ class AppStrings {
     'orgsLabelAdministrator': 'Administrador',
     'orgsLabelAdminEmail': 'Email Admin',
     'orgsLabelProvisionalPass': 'Contraseña prov.',
+    'step': 'Paso',
+    'labelNameAdmin': 'Nombre del administrador',
   };
   static const Map<String, String> _en = {
     // Auth
@@ -1700,5 +1704,7 @@ class AppStrings {
     'orgsLabelAdministrator': 'Administrator',
     'orgsLabelAdminEmail': 'Admin Email',
     'orgsLabelProvisionalPass': 'Prov. Password',
+    'step': 'Step',
+    'labelNameAdmin': 'Administrator name',
   };
 }
