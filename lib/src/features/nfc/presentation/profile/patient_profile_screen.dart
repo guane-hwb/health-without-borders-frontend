@@ -654,6 +654,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                       ),
                       ProfileTabVaccines(
                         draft: _draft,
+                        canEdit: _currentRole.canAddVaccine,
                         onAdd: _navigateAddVaccine,
                       ),
                     ],
