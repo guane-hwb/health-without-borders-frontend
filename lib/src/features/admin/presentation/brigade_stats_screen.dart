@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../core/i18n/app_strings.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../nfc/presentation/shared_read_nfc_header.dart';
 
@@ -141,12 +142,6 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
         ...orgList.map((o) => _OrgFilter(id: o.id, name: o.name)),
       ];
 
-      // ── Cuando el endpoint esté listo, reemplazar el mock: ────────────────
-      // final raw = await AppScope.of(context).userRepository
-      //     .apiClient.getJson(path: '/api/v1/stats/brigades?org_id=$_selectedOrgId',
-      //                        headers: await authHeaders());
-      // final stats = _BrigadeStats.fromJson(raw);
-      // ─────────────────────────────────────────────────────────────────────
       final stats = _BrigadeStats.mock();
 
       if (mounted) {
@@ -157,7 +152,6 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
         });
       }
     } on ApiException catch (_) {
-      // Si el endpoint de orgs falla, igual mostramos las stats mock
       if (mounted) {
         setState(() {
           _stats = _BrigadeStats.mock();
@@ -184,7 +178,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
             Column(
               children: [
                 SharedReadNfcHeader(
-                  title: 'Estadísticas de brigadas',
+                  title: AppStrings.of(context).statsScreenTitle,
                   onBack: () => Navigator.of(context).pop(),
                 ),
                 Expanded(child: _buildBody()),
@@ -203,6 +197,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
   }
 
   Widget _buildBody() {
+    final sStrings = AppStrings.of(context);
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -222,7 +217,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
             ElevatedButton.icon(
               onPressed: _load,
               icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
+              label: Text(sStrings.retry),
             ),
           ],
         ),
@@ -244,19 +239,19 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
             },
           ),
           const SizedBox(height: 16),
-          const _SectionTitle(title: 'Resumen general'),
+          _SectionTitle(title: sStrings.tabSummary),
           const SizedBox(height: 10),
           _KpiGrid(stats: s),
           const SizedBox(height: 20),
-          const _SectionTitle(title: 'Vacunas más administradas'),
+          _SectionTitle(title: sStrings.statsVaccineDistribution),
           const SizedBox(height: 10),
           _VaccineBarChart(vaccines: s.vaccineBreakdown),
           const SizedBox(height: 20),
-          const _SectionTitle(title: 'Alergias más frecuentes'),
+          _SectionTitle(title: sStrings.statsAllergyDistribution),
           const SizedBox(height: 10),
           _AllergyChips(allergies: s.allergyBreakdown),
           const SizedBox(height: 20),
-          const _SectionTitle(title: 'Procedencia de pacientes'),
+          _SectionTitle(title: sStrings.statsNationalityDistribution),
           const SizedBox(height: 10),
           _NationalityList(nationalities: s.nationalityBreakdown),
         ],
@@ -340,6 +335,7 @@ class _KpiGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sStrings = AppStrings.of(context);
     final minorCount = (stats.totalPatients * stats.minorsPct / 100).round();
     return GridView.count(
       crossAxisCount: 2,
@@ -351,28 +347,28 @@ class _KpiGrid extends StatelessWidget {
       children: [
         _KpiCard(
           icon: Icons.people_outline,
-          label: 'Pacientes atendidos',
+          label: sStrings.statsTotalPatients,
           value: _fmt(stats.totalPatients),
           sub: '↑ 12% este mes',
           iconColor: AppColors.primary,
         ),
         _KpiCard(
           icon: Icons.vaccines,
-          label: 'Vacunas administradas',
+          label: sStrings.statsTotalVaccines,
           value: _fmt(stats.totalVaccines),
           sub: 'en ${stats.vaccineBreakdown.length} tipos',
           iconColor: const Color(0xFF1565C0),
         ),
         _KpiCard(
           icon: Icons.warning_amber_rounded,
-          label: 'Alergias registradas',
+          label: sStrings.statsTotalAllergies,
           value: _fmt(stats.totalAllergies),
           sub: 'en 3 categorías',
           iconColor: const Color(0xFFD84315),
         ),
         _KpiCard(
           icon: Icons.child_care,
-          label: 'Menores de edad',
+          label: sStrings.statsMinorsPercentage,
           value: '${stats.minorsPct.toStringAsFixed(0)}%',
           sub: '$minorCount pacientes',
           iconColor: const Color(0xFF6A1B9A),

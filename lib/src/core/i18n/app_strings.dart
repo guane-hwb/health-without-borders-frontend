@@ -581,6 +581,40 @@ class AppStrings {
   String get userFormCreatingStatus => _get('userFormCreatingStatus');
   String get userFormCreateButton => _get('userFormCreateButton');
 
+  // ── Super Admin User ──────────────────────────────────────────────────
+  String get manageOrgsTitle => _get('manageOrgsTitle');
+  String get manageOrgsSubtitle => _get('manageOrgsSubtitle');
+  String get brigadeStatsTitle => _get('brigadeStatsTitle');
+  String get brigadeStatsSubtitle => _get('brigadeStatsSubtitle');
+  String get statsScreenTitle => _get('statsScreenTitle');
+  String get statsTotalPatients => _get('statsTotalPatients');
+  String get statsTotalVaccines => _get('statsTotalVaccines');
+  String get statsTotalAllergies => _get('statsTotalAllergies');
+  String get statsMinorsPercentage => _get('statsMinorsPercentage');
+  String get statsVaccineDistribution => _get('statsVaccineDistribution');
+  String get statsAllergyDistribution => _get('statsAllergyDistribution');
+  String get statsNationalityDistribution =>
+      _get('statsNationalityDistribution');
+  String get manageOrgsScreenTitle => _get('manageOrgsScreenTitle');
+  String get orgsNoOrganizations => _get('orgsNoOrganizations');
+  String get orgsCreateOrgTitle => _get('orgsCreateOrgTitle');
+  String get orgsStepBasicData => _get('orgsStepBasicData');
+  String get orgsStepAdminUser => _get('orgsStepAdminUser');
+  String get orgsStepSummary => _get('orgsStepSummary');
+  String get orgsFieldNameLabel => _get('orgsFieldNameLabel');
+  String get orgsFieldEmailLabel => _get('orgsFieldEmailLabel');
+  String get orgsFieldAdminNameLabel => _get('orgsFieldAdminNameLabel');
+  String get orgsFieldAdminEmailLabel => _get('orgsFieldAdminEmailLabel');
+  String get orgsFieldAdminPassLabel => _get('orgsFieldAdminPassLabel');
+  String get orgsSummarySubtitle => _get('orgsSummarySubtitle');
+  String get orgsLabelOrganization => _get('orgsLabelOrganization');
+  String get orgsLabelOfficialEmail => _get('orgsLabelOfficialEmail');
+  String get orgsLabelAdministrator => _get('orgsLabelAdministrator');
+  String get orgsLabelAdminEmail => _get('orgsLabelAdminEmail');
+  String get orgsLabelProvisionalPass => _get('orgsLabelProvisionalPass');
+  String get step => _get('step');
+  String get labelNameAdmin => _get('labelNameAdmin');
+
   // ══════════════════════════════════════════════════════════════════════════
   // TRANSLATIONS
   // ══════════════════════════════════════════════════════════════════════════
@@ -1097,6 +1131,40 @@ class AppStrings {
     'userFormRequiredFieldsError': 'Completa todos los campos requeridos.',
     'userFormCreatingStatus': 'Creando...',
     'userFormCreateButton': 'Crear usuario',
+
+    // Super Admin
+    'manageOrgsTitle': 'Organizaciones',
+    'manageOrgsSubtitle': 'Crear y gentionar organizaciones',
+    'brigadeStatsTitle': 'Estadísticas de brigadas',
+    'brigadeStatsSubtitle': 'Ver métricas consolidadas',
+    'statsScreenTitle': 'Estadísticas Globales',
+    'statsTotalPatients': 'Pacientes Totales',
+    'statsTotalVaccines': 'Vacunas Aplicadas',
+    'statsTotalAllergies': 'Alergias Detectadas',
+    'statsMinorsPercentage': 'Porcentaje Menores',
+    'statsVaccineDistribution': 'Distribución de Vacunas',
+    'statsAllergyDistribution': 'Distribución de Alergias',
+    'statsNationalityDistribution': 'Distribución por Nacionalidad',
+    'manageOrgsScreenTitle': 'Organizaciones',
+    'orgsNoOrganizations': 'No hay organizaciones registradas.',
+    'orgsCreateOrgTitle': 'Crear organización',
+    'orgsStepBasicData': 'Datos básicos',
+    'orgsStepAdminUser': 'Usuario Administrador',
+    'orgsStepSummary': 'Resumen',
+    'orgsFieldNameLabel': 'Nombre de la organización *',
+    'orgsFieldEmailLabel': 'Correo electrónico oficial *',
+    'orgsFieldAdminNameLabel': 'Nombre del administrador *',
+    'orgsFieldAdminEmailLabel': 'Correo del administrador *',
+    'orgsFieldAdminPassLabel': 'Contraseña provisional *',
+    'orgsSummarySubtitle':
+        'Confirma los datos antes de proceder a la creación.',
+    'orgsLabelOrganization': 'Organización',
+    'orgsLabelOfficialEmail': 'Email Oficial',
+    'orgsLabelAdministrator': 'Administrador',
+    'orgsLabelAdminEmail': 'Email Admin',
+    'orgsLabelProvisionalPass': 'Contraseña prov.',
+    'step': 'Paso',
+    'labelNameAdmin': 'Nombre del administrador',
   };
   static const Map<String, String> _en = {
     // Auth
@@ -1604,5 +1672,39 @@ class AppStrings {
     'userFormRequiredFieldsError': 'Please fill in all required fields.',
     'userFormCreatingStatus': 'Creating...',
     'userFormCreateButton': 'Create user',
+
+    // Super Admin
+    'manageOrgsTitle': 'Organizations',
+    'manageOrgsSubtitle': 'Create and manage organizations',
+    'brigadeStatsTitle': 'Brigade statistics',
+    'brigadeStatsSubtitle': 'View consolidated metrics',
+    'statsScreenTitle': 'Global Statistics',
+    'statsTotalPatients': 'Total Patients',
+    'statsTotalVaccines': 'Vaccines Administered',
+    'statsTotalAllergies': 'Detected Allergies',
+    'statsMinorsPercentage': 'Minors Percentage',
+    'statsVaccineDistribution': 'Vaccine Distribution',
+    'statsAllergyDistribution': 'Allergy Distribution',
+    'statsNationalityDistribution': 'Nationality Distribution',
+    'manageOrgsScreenTitle': 'Organizations',
+    'orgsNoOrganizations': 'No organizations registered.',
+    'orgsCreateOrgTitle': 'Create organization',
+    'orgsStepBasicData': 'Basic data',
+    'orgsStepAdminUser': 'Admin User',
+    'orgsStepSummary': 'Summary',
+    'orgsFieldNameLabel': 'Organization name *',
+    'orgsFieldEmailLabel': 'Official email *',
+    'orgsFieldAdminNameLabel': 'Admin name *',
+    'orgsFieldAdminEmailLabel': 'Admin email *',
+    'orgsFieldAdminPassLabel': 'Provisional password *',
+    'orgsSummarySubtitle':
+        'Confirm the data before proceeding with the creation.',
+    'orgsLabelOrganization': 'Organization',
+    'orgsLabelOfficialEmail': 'Official Email',
+    'orgsLabelAdministrator': 'Administrator',
+    'orgsLabelAdminEmail': 'Admin Email',
+    'orgsLabelProvisionalPass': 'Prov. Password',
+    'step': 'Step',
+    'labelNameAdmin': 'Administrator name',
   };
 }
