@@ -222,7 +222,7 @@ void main() {
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
 
-      expect(find.text('Gestionar organizaciones'), findsOneWidget);
+      expect(find.byIcon(Icons.business_outlined), findsOneWidget);
     });
 
     testWidgets('muestra card de Estadísticas de brigadas', (tester) async {
