@@ -113,7 +113,13 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord(const []), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord(const []),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       final BuildContext context = tester.element(
@@ -128,7 +134,13 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord(const []), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord(const []),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       expect(find.byIcon(Icons.vaccines), findsNothing);
@@ -136,7 +148,13 @@ void main() {
 
     testWidgets('muestra el botón "Agregar vacuna"', (tester) async {
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord(const []), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord(const []),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       expect(find.byIcon(Icons.add), findsOneWidget);
@@ -160,7 +178,13 @@ void main() {
 
     testWidgets('renderiza el nombre de la vacuna', (tester) async {
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord([vaccine]), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord([vaccine]),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       expect(find.text('Hepatitis B'), findsOneWidget);
@@ -170,7 +194,13 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord([vaccine]), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord([vaccine]),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       expect(find.textContaining('CVX 08'), findsOneWidget);
@@ -179,7 +209,13 @@ void main() {
 
     testWidgets('formatea la fecha como DD/MM/YYYY', (tester) async {
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord([vaccine]), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord([vaccine]),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       expect(find.textContaining('04/07/2023'), findsOneWidget);
@@ -189,7 +225,13 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord([vaccine]), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord([vaccine]),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       expect(find.text('Clínica Norte'), findsOneWidget);
@@ -202,6 +244,7 @@ void main() {
             draft: _makeRecord([
               _makeVaccine(administratedAt: 'Centro de Salud Norte'),
             ]),
+            canEdit: true,
             onAdd: () {},
           ),
         ),
@@ -215,6 +258,7 @@ void main() {
         _wrap(
           ProfileTabVaccines(
             draft: _makeRecord([_makeVaccine(administratedAt: '')]),
+            canEdit: true,
             onAdd: () {},
           ),
         ),
@@ -228,7 +272,13 @@ void main() {
     ) async {
       final v = _makeVaccine(administratedAt: '');
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord([v]), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord([v]),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       expect(find.text(''), findsNothing);
@@ -238,7 +288,13 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord([vaccine]), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord([vaccine]),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       expect(find.byIcon(Icons.check_circle), findsOneWidget);
@@ -249,7 +305,13 @@ void main() {
       (tester) async {
         final v = _makeVaccine(status: 'pending');
         await tester.pumpWidget(
-          _wrap(ProfileTabVaccines(draft: _makeRecord([v]), onAdd: () {})),
+          _wrap(
+            ProfileTabVaccines(
+              draft: _makeRecord([v]),
+              canEdit: true,
+              onAdd: () {},
+            ),
+          ),
         );
 
         expect(find.byIcon(Icons.check_circle), findsNothing);
@@ -271,7 +333,13 @@ void main() {
 
     testWidgets('renderiza una tarjeta por cada vacuna', (tester) async {
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord(vaccines), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord(vaccines),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       expect(find.text('BCG'), findsOneWidget);
@@ -281,7 +349,13 @@ void main() {
 
     testWidgets('ordena las vacunas por fecha ascendente', (tester) async {
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord(vaccines), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord(vaccines),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       final polioOffset = tester.getTopLeft(find.text('Polio')).dy;
@@ -294,7 +368,13 @@ void main() {
 
     testWidgets('no muestra el mensaje "sin vacunas"', (tester) async {
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord(vaccines), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord(vaccines),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       final BuildContext context = tester.element(
@@ -316,6 +396,7 @@ void main() {
         _wrap(
           ProfileTabVaccines(
             draft: _makeRecord(const []),
+            canEdit: true,
             onAdd: () => called = true,
           ),
         ),
@@ -333,7 +414,13 @@ void main() {
     testWidgets('fecha corta (< 10 chars) se muestra tal cual', (tester) async {
       final v = _makeVaccine(date: '2024-03');
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord([v]), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord([v]),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       expect(find.textContaining('2024-03'), findsOneWidget);
@@ -342,7 +429,13 @@ void main() {
     testWidgets('fecha ISO completa se convierte a DD/MM/YYYY', (tester) async {
       final v = _makeVaccine(date: '2020-12-31T10:00:00');
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord([v]), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord([v]),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       expect(find.textContaining('31/12/2020'), findsOneWidget);
@@ -351,7 +444,13 @@ void main() {
     testWidgets('fecha sin guiones se muestra sin transformar', (tester) async {
       final v = _makeVaccine(date: '20200131');
       await tester.pumpWidget(
-        _wrap(ProfileTabVaccines(draft: _makeRecord([v]), onAdd: () {})),
+        _wrap(
+          ProfileTabVaccines(
+            draft: _makeRecord([v]),
+            canEdit: true,
+            onAdd: () {},
+          ),
+        ),
       );
 
       expect(find.textContaining('20200131'), findsOneWidget);
@@ -363,7 +462,11 @@ void main() {
     testWidgets('header usa strings en español (locale = es)', (tester) async {
       await tester.pumpWidget(
         _wrap(
-          ProfileTabVaccines(draft: _makeRecord(const []), onAdd: () {}),
+          ProfileTabVaccines(
+            draft: _makeRecord(const []),
+            canEdit: true,
+            onAdd: () {},
+          ),
           locale: 'es',
         ),
       );
@@ -382,7 +485,11 @@ void main() {
     testWidgets('header usa strings en inglés (locale = en)', (tester) async {
       await tester.pumpWidget(
         _wrap(
-          ProfileTabVaccines(draft: _makeRecord(const []), onAdd: () {}),
+          ProfileTabVaccines(
+            draft: _makeRecord(const []),
+            canEdit: true,
+            onAdd: () {},
+          ),
           locale: 'en',
         ),
       );
@@ -405,6 +512,7 @@ void main() {
           _wrap(
             ProfileTabVaccines(
               draft: _makeRecord([_makeVaccine()]),
+              canEdit: true,
               onAdd: () {},
             ),
             locale: 'es',
@@ -433,6 +541,7 @@ void main() {
               _makeVaccine(),
               _makeVaccine(vaccineName: 'Polio'),
             ]),
+            canEdit: true,
             onAdd: () {},
           ),
           locale: 'es',
