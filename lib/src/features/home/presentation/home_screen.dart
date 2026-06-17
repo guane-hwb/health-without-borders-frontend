@@ -112,6 +112,7 @@ class HomeScreen extends StatelessWidget {
   // ── SUPERADMIN ────────────────────────────────────────────────────────────
 
   Widget _buildSuperadminBody(BuildContext context) {
+    final s = AppStrings.of(context);
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 80),
       children: [
@@ -119,8 +120,8 @@ class HomeScreen extends StatelessWidget {
           icon: Icons.business_outlined,
           iconBg: const Color(0xFFE8F5E9),
           iconColor: const Color(0xFF2E7D32),
-          title: 'Gestionar organizaciones',
-          subtitle: null,
+          title: s.manageOrgsTitle,
+          subtitle: s.manageOrgsSubtitle,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => const ManageOrganizationsScreen(),
@@ -132,8 +133,8 @@ class HomeScreen extends StatelessWidget {
           icon: Icons.bar_chart_rounded,
           iconBg: const Color(0xFFE3F2FD),
           iconColor: const Color(0xFF1565C0),
-          title: 'Estadísticas de brigadas',
-          subtitle: null,
+          title: s.brigadeStatsTitle,
+          subtitle: s.brigadeStatsSubtitle,
           onTap: () => Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const BrigadeStatsScreen())),

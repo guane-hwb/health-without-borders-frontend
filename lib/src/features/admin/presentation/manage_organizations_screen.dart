@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../core/i18n/app_strings.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../auth/data/user_repository.dart';
 import '../../nfc/presentation/shared_read_nfc_header.dart';
@@ -73,12 +74,13 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFFEBF2F8),
       floatingActionButton: FloatingActionButton(
         onPressed: _showCreateSheet,
         backgroundColor: AppColors.primary,
-        tooltip: 'Crear organización',
+        tooltip: s.orgsCreateOrgTitle,
         child: const Icon(Icons.add, color: AppColors.white),
       ),
       body: SafeArea(
@@ -87,7 +89,7 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
             Column(
               children: [
                 SharedReadNfcHeader(
-                  title: 'Organizaciones',
+                  title: s.manageOrgsScreenTitle,
                   onBack: () => Navigator.of(context).pop(),
                 ),
                 Expanded(child: _buildBody()),
@@ -106,6 +108,7 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
   }
 
   Widget _buildBody() {
+    final s = AppStrings.of(context);
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -125,17 +128,17 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
             ElevatedButton.icon(
               onPressed: _load,
               icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
+              label: Text(s.retry),
             ),
           ],
         ),
       );
     }
     if (_orgs.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
-          'No hay organizaciones registradas.',
-          style: TextStyle(color: AppColors.textSecondary),
+          s.orgsNoOrganizations,
+          style: const TextStyle(color: AppColors.textSecondary),
         ),
       );
     }
@@ -184,6 +187,7 @@ class _OrgCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -236,7 +240,7 @@ class _OrgCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              org.isActive ? 'Activo' : 'Inactivo',
+              org.isActive ? s.userStatusActive : s.userStatusSuspended,
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
@@ -378,6 +382,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.white,
@@ -406,9 +411,9 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
             ),
             const SizedBox(height: 20),
             if (_step < 3) ...[
-              const Text(
-                'Crear organización',
-                style: TextStyle(
+              Text(
+                s.orgsCreateOrgTitle,
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                   color: AppColors.primary,
@@ -428,15 +433,16 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
   }
 
   Widget _buildStep1() {
+    final s = AppStrings.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Paso 1 — Nombre de la organización',
-          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        Text(
+          'Paso 1 — ${s.orgsFieldNameLabel.replaceAll(" *", "")}',
+          style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 14),
-        _fieldLabel('Nombre de la organización *'),
+        _fieldLabel(s.orgsFieldNameLabel),
         TextField(
           controller: _orgNameCtrl,
           textCapitalization: TextCapitalization.words,
@@ -449,7 +455,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
         if (_error != null) _errorWidget(_error!),
         const SizedBox(height: 20),
         _primaryBtn(
-          label: 'Continuar',
+          label: _step == 3 ? s.save : 'Continue',
           icon: Icons.arrow_forward,
           onTap: _saving ? null : _submitStep1,
           loading: _saving,
@@ -464,6 +470,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
   }
 
   Widget _buildStep2() {
+    final s = AppStrings.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -472,7 +479,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
           style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 14),
-        _fieldLabel('Nombre completo *'),
+        _fieldLabel(s.orgsFieldAdminNameLabel),
         TextField(
           controller: _adminNameCtrl,
           textCapitalization: TextCapitalization.words,
@@ -483,7 +490,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
           ),
         ),
         const SizedBox(height: 12),
-        _fieldLabel('Correo electrónico *'),
+        _fieldLabel(s.orgsFieldAdminEmailLabel),
         TextField(
           controller: _adminEmailCtrl,
           keyboardType: TextInputType.emailAddress,
@@ -494,7 +501,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
           ),
         ),
         const SizedBox(height: 12),
-        _fieldLabel('Contraseña temporal *'),
+        _fieldLabel(s.orgsFieldAdminPassLabel),
         TextField(
           controller: _adminPassCtrl,
           obscureText: _obscurePass,
@@ -513,7 +520,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
         if (_error != null) _errorWidget(_error!),
         const SizedBox(height: 20),
         _primaryBtn(
-          label: 'Crear organización',
+          label: s.orgsCreateOrgTitle,
           icon: Icons.check,
           onTap: _saving ? null : _submitStep2,
           loading: _saving,
@@ -533,6 +540,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
   }
 
   Widget _buildSuccess() {
+    final s = AppStrings.of(context);
     return Column(
       children: [
         const SizedBox(height: 8),
@@ -579,7 +587,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
         ),
         const SizedBox(height: 24),
         _primaryBtn(
-          label: 'Listo',
+          label: s.save,
           icon: Icons.check,
           onTap: () => Navigator.of(context).pop(),
         ),
