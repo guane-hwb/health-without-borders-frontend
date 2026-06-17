@@ -560,6 +560,27 @@ class AppStrings {
   String get addVaccineButton => _get('addVaccineButton');
   String get doseLabel => _get('doseLabel');
 
+  // ── Admin Manage Users ──────────────────────────────────────────────────
+  String get manageUsersTitle => _get('manageUsersTitle');
+  String get filterAll => _get('filterAll');
+  String get filterDoctors => _get('filterDoctors');
+  String get filterNurse => _get('filterNurse');
+  String get filterCoord => _get('filterCoord');
+  String get noUsersInFilter => _get('noUsersInFilter');
+  String get createUserTitle => _get('createUserTitle');
+  String get userStatusActive => _get('userStatusActive');
+  String get userStatusSuspended => _get('userStatusSuspended');
+  String get userDetailOrganization => _get('userDetailOrganization');
+  String get userDetailStatus => _get('userDetailStatus');
+  String get userDetailWebNotice => _get('userDetailWebNotice');
+  String get userFormFullNameLabel => _get('userFormFullNameLabel');
+  String get userFormEmailLabel => _get('userFormEmailLabel');
+  String get userFormPasswordLabel => _get('userFormPasswordLabel');
+  String get userFormRoleLabel => _get('userFormRoleLabel');
+  String get userFormRequiredFieldsError => _get('userFormRequiredFieldsError');
+  String get userFormCreatingStatus => _get('userFormCreatingStatus');
+  String get userFormCreateButton => _get('userFormCreateButton');
+
   // ══════════════════════════════════════════════════════════════════════════
   // TRANSLATIONS
   // ══════════════════════════════════════════════════════════════════════════
@@ -1054,6 +1075,28 @@ class AppStrings {
     'noVaccinesRegistered': 'No hay vacunas registradas.',
     'addVaccineButton': 'Agregar vacuna',
     'doseLabel': 'Dosis',
+
+    // Admin Manage Users
+    'manageUsersTitle': 'Gestionar usuarios',
+    'filterAll': 'Todos',
+    'filterDoctors': 'Doctores',
+    'filterNurse': 'Enfermería',
+    'filterCoord': 'Coord',
+    'noUsersInFilter': 'No hay usuarios en este filtro.',
+    'createUserTitle': 'Crear usuario',
+    'userStatusActive': 'Activo',
+    'userStatusSuspended': 'Suspendido',
+    'userDetailOrganization': 'Organización',
+    'userDetailStatus': 'Estado',
+    'userDetailWebNotice':
+        'Para editar permisos, use el panel web de administración.',
+    'userFormFullNameLabel': 'Nombre completo *',
+    'userFormEmailLabel': 'Correo electrónico *',
+    'userFormPasswordLabel': 'Contraseña temporal *',
+    'userFormRoleLabel': 'Rol *',
+    'userFormRequiredFieldsError': 'Completa todos los campos requeridos.',
+    'userFormCreatingStatus': 'Creando...',
+    'userFormCreateButton': 'Crear usuario',
   };
   static const Map<String, String> _en = {
     // Auth
@@ -1539,5 +1582,27 @@ class AppStrings {
     'noVaccinesRegistered': 'No vaccines registered.',
     'addVaccineButton': 'Add vaccine',
     'doseLabel': 'Dose',
+
+    // Admin Manage Users
+    'manageUsersTitle': 'Manage users',
+    'filterAll': 'All',
+    'filterDoctors': 'Doctors',
+    'filterNurse': 'Nursing',
+    'filterCoord': 'Coord',
+    'noUsersInFilter': 'No users found in this filter.',
+    'createUserTitle': 'Create user',
+    'userStatusActive': 'Active',
+    'userStatusSuspended': 'Suspended',
+    'userDetailOrganization': 'Organization',
+    'userDetailStatus': 'Status',
+    'userDetailWebNotice':
+        'To edit permissions, use the web administration panel.',
+    'userFormFullNameLabel': 'Full name *',
+    'userFormEmailLabel': 'Email *',
+    'userFormPasswordLabel': 'Temporary password *',
+    'userFormRoleLabel': 'Role *',
+    'userFormRequiredFieldsError': 'Please fill in all required fields.',
+    'userFormCreatingStatus': 'Creating...',
+    'userFormCreateButton': 'Create user',
   };
 }

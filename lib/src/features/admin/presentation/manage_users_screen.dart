@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../core/i18n/app_strings.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../auth/domain/user_session.dart';
 import '../../nfc/presentation/shared_read_nfc_header.dart';
@@ -74,6 +75,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+
     return Scaffold(
       backgroundColor: const Color(0xFFEBF2F8),
       floatingActionButton: FloatingActionButton(
@@ -87,55 +90,17 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             Column(
               children: [
                 SharedReadNfcHeader(
-                  title: 'Gestionar usuarios',
+                  title: s.manageUsersTitle,
                   onBack: () => Navigator.of(context).pop(),
                 ),
-                // Filter tabs
-                Container(
-                  color: AppColors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _FilterChip(
-                          label: 'Todos (${_users.length})',
-                          value: 'all',
-                          current: _filter,
-                          onTap: (v) => setState(() => _filter = v),
-                        ),
-                        const SizedBox(width: 8),
-                        _FilterChip(
-                          label:
-                              'Doctores (${_users.where((u) => u.role == UserRole.doctor).length})',
-                          value: 'doctor',
-                          current: _filter,
-                          onTap: (v) => setState(() => _filter = v),
-                        ),
-                        const SizedBox(width: 8),
-                        _FilterChip(
-                          label:
-                              'Enfermería (${_users.where((u) => u.role == UserRole.nurse).length})',
-                          value: 'nurse',
-                          current: _filter,
-                          onTap: (v) => setState(() => _filter = v),
-                        ),
-                        const SizedBox(width: 8),
-                        _FilterChip(
-                          label:
-                              'Admin (${_users.where((u) => u.role == UserRole.orgAdmin).length})',
-                          value: 'org_admin',
-                          current: _filter,
-                          onTap: (v) => setState(() => _filter = v),
-                        ),
-                      ],
-                    ),
-                  ),
+                // Barra de filtros optimizada con navegación en ambos sentidos (< y >)
+                _FilterBar(
+                  filter: _filter,
+                  users: _users,
+                  strings: s,
+                  onFilterChanged: (v) => setState(() => _filter = v),
                 ),
-                Expanded(child: _buildContent()),
+                Expanded(child: _buildContent(s)),
               ],
             ),
             const Positioned(
@@ -150,7 +115,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(AppStrings s) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return Center(
@@ -168,7 +133,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             ElevatedButton.icon(
               onPressed: _load,
               icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
+              label: Text(s.retry),
             ),
           ],
         ),
@@ -176,10 +141,10 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     }
 
     if (_filtered.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
-          'No hay usuarios en este filtro.',
-          style: TextStyle(color: AppColors.textSecondary),
+          s.noUsersInFilter,
+          style: const TextStyle(color: AppColors.textSecondary),
         ),
       );
     }
@@ -201,6 +166,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   // ── Create user sheet ─────────────────────────────────────────────────────
 
   void _showCreateUserSheet() {
+    final s = AppStrings.of(context);
     final currentRole =
         AppScope.of(context).authRepository.currentUser?.role ??
         UserRole.orgAdmin;
@@ -211,7 +177,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => _UserFormSheet(
-        title: 'Crear usuario',
+        title: s.createUserTitle,
         creatorRole: currentRole,
         onSubmit: (email, name, role, password) async {
           await AppScope.of(context).userRepository.createUser(
@@ -229,8 +195,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     );
   }
 
-  // ── Edit user sheet (read-only for now — backend lacks PATCH /users/{id}) ─
-
   void _showEditUserSheet(UserSession user) {
     showModalBottomSheet<void>(
       context: context,
@@ -239,6 +203,299 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => _UserDetailSheet(user: user),
+    );
+  }
+}
+
+class _FilterBar extends StatefulWidget {
+  const _FilterBar({
+    required this.filter,
+    required this.users,
+    required this.strings,
+    required this.onFilterChanged,
+  });
+
+  final String filter;
+  final List<UserSession> users;
+  final AppStrings strings;
+  final ValueChanged<String> onFilterChanged;
+
+  @override
+  State<_FilterBar> createState() => _FilterBarState();
+}
+
+class _FilterBarState extends State<_FilterBar> {
+  final ScrollController _scrollController = ScrollController();
+  bool _showLeftArrow = false;
+  bool _showRightArrow = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_checkScrollPosition);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkScrollPosition());
+  }
+
+  @override
+  void didUpdateWidget(covariant _FilterBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkScrollPosition());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_checkScrollPosition);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _checkScrollPosition() {
+    if (!_scrollController.hasClients) return;
+
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+
+    final shouldShowLeft = currentScroll > 10;
+    final shouldShowRight = maxScroll > 0 && (maxScroll - currentScroll) > 10;
+
+    if (_showLeftArrow != shouldShowLeft ||
+        _showRightArrow != shouldShowRight) {
+      setState(() {
+        _showLeftArrow = shouldShowLeft;
+        _showRightArrow = shouldShowRight;
+      });
+    }
+  }
+
+  void _scrollToRight() {
+    if (!_scrollController.hasClients) return;
+    final target = _scrollController.offset + 140.0;
+    final maxExtent = _scrollController.position.maxScrollExtent;
+
+    _scrollController.animateTo(
+      target > maxExtent ? maxExtent : target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _scrollToLeft() {
+    if (!_scrollController.hasClients) return;
+    final target = _scrollController.offset - 140.0;
+
+    _scrollController.animateTo(
+      target < 0 ? 0 : target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 58,
+      color: AppColors.white,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(left: 44, right: 44),
+              child: Row(
+                children: [
+                  _FilterChip(
+                    label:
+                        '${widget.strings.filterAll} (${widget.users.length})',
+                    value: 'all',
+                    current: widget.filter,
+                    onTap: widget.onFilterChanged,
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label:
+                        '${widget.strings.filterDoctors} (${widget.users.where((u) => u.role == UserRole.doctor).length})',
+                    value: 'doctor',
+                    current: widget.filter,
+                    onTap: widget.onFilterChanged,
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label:
+                        '${widget.strings.filterNurse} (${widget.users.where((u) => u.role == UserRole.nurse).length})',
+                    value: 'nurse',
+                    current: widget.filter,
+                    onTap: widget.onFilterChanged,
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label:
+                        '${widget.strings.filterCoord} (${widget.users.where((u) => u.role == UserRole.orgAdmin).length})',
+                    value: 'org_admin',
+                    current: widget.filter,
+                    onTap: widget.onFilterChanged,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          if (_showLeftArrow)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: Row(
+                children: [
+                  Container(
+                    height: double.infinity,
+                    color: AppColors.white,
+                    padding: const EdgeInsets.only(left: 12, right: 4),
+                    child: Center(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _scrollToLeft,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0F4F8),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.05),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.arrow_back_ios_new,
+                              size: 11,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 20,
+                    height: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerRight,
+                        end: Alignment.centerLeft,
+                        colors: [
+                          AppColors.white.withValues(alpha: 0.0),
+                          AppColors.white,
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (_showRightArrow)
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: Row(
+                children: [
+                  Container(
+                    width: 20,
+                    height: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          AppColors.white.withValues(alpha: 0.0),
+                          AppColors.white,
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    height: double.infinity,
+                    color: AppColors.white,
+                    padding: const EdgeInsets.only(right: 12, left: 4),
+                    child: Center(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _scrollToRight,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0F4F8),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.05),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.arrow_forward_ios,
+                              size: 11,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Filter chip ───────────────────────────────────────────────────────────
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.value,
+    required this.current,
+    required this.onTap,
+  });
+  final String label;
+  final String value;
+  final String current;
+  final ValueChanged<String> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final sel = current == value;
+    return GestureDetector(
+      onTap: () => onTap(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: sel ? AppColors.primary : const Color(0xFFF0F4F8),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: sel ? AppColors.white : AppColors.textSecondary,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -252,6 +509,7 @@ class _UserCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final initials = user.fullName
         .split(' ')
         .where((p) => p.isNotEmpty)
@@ -277,7 +535,6 @@ class _UserCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Avatar with initials
             Container(
               width: 44,
               height: 44,
@@ -335,7 +592,7 @@ class _UserCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    user.isActive ? 'Activo' : 'Suspendido',
+                    user.isActive ? s.userStatusActive : s.userStatusSuspended,
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
@@ -367,12 +624,14 @@ class _RoleBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final (label, color) = switch (role) {
-      UserRole.doctor => ('Doctor', const Color(0xFF1565C0)),
-      UserRole.nurse => ('Enfermería', const Color(0xFF2E7D32)),
-      UserRole.orgAdmin => ('Admin', const Color(0xFF6A1B9A)),
-      UserRole.superadmin => ('Superadmin', const Color(0xFFB71C1C)),
+      UserRole.doctor => (s.roleDoctor, const Color(0xFF1565C0)),
+      UserRole.nurse => (s.roleNurse, const Color(0xFF2E7D32)),
+      UserRole.orgAdmin => (s.roleOrgAdmin, const Color(0xFF6A1B9A)),
+      UserRole.superadmin => (s.roleSuperadmin, const Color(0xFFB71C1C)),
     };
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -392,45 +651,6 @@ class _RoleBadge extends StatelessWidget {
   }
 }
 
-// ── Filter chip ───────────────────────────────────────────────────────────
-
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({
-    required this.label,
-    required this.value,
-    required this.current,
-    required this.onTap,
-  });
-  final String label, value, current;
-  final ValueChanged<String> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final sel = value == current;
-    return GestureDetector(
-      onTap: () => onTap(value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: sel ? AppColors.primary : AppColors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: sel ? AppColors.primary : AppColors.divider,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: sel ? AppColors.white : AppColors.textPrimary,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ── User detail sheet (read-only) ────────────────────────────────────────
 
 class _UserDetailSheet extends StatelessWidget {
@@ -439,6 +659,8 @@ class _UserDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
       child: Column(
@@ -470,16 +692,16 @@ class _UserDetailSheet extends StatelessWidget {
           const SizedBox(height: 12),
           _RoleBadge(role: user.role),
           const SizedBox(height: 20),
-          _row(Icons.business, 'Organización', user.organizationId),
+          _row(Icons.business, s.userDetailOrganization, user.organizationId),
           const SizedBox(height: 8),
           _row(
             Icons.check_circle_outline,
-            'Estado',
-            user.isActive ? 'Activo' : 'Suspendido',
+            s.userDetailStatus,
+            user.isActive ? s.userStatusActive : s.userStatusSuspended,
           ),
           const SizedBox(height: 24),
           Text(
-            'Para editar permisos, use el panel web de administración.',
+            s.userDetailWebNotice,
             style: const TextStyle(
               fontSize: 12,
               color: AppColors.textSecondary,
@@ -536,23 +758,17 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   bool _saving = false;
   String? _error;
 
-  /// Role options depend on who is creating:
-  /// - superadmin → can only create org_admin
-  /// - org_admin → can only create doctor or nurse
-  List<MapEntry<String, String>> get _roleOptions {
+  List<MapEntry<String, String>> _getRoleOptions(AppStrings s) {
     if (widget.creatorRole == UserRole.superadmin) {
-      return const [MapEntry('org_admin', 'Administrador')];
+      return [MapEntry('org_admin', s.roleOrgAdmin)];
     }
-    return const [
-      MapEntry('doctor', 'Doctor'),
-      MapEntry('nurse', 'Enfermería'),
-    ];
+    return [MapEntry('doctor', s.roleDoctor), MapEntry('nurse', s.roleNurse)];
   }
 
   @override
   void initState() {
     super.initState();
-    _role = _roleOptions.first.key;
+    _role = widget.creatorRole == UserRole.superadmin ? 'org_admin' : 'doctor';
   }
 
   @override
@@ -565,6 +781,9 @@ class _UserFormSheetState extends State<_UserFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final roleOptions = _getRoleOptions(s);
+
     return Padding(
       padding: EdgeInsets.only(
         left: 24,
@@ -597,29 +816,29 @@ class _UserFormSheetState extends State<_UserFormSheet> {
               ),
             ),
             const SizedBox(height: 16),
-            _tf('Nombre completo *', _nameCtrl, icon: Icons.person),
+            _tf(s.userFormFullNameLabel, _nameCtrl, icon: Icons.person),
             const SizedBox(height: 12),
             _tf(
-              'Correo electrónico *',
+              s.userFormEmailLabel,
               _emailCtrl,
               icon: Icons.email,
               keyboard: TextInputType.emailAddress,
             ),
             const SizedBox(height: 12),
             _tf(
-              'Contraseña temporal *',
+              s.userFormPasswordLabel,
               _passCtrl,
               icon: Icons.lock,
               obscure: true,
             ),
             const SizedBox(height: 12),
-            const Text('Rol *', style: TextStyle(fontSize: 13)),
+            Text(s.userFormRoleLabel, style: const TextStyle(fontSize: 13)),
             const SizedBox(height: 6),
             Row(
               children: [
-                for (var i = 0; i < _roleOptions.length; i++) ...[
+                for (var i = 0; i < roleOptions.length; i++) ...[
                   if (i > 0) const SizedBox(width: 10),
-                  _roleOption(_roleOptions[i].value, _roleOptions[i].key),
+                  _roleOption(roleOptions[i].value, roleOptions[i].key),
                 ],
               ],
             ),
@@ -635,7 +854,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
               width: double.infinity,
               height: 44,
               child: ElevatedButton.icon(
-                onPressed: _saving ? null : _submit,
+                onPressed: _saving ? null : () => _submit(s),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   disabledBackgroundColor: AppColors.disabled,
@@ -658,7 +877,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                         color: AppColors.white,
                       ),
                 label: Text(
-                  _saving ? 'Creando...' : 'Crear usuario',
+                  _saving ? s.userFormCreatingStatus : s.userFormCreateButton,
                   style: const TextStyle(color: AppColors.white, fontSize: 15),
                 ),
               ),
@@ -730,12 +949,12 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     );
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit(AppStrings s) async {
     final email = _emailCtrl.text.trim();
     final name = _nameCtrl.text.trim();
     final pass = _passCtrl.text;
     if (email.isEmpty || name.isEmpty || pass.isEmpty) {
-      setState(() => _error = 'Completa todos los campos requeridos.');
+      setState(() => _error = s.userFormRequiredFieldsError);
       return;
     }
     setState(() {
