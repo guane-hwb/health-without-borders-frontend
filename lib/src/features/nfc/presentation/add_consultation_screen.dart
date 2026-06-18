@@ -171,6 +171,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
         ? PayerInfo(name: payerName)
         : null;
 
+    final weightText = _weightCtrl.text.trim().replaceAll(',', '.');
+    final heightText = _heightCtrl.text.trim().replaceAll(',', '.');
+
     final newConsultation = MedicalHistoryItem(
       type: 'Consultation',
       startDateTime: _startDateTime.toIso8601String(),
@@ -204,20 +207,12 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       riskFactors: <RiskFactor>[],
     );
 
-    // When called from PatientProfileScreen, return item to caller.
-    if (widget.returnToProfile) {
-      if (mounted) Navigator.of(context).pop(newConsultation);
-      return;
-    }
-
     final updatedRecord = PatientFullRecord(
       patientId: _patient!.patientId,
       deviceUid: _patient!.deviceUid,
       patientInfo: _patient!.patientInfo.copyWith(
-        weight:
-            double.tryParse(_weightCtrl.text) ?? _patient!.patientInfo.weight,
-        height:
-            double.tryParse(_heightCtrl.text) ?? _patient!.patientInfo.height,
+        weight: double.tryParse(weightText) ?? _patient!.patientInfo.weight,
+        height: double.tryParse(heightText) ?? _patient!.patientInfo.height,
       ),
       guardianInfo: _patient!.guardianInfo,
       guardian2Info: _patient!.guardian2Info,
@@ -231,14 +226,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       final scope = AppScope.of(context);
       await scope.localDatabase.savePatient(updatedRecord);
 
+      scope.syncEngine.syncAll().ignore();
+
       if (mounted) {
-        setState(() {
-          _saved = true;
-          _isSaving = false;
-        });
-
-        scope.syncEngine.syncAll().ignore();
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(s.consultationSaved),
@@ -246,6 +236,16 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             duration: const Duration(seconds: 3),
           ),
         );
+
+        if (widget.returnToProfile) {
+          Navigator.of(context).pop(newConsultation);
+          return;
+        }
+
+        setState(() {
+          _saved = true;
+          _isSaving = false;
+        });
       }
     } catch (e) {
       if (mounted) {

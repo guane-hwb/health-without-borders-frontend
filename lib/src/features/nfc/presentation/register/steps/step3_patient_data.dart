@@ -132,6 +132,11 @@ class _Step3State extends State<Step3PatientData> {
     d.ethnicCommunity = _ethnicComm.text.trim().isEmpty
         ? null
         : _ethnicComm.text.trim();
+
+    d.bloodType = (d.bloodType == null || d.bloodType!.trim().isEmpty)
+        ? 'O+'
+        : d.bloodType;
+
     widget.onContinue();
   }
 
