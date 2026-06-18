@@ -661,7 +661,7 @@ void main() {
   group('returnToProfile = true', () {
     testWidgets('al guardar hace pop con MedicalHistoryItem', (tester) async {
       MedicalHistoryItem? popped;
-      final scope = _defaultScope();
+      final scope = _scopeWithSave();
 
       await tester.pumpWidget(
         AppScope(
