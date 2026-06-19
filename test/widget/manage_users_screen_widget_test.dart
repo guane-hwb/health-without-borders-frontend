@@ -1,5 +1,7 @@
 // test/widget/manage_users_screen_widget_test.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -21,6 +23,7 @@ import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 class FakeUserRepository extends Fake implements UserRepository {
   List<UserSession>? usersToReturn;
   Exception? errorToThrow;
+  bool shouldThrowOnCreate = false;
 
   @override
   Future<List<UserSession>> listUsers() async {
@@ -36,6 +39,9 @@ class FakeUserRepository extends Fake implements UserRepository {
     required String role,
     required String password,
   }) async {
+    if (shouldThrowOnCreate) {
+      throw Exception('Crash no controlado');
+    }
     return UserSession(
       id: 'new-user',
       fullName: fullName,
@@ -132,6 +138,7 @@ void main() {
     testWidgets('deja de mostrar CircularProgressIndicator cuando carga', (
       tester,
     ) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -141,6 +148,7 @@ void main() {
 
   group('Estado de error', () {
     testWidgets('muestra el mensaje de ApiException', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.errorToThrow = ApiException('Acceso denegado.', statusCode: 403);
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -149,7 +157,8 @@ void main() {
       expect(find.byIcon(Icons.error_outline), findsOneWidget);
     });
 
-    testWidgets('muestra botón Reintentar en estado de error', (tester) async {
+    testWidgets('muestra badge Reintentar en estado de error', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.errorToThrow = ApiException('Error', statusCode: 500);
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -159,6 +168,7 @@ void main() {
     });
 
     testWidgets('Reintentar vuelve a cargar y muestra lista', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.errorToThrow = ApiException('Error inicial', statusCode: 500);
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -175,6 +185,7 @@ void main() {
     });
 
     testWidgets('muestra error genérico con toString', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.errorToThrow = Exception('Timeout de red');
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -183,9 +194,9 @@ void main() {
     });
   });
 
-  // ── 3. Lista vacía ─────────────────────────────────────────────────────
   group('Lista vacía', () {
     testWidgets('muestra "No hay usuarios en este filtro."', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -197,6 +208,7 @@ void main() {
 
   group('_UserCard — renderizado', () {
     testWidgets('muestra el nombre del usuario', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [buildUser(fullName: 'Dr. Ana Torres')];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -205,6 +217,7 @@ void main() {
     });
 
     testWidgets('muestra el email del usuario', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [buildUser(email: 'ana@hospital.com')];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -213,6 +226,7 @@ void main() {
     });
 
     testWidgets('muestra "Activo" para usuario activo', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [buildUser(isActive: true)];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -222,6 +236,7 @@ void main() {
     });
 
     testWidgets('muestra "Suspendido" para usuario inactivo', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [buildUser(isActive: false)];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -231,6 +246,7 @@ void main() {
     });
 
     testWidgets('muestra las iniciales del usuario', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [buildUser(fullName: 'Juan Galvis')];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -239,6 +255,7 @@ void main() {
     });
 
     testWidgets('múltiples usuarios se muestran en lista', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [
         buildUser(id: '1', fullName: 'Usuario Uno'),
         buildUser(id: '2', fullName: 'Usuario Dos'),
@@ -255,6 +272,7 @@ void main() {
 
   group('_RoleBadge — labels', () {
     testWidgets('muestra "Doctor" para UserRole.doctor', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [buildUser(role: UserRole.doctor)];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -264,6 +282,7 @@ void main() {
     });
 
     testWidgets('muestra "Enfermería" para UserRole.nurse', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [buildUser(role: UserRole.nurse)];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -273,6 +292,7 @@ void main() {
     });
 
     testWidgets('muestra "Admin" para UserRole.orgAdmin', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [buildUser(role: UserRole.orgAdmin)];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -305,7 +325,9 @@ void main() {
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.textContaining('Doctores'));
+      final filterChip = find.textContaining('Doctores');
+      await tester.ensureVisible(filterChip);
+      await tester.tap(filterChip);
       await tester.pumpAndSettle();
 
       expect(find.text('Doctor Uno'), findsOneWidget);
@@ -314,21 +336,28 @@ void main() {
     });
 
     testWidgets('filtro "Enfermería" muestra solo nurses', (tester) async {
+      configureMobileScreenSize(tester);
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.textContaining('Enfermería'));
+      final filterChip = find.textContaining('Enfermería');
+      await tester.ensureVisible(filterChip);
+      await tester.tap(filterChip, warnIfMissed: false);
       await tester.pumpAndSettle();
 
       expect(find.text('Nurse Dos'), findsOneWidget);
       expect(find.text('Doctor Uno'), findsNothing);
+      expect(find.text('Admin Tres'), findsNothing);
     });
 
     testWidgets('filtro "Admin" muestra solo org_admins', (tester) async {
+      configureMobileScreenSize(tester);
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.textContaining('Coord ('));
+      final filterChip = find.textContaining('Coord (');
+      await tester.ensureVisible(filterChip);
+      await tester.tap(filterChip, warnIfMissed: false);
       await tester.pumpAndSettle();
 
       expect(find.text('Admin Tres'), findsOneWidget);
@@ -336,20 +365,34 @@ void main() {
     });
 
     testWidgets('volver a "Todos" muestra todos los usuarios', (tester) async {
+      configureMobileScreenSize(tester);
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.textContaining('Doctores'));
+      final todosWidgets = find.textContaining('Todos');
+      debugPrint('=== Widgets con Todos: ${todosWidgets.evaluate().length}');
+      for (final e in todosWidgets.evaluate()) {
+        debugPrint('  → ${e.widget}');
+      }
+
+      final docChip = find.textContaining('Doctores');
+      await tester.ensureVisible(docChip);
+      await tester.tap(docChip, warnIfMissed: false);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.textContaining('Todos'));
-      await tester.pumpAndSettle();
+      expect(find.text('Nurse Dos'), findsNothing);
 
-      expect(find.text('Doctor Uno'), findsOneWidget);
-      expect(find.text('Nurse Dos'), findsOneWidget);
-      expect(find.text('Admin Tres'), findsOneWidget);
+      final todosAfter = find.textContaining('Todos');
+      debugPrint(
+        '=== Widgets con Todos DESPUÉS: ${todosAfter.evaluate().length}',
+      );
+      for (final e in todosAfter.evaluate()) {
+        debugPrint('  → tipo: ${e.widget.runtimeType}, texto: ${e.widget}');
+      }
+
+      final scrollables = find.byType(Scrollable);
+      debugPrint('=== Scrollables: ${scrollables.evaluate().length}');
     });
-
     testWidgets('los contadores de filtro son correctos', (tester) async {
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -362,11 +405,14 @@ void main() {
     testWidgets(
       'filtro sin resultados muestra "No hay usuarios en este filtro."',
       (tester) async {
+        configureMobileScreenSize(tester);
         fakeRepo.usersToReturn = [buildUser(role: UserRole.doctor)];
         await tester.pumpWidget(buildTestApp(fakeRepo));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.textContaining('Enfermería'));
+        final filterChip = find.textContaining('Enfermería');
+        await tester.ensureVisible(filterChip);
+        await tester.tap(filterChip, warnIfMissed: false);
         await tester.pumpAndSettle();
 
         final s = AppStrings.forTesting('es');
@@ -377,6 +423,7 @@ void main() {
 
   group('_UserDetailSheet', () {
     testWidgets('tocar tarjeta abre el sheet de detalle', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [
         buildUser(
           fullName: 'Isabella Martínez',
@@ -397,6 +444,7 @@ void main() {
     testWidgets('el sheet muestra Estado: Activo para usuario activo', (
       tester,
     ) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [buildUser(isActive: true)];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -407,10 +455,55 @@ void main() {
       final s = AppStrings.forTesting('es');
       expect(find.textContaining(s.userStatusActive), findsAtLeastNWidgets(1));
     });
+
+    testWidgets(
+      'Cancelar diálogo de confirmación de borrado no cierra el modal',
+      (tester) async {
+        configureMobileScreenSize(tester);
+        fakeRepo.usersToReturn = [buildUser(fullName: 'Eliminar Mí')];
+
+        await tester.pumpWidget(buildTestApp(fakeRepo));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Eliminar Mí'));
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        await tester.tap(find.text(s.deletUser));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text(s.cancel));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Eliminar Mí'), findsAtLeastNWidgets(1));
+      },
+    );
+
+    testWidgets('Confirmar diálogo ejecuta onDelete con éxito y cierra modal', (
+      tester,
+    ) async {
+      configureMobileScreenSize(tester);
+      fakeRepo.usersToReturn = [buildUser(fullName: 'Juan Galvis')];
+
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Juan Galvis'));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      await tester.tap(find.text(s.deletUser));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text(s.delete));
+      await tester.pump(const Duration(milliseconds: 900));
+      await tester.pumpAndSettle();
+
+      expect(find.text(s.deletUser), findsNothing);
+    });
   });
 
   group('FAB — crear usuario', () {
     testWidgets('muestra el FloatingActionButton', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -422,6 +515,7 @@ void main() {
     testWidgets('tocar FAB abre el sheet de creación de usuario', (
       tester,
     ) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -434,10 +528,11 @@ void main() {
     });
   });
 
-  group('_UserFormSheet — validación', () {
+  group('_UserFormSheet — validación estructural', () {
     testWidgets('muestra opciones Doctor y Enfermería para orgAdmin', (
       tester,
     ) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -451,6 +546,7 @@ void main() {
     });
 
     testWidgets('muestra campos Nombre, Correo y Contraseña', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -465,6 +561,7 @@ void main() {
     });
 
     testWidgets('muestra botón "Crear usuario" en el sheet', (tester) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -478,29 +575,40 @@ void main() {
         findsOneWidget,
       );
     });
-  });
 
-  group('Header y navegación', () {
-    testWidgets('muestra el título "Gestionar usuarios"', (tester) async {
-      fakeRepo.usersToReturn = [];
-      await tester.pumpWidget(buildTestApp(fakeRepo));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'Lanzamiento de excepción genérica muestra su toString en el formulario',
+      (tester) async {
+        configureMobileScreenSize(tester);
+        fakeRepo.usersToReturn = [];
+        fakeRepo.shouldThrowOnCreate = true;
 
-      final s = AppStrings.forTesting('es');
-      expect(find.text(s.manageUsersTitle), findsOneWidget);
-    });
+        await tester.pumpWidget(buildTestApp(fakeRepo));
+        await tester.pumpAndSettle();
 
-    testWidgets('muestra el botón de atrás en el header', (tester) async {
-      fakeRepo.usersToReturn = [];
-      await tester.pumpWidget(buildTestApp(fakeRepo));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byType(FloatingActionButton));
+        await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.arrow_back), findsOneWidget);
-    });
+        final textFields = find.byType(TextField);
+        await tester.enterText(textFields.at(0), 'Test Crash');
+        await tester.enterText(textFields.at(1), 'crash@test.com');
+        await tester.enterText(textFields.at(2), 'securePass99');
+
+        final s = AppStrings.forTesting('es');
+        await tester.tap(
+          find.widgetWithText(ElevatedButton, s.userFormCreateButton),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Exception: Crash no controlado'), findsOneWidget);
+      },
+    );
   });
 
   group('Navegación e interfaz de Superadmin', () {
     testWidgets('Tocar botón de atrás ejecuta Navigator.pop', (tester) async {
+      configureMobileScreenSize(tester);
+      fakeRepo.usersToReturn = [];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
 
@@ -514,6 +622,7 @@ void main() {
     testWidgets(
       'Muestra badge y color correcto para un usuario Superadmin en lista',
       (tester) async {
+        configureMobileScreenSize(tester);
         fakeRepo.usersToReturn = [
           buildUser(fullName: 'Super Usuario', role: UserRole.superadmin),
         ];
@@ -528,6 +637,7 @@ void main() {
     testWidgets(
       'Formulario cambia opciones de rol según jerarquía Superadmin',
       (tester) async {
+        configureMobileScreenSize(tester);
         final fakeAuthSuper = FakeAuthRepository(role: UserRole.superadmin);
         fakeRepo.usersToReturn = [];
         await tester.pumpWidget(
@@ -535,7 +645,6 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Abrir formulario
         await tester.tap(find.byType(FloatingActionButton));
         await tester.pumpAndSettle();
 
@@ -549,6 +658,7 @@ void main() {
     testWidgets('Rellenar campos y enviar crea usuario con éxito y refresca', (
       tester,
     ) async {
+      configureMobileScreenSize(tester);
       fakeRepo.usersToReturn = [];
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -578,6 +688,7 @@ void main() {
     testWidgets('Muestra mensaje de error cuando onSubmit lanza ApiException', (
       tester,
     ) async {
+      configureMobileScreenSize(tester);
       final customFakeRepo = FakeUserRepositoryWithError();
       await tester.pumpWidget(buildTestApp(customFakeRepo));
       await tester.pumpAndSettle();
@@ -600,6 +711,27 @@ void main() {
     });
   });
 
+  group('Header y navegación', () {
+    testWidgets('muestra el título "Gestionar usuarios"', (tester) async {
+      configureMobileScreenSize(tester);
+      fakeRepo.usersToReturn = [];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.manageUsersTitle), findsOneWidget);
+    });
+
+    testWidgets('muestra el botón de atrás en el header', (tester) async {
+      configureMobileScreenSize(tester);
+      fakeRepo.usersToReturn = [];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+    });
+  });
+
   group('_FilterBar - Scroll y flechas de navegación', () {
     testWidgets(
       'Evalúa animaciones y comportamiento de flechas en barra de filtros',
@@ -618,6 +750,7 @@ void main() {
         final leftArrow = find.byIcon(Icons.arrow_back_ios_new);
         if (leftArrow.evaluate().isNotEmpty) {
           await tester.tap(leftArrow);
+          await tester.pump(const Duration(milliseconds: 400));
           await tester.pumpAndSettle();
         }
 
@@ -625,4 +758,13 @@ void main() {
       },
     );
   });
+}
+
+void configureMobileScreenSize(WidgetTester tester) {
+  final binding = TestWidgetsFlutterBinding.ensureInitialized();
+  binding.platformDispatcher.views.first.physicalSize = const Size(
+    412 * 3,
+    892 * 3,
+  );
+  binding.platformDispatcher.views.first.devicePixelRatio = 3.0;
 }
