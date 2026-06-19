@@ -360,4 +360,41 @@ void main() {
       expect(current, 'all');
     });
   });
+
+  group('_roleOptions — opciones de rol para crear usuario', () {
+    test('superadmin solo puede crear org_admin', () {
+      final opts = roleOptions(UserRole.superadmin);
+      expect(opts.length, 1);
+      expect(opts.first.key, 'org_admin');
+      expect(opts.first.value, 'Administrador');
+    });
+
+    test('orgAdmin puede crear doctor o nurse', () {
+      final opts = roleOptions(UserRole.orgAdmin);
+      expect(opts.length, 2);
+      expect(opts.map((e) => e.key).toList(), ['doctor', 'nurse']);
+    });
+
+    test('orgAdmin opciones tienen labels correctos', () {
+      final opts = roleOptions(UserRole.orgAdmin);
+      expect(opts[0].value, 'Doctor');
+      expect(opts[1].value, 'Enfermería');
+    });
+
+    test('primera opción de orgAdmin es doctor (rol por defecto)', () {
+      final opts = roleOptions(UserRole.orgAdmin);
+      expect(opts.first.key, 'doctor');
+    });
+
+    test('primera opción de superadmin es org_admin (rol por defecto)', () {
+      final opts = roleOptions(UserRole.superadmin);
+      expect(opts.first.key, 'org_admin');
+    });
+
+    test('doctor u otros roles retornan doctor y nurse por defecto', () {
+      final opts = roleOptions(UserRole.doctor);
+      expect(opts.length, 2);
+      expect(opts.first.key, 'doctor');
+    });
+  });
 }

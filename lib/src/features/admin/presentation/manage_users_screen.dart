@@ -759,7 +759,7 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
                     )
                   : const Icon(Icons.delete_outline, size: 20),
               label: Text(
-                _isDeleting ? 'Eliminando...' : 'Eliminar Usuario',
+                _isDeleting ? s.deleting : s.deletUser,
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -769,14 +769,6 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
           ),
 
           const SizedBox(height: 16),
-          Text(
-            s.userDetailWebNotice,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-            ),
-            textAlign: TextAlign.center,
-          ),
         ],
       ),
     );
@@ -797,22 +789,21 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
   }
 
   Future<void> _confirmAndDelete() async {
+    final s = AppStrings.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('¿Eliminar usuario?'),
-        content: Text(
-          'Esta acción eliminará permanentemente a ${widget.user.fullName}.',
-        ),
+        title: Text('¿${s.deletUser}?'),
+        content: Text('${s.permanentlyDelete} ${widget.user.fullName}.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
+            child: Text(s.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Eliminar'),
+            child: Text(s.delete),
           ),
         ],
       ),
