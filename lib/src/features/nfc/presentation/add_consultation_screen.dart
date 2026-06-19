@@ -1,5 +1,6 @@
 // lib/src/features/nfc/presentation/add_consultation_screen.dart
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
@@ -34,10 +35,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   String? _scanError;
   bool _isSaving = false;
   bool _saved = false;
-
-  // ── Vitals (stored in patientInfo) ───────────────────────────────────────
-  final _weightCtrl = TextEditingController();
-  final _heightCtrl = TextEditingController();
 
   // ── Encounter metadata ────────────────────────────────────────────────────
   DateTime _startDateTime = DateTime.now();
@@ -75,10 +72,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   void initState() {
     super.initState();
     _patient = widget.patient;
-    if (_patient != null) {
-      _weightCtrl.text = _patient!.patientInfo.weight?.toString() ?? '';
-      _heightCtrl.text = _patient!.patientInfo.height?.toString() ?? '';
-    }
     _historyCtrl.addListener(_onHistoryChanged);
   }
 
@@ -97,8 +90,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   @override
   void dispose() {
     _historyCtrl.removeListener(_onHistoryChanged);
-    _weightCtrl.dispose();
-    _heightCtrl.dispose();
     _practitionerDocCtrl.dispose();
     _practitionerNameCtrl.dispose();
     _providerRepsCtrl.dispose();
@@ -171,10 +162,8 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
         ? PayerInfo(name: payerName)
         : null;
 
-    final weightText = _weightCtrl.text.trim().replaceAll(',', '.');
-    final heightText = _heightCtrl.text.trim().replaceAll(',', '.');
-
     final newConsultation = MedicalHistoryItem(
+      encounterIdentifier: const Uuid().v4(),
       type: 'Consultation',
       startDateTime: _startDateTime.toIso8601String(),
       endDateTime: _endDateTime?.toIso8601String(),
@@ -210,10 +199,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     final updatedRecord = PatientFullRecord(
       patientId: _patient!.patientId,
       deviceUid: _patient!.deviceUid,
-      patientInfo: _patient!.patientInfo.copyWith(
-        weight: double.tryParse(weightText) ?? _patient!.patientInfo.weight,
-        height: double.tryParse(heightText) ?? _patient!.patientInfo.height,
-      ),
+      patientInfo: _patient!.patientInfo,
       guardianInfo: _patient!.guardianInfo,
       guardian2Info: _patient!.guardian2Info,
       backgroundHistory: _patient!.backgroundHistory,
@@ -502,30 +488,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
         children: [
           _PatientBadge(patient: p),
           const SizedBox(height: 16),
-
-          // ── Vitals (weight + height saved on patientInfo) ────────────────
-          _SectionCard(
-            icon: Icons.monitor_heart_outlined,
-            title: s.editMeasurements,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _vitalField(
-                      s.weightKg,
-                      _weightCtrl,
-                      Icons.monitor_weight_outlined,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _vitalField(s.heightCm, _heightCtrl, Icons.height),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
 
           // ── Encounter date/time ──────────────────────────────────────────
           _SectionCard(
@@ -862,44 +824,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   }
 
   // ── Widget helpers ────────────────────────────────────────────────────────
-
-  Widget _vitalField(
-    String label,
-    TextEditingController ctrl,
-    IconData icon,
-  ) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        label,
-        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-      ),
-      const SizedBox(height: 4),
-      TextField(
-        controller: ctrl,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        style: const TextStyle(fontSize: 14),
-        decoration: InputDecoration(
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 10,
-          ),
-          filled: true,
-          fillColor: AppColors.white,
-          prefixIcon: Icon(icon, size: 16, color: AppColors.secondary),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: AppColors.primary, width: 2),
-          ),
-        ),
-      ),
-    ],
-  );
 
   Widget _textField(
     String label,

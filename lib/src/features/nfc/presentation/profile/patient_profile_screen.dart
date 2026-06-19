@@ -30,10 +30,16 @@ class PatientProfileScreen extends StatefulWidget {
     super.key,
     required this.patient,
     this.lastSyncedAt,
+    this.readOnly = false,
   });
 
   final PatientFullRecord patient;
   final String? lastSyncedAt;
+
+  /// When true the profile is shown for review only: every add/edit
+  /// affordance is hidden and all mutation entry points are inert. Used by the
+  /// sync queue to preview a pending record without risk of altering it.
+  final bool readOnly;
 
   @override
   State<PatientProfileScreen> createState() => _PatientProfileScreenState();
@@ -364,6 +370,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   // ── Sync ─────────────────────────────────────────────────────────────────
 
   Future<void> _sync({bool silent = false}) async {
+    if (widget.readOnly) return;
     if (_isSyncing) return;
     if (!silent) {
       setState(() {
@@ -403,6 +410,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   // ── Navigation ───────────────────────────────────────────────────────────
 
   Future<void> _navigateAddConsultation() async {
+    if (widget.readOnly) return;
     if (!_currentRole.canAddConsultation) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -423,6 +431,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   Future<void> _navigateAddVaccine() async {
+    if (widget.readOnly) return;
     final result = await Navigator.of(context).push<VaccinationRecordItem>(
       MaterialPageRoute(
         builder: (_) =>
@@ -437,6 +446,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   // ── Sheets ────────────────────────────────────────────────────────────────
 
   Future<void> _openVitalSignsSheet() async {
+    if (widget.readOnly) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -452,6 +462,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   Future<void> _openAddressSheet() async {
+    if (widget.readOnly) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -464,6 +475,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   Future<void> _openGuardianSheet(int guardianIndex) async {
+    if (widget.readOnly) return;
     final current = guardianIndex == 1
         ? _draft.guardianInfo
         : _draft.guardian2Info;
@@ -501,6 +513,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   Future<void> _openEditPersonalSheet() async {
+    if (widget.readOnly) return;
     final bg = _draft.backgroundHistory ?? BackgroundHistory();
     await showModalBottomSheet<void>(
       context: context,
@@ -553,6 +566,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   void _openAllergiesSheet() {
+    if (widget.readOnly) return;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -572,6 +586,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   void _openBackgroundSheet() {
+    if (widget.readOnly) return;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -639,8 +654,9 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                         draft: _draft,
                         original: _original,
                         canEdit:
-                            _currentRole.canAddConsultation ||
-                            _currentRole.canAddVaccine,
+                            !widget.readOnly &&
+                            (_currentRole.canAddConsultation ||
+                                _currentRole.canAddVaccine),
                         onEditVitalSigns: _openVitalSignsSheet,
                         onEditAddress: _openAddressSheet,
                         onEditGuardian: _openGuardianSheet,
@@ -649,12 +665,15 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                       ),
                       ProfileTabConsultations(
                         draft: _draft,
-                        canAdd: _currentRole.canAddConsultation,
+                        canAdd:
+                            !widget.readOnly &&
+                            _currentRole.canAddConsultation,
                         onAdd: _navigateAddConsultation,
                       ),
                       ProfileTabVaccines(
                         draft: _draft,
-                        canEdit: _currentRole.canAddVaccine,
+                        canEdit:
+                            !widget.readOnly && _currentRole.canAddVaccine,
                         onAdd: _navigateAddVaccine,
                       ),
                     ],

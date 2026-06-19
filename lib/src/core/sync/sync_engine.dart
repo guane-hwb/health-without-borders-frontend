@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../features/nfc/data/patient_repository.dart';
 import '../../features/nfc/domain/patient_record.dart';
@@ -27,6 +28,22 @@ class SyncEngine {
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool _isSyncing = false;
+
+  /// Reactive count of records still pending sync. Widgets (e.g. the home
+  /// screen sync card) can listen to this and update automatically when a
+  /// background sync completes or a new record is queued — no manual refresh
+  /// or screen navigation required.
+  final ValueNotifier<int> pendingCount = ValueNotifier<int>(0);
+
+  /// Re-reads the number of unsynced records from local storage and publishes
+  /// it on [pendingCount].
+  Future<void> refreshPendingCount() async {
+    try {
+      pendingCount.value = await _localDb.getUnsyncedCount();
+    } catch (_) {
+      // Leave the previous value on a transient storage error.
+    }
+  }
 
   /// Callback fired whenever the sync status changes.
   /// The int parameter is the current count of unsynced records.
@@ -68,6 +85,9 @@ class SyncEngine {
   /// Attempts to sync all unsynced records to the backend.
   /// Safe to call multiple times — concurrent calls are serialized.
   Future<void> syncAll() async {
+    // Reflect the current pending count immediately (covers the case where a
+    // sync is already in flight and a new record was just queued).
+    await refreshPendingCount();
     if (_isSyncing) return;
     _isSyncing = true;
 
@@ -80,9 +100,11 @@ class SyncEngine {
       }
 
       final remaining = await _localDb.getUnsyncedCount();
+      pendingCount.value = remaining;
       onSyncStatusChanged?.call(remaining);
     } finally {
       _isSyncing = false;
+      await refreshPendingCount();
     }
   }
 
@@ -151,6 +173,7 @@ class SyncEngine {
 
     await _syncOne(match.first);
     final updated = await _localDb.getUnsyncedRecords();
+    await refreshPendingCount();
     return !updated.any((e) => e.patientId == patientId);
   }
 }

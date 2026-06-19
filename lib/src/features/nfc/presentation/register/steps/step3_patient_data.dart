@@ -65,6 +65,18 @@ class _Step3State extends State<Step3PatientData> {
   late final _ethnicComm = TextEditingController(
     text: widget.draft.ethnicCommunity ?? '',
   );
+  late final _weight = TextEditingController(
+    text: widget.draft.weight != null
+        ? (widget.draft.weight! % 1 == 0
+              ? widget.draft.weight!.toInt().toString()
+              : widget.draft.weight!.toString())
+        : '',
+  );
+  late final _height = TextEditingController(
+    text: widget.draft.height != null
+        ? widget.draft.height!.toInt().toString()
+        : '',
+  );
   String? _err;
 
   bool get _hasEthnicity {
@@ -83,6 +95,8 @@ class _Step3State extends State<Step3PatientData> {
     _city.dispose();
     _stateCtrl.dispose();
     _ethnicComm.dispose();
+    _weight.dispose();
+    _height.dispose();
     super.dispose();
   }
 
@@ -132,6 +146,9 @@ class _Step3State extends State<Step3PatientData> {
     d.ethnicCommunity = _ethnicComm.text.trim().isEmpty
         ? null
         : _ethnicComm.text.trim();
+
+    d.weight = double.tryParse(_weight.text.trim().replaceAll(',', '.'));
+    d.height = double.tryParse(_height.text.trim().replaceAll(',', '.'));
 
     d.bloodType = (d.bloodType == null || d.bloodType!.trim().isEmpty)
         ? 'O+'
@@ -472,6 +489,44 @@ class _Step3State extends State<Step3PatientData> {
                     value: d.bloodType ?? 'O+',
                     options: blood,
                     onChanged: (v) => setState(() => d.bloodType = v),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 14),
+
+              // ── Measurements (weight / height) ─────────────────────────
+              _SectionCard(
+                children: [
+                  _SectionHeader(
+                    icon: Icons.straighten,
+                    title: isEs ? 'Medidas' : 'Measurements',
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _StyledTextField(
+                          label: s.weightKg,
+                          controller: _weight,
+                          hint: 'Ej: 39.2',
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StyledTextField(
+                          label: s.heightCm,
+                          controller: _height,
+                          hint: 'Ej: 148',
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

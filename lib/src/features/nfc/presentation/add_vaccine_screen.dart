@@ -1,5 +1,6 @@
 // lib/src/features/nfc/presentation/add_vaccine_screen.dart
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
@@ -137,6 +138,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
     final newVaccines = _entries
         .map(
           (e) => VaccinationRecordItem(
+            vaccinationId: const Uuid().v4(),
             date: _formattedDate,
             vaccineName: e.nameCtrl.text.trim(),
             vaccineCode: e.cvxCtrl.text.trim(),
