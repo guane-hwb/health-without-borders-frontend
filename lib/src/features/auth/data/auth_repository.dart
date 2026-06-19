@@ -1,6 +1,6 @@
 // lib/src/features/auth/data/auth_repository.dart
 import 'dart:convert';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/network/api_client.dart';
@@ -12,6 +12,11 @@ class AuthRepository {
     FlutterSecureStorage? secureStorage,
   }) : _apiClient = apiClient,
        _secureStorage = secureStorage ?? const FlutterSecureStorage();
+
+  @visibleForTesting
+  static const String tokenKey = _tokenKey;
+  @visibleForTesting
+  static const String nfcKeyKey = _nfcKeyKey;
 
   static const String _tokenKey = 'hwb_access_token';
   static const String _nfcKeyKey = 'hwb_nfc_key';
