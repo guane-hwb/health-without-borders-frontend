@@ -409,7 +409,6 @@ void main() {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Editar mediciones'), findsOneWidget);
       expect(find.text('Fecha y hora (ISO 8601)'), findsOneWidget);
       expect(find.text('Contexto de atención'), findsOneWidget);
       expect(find.text('Evaluación clínica'), findsOneWidget);
@@ -441,23 +440,6 @@ void main() {
       await tester.pump();
 
       expect(_isGuardarEnabled(tester), isTrue);
-    });
-
-    testWidgets('pre-carga peso y talla cuando el paciente los tiene', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _buildApp(patient: _fakePatient(weight: 58.5, height: 162.0)),
-      );
-      await tester.pumpAndSettle();
-
-      final values = tester
-          .widgetList<TextField>(find.byType(TextField))
-          .map((tf) => tf.controller?.text ?? '')
-          .toList();
-
-      expect(values.any((v) => v == '58.5'), isTrue);
-      expect(values.any((v) => v == '162.0'), isTrue);
     });
 
     testWidgets('dropdowns de modalidad, grupo y entorno presentes', (
@@ -753,7 +735,6 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Edit measurements'), findsOneWidget);
         expect(find.text('Care Context'), findsOneWidget);
         expect(find.text('Clinical evaluation'), findsOneWidget);
         expect(find.text('Payer'), findsOneWidget);

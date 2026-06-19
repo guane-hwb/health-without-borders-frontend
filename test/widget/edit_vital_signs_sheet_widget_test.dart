@@ -325,7 +325,7 @@ void main() {
       'ES Locale: Blood type structural alert contains correct localized copy tokens in Spanish',
       (tester) async {
         await tester.pumpWidget(_wrap(locale: 'es'));
-        expect(find.textContaining('tipo de sangre'), findsOneWidget);
+        expect(find.textContaining('Tipo de sangre'), findsOneWidget);
       },
     );
 

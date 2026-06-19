@@ -86,30 +86,49 @@ class ApiClient {
   }
 
   Map<String, dynamic> _decodeMapOrThrow(http.Response response) {
-    final Object? decoded = response.body.isEmpty
-        ? <String, dynamic>{}
-        : jsonDecode(response.body);
+    final bool isSuccess =
+        response.statusCode >= 200 && response.statusCode < 300;
 
-    if (decoded is! Map<String, dynamic>) {
+    // Decode defensively: gateways/proxies (Cloud Run, load balancers) can
+    // return a plain-text or HTML body such as "Internal Server Error" on a
+    // 5xx, which is NOT valid JSON. Parsing that unconditionally used to throw
+    // a confusing FormatException; instead we fall back to a clean message.
+    Object? decoded;
+    try {
+      decoded = response.body.isEmpty
+          ? <String, dynamic>{}
+          : jsonDecode(response.body);
+    } catch (_) {
+      decoded = null;
+    }
+
+    if (isSuccess) {
+      if (decoded is Map<String, dynamic>) return decoded;
       throw ApiException(
         'Unexpected response payload format.',
         statusCode: response.statusCode,
       );
     }
 
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return decoded;
-    }
-
-    final String message =
-        decoded['detail']?.toString() ?? 'Request failed with backend.';
+    final String message = (decoded is Map<String, dynamic>)
+        ? (decoded['detail']?.toString() ??
+              _httpErrorFallback(response.statusCode))
+        : _httpErrorFallback(response.statusCode);
     throw ApiException(message, statusCode: response.statusCode);
   }
 
   List<dynamic> _decodeListOrThrow(http.Response response) {
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      final Object? decoded =
-          response.body.isEmpty ? <dynamic>[] : jsonDecode(response.body);
+    final bool isSuccess =
+        response.statusCode >= 200 && response.statusCode < 300;
+
+    Object? decoded;
+    try {
+      decoded = response.body.isEmpty ? <dynamic>[] : jsonDecode(response.body);
+    } catch (_) {
+      decoded = null;
+    }
+
+    if (isSuccess) {
       if (decoded is List<dynamic>) return decoded;
       throw ApiException(
         'Expected a JSON array but got something else.',
@@ -117,11 +136,23 @@ class ApiClient {
       );
     }
 
-    final Object? decoded =
-        response.body.isEmpty ? null : jsonDecode(response.body);
     final String message = (decoded is Map<String, dynamic>)
-        ? decoded['detail']?.toString() ?? 'Request failed with backend.'
-        : 'Request failed with backend.';
+        ? (decoded['detail']?.toString() ??
+              _httpErrorFallback(response.statusCode))
+        : _httpErrorFallback(response.statusCode);
     throw ApiException(message, statusCode: response.statusCode);
+  }
+
+  /// Human-readable fallback when the backend returns an error status with a
+  /// body that is empty or not valid JSON (e.g. a gateway error page).
+  String _httpErrorFallback(int statusCode) {
+    if (statusCode >= 500) {
+      return 'Server error (HTTP $statusCode). The record stays pending and '
+          'will be retried automatically.';
+    }
+    if (statusCode == 401) return 'Session expired. Please sign in again.';
+    if (statusCode == 403) return 'Access denied (HTTP 403).';
+    if (statusCode == 404) return 'Not found (HTTP 404).';
+    return 'Request failed (HTTP $statusCode).';
   }
 }

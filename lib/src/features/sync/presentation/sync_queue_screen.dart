@@ -5,7 +5,7 @@ import '../../../core/i18n/app_strings.dart';
 import '../../../core/storage/local_database.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
-import '../../nfc/presentation/read_nfc_guardian_screen.dart';
+import '../../nfc/presentation/profile/patient_profile_screen.dart';
 import '../../nfc/presentation/shared_read_nfc_header.dart';
 
 class SyncQueueScreen extends StatefulWidget {
@@ -66,7 +66,9 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
     final r = e.toPatientRecord();
     if (r == null) return;
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ReadNfcGuardianScreen(patient: r)),
+      MaterialPageRoute(
+        builder: (_) => PatientProfileScreen(patient: r, readOnly: true),
+      ),
     );
   }
 
