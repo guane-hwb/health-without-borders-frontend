@@ -202,7 +202,18 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _UserDetailSheet(user: user),
+      builder: (_) => _UserDetailSheet(
+        user: user,
+        onDelete: () async {
+          // Delet service
+          await Future<void>.delayed(const Duration(milliseconds: 800));
+
+          if (mounted) {
+            Navigator.of(context).pop();
+            _load();
+          }
+        },
+      ),
     );
   }
 }
@@ -653,9 +664,19 @@ class _RoleBadge extends StatelessWidget {
 
 // ── User detail sheet (read-only) ────────────────────────────────────────
 
-class _UserDetailSheet extends StatelessWidget {
-  const _UserDetailSheet({required this.user});
+class _UserDetailSheet extends StatefulWidget {
+  const _UserDetailSheet({required this.user, required this.onDelete});
+
   final UserSession user;
+  final Future<void> Function() onDelete;
+
+  @override
+  State<_UserDetailSheet> createState() => _UserDetailSheetState();
+}
+
+class _UserDetailSheetState extends State<_UserDetailSheet> {
+  bool _isDeleting = false;
+  String? _error;
 
   @override
   Widget build(BuildContext context) {
@@ -678,28 +699,76 @@ class _UserDetailSheet extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            user.fullName,
+            widget.user.fullName,
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
           Text(
-            user.email,
+            widget.user.email,
             style: const TextStyle(
               fontSize: 13,
               color: AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 12),
-          _RoleBadge(role: user.role),
+          _RoleBadge(role: widget.user.role),
           const SizedBox(height: 20),
-          _row(Icons.business, s.userDetailOrganization, user.organizationId),
+          _row(
+            Icons.business,
+            s.userDetailOrganization,
+            widget.user.organizationId,
+          ),
           const SizedBox(height: 8),
           _row(
             Icons.check_circle_outline,
             s.userDetailStatus,
-            user.isActive ? s.userStatusActive : s.userStatusSuspended,
+            widget.user.isActive ? s.userStatusActive : s.userStatusSuspended,
           ),
+
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: const TextStyle(color: AppColors.error, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+          ],
+
           const SizedBox(height: 24),
+
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: OutlinedButton.icon(
+              onPressed: _isDeleting ? null : _confirmAndDelete,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.error,
+                side: const BorderSide(color: AppColors.error),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: _isDeleting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.error,
+                      ),
+                    )
+                  : const Icon(Icons.delete_outline, size: 20),
+              label: Text(
+                _isDeleting ? 'Eliminando...' : 'Eliminar Usuario',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
           Text(
             s.userDetailWebNotice,
             style: const TextStyle(
@@ -725,6 +794,47 @@ class _UserDetailSheet extends StatelessWidget {
         Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
       ],
     );
+  }
+
+  Future<void> _confirmAndDelete() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Eliminar usuario?'),
+        content: Text(
+          'Esta acción eliminará permanentemente a ${widget.user.fullName}.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() {
+      _isDeleting = true;
+      _error = null;
+    });
+
+    try {
+      await widget.onDelete();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isDeleting = false;
+        });
+      }
+    }
   }
 }
 
