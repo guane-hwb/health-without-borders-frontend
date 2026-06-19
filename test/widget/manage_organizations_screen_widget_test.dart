@@ -346,7 +346,6 @@ void main() {
     });
   });
 
-  // ── REVISADO: Cobertura de Navegación del Header y Cancelar en Paso 1 ───────
   group('Navegación general y Cancelación', () {
     testWidgets('Tocar botón de atrás en el header ejecuta Navigator.pop', (
       t,
@@ -381,15 +380,6 @@ void main() {
     });
   });
 
-  // ── REVISADO: Cobertura Completa del Formulario de Creación (Paso 1, 2 y Éxito) ──
-  // ── SOLUCIÓN DEFINITIVA BLINDADA: Cobertura Completa de Modales Aislados ──
-  // ── SOLUCIÓN MAESTRA BLINDADA: Control de Microtareas Asíncronas en Cascada ──
-  // ── SOLUCIÓN BLINDADA ASÍNCRONA: Cobertura Completa del Formulario de Creación ──
-  // ── SOLUCIÓN ATÓMICA: Sincronización Absoluta de Transición de Pasos ──
-  // ── SOLUCIÓN MAESTRA BLINDADA: Localización por Tipo de Botón sin Ambigüedad ──
-  // ── SOLUCIÓN DEFINITIVA ELIMINANDO COLISIONES FANTASMAS ──
-  // ── SOLUCIÓN MAESTRA FINAL: Indexación Secuencial por Posición en el Árbol ──
-  // ── SOLUCIÓN DEFINITIVA ASEGURANDO SCROLL Y VISIBILIDAD MECÁNICA ──
   group('Flujo completo de _CreateOrgSheet', () {
     testWidgets('Flujo exitoso paso a paso e inserción en la lista reactiva', (
       t,
@@ -411,7 +401,6 @@ void main() {
         (widget) => widget.runtimeType.toString() == '_CreateOrgSheet',
       );
 
-      // --- PASO 1: Validación de campo obligatorio y continuación ---
       final continueBtn = find.descendant(
         of: sheetFinder,
         matching: find.widgetWithText(ElevatedButton, 'Continue'),
@@ -433,7 +422,6 @@ void main() {
       await t.tap(continueBtn);
       await t.pumpAndSettle();
 
-      // --- PASO 2: Probar el botón Atrás de forma aislada ---
       expect(find.textContaining('2'), findsOneWidget);
 
       final backBtnStep2 = find.descendant(
@@ -441,13 +429,11 @@ void main() {
         matching: find.widgetWithText(OutlinedButton, s.back),
       );
 
-      // Aseguramos que el botón de atrás sea visible (por si la pantalla quedó recortada)
       await t.ensureVisible(backBtnStep2);
       await t.tap(backBtnStep2);
       await t.pumpAndSettle();
       expect(find.textContaining('1'), findsOneWidget);
 
-      // Re-escribimos en el TextField generado tras el regreso
       final orgFieldBack = find.descendant(
         of: sheetFinder,
         matching: find.byType(TextField),
@@ -462,8 +448,6 @@ void main() {
       await t.tap(continueBtnAgain);
       await t.pumpAndSettle();
 
-      // --- PASO 2 REAL: Envío del formulario del Administrador ---
-      // Usamos .last para evitar la colisión semántica con el texto de la cabecera del modal
       final submitBtn = find
           .descendant(
             of: sheetFinder,
@@ -471,16 +455,13 @@ void main() {
           )
           .last;
 
-      // BLINDAJE CRÍTICO: Obligamos a la pantalla a hacer scroll hacia abajo para revelar el botón
       await t.ensureVisible(submitBtn);
       await t.pumpAndSettle();
 
-      // Validación local de campos obligatorios en el paso 2
       await t.tap(submitBtn);
       await t.pumpAndSettle();
       expect(find.text('Todos los campos son obligatorios.'), findsOneWidget);
 
-      // Buscamos e ingresamos los textos en los 3 TextFields secuenciales del Paso 2
       final fieldsStep2 = find.descendant(
         of: sheetFinder,
         matching: find.byType(TextField),
@@ -489,13 +470,9 @@ void main() {
 
       await t.enterText(fieldsStep2.at(0), 'Admin Name');
       await t.enterText(fieldsStep2.at(1), 'admin@hospital.com');
-      await t.enterText(
-        fieldsStep2.at(2),
-        '123',
-      ); // Contraseña intencionalmente corta
+      await t.enterText(fieldsStep2.at(2), '123');
       await t.pumpAndSettle();
 
-      // Aseguramos visibilidad de nuevo por si el teclado virtual desplazó la UI
       await t.ensureVisible(submitBtn);
       await t.tap(submitBtn);
       await t.pumpAndSettle();
@@ -504,7 +481,6 @@ void main() {
         findsOneWidget,
       );
 
-      // Probar el toggle de visibilidad de la contraseña
       final visibilityBtn = find.byIcon(Icons.visibility_off);
       await t.tap(visibilityBtn);
       await t.pumpAndSettle();
@@ -514,10 +490,6 @@ void main() {
       await t.enterText(fieldsStep2.at(2), 'passwordSeguro123');
       await t.pumpAndSettle();
 
-      // Hacemos scroll final, clic y esperamos los delays reales del FakeRepo asíncrono.
-      // IMPORTANTE: createOrganization/createOrgAdminUser usan Future.delayed REALES,
-      // por lo que el tap debe ejecutarse dentro de runAsync para que esos timers
-      // reales avancen de forma fiable antes de inspeccionar el árbol de widgets.
       await t.ensureVisible(submitBtn);
       await t.runAsync(() async {
         await t.tap(submitBtn);
@@ -525,10 +497,8 @@ void main() {
       });
       await t.pumpAndSettle();
 
-      // --- PASO 3: Verificación de la vista de éxito ---
       expect(find.text('Hospital General'), findsAtLeastNWidgets(1));
 
-      // Guardar y cerrar el BottomSheet
       final saveBtn = find.descendant(
         of: sheetFinder,
         matching: find.widgetWithText(ElevatedButton, s.save),
@@ -537,91 +507,89 @@ void main() {
       await t.pumpAndSettle();
     });
 
-    testWidgets('Manejo de errores ApiException y Excepción Genérica en Paso 2', (
-      t,
-    ) async {
-      configureMobileScreenSize(t);
+    testWidgets(
+      'Manejo de errores ApiException y Excepción Genérica en Paso 2',
+      (t) async {
+        configureMobileScreenSize(t);
 
-      int errorMode = 0;
-      final repo = _FakeRepo(
-        listOrgs: () async => [],
-        onCreateOrg: (name) async {
-          await Future<void>.delayed(const Duration(milliseconds: 10));
-          if (errorMode == 0) {
-            throw ApiException('Error desde Servidor', statusCode: 400);
-          }
-          throw Exception('Fallo de red inesperado');
-        },
-      );
+        int errorMode = 0;
+        final repo = _FakeRepo(
+          listOrgs: () async => [],
+          onCreateOrg: (name) async {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            if (errorMode == 0) {
+              throw ApiException('Error desde Servidor', statusCode: 400);
+            }
+            throw Exception('Fallo de red inesperado');
+          },
+        );
 
-      await t.pumpWidget(_build(repo));
-      await t.pumpAndSettle();
-      await _openSheet(t);
+        await t.pumpWidget(_build(repo));
+        await t.pumpAndSettle();
+        await _openSheet(t);
 
-      final s = AppStrings.forTesting('es');
-      final sheetFinder = find.byWidgetPredicate(
-        (widget) => widget.runtimeType.toString() == '_CreateOrgSheet',
-      );
+        final s = AppStrings.forTesting('es');
+        final sheetFinder = find.byWidgetPredicate(
+          (widget) => widget.runtimeType.toString() == '_CreateOrgSheet',
+        );
 
-      // Avanzamos de forma segura al paso 2
-      final orgField = find.descendant(
-        of: sheetFinder,
-        matching: find.byType(TextField),
-      );
-      await t.enterText(orgField, 'Clínica Central');
-      await t.pumpAndSettle();
+        final orgField = find.descendant(
+          of: sheetFinder,
+          matching: find.byType(TextField),
+        );
+        await t.enterText(orgField, 'Clínica Central');
+        await t.pumpAndSettle();
 
-      final continueBtn = find.descendant(
-        of: sheetFinder,
-        matching: find.widgetWithText(ElevatedButton, 'Continue'),
-      );
-      await t.tap(continueBtn);
-      await t.pumpAndSettle();
+        final continueBtn = find.descendant(
+          of: sheetFinder,
+          matching: find.widgetWithText(ElevatedButton, 'Continue'),
+        );
+        await t.tap(continueBtn);
+        await t.pumpAndSettle();
 
-      // Rellenamos los datos del administrador
-      final fieldsStep2Err = find.descendant(
-        of: sheetFinder,
-        matching: find.byType(TextField),
-      );
-      expect(fieldsStep2Err, findsNWidgets(3));
+        final fieldsStep2Err = find.descendant(
+          of: sheetFinder,
+          matching: find.byType(TextField),
+        );
+        expect(fieldsStep2Err, findsNWidgets(3));
 
-      await t.enterText(fieldsStep2Err.at(0), 'Carlos');
-      await t.enterText(fieldsStep2Err.at(1), 'carlos@test.com');
-      await t.enterText(fieldsStep2Err.at(2), '12345678');
-      await t.pumpAndSettle();
+        await t.enterText(fieldsStep2Err.at(0), 'Carlos');
+        await t.enterText(fieldsStep2Err.at(1), 'carlos@test.com');
+        await t.enterText(fieldsStep2Err.at(2), '12345678');
+        await t.pumpAndSettle();
 
-      // Seleccionamos el último elemento (.last) y forzamos su visibilidad en el scroll
-      final submitBtnErr = find
-          .descendant(
-            of: sheetFinder,
-            matching: find.widgetWithText(ElevatedButton, s.orgsCreateOrgTitle),
-          )
-          .last;
-      await t.ensureVisible(submitBtnErr);
-      await t.pumpAndSettle();
+        final submitBtnErr = find
+            .descendant(
+              of: sheetFinder,
+              matching: find.widgetWithText(
+                ElevatedButton,
+                s.orgsCreateOrgTitle,
+              ),
+            )
+            .last;
+        await t.ensureVisible(submitBtnErr);
+        await t.pumpAndSettle();
 
-      // 1. Caso: ApiException de servidor
-      errorMode = 0;
-      await t.runAsync(() async {
-        await t.tap(submitBtnErr);
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-      });
-      await t.pumpAndSettle();
-      expect(find.text('Error desde Servidor'), findsOneWidget);
+        errorMode = 0;
+        await t.runAsync(() async {
+          await t.tap(submitBtnErr);
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        });
+        await t.pumpAndSettle();
+        expect(find.text('Error desde Servidor'), findsOneWidget);
 
-      // 2. Caso: Excepción Genérica inesperada
-      errorMode = 1;
-      await t.ensureVisible(submitBtnErr);
-      await t.runAsync(() async {
-        await t.tap(submitBtnErr);
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-      });
-      await t.pumpAndSettle();
-      expect(find.textContaining('Fallo de red inesperado'), findsOneWidget);
-    });
+        errorMode = 1;
+        await t.ensureVisible(submitBtnErr);
+        await t.runAsync(() async {
+          await t.tap(submitBtnErr);
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        });
+        await t.pumpAndSettle();
+        expect(find.textContaining('Fallo de red inesperado'), findsOneWidget);
+      },
+    );
   });
 
-  // ── REVISADO: Cobertura Completa del Modal de Detalle e Interacción de Eliminación ──
   group('_OrgDetailSheet y flujos de eliminación', () {
     testWidgets(
       'Abre detalle de organización y cancela el diálogo de eliminación',
@@ -631,19 +599,15 @@ void main() {
         await t.pumpWidget(_build(repo));
         await t.pumpAndSettle();
 
-        // Tocar la tarjeta para abrir el Sheet de Detalle
         await t.tap(find.text('Cruz Roja'));
         await t.pumpAndSettle();
 
         final s = AppStrings.forTesting('es');
-        // CAMBIO: Buscamos el texto del ID por su valor numérico real renderizado en el row
         expect(find.text('1'), findsOneWidget);
 
-        // Tocar eliminar para abrir el AlertDialog de confirmación
         await t.tap(find.widgetWithText(OutlinedButton, s.orgDeleteButton));
         await t.pumpAndSettle();
 
-        // Cancelar el diálogo
         await t.tap(find.widgetWithText(TextButton, s.cancel));
         await t.pumpAndSettle();
 
@@ -666,10 +630,8 @@ void main() {
       await t.tap(find.widgetWithText(OutlinedButton, s.orgDeleteButton));
       await t.pumpAndSettle();
 
-      // Confirmar eliminación
       await t.tap(find.widgetWithText(TextButton, s.delete));
 
-      // Avanzar el timer ficticio del delay de 800ms
       await t.pump(const Duration(milliseconds: 900));
       await t.pumpAndSettle();
 
