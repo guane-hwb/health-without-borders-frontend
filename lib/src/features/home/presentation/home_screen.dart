@@ -498,126 +498,128 @@ class _SyncCard extends StatefulWidget {
 }
 
 class _SyncCardState extends State<_SyncCard> {
-  int _pending = 0;
-
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _countPending());
-  }
-
-  Future<void> _countPending() async {
-    try {
-      final count = await AppScope.of(context).localDatabase.getUnsyncedCount();
-      if (mounted) setState(() => _pending = count);
-    } catch (_) {}
+    // Pull a fresh count whenever the home screen is shown. The actual value
+    // is rendered reactively from the sync engine's notifier below, so a
+    // background sync that finishes while we're on another screen is reflected
+    // here automatically.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => AppScope.of(context).syncEngine.refreshPendingCount(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final subtitle = _pending == 0
-        ? s.actionPendingSyncEmpty
-        : s.actionPendingSyncCount(_pending);
+    return ValueListenableBuilder<int>(
+      valueListenable: AppScope.of(context).syncEngine.pendingCount,
+      builder: (context, pending, _) {
+        final subtitle = pending == 0
+            ? s.actionPendingSyncEmpty
+            : s.actionPendingSyncCount(pending);
 
-    final hasPending = _pending > 0;
-    const cardBg = AppColors.white;
-    const iBg = Color(0xFFE8F5E8);
-    const iColor = Color(0xFF4CAF50);
+        final hasPending = pending > 0;
+        const cardBg = AppColors.white;
+        const iBg = Color(0xFFE8F5E8);
+        const iColor = Color(0xFF4CAF50);
 
-    return Material(
-      color: cardBg,
-      borderRadius: BorderRadius.circular(16),
-      elevation: 0,
-      child: InkWell(
-        onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-          decoration: BoxDecoration(
-            color: AppColors.white,
+        return Material(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(16),
+          elevation: 0,
+          child: InkWell(
+            onTap: widget.onTap,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE8ECF0), width: 1),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0A000000),
-                blurRadius: 8,
-                offset: Offset(0, 2),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE8ECF0), width: 1),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0A000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: iBg,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  hasPending
-                      ? Icons.cloud_upload_outlined
-                      : Icons.cloud_done_outlined,
-                  size: 24,
-                  color: iColor,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      s.actionPendingSync,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: iBg,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      hasPending
+                          ? Icons.cloud_upload_outlined
+                          : Icons.cloud_done_outlined,
+                      size: 24,
+                      color: iColor,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          s.actionPendingSync,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: hasPending
+                                ? const Color(0xFFB8860B)
+                                : AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (hasPending)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 4,
                       ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: hasPending
-                            ? const Color(0xFFB8860B)
-                            : AppColors.textSecondary,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD4A017),
+                        borderRadius: BorderRadius.circular(12),
                       ),
+                      child: Text(
+                        '$pending',
+                        style: const TextStyle(
+                          color: AppColors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    )
+                  else
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppColors.textSecondary,
+                      size: 22,
                     ),
-                  ],
-                ),
+                ],
               ),
-              if (hasPending)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD4A017),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '$_pending',
-                    style: const TextStyle(
-                      color: AppColors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                )
-              else
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: AppColors.textSecondary,
-                  size: 22,
-                ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

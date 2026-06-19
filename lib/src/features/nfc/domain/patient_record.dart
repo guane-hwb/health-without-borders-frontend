@@ -506,6 +506,7 @@ class AllergyInfo {
 // ---------------------------------------------------------------------------
 class VaccinationRecordItem {
   VaccinationRecordItem({
+    this.vaccinationId,
     required this.date,
     required this.vaccineName,
     required this.vaccineCode,
@@ -517,6 +518,7 @@ class VaccinationRecordItem {
 
   factory VaccinationRecordItem.fromJson(Map<String, dynamic> json) {
     return VaccinationRecordItem(
+      vaccinationId: json['vaccinationId']?.toString(),
       date: json['date']?.toString() ?? '',
       vaccineName: json['vaccineName']?.toString() ?? '',
       vaccineCode: json['vaccineCode']?.toString() ?? '',
@@ -534,8 +536,13 @@ class VaccinationRecordItem {
   final String administratedBy;
   final String administratedAt;
   final String status;
+  // Stable UUID for this vaccination. Generated once on the device when the
+  // vaccine is created and preserved across syncs so the backend merge can
+  // recognise an already-stored vaccination instead of duplicating it.
+  final String? vaccinationId;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+    if (vaccinationId != null) 'vaccinationId': vaccinationId,
     'date': date,
     'vaccineName': vaccineName,
     'vaccineCode': vaccineCode,
@@ -769,6 +776,7 @@ class PayerInfo {
 // ---------------------------------------------------------------------------
 class MedicalHistoryItem {
   MedicalHistoryItem({
+    this.encounterIdentifier,
     this.type = 'Consultation',
     required this.startDateTime,
     this.endDateTime,
@@ -792,6 +800,7 @@ class MedicalHistoryItem {
 
   factory MedicalHistoryItem.fromJson(Map<String, dynamic> json) {
     return MedicalHistoryItem(
+      encounterIdentifier: json['encounterIdentifier']?.toString(),
       type: json['type']?.toString() ?? 'Consultation',
       startDateTime: json['startDateTime']?.toString() ?? '',
       endDateTime: json['endDateTime']?.toString(),
@@ -844,6 +853,10 @@ class MedicalHistoryItem {
   final String type;
   final String startDateTime; // ISO 8601 datetime
   final String? endDateTime;
+  // Stable UUID for this encounter. Generated once on the device when the
+  // consultation is created and preserved across syncs so the backend merge
+  // can recognise an already-stored visit instead of duplicating it.
+  final String? encounterIdentifier;
   final String careModality; // "01"-"09"
   final String serviceGroup; // "01"-"05"
   final String careEnvironment; // "01"-"05"
@@ -862,6 +875,8 @@ class MedicalHistoryItem {
   final PayerInfo? payer;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+    if (encounterIdentifier != null)
+      'encounterIdentifier': encounterIdentifier,
     'type': type,
     'startDateTime': startDateTime,
     if (endDateTime != null) 'endDateTime': endDateTime,

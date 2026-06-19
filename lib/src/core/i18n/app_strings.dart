@@ -936,8 +936,7 @@ class AppStrings {
     'weightKg': 'PESO (KG)',
     'heightCm': 'ALTURA (CM)',
     'previous': 'Anterior',
-    'bloodTypeReadOnly':
-        'El tipo de sangre no se edita aquí — es un dato biológico permanente.',
+    'bloodTypeReadOnly': 'Tipo de sangre',
 
     // Patient profile screen
     'unsyncedChanges': 'Cambios sin sincronizar',
@@ -1492,8 +1491,7 @@ class AppStrings {
     'weightKg': 'WEIGHT (KG)',
     'heightCm': 'HEIGHT (CM)',
     'previous': 'Previous',
-    'bloodTypeReadOnly':
-        'Blood type is not edited here — it is a permanent biological datum.',
+    'bloodTypeReadOnly': 'Blood type',
 
     // Patient profile screen
     'unsyncedChanges': 'Unsynced changes',
