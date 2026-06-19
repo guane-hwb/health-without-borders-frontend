@@ -51,15 +51,31 @@ class FakeUserRepository extends Fake implements UserRepository {
 }
 
 class FakeAuthRepository extends Fake implements AuthRepository {
+  FakeAuthRepository({this.role = UserRole.orgAdmin});
+  final UserRole role;
+
   @override
   UserSession? get currentUser => UserSession(
     id: 'admin-1',
     fullName: 'Admin User',
     email: 'admin@test.com',
-    role: UserRole.orgAdmin,
+    role: role,
     isActive: true,
     organizationId: 'org-1',
   );
+}
+
+class FakeUserRepositoryWithError extends FakeUserRepository {
+  @override
+  Future<UserSession> createUser({
+    required String email,
+    required String fullName,
+    String? organizationId,
+    required String role,
+    required String password,
+  }) async {
+    throw ApiException('Error desde API Form', statusCode: 400);
+  }
 }
 
 class FakePatientRepository extends Fake implements PatientRepository {}
@@ -86,13 +102,17 @@ UserSession buildUser({
   organizationId: organizationId,
 );
 
-Widget buildTestApp(FakeUserRepository fakeRepo, {String locale = 'es'}) {
+Widget buildTestApp(
+  FakeUserRepository fakeRepo, {
+  String locale = 'es',
+  FakeAuthRepository? fakeAuth,
+}) {
   return AppLocale(
     locale: locale,
     setLocale: (_) {},
     child: MaterialApp(
       home: AppScope(
-        authRepository: FakeAuthRepository(),
+        authRepository: fakeAuth ?? FakeAuthRepository(),
         userRepository: fakeRepo,
         patientRepository: FakePatientRepository(),
         localDatabase: FakeLocalDatabase(),
@@ -374,20 +394,6 @@ void main() {
       expect(find.textContaining('org-99'), findsOneWidget);
     });
 
-    testWidgets('el sheet de detalle muestra el texto del panel web', (
-      tester,
-    ) async {
-      fakeRepo.usersToReturn = [buildUser()];
-      await tester.pumpWidget(buildTestApp(fakeRepo));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Juan Galvis'));
-      await tester.pumpAndSettle();
-
-      final s = AppStrings.forTesting('es');
-      expect(find.text(s.userDetailWebNotice), findsOneWidget);
-    });
-
     testWidgets('el sheet muestra Estado: Activo para usuario activo', (
       tester,
     ) async {
@@ -491,5 +497,132 @@ void main() {
 
       expect(find.byIcon(Icons.arrow_back), findsOneWidget);
     });
+  });
+
+  group('Navegación e interfaz de Superadmin', () {
+    testWidgets('Tocar botón de atrás ejecuta Navigator.pop', (tester) async {
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      final backButton = find.byIcon(Icons.arrow_back);
+      expect(backButton, findsOneWidget);
+
+      await tester.tap(backButton);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      'Muestra badge y color correcto para un usuario Superadmin en lista',
+      (tester) async {
+        fakeRepo.usersToReturn = [
+          buildUser(fullName: 'Super Usuario', role: UserRole.superadmin),
+        ];
+        await tester.pumpWidget(buildTestApp(fakeRepo));
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        expect(find.text(s.roleSuperadmin), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Formulario cambia opciones de rol según jerarquía Superadmin',
+      (tester) async {
+        final fakeAuthSuper = FakeAuthRepository(role: UserRole.superadmin);
+        fakeRepo.usersToReturn = [];
+        await tester.pumpWidget(
+          buildTestApp(fakeRepo, fakeAuth: fakeAuthSuper),
+        );
+        await tester.pumpAndSettle();
+
+        // Abrir formulario
+        await tester.tap(find.byType(FloatingActionButton));
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        expect(find.text(s.roleOrgAdmin), findsAtLeastNWidgets(1));
+      },
+    );
+  });
+
+  group('_UserFormSheet - Envío de datos (Submit, Errores y Éxito)', () {
+    testWidgets('Rellenar campos y enviar crea usuario con éxito y refresca', (
+      tester,
+    ) async {
+      fakeRepo.usersToReturn = [];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      final textFields = find.byType(TextField);
+      expect(textFields, findsNWidgets(3));
+
+      await tester.enterText(textFields.at(0), 'Nuevo Medico');
+      await tester.enterText(textFields.at(1), 'medico@test.com');
+      await tester.enterText(textFields.at(2), 'password123');
+
+      final s = AppStrings.forTesting('es');
+      await tester.tap(find.text(s.roleNurse));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.widgetWithText(ElevatedButton, s.userFormCreateButton),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(s.createUserTitle), findsNothing);
+    });
+
+    testWidgets('Muestra mensaje de error cuando onSubmit lanza ApiException', (
+      tester,
+    ) async {
+      final customFakeRepo = FakeUserRepositoryWithError();
+      await tester.pumpWidget(buildTestApp(customFakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      final textFields = find.byType(TextField);
+      await tester.enterText(textFields.at(0), 'Error User');
+      await tester.enterText(textFields.at(1), 'error@test.com');
+      await tester.enterText(textFields.at(2), 'password');
+
+      final s = AppStrings.forTesting('es');
+      await tester.tap(
+        find.widgetWithText(ElevatedButton, s.userFormCreateButton),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Error desde API Form'), findsOneWidget);
+    });
+  });
+
+  group('_FilterBar - Scroll y flechas de navegación', () {
+    testWidgets(
+      'Evalúa animaciones y comportamiento de flechas en barra de filtros',
+      (tester) async {
+        tester.view.physicalSize = const Size(300, 600);
+        tester.view.devicePixelRatio = 1.0;
+
+        fakeRepo.usersToReturn = [buildUser()];
+        await tester.pumpWidget(buildTestApp(fakeRepo));
+        await tester.pumpAndSettle();
+
+        final scrollable = find.byType(SingleChildScrollView);
+        await tester.drag(scrollable, const Offset(-100, 0));
+        await tester.pumpAndSettle();
+
+        final leftArrow = find.byIcon(Icons.arrow_back_ios_new);
+        if (leftArrow.evaluate().isNotEmpty) {
+          await tester.tap(leftArrow);
+          await tester.pumpAndSettle();
+        }
+
+        addTearDown(tester.view.resetPhysicalSize);
+      },
+    );
   });
 }

@@ -572,7 +572,6 @@ class AppStrings {
   String get userStatusSuspended => _get('userStatusSuspended');
   String get userDetailOrganization => _get('userDetailOrganization');
   String get userDetailStatus => _get('userDetailStatus');
-  String get userDetailWebNotice => _get('userDetailWebNotice');
   String get userFormFullNameLabel => _get('userFormFullNameLabel');
   String get userFormEmailLabel => _get('userFormEmailLabel');
   String get userFormPasswordLabel => _get('userFormPasswordLabel');
@@ -580,6 +579,9 @@ class AppStrings {
   String get userFormRequiredFieldsError => _get('userFormRequiredFieldsError');
   String get userFormCreatingStatus => _get('userFormCreatingStatus');
   String get userFormCreateButton => _get('userFormCreateButton');
+  String get deletUser => _get('deletUser');
+  String get deleting => _get('deleting');
+  String get permanentlyDelete => _get('permanentlyDelete');
 
   // ── Super Admin User ──────────────────────────────────────────────────
   String get manageOrgsTitle => _get('manageOrgsTitle');
@@ -614,6 +616,11 @@ class AppStrings {
   String get orgsLabelProvisionalPass => _get('orgsLabelProvisionalPass');
   String get step => _get('step');
   String get labelNameAdmin => _get('labelNameAdmin');
+  String get orgDetailTitle => _get('orgDetailTitle');
+  String get orgDetailId => _get('orgDetailId');
+  String get orgDeleteButton => _get('orgDeleteButton');
+  String get orgDeleteDialogTitle => _get('orgDeleteDialogTitle');
+  String get orgDeleteDialogContent => _get('orgDeleteDialogContent');
 
   // ══════════════════════════════════════════════════════════════════════════
   // TRANSLATIONS
@@ -1121,8 +1128,6 @@ class AppStrings {
     'userStatusSuspended': 'Suspendido',
     'userDetailOrganization': 'Organización',
     'userDetailStatus': 'Estado',
-    'userDetailWebNotice':
-        'Para editar permisos, use el panel web de administración.',
     'userFormFullNameLabel': 'Nombre completo *',
     'userFormEmailLabel': 'Correo electrónico *',
     'userFormPasswordLabel': 'Contraseña temporal *',
@@ -1130,6 +1135,9 @@ class AppStrings {
     'userFormRequiredFieldsError': 'Completa todos los campos requeridos.',
     'userFormCreatingStatus': 'Creando...',
     'userFormCreateButton': 'Crear usuario',
+    'deletUser': 'Eliminar usuario',
+    'deleting': 'Eliminando...',
+    'permanentlyDelete': 'Esta acción eliminará permanentemente a',
 
     // Super Admin
     'manageOrgsTitle': 'Organizaciones',
@@ -1164,6 +1172,12 @@ class AppStrings {
     'orgsLabelProvisionalPass': 'Contraseña prov.',
     'step': 'Paso',
     'labelNameAdmin': 'Nombre del administrador',
+    'orgDetailTitle': 'Detalle de la Organización',
+    'orgDetailId': 'ID de Organización',
+    'orgDeleteButton': 'Eliminar Organización',
+    'orgDeleteDialogTitle': '¿Eliminar organización?',
+    'orgDeleteDialogContent':
+        'Esta acción eliminará permanentemente la organización {name} y todos sus datos asociados.',
   };
   static const Map<String, String> _en = {
     // Auth
@@ -1661,8 +1675,6 @@ class AppStrings {
     'userStatusSuspended': 'Suspended',
     'userDetailOrganization': 'Organization',
     'userDetailStatus': 'Status',
-    'userDetailWebNotice':
-        'To edit permissions, use the web administration panel.',
     'userFormFullNameLabel': 'Full name *',
     'userFormEmailLabel': 'Email *',
     'userFormPasswordLabel': 'Temporary password *',
@@ -1670,6 +1682,9 @@ class AppStrings {
     'userFormRequiredFieldsError': 'Please fill in all required fields.',
     'userFormCreatingStatus': 'Creating...',
     'userFormCreateButton': 'Create user',
+    'deletUser': 'Delete user',
+    'deleting': 'Deleting ...',
+    'permanentlyDelete': 'This action will permanently delete',
 
     // Super Admin
     'manageOrgsTitle': 'Organizations',
@@ -1704,5 +1719,11 @@ class AppStrings {
     'orgsLabelProvisionalPass': 'Prov. Password',
     'step': 'Step',
     'labelNameAdmin': 'Administrator name',
+    'orgDetailTitle': 'Organization Detail',
+    'orgDetailId': 'Organization ID',
+    'orgDeleteButton': 'Delete Organization',
+    'orgDeleteDialogTitle': 'Delete organization?',
+    'orgDeleteDialogContent':
+        'This action will permanently delete the organization {name} and all its associated data.',
   };
 }
