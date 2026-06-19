@@ -1,0 +1,495 @@
+// test/widget/manage_users_screen_widget_test.dart
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
+import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
+import 'package:health_without_borders_frontend/src/features/admin/presentation/manage_users_screen.dart';
+import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Fakes
+// ═════════════════════════════════════════════════════════════════════════════
+
+class FakeUserRepository extends Fake implements UserRepository {
+  List<UserSession>? usersToReturn;
+  Exception? errorToThrow;
+
+  @override
+  Future<List<UserSession>> listUsers() async {
+    if (errorToThrow != null) throw errorToThrow!;
+    return usersToReturn ?? [];
+  }
+
+  @override
+  Future<UserSession> createUser({
+    required String email,
+    required String fullName,
+    String? organizationId,
+    required String role,
+    required String password,
+  }) async {
+    return UserSession(
+      id: 'new-user',
+      fullName: fullName,
+      email: email,
+      role: UserRole.values.firstWhere(
+        (r) => r.name == role || r.toString().split('.').last == role,
+        orElse: () => UserRole.doctor,
+      ),
+      isActive: true,
+      organizationId: organizationId ?? 'org-1',
+    );
+  }
+}
+
+class FakeAuthRepository extends Fake implements AuthRepository {
+  @override
+  UserSession? get currentUser => UserSession(
+    id: 'admin-1',
+    fullName: 'Admin User',
+    email: 'admin@test.com',
+    role: UserRole.orgAdmin,
+    isActive: true,
+    organizationId: 'org-1',
+  );
+}
+
+class FakePatientRepository extends Fake implements PatientRepository {}
+
+class FakeLocalDatabase extends Fake implements LocalDatabase {}
+
+class FakeSyncEngine extends Fake implements SyncEngine {}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+UserSession buildUser({
+  String id = 'u1',
+  String fullName = 'Juan Galvis',
+  String email = 'juan@test.com',
+  UserRole role = UserRole.doctor,
+  bool isActive = true,
+  String organizationId = 'org-1',
+}) => UserSession(
+  id: id,
+  fullName: fullName,
+  email: email,
+  role: role,
+  isActive: isActive,
+  organizationId: organizationId,
+);
+
+Widget buildTestApp(FakeUserRepository fakeRepo, {String locale = 'es'}) {
+  return AppLocale(
+    locale: locale,
+    setLocale: (_) {},
+    child: MaterialApp(
+      home: AppScope(
+        authRepository: FakeAuthRepository(),
+        userRepository: fakeRepo,
+        patientRepository: FakePatientRepository(),
+        localDatabase: FakeLocalDatabase(),
+        syncEngine: FakeSyncEngine(),
+        child: const ManageUsersScreen(),
+      ),
+    ),
+  );
+}
+
+void main() {
+  late FakeUserRepository fakeRepo;
+
+  setUp(() => fakeRepo = FakeUserRepository());
+
+  group('Estado de carga', () {
+    testWidgets('deja de mostrar CircularProgressIndicator cuando carga', (
+      tester,
+    ) async {
+      fakeRepo.usersToReturn = [];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+  });
+
+  group('Estado de error', () {
+    testWidgets('muestra el mensaje de ApiException', (tester) async {
+      fakeRepo.errorToThrow = ApiException('Acceso denegado.', statusCode: 403);
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Acceso denegado.'), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    });
+
+    testWidgets('muestra botón Reintentar en estado de error', (tester) async {
+      fakeRepo.errorToThrow = ApiException('Error', statusCode: 500);
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.retry), findsOneWidget);
+    });
+
+    testWidgets('Reintentar vuelve a cargar y muestra lista', (tester) async {
+      fakeRepo.errorToThrow = ApiException('Error inicial', statusCode: 500);
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      fakeRepo
+        ..errorToThrow = null
+        ..usersToReturn = [buildUser()];
+
+      final s = AppStrings.forTesting('es');
+      await tester.tap(find.text(s.retry));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Juan Galvis'), findsOneWidget);
+    });
+
+    testWidgets('muestra error genérico con toString', (tester) async {
+      fakeRepo.errorToThrow = Exception('Timeout de red');
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Timeout de red'), findsOneWidget);
+    });
+  });
+
+  // ── 3. Lista vacía ─────────────────────────────────────────────────────
+  group('Lista vacía', () {
+    testWidgets('muestra "No hay usuarios en este filtro."', (tester) async {
+      fakeRepo.usersToReturn = [];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.noUsersInFilter), findsOneWidget);
+    });
+  });
+
+  group('_UserCard — renderizado', () {
+    testWidgets('muestra el nombre del usuario', (tester) async {
+      fakeRepo.usersToReturn = [buildUser(fullName: 'Dr. Ana Torres')];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Dr. Ana Torres'), findsOneWidget);
+    });
+
+    testWidgets('muestra el email del usuario', (tester) async {
+      fakeRepo.usersToReturn = [buildUser(email: 'ana@hospital.com')];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ana@hospital.com'), findsOneWidget);
+    });
+
+    testWidgets('muestra "Activo" para usuario activo', (tester) async {
+      fakeRepo.usersToReturn = [buildUser(isActive: true)];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.userStatusActive), findsOneWidget);
+    });
+
+    testWidgets('muestra "Suspendido" para usuario inactivo', (tester) async {
+      fakeRepo.usersToReturn = [buildUser(isActive: false)];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.userStatusSuspended), findsOneWidget);
+    });
+
+    testWidgets('muestra las iniciales del usuario', (tester) async {
+      fakeRepo.usersToReturn = [buildUser(fullName: 'Juan Galvis')];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('JG'), findsOneWidget);
+    });
+
+    testWidgets('múltiples usuarios se muestran en lista', (tester) async {
+      fakeRepo.usersToReturn = [
+        buildUser(id: '1', fullName: 'Usuario Uno'),
+        buildUser(id: '2', fullName: 'Usuario Dos'),
+        buildUser(id: '3', fullName: 'Usuario Tres'),
+      ];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Usuario Uno'), findsOneWidget);
+      expect(find.text('Usuario Dos'), findsOneWidget);
+      expect(find.text('Usuario Tres'), findsOneWidget);
+    });
+  });
+
+  group('_RoleBadge — labels', () {
+    testWidgets('muestra "Doctor" para UserRole.doctor', (tester) async {
+      fakeRepo.usersToReturn = [buildUser(role: UserRole.doctor)];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.roleDoctor), findsOneWidget);
+    });
+
+    testWidgets('muestra "Enfermería" para UserRole.nurse', (tester) async {
+      fakeRepo.usersToReturn = [buildUser(role: UserRole.nurse)];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.roleNurse), findsOneWidget);
+    });
+
+    testWidgets('muestra "Admin" para UserRole.orgAdmin', (tester) async {
+      fakeRepo.usersToReturn = [buildUser(role: UserRole.orgAdmin)];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.roleOrgAdmin), findsOneWidget);
+    });
+  });
+
+  group('Filtros — _FilterChip', () {
+    setUp(() {
+      fakeRepo.usersToReturn = [
+        buildUser(id: '1', fullName: 'Doctor Uno', role: UserRole.doctor),
+        buildUser(id: '2', fullName: 'Nurse Dos', role: UserRole.nurse),
+        buildUser(id: '3', fullName: 'Admin Tres', role: UserRole.orgAdmin),
+      ];
+    });
+
+    testWidgets('muestra los 4 chips de filtro', (tester) async {
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Todos'), findsOneWidget);
+      expect(find.textContaining('Doctores'), findsOneWidget);
+      expect(find.textContaining('Enfermería'), findsOneWidget);
+      expect(find.textContaining('Coord'), findsAtLeastNWidgets(1));
+    });
+
+    testWidgets('filtro "Doctores" muestra solo doctores', (tester) async {
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('Doctores'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Doctor Uno'), findsOneWidget);
+      expect(find.text('Nurse Dos'), findsNothing);
+      expect(find.text('Admin Tres'), findsNothing);
+    });
+
+    testWidgets('filtro "Enfermería" muestra solo nurses', (tester) async {
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('Enfermería'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nurse Dos'), findsOneWidget);
+      expect(find.text('Doctor Uno'), findsNothing);
+    });
+
+    testWidgets('filtro "Admin" muestra solo org_admins', (tester) async {
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('Coord ('));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Admin Tres'), findsOneWidget);
+      expect(find.text('Doctor Uno'), findsNothing);
+    });
+
+    testWidgets('volver a "Todos" muestra todos los usuarios', (tester) async {
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('Doctores'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('Todos'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Doctor Uno'), findsOneWidget);
+      expect(find.text('Nurse Dos'), findsOneWidget);
+      expect(find.text('Admin Tres'), findsOneWidget);
+    });
+
+    testWidgets('los contadores de filtro son correctos', (tester) async {
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Todos (3)'), findsOneWidget);
+      expect(find.text('Doctores (1)'), findsOneWidget);
+      expect(find.text('Enfermería (1)'), findsOneWidget);
+    });
+
+    testWidgets(
+      'filtro sin resultados muestra "No hay usuarios en este filtro."',
+      (tester) async {
+        fakeRepo.usersToReturn = [buildUser(role: UserRole.doctor)];
+        await tester.pumpWidget(buildTestApp(fakeRepo));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.textContaining('Enfermería'));
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        expect(find.text(s.noUsersInFilter), findsOneWidget);
+      },
+    );
+  });
+
+  group('_UserDetailSheet', () {
+    testWidgets('tocar tarjeta abre el sheet de detalle', (tester) async {
+      fakeRepo.usersToReturn = [
+        buildUser(
+          fullName: 'Isabella Martínez',
+          email: 'isabella@test.com',
+          organizationId: 'org-99',
+        ),
+      ];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Isabella Martínez'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('isabella@test.com'), findsAtLeastNWidgets(1));
+      expect(find.textContaining('org-99'), findsOneWidget);
+    });
+
+    testWidgets('el sheet de detalle muestra el texto del panel web', (
+      tester,
+    ) async {
+      fakeRepo.usersToReturn = [buildUser()];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Juan Galvis'));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.userDetailWebNotice), findsOneWidget);
+    });
+
+    testWidgets('el sheet muestra Estado: Activo para usuario activo', (
+      tester,
+    ) async {
+      fakeRepo.usersToReturn = [buildUser(isActive: true)];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Juan Galvis'));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.textContaining(s.userStatusActive), findsAtLeastNWidgets(1));
+    });
+  });
+
+  group('FAB — crear usuario', () {
+    testWidgets('muestra el FloatingActionButton', (tester) async {
+      fakeRepo.usersToReturn = [];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(FloatingActionButton), findsOneWidget);
+      expect(find.byIcon(Icons.person_add), findsOneWidget);
+    });
+
+    testWidgets('tocar FAB abre el sheet de creación de usuario', (
+      tester,
+    ) async {
+      fakeRepo.usersToReturn = [];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.createUserTitle).first, findsOneWidget);
+    });
+  });
+
+  group('_UserFormSheet — validación', () {
+    testWidgets('muestra opciones Doctor y Enfermería para orgAdmin', (
+      tester,
+    ) async {
+      fakeRepo.usersToReturn = [];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.roleDoctor), findsOneWidget);
+      expect(find.text(s.roleNurse), findsOneWidget);
+    });
+
+    testWidgets('muestra campos Nombre, Correo y Contraseña', (tester) async {
+      fakeRepo.usersToReturn = [];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.userFormFullNameLabel), findsOneWidget);
+      expect(find.text(s.userFormEmailLabel), findsOneWidget);
+      expect(find.text(s.userFormPasswordLabel), findsOneWidget);
+    });
+
+    testWidgets('muestra botón "Crear usuario" en el sheet', (tester) async {
+      fakeRepo.usersToReturn = [];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(
+        find.widgetWithText(ElevatedButton, s.userFormCreateButton),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('Header y navegación', () {
+    testWidgets('muestra el título "Gestionar usuarios"', (tester) async {
+      fakeRepo.usersToReturn = [];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.manageUsersTitle), findsOneWidget);
+    });
+
+    testWidgets('muestra el botón de atrás en el header', (tester) async {
+      fakeRepo.usersToReturn = [];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+    });
+  });
+}
