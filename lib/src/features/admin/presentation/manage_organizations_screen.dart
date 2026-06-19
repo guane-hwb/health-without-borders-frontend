@@ -72,6 +72,29 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
     );
   }
 
+  void _showOrgDetailSheet(OrgSummary org) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _OrgDetailSheet(
+        org: org,
+        onDelete: () async {
+          // implement delete service
+          await Future<void>.delayed(const Duration(milliseconds: 800));
+
+          if (mounted) {
+            Navigator.of(context).pop();
+            _load();
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
@@ -148,7 +171,8 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
         itemCount: _orgs.length,
         separatorBuilder: (_, _) => const SizedBox(height: 10),
-        itemBuilder: (_, i) => _OrgCard(org: _orgs[i]),
+        itemBuilder: (_, i) =>
+            _OrgCard(org: _orgs[i], onTap: () => _showOrgDetailSheet(_orgs[i])),
       ),
     );
   }
@@ -157,8 +181,10 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
 // ── Org card ──────────────────────────────────────────────────────────────
 
 class _OrgCard extends StatelessWidget {
-  const _OrgCard({required this.org});
+  const _OrgCard({required this.org, required this.onTap});
+
   final OrgSummary org;
+  final VoidCallback onTap;
 
   static const _bgColors = [
     Color(0xFF9FE1CB),
@@ -188,69 +214,230 @@ class _OrgCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 6,
-            offset: Offset(0, 2),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 6,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: _bgColors[_ci],
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                _initials,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _fgColors[_ci],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                org.name,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: org.isActive
+                    ? const Color(0xFFE8F5E9)
+                    : const Color(0xFFFCE4EC),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                org.isActive ? s.userStatusActive : s.userStatusSuspended,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: org.isActive
+                      ? const Color(0xFF2E7D32)
+                      : AppColors.error,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Org detail sheet ──────────────────────────────────────────────────────
+
+class _OrgDetailSheet extends StatefulWidget {
+  const _OrgDetailSheet({required this.org, required this.onDelete});
+
+  final OrgSummary org;
+  final Future<void> Function() onDelete;
+
+  @override
+  State<_OrgDetailSheet> createState() => _OrgDetailSheetState();
+}
+
+class _OrgDetailSheetState extends State<_OrgDetailSheet> {
+  bool _isDeleting = false;
+  String? _error;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              width: 60,
+              height: 5,
+              decoration: BoxDecoration(
+                color: AppColors.disabled,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
           ),
+          const SizedBox(height: 20),
+          Text(
+            widget.org.name,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 20),
+          _row(Icons.fingerprint, s.orgDetailId, widget.org.id),
+          const SizedBox(height: 8),
+          _row(
+            Icons.check_circle_outline,
+            s.userDetailStatus,
+            widget.org.isActive ? s.userStatusActive : s.userStatusSuspended,
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: const TextStyle(color: AppColors.error, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          const SizedBox(height: 24),
+
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: OutlinedButton.icon(
+              onPressed: _isDeleting ? null : _confirmAndDelete,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.error,
+                side: const BorderSide(color: AppColors.error),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: _isDeleting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.error,
+                      ),
+                    )
+                  : const Icon(Icons.delete_outline, size: 20),
+              label: Text(
+                _isDeleting ? s.deleting : s.orgDeleteButton,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
         ],
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: _bgColors[_ci],
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              _initials,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: _fgColors[_ci],
-              ),
-            ),
+    );
+  }
+
+  Widget _row(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: AppColors.secondary),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+        Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
+      ],
+    );
+  }
+
+  Future<void> _confirmAndDelete() async {
+    final s = AppStrings.of(context);
+    final contentMessage = s.orgDeleteDialogContent.replaceAll(
+      '{name}',
+      widget.org.name,
+    );
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.orgDeleteDialogTitle),
+        content: Text(contentMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s.cancel),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              org.name,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: org.isActive
-                  ? const Color(0xFFE8F5E9)
-                  : const Color(0xFFFCE4EC),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              org.isActive ? s.userStatusActive : s.userStatusSuspended,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: org.isActive ? const Color(0xFF2E7D32) : AppColors.error,
-              ),
-            ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: Text(s.delete),
           ),
         ],
       ),
     );
+
+    if (confirm != true) return;
+
+    setState(() {
+      _isDeleting = true;
+      _error = null;
+    });
+
+    try {
+      await widget.onDelete();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isDeleting = false;
+        });
+      }
+    }
   }
 }
 
@@ -355,8 +542,6 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
       }
     }
   }
-
-  // ── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {

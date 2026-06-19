@@ -616,6 +616,11 @@ class AppStrings {
   String get orgsLabelProvisionalPass => _get('orgsLabelProvisionalPass');
   String get step => _get('step');
   String get labelNameAdmin => _get('labelNameAdmin');
+  String get orgDetailTitle => _get('orgDetailTitle');
+  String get orgDetailId => _get('orgDetailId');
+  String get orgDeleteButton => _get('orgDeleteButton');
+  String get orgDeleteDialogTitle => _get('orgDeleteDialogTitle');
+  String get orgDeleteDialogContent => _get('orgDeleteDialogContent');
 
   // ══════════════════════════════════════════════════════════════════════════
   // TRANSLATIONS
@@ -1167,6 +1172,12 @@ class AppStrings {
     'orgsLabelProvisionalPass': 'Contraseña prov.',
     'step': 'Paso',
     'labelNameAdmin': 'Nombre del administrador',
+    'orgDetailTitle': 'Detalle de la Organización',
+    'orgDetailId': 'ID de Organización',
+    'orgDeleteButton': 'Eliminar Organización',
+    'orgDeleteDialogTitle': '¿Eliminar organización?',
+    'orgDeleteDialogContent':
+        'Esta acción eliminará permanentemente la organización {name} y todos sus datos asociados.',
   };
   static const Map<String, String> _en = {
     // Auth
@@ -1708,5 +1719,11 @@ class AppStrings {
     'orgsLabelProvisionalPass': 'Prov. Password',
     'step': 'Step',
     'labelNameAdmin': 'Administrator name',
+    'orgDetailTitle': 'Organization Detail',
+    'orgDetailId': 'Organization ID',
+    'orgDeleteButton': 'Delete Organization',
+    'orgDeleteDialogTitle': 'Delete organization?',
+    'orgDeleteDialogContent':
+        'This action will permanently delete the organization {name} and all its associated data.',
   };
 }
