@@ -1491,8 +1491,7 @@ class AppStrings {
     'weightKg': 'WEIGHT (KG)',
     'heightCm': 'HEIGHT (CM)',
     'previous': 'Previous',
-    'bloodTypeReadOnly':
-        'Blood type is not edited here — it is a permanent biological datum.',
+    'bloodTypeReadOnly': 'Blood type',
 
     // Patient profile screen
     'unsyncedChanges': 'Unsynced changes',
