@@ -56,7 +56,7 @@ class PatientRepository {
     return PatientFullRecord.fromJson(data);
   }
 
-  // ── GET /api/v1/patients/search ─────────────────────────────────────────
+  // ── POST /api/v1/patients/search ────────────────────────────────────────
   /// Strict patient lookup by identity fields.
   /// Returns exactly one patient or throws 404.
   ///
@@ -67,6 +67,10 @@ class PatientRepository {
   ///   - lastName (matches first OR second last name, case-insensitive)
   ///
   /// Optional: guardianName adds an extra verification layer.
+  ///
+  /// The criteria travel in the request body (not the query string) so that
+  /// the document number, names and birth date never leak into access logs,
+  /// proxies or browser history.
   Future<PatientFullRecord> searchPatient({
     required String documentNumber,
     required String birthDate,
@@ -74,20 +78,20 @@ class PatientRepository {
     required String lastName,
     String? guardianName,
   }) async {
-    final Map<String, String> queryParams = <String, String>{
+    final Map<String, dynamic> body = <String, dynamic>{
       'document_number': documentNumber,
       'birth_date': birthDate,
       'first_name': firstName,
       'last_name': lastName,
     };
     if (guardianName != null && guardianName.isNotEmpty) {
-      queryParams['guardian_name'] = guardianName;
+      body['guardian_name'] = guardianName;
     }
 
-    final Map<String, dynamic> data = await _apiClient.getJson(
+    final Map<String, dynamic> data = await _apiClient.postJson(
       path: '/api/v1/patients/search',
       headers: await _authHeaders(),
-      queryParams: queryParams,
+      body: body,
     );
     return PatientFullRecord.fromJson(data);
   }

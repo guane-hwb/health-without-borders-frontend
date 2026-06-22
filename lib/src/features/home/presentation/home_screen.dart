@@ -59,7 +59,7 @@ class HomeScreen extends StatelessWidget {
     );
 
     if (confirmed == true && context.mounted) {
-      await scope.authRepository.clearSession();
+      await scope.authRepository.logout();
       if (context.mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()),

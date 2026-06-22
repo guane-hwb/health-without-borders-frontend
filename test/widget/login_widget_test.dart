@@ -56,6 +56,9 @@ class FakeAuthRepository implements AuthRepository {
   Future<void> clearSession() async {}
 
   @override
+  Future<void> logout() async {}
+
+  @override
   bool get hasToken => false;
 }
 
