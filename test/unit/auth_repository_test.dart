@@ -50,6 +50,11 @@ void main() {
   late MockSecureStorage storage;
   late AuthRepository repo;
 
+  setUpAll(() {
+    registerFallbackValue(<String, dynamic>{});
+    registerFallbackValue(<String, String>{});
+  });
+
   setUp(() {
     api = MockApiClient();
     storage = MockSecureStorage();
@@ -310,6 +315,131 @@ void main() {
         () => repo.login(email: 'x@y.com', password: 'p'),
         throwsA(isA<ApiException>()),
       );
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // refresh token persistence
+  // ───────────────────────────────────────────────────────────────────────────
+  group('refresh token', () {
+    test('login persiste refresh_token cuando está presente', () async {
+      final jwt = _validJwt('a@b.com');
+      when(
+        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+      ).thenAnswer(
+        (_) async => {'access_token': jwt, 'refresh_token': 'refresh-xyz'},
+      );
+      when(
+        () => api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+      ).thenAnswer((_) async => _meResponse());
+
+      await repo.login(email: 'a@b.com', password: 'x');
+
+      verify(
+        () => storage.write(key: AuthRepository.refreshKey, value: 'refresh-xyz'),
+      ).called(1);
+    });
+
+    test('refresh_token ausente NO se persiste', () async {
+      final jwt = _validJwt('a@b.com');
+      when(
+        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+      ).thenAnswer((_) async => {'access_token': jwt});
+      when(
+        () => api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+      ).thenAnswer((_) async => _meResponse());
+
+      await repo.login(email: 'a@b.com', password: 'x');
+
+      verifyNever(
+        () => storage.write(
+          key: AuthRepository.refreshKey,
+          value: any(named: 'value'),
+        ),
+      );
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // logout()
+  // ───────────────────────────────────────────────────────────────────────────
+  group('logout()', () {
+    test('revoca tokens en el servidor y limpia la sesión', () async {
+      final jwt = _validJwt('a@b.com');
+      when(
+        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+      ).thenAnswer(
+        (_) async => {'access_token': jwt, 'refresh_token': 'refresh-xyz'},
+      );
+      when(
+        () => api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+      ).thenAnswer((_) async => _meResponse());
+      when(
+        () => api.postJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer((_) async => <String, dynamic>{});
+
+      await repo.login(email: 'a@b.com', password: 'x');
+      await repo.logout();
+
+      final captured = verify(
+        () => api.postJson(
+          path: captureAny(named: 'path'),
+          headers: captureAny(named: 'headers'),
+          body: captureAny(named: 'body'),
+        ),
+      ).captured;
+      // mocktail returns captured named args in the method's declaration
+      // order: postJson({path, body, headers}) -> [path, body, headers].
+      expect(captured[0], '/api/v1/logout');
+      expect((captured[1] as Map)['refresh_token'], 'refresh-xyz');
+      expect((captured[2] as Map)['Authorization'], 'Bearer $jwt');
+      expect(repo.hasToken, isFalse);
+    });
+
+    test('limpia la sesión aunque el servidor falle (offline)', () async {
+      final jwt = _validJwt('a@b.com');
+      when(
+        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+      ).thenAnswer(
+        (_) async => {'access_token': jwt, 'refresh_token': 'r'},
+      );
+      when(
+        () => api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+      ).thenAnswer((_) async => _meResponse());
+      when(
+        () => api.postJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+          body: any(named: 'body'),
+        ),
+      ).thenThrow(ApiException('offline', statusCode: 500));
+
+      await repo.login(email: 'a@b.com', password: 'x');
+      await repo.logout();
+
+      expect(repo.hasToken, isFalse);
+      verify(() => storage.delete(key: AuthRepository.tokenKey)).called(1);
+    });
+
+    test('sin token no llama al servidor pero limpia la sesión', () async {
+      when(
+        () => storage.read(key: AuthRepository.tokenKey),
+      ).thenAnswer((_) async => null);
+
+      await repo.logout();
+
+      verifyNever(
+        () => api.postJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+          body: any(named: 'body'),
+        ),
+      );
+      expect(repo.hasToken, isFalse);
     });
   });
 

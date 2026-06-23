@@ -16,15 +16,19 @@ class AuthRepository {
   @visibleForTesting
   static const String tokenKey = _tokenKey;
   @visibleForTesting
+  static const String refreshKey = _refreshKey;
+  @visibleForTesting
   static const String nfcKeyKey = _nfcKeyKey;
 
   static const String _tokenKey = 'hwb_access_token';
+  static const String _refreshKey = 'hwb_refresh_token';
   static const String _nfcKeyKey = 'hwb_nfc_key';
 
   final ApiClient _apiClient;
   final FlutterSecureStorage _secureStorage;
 
   String? _cachedToken;
+  String? _cachedRefreshToken;
   UserSession? _session;
 
   /// The currently authenticated user. Null before login.
@@ -50,6 +54,16 @@ class AuthRepository {
     try {
       await _secureStorage.write(key: _tokenKey, value: accessToken);
     } catch (_) {}
+
+    // Persist the refresh token so the session can be terminated server-side
+    // on logout (and, in the future, used to renew the access token).
+    final String? refreshToken = tokenData['refresh_token']?.toString();
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      _cachedRefreshToken = refreshToken;
+      try {
+        await _secureStorage.write(key: _refreshKey, value: refreshToken);
+      } catch (_) {}
+    }
 
     // Store global NFC master key for offline NFC operations
     final nfcKey = tokenData['nfc_encryption_key']?.toString();
@@ -98,11 +112,43 @@ class AuthRepository {
     }
   }
 
+  /// Ends the session on the server — revoking both the access token and, when
+  /// available, the refresh token — and then clears the local session.
+  ///
+  /// Best-effort: any network or credential error is swallowed and the local
+  /// session is cleared regardless, so the user is never left stranded as
+  /// "logged in" on the device (e.g. when offline).
+  Future<void> logout() async {
+    try {
+      final String? token =
+          _cachedToken ?? await _secureStorage.read(key: _tokenKey);
+      if (token != null && token.isNotEmpty) {
+        final String? refreshToken = await _getRefreshToken();
+        await _apiClient.postJson(
+          path: '/api/v1/logout',
+          headers: <String, String>{'Authorization': 'Bearer $token'},
+          body: <String, dynamic>{
+            if (refreshToken != null && refreshToken.isNotEmpty)
+              'refresh_token': refreshToken,
+          },
+        );
+      }
+    } catch (_) {
+      // Ignore: clear the local session regardless of server reachability.
+    } finally {
+      await clearSession();
+    }
+  }
+
   Future<void> clearSession() async {
     _cachedToken = null;
+    _cachedRefreshToken = null;
     _session = null;
     try {
       await _secureStorage.delete(key: _tokenKey);
+    } catch (_) {}
+    try {
+      await _secureStorage.delete(key: _refreshKey);
     } catch (_) {}
     try {
       await _secureStorage.delete(key: _nfcKeyKey);
@@ -112,6 +158,18 @@ class AuthRepository {
   bool get hasToken => _cachedToken?.isNotEmpty == true;
 
   // ── Private ───────────────────────────────────────────────────────────────
+
+  Future<String?> _getRefreshToken() async {
+    if (_cachedRefreshToken?.isNotEmpty == true) return _cachedRefreshToken;
+    try {
+      final stored = await _secureStorage.read(key: _refreshKey);
+      if (stored?.isNotEmpty == true) {
+        _cachedRefreshToken = stored;
+        return stored;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   Future<UserSession> _fetchMe(String token) async {
     final headers = <String, String>{'Authorization': 'Bearer $token'};
