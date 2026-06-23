@@ -476,7 +476,9 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
   void _submitStep1() {
     final name = _orgNameCtrl.text.trim();
     if (name.isEmpty) {
-      setState(() => _error = 'El nombre de la organización es obligatorio.');
+      setState(
+        () => _error = AppStrings.of(context).userFormRequiredFieldsError,
+      );
       return;
     }
     setState(() {
@@ -492,12 +494,16 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
     final pass = _adminPassCtrl.text;
 
     if (adminName.isEmpty || email.isEmpty || pass.isEmpty) {
-      setState(() => _error = 'Todos los campos son obligatorios.');
+      setState(
+        () => _error = AppStrings.of(context).userFormRequiredFieldsError,
+      );
       return;
     }
     if (pass.length < 8) {
       setState(
-        () => _error = 'La contraseña debe tener al menos 8 caracteres.',
+        () => _error = AppStrings.of(
+          context,
+        ).passwordTooShort.replaceAll('6', '8'),
       );
       return;
     }
@@ -526,17 +532,10 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
           _saving = false;
         });
       }
-    } on ApiException catch (e) {
+    } on ApiException {
       if (mounted) {
         setState(() {
-          _error = e.message;
-          _saving = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
+          _error = AppStrings.of(context).userFormValidationError;
           _saving = false;
         });
       }
