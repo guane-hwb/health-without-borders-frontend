@@ -407,10 +407,8 @@ void main() {
       );
       await t.tap(continueBtn);
       await t.pumpAndSettle();
-      expect(
-        find.text('El nombre de la organización es obligatorio.'),
-        findsOneWidget,
-      );
+
+      expect(find.text(s.userFormRequiredFieldsError), findsOneWidget);
 
       final orgField = find.descendant(
         of: sheetFinder,
@@ -460,7 +458,8 @@ void main() {
 
       await t.tap(submitBtn);
       await t.pumpAndSettle();
-      expect(find.text('Todos los campos son obligatorios.'), findsOneWidget);
+
+      expect(find.text(s.userFormRequiredFieldsError), findsOneWidget);
 
       final fieldsStep2 = find.descendant(
         of: sheetFinder,
@@ -476,8 +475,9 @@ void main() {
       await t.ensureVisible(submitBtn);
       await t.tap(submitBtn);
       await t.pumpAndSettle();
+
       expect(
-        find.text('La contraseña debe tener al menos 8 caracteres.'),
+        find.text(s.passwordTooShort.replaceAll('6', '8')),
         findsOneWidget,
       );
 
@@ -576,7 +576,7 @@ void main() {
           await Future<void>.delayed(const Duration(milliseconds: 50));
         });
         await t.pumpAndSettle();
-        expect(find.text('Error desde Servidor'), findsOneWidget);
+        expect(find.text(s.userFormValidationError), findsOneWidget);
 
         errorMode = 1;
         await t.ensureVisible(submitBtnErr);
@@ -585,7 +585,8 @@ void main() {
           await Future<void>.delayed(const Duration(milliseconds: 50));
         });
         await t.pumpAndSettle();
-        expect(find.textContaining('Fallo de red inesperado'), findsOneWidget);
+
+        expect(find.text(s.userFormValidationError), findsOneWidget);
       },
     );
   });

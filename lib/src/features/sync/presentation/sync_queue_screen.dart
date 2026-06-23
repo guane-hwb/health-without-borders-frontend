@@ -314,18 +314,7 @@ class _SyncCard extends StatelessWidget {
               ],
             ),
           ),
-          if (hasErr)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-              child: Text(
-                entry.syncError!,
-                style: const TextStyle(fontSize: 11, color: AppColors.error),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
           const SizedBox(height: 10),
-          const Divider(height: 1),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
             child: Row(

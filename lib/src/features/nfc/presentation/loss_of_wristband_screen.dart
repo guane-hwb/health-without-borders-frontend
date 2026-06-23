@@ -123,9 +123,7 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(
-        () => _error = 'No se pudo completar la búsqueda. Inténtalo de nuevo.',
-      );
+      setState(() => _error = s.searchError);
     } finally {
       if (mounted) setState(() => _searching = false);
     }
@@ -393,10 +391,7 @@ class _DocTypeDropdown extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.white,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: const Color(0xFFB0B8C4),
-              width: 1.5,
-            ),
+            border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
@@ -527,10 +522,7 @@ class _LabeledField extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: AppColors.primary,
-                width: 2,
-              ),
+              borderSide: const BorderSide(color: AppColors.primary, width: 2),
             ),
           ),
         ),
@@ -603,9 +595,7 @@ class _DateField extends StatelessWidget {
               color: AppColors.white,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: hasValue
-                    ? AppColors.primary
-                    : const Color(0xFFB0B8C4),
+                color: hasValue ? AppColors.primary : const Color(0xFFB0B8C4),
                 width: 1.5,
               ),
             ),
@@ -616,9 +606,7 @@ class _DateField extends StatelessWidget {
                     hasValue ? value : 'YYYY-MM-DD',
                     style: TextStyle(
                       fontSize: 15,
-                      fontWeight: hasValue
-                          ? FontWeight.w500
-                          : FontWeight.w400,
+                      fontWeight: hasValue ? FontWeight.w500 : FontWeight.w400,
                       color: hasValue
                           ? AppColors.textPrimary
                           : AppColors.textSecondary,

@@ -598,7 +598,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Exception: Crash no controlado'), findsOneWidget);
+        expect(find.text(s.userFormValidationError), findsOneWidget);
       },
     );
   });
@@ -705,7 +705,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Error desde API Form'), findsOneWidget);
+      expect(find.text(s.userFormValidationError), findsOneWidget);
     });
   });
 

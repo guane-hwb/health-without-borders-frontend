@@ -102,6 +102,7 @@ class AppStrings {
   String get error => _get('error');
   String get success => _get('success');
   String get noData => _get('noData');
+  String get searchError => _get('searchError');
 
   // ── Register NFC ────────────────────────────────────────────────────────
   String get registerTitle => _get('registerTitle');
@@ -582,6 +583,7 @@ class AppStrings {
   String get deletUser => _get('deletUser');
   String get deleting => _get('deleting');
   String get permanentlyDelete => _get('permanentlyDelete');
+  String get userFormValidationError => _get('userFormValidationError');
 
   // ── Super Admin User ──────────────────────────────────────────────────
   String get manageOrgsTitle => _get('manageOrgsTitle');
@@ -680,6 +682,7 @@ class AppStrings {
     'error': 'Error',
     'success': 'Éxito',
     'noData': 'Sin datos',
+    'searchError': 'No se pudo completar la búsqueda. Inténtalo de nuevo.',
 
     // Register NFC
     'registerTitle': 'Registrar NFC',
@@ -1138,6 +1141,8 @@ class AppStrings {
     'deletUser': 'Eliminar usuario',
     'deleting': 'Eliminando...',
     'permanentlyDelete': 'Esta acción eliminará permanentemente a',
+    'userFormValidationError':
+        'Revise por favor que los datos estén bien diligenciados',
 
     // Super Admin
     'manageOrgsTitle': 'Organizaciones',
@@ -1230,6 +1235,7 @@ class AppStrings {
     'error': 'Error',
     'success': 'Success',
     'noData': 'No data',
+    'searchError': 'The search could not be completed. Please try again.',
 
     // Register NFC
     'registerTitle': 'Register NFC',
@@ -1685,6 +1691,8 @@ class AppStrings {
     'deletUser': 'Delete user',
     'deleting': 'Deleting ...',
     'permanentlyDelete': 'This action will permanently delete',
+    'userFormValidationError':
+        'Please check that the fields are properly filled out',
 
     // Super Admin
     'manageOrgsTitle': 'Organizations',
