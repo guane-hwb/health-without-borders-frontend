@@ -539,6 +539,13 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
           _saving = false;
         });
       }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = AppStrings.of(context).userFormValidationError;
+          _saving = false;
+        });
+      }
     }
   }
 
