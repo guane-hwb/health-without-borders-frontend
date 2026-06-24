@@ -88,6 +88,23 @@ class FakeLocalDatabase implements LocalDatabase {
 
   @override
   Future<void> savePatient(PatientFullRecord record) async {}
+
+  @override
+  Future<NfcChipStatus?> getChipStatus(String patientId) async => null;
+
+  @override
+  Future<void> markChipsDirty(
+    String patientId, {
+    bool patient = false,
+    bool guardian = false,
+  }) async {}
+
+  @override
+  Future<void> clearChipsDirty(
+    String patientId, {
+    bool patient = false,
+    bool guardian = false,
+  }) async {}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

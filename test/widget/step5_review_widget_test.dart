@@ -403,11 +403,11 @@ void main() {
       expect(find.text('Atrás'), findsOneWidget);
     });
 
-    testWidgets('muestra botón Registrar paciente', (tester) async {
+    testWidgets('muestra botón Confirmar', (tester) async {
       configureMobileScreenSize(tester);
       await tester.pumpWidget(buildTestApp(draft: buildDraft()));
       await tester.pumpAndSettle();
-      expect(find.text('Registrar paciente'), findsOneWidget);
+      expect(find.text('Confirmar'), findsOneWidget);
     });
 
     testWidgets('botón Atrás invoca onBack', (tester) async {
@@ -422,7 +422,7 @@ void main() {
       expect(tapped, isTrue);
     });
 
-    testWidgets('botón Registrar invoca onConfirm', (tester) async {
+    testWidgets('botón Confirmar invoca onConfirm', (tester) async {
       configureMobileScreenSize(tester);
       var confirmed = false;
       await tester.pumpWidget(
@@ -433,7 +433,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final registerBtn = find.text('Registrar paciente');
+      final registerBtn = find.text('Confirmar');
       await tester.ensureVisible(registerBtn);
       await tester.tap(registerBtn);
 
@@ -469,7 +469,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final registerBtn = find.text('Registrar paciente');
+      final registerBtn = find.text('Confirmar');
       await tester.ensureVisible(registerBtn);
       await tester.tap(registerBtn);
 
@@ -495,7 +495,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final registerBtn = find.text('Registrar paciente');
+      final registerBtn = find.text('Confirmar');
       await tester.ensureVisible(registerBtn);
       await tester.tap(registerBtn);
 
@@ -522,7 +522,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final registerBtn = find.text('Registrar paciente');
+      final registerBtn = find.text('Confirmar');
       await tester.ensureVisible(registerBtn);
       await tester.tap(registerBtn);
 
@@ -546,7 +546,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final registerBtn = find.text('Registrar paciente');
+      final registerBtn = find.text('Confirmar');
       await tester.ensureVisible(registerBtn);
       await tester.tap(registerBtn);
 
@@ -564,11 +564,11 @@ void main() {
       expect(find.text('Review data'), findsOneWidget);
     });
 
-    testWidgets('muestra "Register patient" en inglés', (tester) async {
+    testWidgets('muestra "Confirm" en inglés', (tester) async {
       configureMobileScreenSize(tester);
       await tester.pumpWidget(buildTestApp(draft: buildDraft(), locale: 'en'));
       await tester.pumpAndSettle();
-      expect(find.text('Register patient'), findsOneWidget);
+      expect(find.text('Confirm'), findsOneWidget);
     });
 
     testWidgets('muestra "Female" para sexo F en inglés', (tester) async {

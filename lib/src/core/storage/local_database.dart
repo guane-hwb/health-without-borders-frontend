@@ -17,13 +17,17 @@ class LocalDatabase {
   static final LocalDatabase instance = LocalDatabase._();
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 1;
+  static const int _dbVersion = 2;
   static const String _table = 'local_patients';
+  static const String _chipStatusTable = 'nfc_chip_status';
 
   Database? _db;
 
   // In-memory fallback for web (rows keyed by patient_id)
   final Map<String, Map<String, dynamic>> _webStore = {};
+
+  // In-memory fallback for chip-dirty status on web (keyed by patient_id)
+  final Map<String, Map<String, dynamic>> _webChipStatus = {};
 
   /// Call once in main() before runApp().
   static Future<void> init() async {
@@ -59,8 +63,28 @@ class LocalDatabase {
           )
         ''');
         await db.execute('CREATE INDEX idx_synced ON $_table (is_synced)');
+        await _createChipStatusTable(db);
+      },
+      onUpgrade: (Database db, int oldVersion, int newVersion) async {
+        if (oldVersion < 2) {
+          await _createChipStatusTable(db);
+        }
       },
     );
+  }
+
+  /// NFC backup staleness, tracked separately from the outbound sync queue so
+  /// it survives `markSynced` (which deletes the queue row). Persists which
+  /// chips are out of date for a patient until they are re-written.
+  static Future<void> _createChipStatusTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_chipStatusTable (
+        patient_id          TEXT PRIMARY KEY,
+        patient_chip_dirty  INTEGER NOT NULL DEFAULT 0,
+        guardian_chip_dirty INTEGER NOT NULL DEFAULT 0,
+        updated_at          TEXT NOT NULL
+      )
+    ''');
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
@@ -165,13 +189,96 @@ class LocalDatabase {
     await db!.delete(_table, where: 'patient_id = ?', whereArgs: [patientId]);
   }
 
+  // ── NFC chip status (backup staleness) ────────────────────────────────────
+
+  /// Returns the chip-dirty status for a patient, or null if nothing is stale.
+  Future<NfcChipStatus?> getChipStatus(String patientId) async {
+    if (patientId.isEmpty) return null;
+    if (_isWeb) {
+      final r = _webChipStatus[patientId];
+      return r == null ? null : NfcChipStatus.fromRow(r);
+    }
+    final db = await _database;
+    final rows = await db!.query(
+      _chipStatusTable,
+      where: 'patient_id = ?',
+      whereArgs: [patientId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return NfcChipStatus.fromRow(rows.first);
+  }
+
+  /// Marks one or both chips as stale for a patient. Flags are OR-ed with any
+  /// existing state, so repeated edits never clear a pending chip.
+  Future<void> markChipsDirty(
+    String patientId, {
+    bool patient = false,
+    bool guardian = false,
+  }) async {
+    if (patientId.isEmpty || (!patient && !guardian)) return;
+    final current =
+        (await getChipStatus(patientId)) ?? NfcChipStatus.clean(patientId);
+    await _upsertChipStatus(
+      current.markDirty(patient: patient, guardian: guardian),
+    );
+  }
+
+  /// Clears the dirty flag for one or both chips after a successful re-write.
+  /// Deletes the row once nothing is stale.
+  Future<void> clearChipsDirty(
+    String patientId, {
+    bool patient = false,
+    bool guardian = false,
+  }) async {
+    if (patientId.isEmpty) return;
+    final current = await getChipStatus(patientId);
+    if (current == null) return;
+    final updated = current.clearDirty(patient: patient, guardian: guardian);
+    if (!updated.anyDirty) {
+      await _deleteChipStatus(patientId);
+    } else {
+      await _upsertChipStatus(updated);
+    }
+  }
+
+  Future<void> _upsertChipStatus(NfcChipStatus status) async {
+    final row = status.toRow()
+      ..['updated_at'] = DateTime.now().toIso8601String();
+    if (_isWeb) {
+      _webChipStatus[status.patientId] = row;
+      return;
+    }
+    final db = await _database;
+    await db!.insert(
+      _chipStatusTable,
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> _deleteChipStatus(String patientId) async {
+    if (_isWeb) {
+      _webChipStatus.remove(patientId);
+      return;
+    }
+    final db = await _database;
+    await db!.delete(
+      _chipStatusTable,
+      where: 'patient_id = ?',
+      whereArgs: [patientId],
+    );
+  }
+
   Future<void> clearAll() async {
     if (_isWeb) {
       _webStore.clear();
+      _webChipStatus.clear();
       return;
     }
     final db = await _database;
     await db!.delete(_table);
+    await db.delete(_chipStatusTable);
   }
 }
 
@@ -227,4 +334,58 @@ class LocalPatientEntry {
     if (parts.length <= 1) return patientName;
     return '${parts.first} ${parts[1][0]}.';
   }
+}
+
+// ── NFC chip status data class ──────────────────────────────────────────────
+
+/// Tracks which NFC chips are out of date relative to the patient's record.
+///
+/// The guardian card holds the full record, so any change makes it stale; the
+/// patient wristband holds only triage, so it goes stale only when a
+/// triage-relevant field changes (demographics, blood type, chronic
+/// conditions, allergies, guardian UIDs).
+class NfcChipStatus {
+  const NfcChipStatus({
+    required this.patientId,
+    required this.patientChipDirty,
+    required this.guardianChipDirty,
+  });
+
+  factory NfcChipStatus.clean(String patientId) => NfcChipStatus(
+        patientId: patientId,
+        patientChipDirty: false,
+        guardianChipDirty: false,
+      );
+
+  factory NfcChipStatus.fromRow(Map<String, dynamic> row) => NfcChipStatus(
+        patientId: row['patient_id'] as String,
+        patientChipDirty: (row['patient_chip_dirty'] as int? ?? 0) == 1,
+        guardianChipDirty: (row['guardian_chip_dirty'] as int? ?? 0) == 1,
+      );
+
+  final String patientId;
+  final bool patientChipDirty;
+  final bool guardianChipDirty;
+
+  bool get anyDirty => patientChipDirty || guardianChipDirty;
+
+  NfcChipStatus markDirty({bool patient = false, bool guardian = false}) =>
+      NfcChipStatus(
+        patientId: patientId,
+        patientChipDirty: patientChipDirty || patient,
+        guardianChipDirty: guardianChipDirty || guardian,
+      );
+
+  NfcChipStatus clearDirty({bool patient = false, bool guardian = false}) =>
+      NfcChipStatus(
+        patientId: patientId,
+        patientChipDirty: patientChipDirty && !patient,
+        guardianChipDirty: guardianChipDirty && !guardian,
+      );
+
+  Map<String, dynamic> toRow() => <String, dynamic>{
+        'patient_id': patientId,
+        'patient_chip_dirty': patientChipDirty ? 1 : 0,
+        'guardian_chip_dirty': guardianChipDirty ? 1 : 0,
+      };
 }

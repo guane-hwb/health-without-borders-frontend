@@ -190,11 +190,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Datos de emergencia sellados en el dispositivo NFC'),
+        find.text('Pendiente de grabar en el dispositivo NFC'),
         findsOneWidget,
       );
       expect(
-        find.text('Cifrado AES-256-GCM · Solo legible por la app'),
+        find.text('Toca "Finalizar" y acerca los dispositivos para sellar'),
         findsOneWidget,
       );
     });
@@ -215,11 +215,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Emergency data sealed on the NFC device'),
+        find.text('Pending write to the NFC device'),
         findsOneWidget,
       );
       expect(
-        find.text('AES-256-GCM Encryption · Read-only by the app'),
+        find.text('Tap "Finish" and bring the devices to seal the data'),
         findsOneWidget,
       );
     });
@@ -816,7 +816,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Cifrado AES-256-GCM · Solo legible por la app'),
+        find.text('Toca "Finalizar" y acerca los dispositivos para sellar'),
         findsOneWidget,
       );
     });
