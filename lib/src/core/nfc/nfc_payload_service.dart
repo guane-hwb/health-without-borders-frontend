@@ -282,6 +282,110 @@ class NfcPayloadService {
     return completer.future;
   }
 
+  /// Reads any HWB chip — patient wristband or guardian card — in one tap.
+  ///
+  /// Returns the UID plus whichever payload was found, decoded and ready to
+  /// reconstruct a record. If both records are present the guardian one wins
+  /// (it is a superset). Returns [HwbChipKind.none] for a blank or non-HWB
+  /// chip (the UID is still populated when readable). Used for offline reads.
+  Future<HwbChipReadResult> readHwbChip() async {
+    if (!await NfcManager.instance.isAvailable()) {
+      throw NfcNotAvailableException();
+    }
+
+    final completer = Completer<HwbChipReadResult>();
+
+    NfcManager.instance.startSession(
+      pollingOptions: {
+        NfcPollingOption.iso14443,
+        NfcPollingOption.iso15693,
+      },
+      onDiscovered: (NfcTag tag) async {
+        try {
+          final uid = _extractUid(tag) ?? '';
+
+          final ndef = Ndef.from(tag);
+          final cached = ndef?.cachedMessage;
+          if (ndef == null || cached == null || cached.records.isEmpty) {
+            if (!completer.isCompleted) {
+              completer.complete(
+                HwbChipReadResult(uid: uid, kind: HwbChipKind.none),
+              );
+            }
+            return;
+          }
+
+          // Collect HWB records by MIME type (guardian preferred over triage).
+          Uint8List? guardianPayload;
+          Uint8List? triagePayload;
+          for (final record in cached.records) {
+            if (record.typeNameFormat == NdefTypeNameFormat.media) {
+              final type = String.fromCharCodes(record.type);
+              if (type == kHwbGuardianMimeType) {
+                guardianPayload = record.payload;
+              } else if (type == kHwbNdefMimeType) {
+                triagePayload = record.payload;
+              }
+            }
+          }
+
+          if (guardianPayload != null) {
+            final decoded = await codec.decode(guardianPayload);
+            if (!completer.isCompleted) {
+              completer.complete(
+                HwbChipReadResult(
+                  uid: uid,
+                  kind: decoded != null
+                      ? HwbChipKind.guardian
+                      : HwbChipKind.none,
+                  guardianRecord: decoded,
+                ),
+              );
+            }
+            return;
+          }
+
+          if (triagePayload != null) {
+            final decoded = await codec.decode(triagePayload);
+            final triage =
+                decoded != null ? NfcTriagePayload.fromPayload(decoded) : null;
+            if (!completer.isCompleted) {
+              completer.complete(
+                HwbChipReadResult(
+                  uid: uid,
+                  kind:
+                      triage != null ? HwbChipKind.triage : HwbChipKind.none,
+                  triage: triage,
+                ),
+              );
+            }
+            return;
+          }
+
+          if (!completer.isCompleted) {
+            completer.complete(
+              HwbChipReadResult(uid: uid, kind: HwbChipKind.none),
+            );
+          }
+        } catch (e) {
+          if (!completer.isCompleted) {
+            completer.completeError(NfcReadException('Read failed: $e'));
+          }
+        } finally {
+          await NfcManager.instance.stopSession();
+        }
+      },
+      onError: (dynamic error) async {
+        if (!completer.isCompleted) {
+          completer.completeError(NfcReadException('NFC error: $error'));
+        }
+        await NfcManager.instance.stopSession();
+      },
+    );
+
+    return completer.future;
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   static String? _extractUid(NfcTag tag) {
@@ -331,6 +435,29 @@ class NfcReadResult {
 
   /// Null if the chip has no HWB payload (blank or different format).
   final TriageSummary? triage;
+}
+
+/// Which HWB payload a chip carries.
+enum HwbChipKind { none, triage, guardian }
+
+/// Result of reading an HWB chip with [NfcPayloadService.readHwbChip].
+///
+/// For [HwbChipKind.guardian], [guardianRecord] is the full-record JSON map
+/// (feed it to NfcGuardianPayload.reconstructFromGuardian). For
+/// [HwbChipKind.triage], [triage] is the decoded triage summary (feed it to
+/// NfcGuardianPayload.reconstructFromTriage).
+class HwbChipReadResult {
+  const HwbChipReadResult({
+    required this.uid,
+    required this.kind,
+    this.triage,
+    this.guardianRecord,
+  });
+
+  final String uid;
+  final HwbChipKind kind;
+  final TriageSummary? triage;
+  final Map<String, dynamic>? guardianRecord;
 }
 
 // ── Exceptions ──────────────────────────────────────────────────────────────

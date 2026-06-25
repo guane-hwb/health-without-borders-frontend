@@ -8,11 +8,11 @@ import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/hwb_logo.dart';
 import '../../../../shared/widgets/screen_bottom_handle.dart';
 import '../../domain/patient_record.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../core/nfc/nfc_payload_service.dart';
 import '../../../../core/nfc/nfc_guardian_payload.dart';
+import '../nfc_guided_write.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
 import 'steps/step2_guardian.dart';
@@ -161,10 +161,10 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
   /// Writes the patient chip, queues the record for sync and shows the final
   /// sealed-confirmation screen. The guardian card write is added in Patch 4.
-  // ── Finalize: write both chips, then show the sealed confirmation ──────────
+  // ── Finalize: write both chips with the guided overlay, then seal ──────────
 
-  /// Phase 1: write the patient wristband, then route to the guardian card
-  /// (if any) or straight to the sealed screen.
+  /// Writes the patient wristband and (if any) the guardian card, each through
+  /// the guided NFC overlay, then shows the sealed confirmation screen.
   Future<void> _finalize() async {
     final scope = AppScope.of(context);
     final record = _savedRecord;
@@ -176,133 +176,68 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final nfcKey = await scope.authRepository.getNfcEncryptionKey();
     if (!mounted) return;
 
-    // No key, or web/desktop without NFC: nothing to write, just queue sync.
-    if (nfcKey == null || nfcKey.isEmpty || kIsWeb) {
+    // No NFC key (e.g. not provisioned): nothing to write, just queue sync.
+    if (nfcKey == null || nfcKey.isEmpty) {
       _completeFinalize();
       return;
     }
 
     final codec = NfcPayloadCodec(hexKey: nfcKey);
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
 
-    final outcome = await _attemptWrite(() {
-      final triageMap = NfcTriagePayload.buildPatientPayload(record: record);
-      return NfcPayloadService(codec: codec).writeTriagePayload(
-        triageMap,
+    // Patient wristband (triage).
+    final patientOk = await showNfcGuidedWrite(
+      context,
+      title: isEs ? 'Pulsera del paciente' : 'Patient wristband',
+      instruction: isEs
+          ? 'Acerque la pulsera del paciente al teléfono'
+          : 'Bring the patient wristband to the phone',
+      write: () => NfcPayloadService(codec: codec).writeTriagePayload(
+        NfcTriagePayload.buildPatientPayload(record: record),
         expectedUid: record.deviceUid,
-      );
-    });
+      ),
+    );
     if (!mounted) return;
-
-    if (outcome != _ChipWriteOutcome.success) {
-      final isEs = AppStrings.of(context).welcome == 'Bienvenido';
-      _showChipFailureDialog(
-        chipLabel: isEs ? 'la pulsera del paciente' : 'the patient wristband',
-        outcome: outcome,
-        onRetry: _finalize,
-        onSkip: () => _afterPatientChip(codec, record),
+    if (patientOk) {
+      await scope.localDatabase.clearChipsDirty(
+        record.patientId,
+        patient: true,
       );
-      return;
+      if (!mounted) return;
     }
 
-    await scope.localDatabase.clearChipsDirty(record.patientId, patient: true);
-    if (!mounted) return;
-    _afterPatientChip(codec, record);
-  }
-
-  /// Phase 2: if there is a guardian device, prompt for the second tap;
-  /// otherwise finish.
-  void _afterPatientChip(NfcPayloadCodec codec, PatientFullRecord record) {
+    // Guardian card (bounded full record), if the patient has one.
     final hasGuardian =
         (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
-    if (!hasGuardian) {
-      _completeFinalize();
-      return;
-    }
-
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: Text(
-            isEs ? 'Pulsera grabada' : 'Wristband written',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Text(
-            isEs
-                ? 'Ahora acerque la tarjeta del guardián y toque Continuar para '
-                      'grabar el historial completo.'
-                : 'Now bring the guardian card and tap Continue to write the '
-                      'full record.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                _completeFinalize();
-              },
-              child: Text(
-                isEs ? 'Omitir tarjeta' : 'Skip card',
-                style: const TextStyle(color: AppColors.textSecondary),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                _writeGuardianThenFinish(codec, record);
-              },
-              child: Text(
-                isEs ? 'Continuar' : 'Continue',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
+    if (hasGuardian) {
+      final guardianOk = await showNfcGuidedWrite(
+        context,
+        title: isEs ? 'Tarjeta del guardián' : 'Guardian card',
+        instruction: isEs
+            ? 'Acerque la tarjeta del guardián al teléfono'
+            : 'Bring the guardian card to the phone',
+        write: () {
+          final fit = NfcGuardianPayload.buildWithinCapacity(
+            record: record,
+            capacityBytes: _kGuardianCardCapacityBytes,
+            estimateSize: codec.estimateSize,
+          );
+          return NfcPayloadService(codec: codec).writeGuardianPayload(
+            fit.payload,
+            expectedUid: record.guardianInfo.deviceUid,
+          );
+        },
+      );
+      if (!mounted) return;
+      if (guardianOk) {
+        await scope.localDatabase.clearChipsDirty(
+          record.patientId,
+          guardian: true,
         );
-      },
-    );
-  }
-
-  /// Phase 3: write the guardian card (bounded full record), then finish.
-  Future<void> _writeGuardianThenFinish(
-    NfcPayloadCodec codec,
-    PatientFullRecord record,
-  ) async {
-    final scope = AppScope.of(context);
-    final outcome = await _attemptWrite(() {
-      final fit = NfcGuardianPayload.buildWithinCapacity(
-        record: record,
-        capacityBytes: _kGuardianCardCapacityBytes,
-        estimateSize: codec.estimateSize,
-      );
-      debugPrint(
-        'Guardian payload: ${fit.estimatedBytes} bytes '
-        '(${fit.includedConsultations} consultations, '
-        '${fit.includedVaccines} vaccines, fits=${fit.fits})',
-      );
-      return NfcPayloadService(codec: codec).writeGuardianPayload(
-        fit.payload,
-        expectedUid: record.guardianInfo.deviceUid,
-      );
-    });
-    if (!mounted) return;
-
-    if (outcome != _ChipWriteOutcome.success) {
-      final isEs = AppStrings.of(context).welcome == 'Bienvenido';
-      _showChipFailureDialog(
-        chipLabel: isEs ? 'la tarjeta del guardián' : 'the guardian card',
-        outcome: outcome,
-        onRetry: () => _writeGuardianThenFinish(codec, record),
-        onSkip: _completeFinalize,
-      );
-      return;
+        if (!mounted) return;
+      }
     }
 
-    await scope.localDatabase.clearChipsDirty(record.patientId, guardian: true);
-    if (!mounted) return;
     _completeFinalize();
   }
 
@@ -311,102 +246,6 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final scope = AppScope.of(context);
     unawaited(scope.syncEngine.syncAll());
     if (mounted) setState(() => _step = 5);
-  }
-
-  Future<_ChipWriteOutcome> _attemptWrite(
-    Future<NfcWriteResult> Function() write,
-  ) async {
-    try {
-      final result = await write();
-      debugPrint(
-        'NFC write OK: ${result.bytesWritten}/${result.chipCapacity} bytes '
-        '(${result.utilizationPercent.toStringAsFixed(1)}%)',
-      );
-      return _ChipWriteOutcome.success;
-    } on NfcUidMismatchException catch (e) {
-      debugPrint('NFC UID mismatch: $e');
-      return _ChipWriteOutcome.mismatch;
-    } catch (e) {
-      debugPrint('NFC write failed: $e');
-      return _ChipWriteOutcome.failed;
-    }
-  }
-
-  void _showChipFailureDialog({
-    required String chipLabel,
-    required _ChipWriteOutcome outcome,
-    required VoidCallback onRetry,
-    required VoidCallback onSkip,
-  }) {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
-
-    final String content;
-    if (outcome == _ChipWriteOutcome.mismatch) {
-      content = isEs
-          ? 'El dispositivo que acercó no coincide con el registrado para '
-                '$chipLabel. Verifique que sea el correcto e intente de nuevo.'
-          : 'The device you tapped does not match the one registered for '
-                '$chipLabel. Make sure it is the correct one and try again.';
-    } else {
-      content = isEs
-          ? 'Los datos se guardaron localmente, pero NO se pudieron grabar en '
-                '$chipLabel.\n\nAsegúrese de no retirar el dispositivo e intente '
-                'de nuevo para evitar entregar un dispositivo vacío.'
-          : 'Data was saved locally, but it COULD NOT be written to $chipLabel.'
-                '\n\nKeep the device in place and try again to avoid releasing '
-                'an empty device.';
-    }
-
-    final title = isEs ? 'Error de escritura NFC' : 'NFC Write Error';
-    final retryBtn = isEs ? 'Reintentar' : 'Retry';
-    final skipBtn = isEs ? 'Omitir y continuar' : 'Skip & continue';
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: Row(
-            children: [
-              const Icon(Icons.gpp_bad_rounded, color: AppColors.error),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          content: Text(content),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                onRetry();
-              },
-              child: Text(
-                retryBtn,
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                onSkip();
-              },
-              child: Text(
-                skipBtn,
-                style: const TextStyle(color: AppColors.textSecondary),
-              ),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   String _formatTimeNow(BuildContext context) {
@@ -744,5 +583,3 @@ class RegisterDraft {
   }
 }
 
-/// Outcome of a single chip write during finalize.
-enum _ChipWriteOutcome { success, mismatch, failed }

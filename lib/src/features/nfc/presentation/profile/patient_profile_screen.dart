@@ -11,6 +11,7 @@ import '../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../core/nfc/nfc_payload_service.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../core/storage/local_database.dart';
+import '../nfc_guided_write.dart';
 import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/screen_bottom_handle.dart';
 import '../../../auth/domain/user_session.dart';
@@ -148,8 +149,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   /// Re-writes the chips that are marked stale, then clears their flags.
-  /// Writes only the affected chips: the wristband only if triage changed, the
-  /// guardian card whenever the record changed.
+  /// Writes only the affected chips, walking the user through each tap with a
+  /// guided overlay.
   Future<void> _updateNfcChips() async {
     if (_isUpdatingChips) return;
     final scope = AppScope.of(context);
@@ -179,59 +180,53 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     final record = _draft;
 
     if (status.patientChipDirty) {
-      final proceed = await _promptTap(
-        isEs
-            ? 'Acerque la pulsera del paciente'
-            : 'Bring the patient wristband',
+      final ok = await showNfcGuidedWrite(
+        context,
+        title: isEs ? 'Pulsera del paciente' : 'Patient wristband',
+        instruction: isEs
+            ? 'Acerque la pulsera del paciente al teléfono'
+            : 'Bring the patient wristband to the phone',
+        write: () => NfcPayloadService(codec: codec).writeTriagePayload(
+          NfcTriagePayload.buildPatientPayload(record: record),
+          expectedUid: record.deviceUid,
+        ),
       );
       if (!mounted) return;
-      if (proceed) {
-        final ok = await _writeChipWithRetry(
-          chipLabel:
-              isEs ? 'la pulsera del paciente' : 'the patient wristband',
-          write: () => NfcPayloadService(codec: codec).writeTriagePayload(
-            NfcTriagePayload.buildPatientPayload(record: record),
-            expectedUid: record.deviceUid,
-          ),
+      if (ok) {
+        await scope.localDatabase.clearChipsDirty(
+          record.patientId,
+          patient: true,
         );
-        if (!mounted) return;
-        if (ok) {
-          await scope.localDatabase.clearChipsDirty(
-            record.patientId,
-            patient: true,
-          );
-        }
       }
     }
+    if (!mounted) return;
 
     if (status.guardianChipDirty &&
         (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty) {
-      final proceed = await _promptTap(
-        isEs ? 'Acerque la tarjeta del guardián' : 'Bring the guardian card',
+      final ok = await showNfcGuidedWrite(
+        context,
+        title: isEs ? 'Tarjeta del guardián' : 'Guardian card',
+        instruction: isEs
+            ? 'Acerque la tarjeta del guardián al teléfono'
+            : 'Bring the guardian card to the phone',
+        write: () {
+          final fit = NfcGuardianPayload.buildWithinCapacity(
+            record: record,
+            capacityBytes: _kGuardianCardCapacityBytes,
+            estimateSize: codec.estimateSize,
+          );
+          return NfcPayloadService(codec: codec).writeGuardianPayload(
+            fit.payload,
+            expectedUid: record.guardianInfo.deviceUid,
+          );
+        },
       );
       if (!mounted) return;
-      if (proceed) {
-        final ok = await _writeChipWithRetry(
-          chipLabel: isEs ? 'la tarjeta del guardián' : 'the guardian card',
-          write: () {
-            final fit = NfcGuardianPayload.buildWithinCapacity(
-              record: record,
-              capacityBytes: _kGuardianCardCapacityBytes,
-              estimateSize: codec.estimateSize,
-            );
-            return NfcPayloadService(codec: codec).writeGuardianPayload(
-              fit.payload,
-              expectedUid: record.guardianInfo.deviceUid,
-            );
-          },
+      if (ok) {
+        await scope.localDatabase.clearChipsDirty(
+          record.patientId,
+          guardian: true,
         );
-        if (!mounted) return;
-        if (ok) {
-          await scope.localDatabase.clearChipsDirty(
-            record.patientId,
-            guardian: true,
-          );
-        }
       }
     }
 
@@ -239,110 +234,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     await _loadChipStatus(scope.localDatabase);
     if (!mounted) return;
     setState(() => _isUpdatingChips = false);
-  }
-
-  Future<bool> _promptTap(String message) async {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(
-              isEs ? 'Cancelar' : 'Cancel',
-              style: const TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              isEs ? 'Continuar' : 'Continue',
-              style: const TextStyle(
-                color: AppColors.primary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    return result ?? false;
-  }
-
-  /// Attempts a chip write, looping on "Retry" and returning false on "Skip".
-  Future<bool> _writeChipWithRetry({
-    required String chipLabel,
-    required Future<NfcWriteResult> Function() write,
-  }) async {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
-    while (true) {
-      _ChipUpdateOutcome outcome;
-      try {
-        await write();
-        outcome = _ChipUpdateOutcome.success;
-      } on NfcUidMismatchException catch (e) {
-        debugPrint('Chip UID mismatch: $e');
-        outcome = _ChipUpdateOutcome.mismatch;
-      } catch (e) {
-        debugPrint('Chip write failed: $e');
-        outcome = _ChipUpdateOutcome.failed;
-      }
-      if (outcome == _ChipUpdateOutcome.success) return true;
-      if (!mounted) return false;
-
-      final content = outcome == _ChipUpdateOutcome.mismatch
-          ? (isEs
-                ? 'El dispositivo que acercó no coincide con el registrado '
-                      'para $chipLabel.'
-                : 'The device you tapped does not match the one registered '
-                      'for $chipLabel.')
-          : (isEs
-                ? 'No se pudo grabar en $chipLabel.'
-                : 'Could not write to $chipLabel.');
-
-      final retry = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: Row(
-            children: [
-              const Icon(Icons.gpp_bad_rounded, color: AppColors.error),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  isEs ? 'Error de escritura NFC' : 'NFC Write Error',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          content: Text(content),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(
-                isEs ? 'Omitir' : 'Skip',
-                style: const TextStyle(color: AppColors.textSecondary),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text(
-                isEs ? 'Reintentar' : 'Retry',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-      if (retry != true || !mounted) return false;
-    }
   }
 
   Future<void> _saveAndPendingSync() async {
@@ -2042,8 +1933,6 @@ class _BgSection extends StatelessWidget {
   }
 }
 
-/// Outcome of a single chip write from the profile "update NFC" action.
-enum _ChipUpdateOutcome { success, mismatch, failed }
 
 /// Banner shown in the profile when the NFC backup is out of date, offering to
 /// re-write the affected chips.
