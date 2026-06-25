@@ -1,10 +1,16 @@
 // lib/src/features/nfc/presentation/profile/patient_profile_screen.dart
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../../core/di/app_scope.dart';
 import '../../../../core/i18n/app_strings.dart';
+import '../../../../core/nfc/nfc_guardian_payload.dart';
+import '../../../../core/nfc/nfc_payload_codec.dart';
+import '../../../../core/nfc/nfc_payload_service.dart';
+import '../../../../core/nfc/nfc_triage_payload.dart';
+import '../../../../core/storage/local_database.dart';
 import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/screen_bottom_handle.dart';
 import '../../../auth/domain/user_session.dart';
@@ -47,11 +53,16 @@ class PatientProfileScreen extends StatefulWidget {
 
 class _PatientProfileScreenState extends State<PatientProfileScreen>
     with SingleTickerProviderStateMixin {
+  static const int _kGuardianCardCapacityBytes = 4000;
+
   late TabController _tabController;
   late PatientFullRecord _draft;
   late PatientFullRecord _original;
   bool _isSyncing = false;
   bool _hasInternet = true;
+  NfcChipStatus? _chipStatus;
+  bool _chipStatusLoaded = false;
+  bool _isUpdatingChips = false;
   late StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
 
   @override
@@ -63,6 +74,15 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
     _checkInitialConnectivity();
     _subscribeToConnectivity();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_chipStatusLoaded) {
+      _chipStatusLoaded = true;
+      _loadChipStatus(AppScope.of(context).localDatabase);
+    }
   }
 
   @override
@@ -104,10 +124,232 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   UserRole get _currentRole =>
       AppScope.of(context).authRepository.currentUser?.role ?? UserRole.doctor;
 
+  /// Marks the NFC backup stale after an edit: the guardian card always (it
+  /// holds the full record) and the patient wristband only when a
+  /// triage-relevant field changed. No-op when nothing changed.
+  Future<void> _markNfcChipsDirtyIfChanged(LocalDatabase db) async {
+    if (_draft.patientId.isEmpty) return;
+    if (_draft.toJson().toString() == _original.toJson().toString()) return;
+    final triageChanged =
+        jsonEncode(NfcTriagePayload.buildPatientPayload(record: _original)) !=
+            jsonEncode(NfcTriagePayload.buildPatientPayload(record: _draft));
+    await db.markChipsDirty(
+      _draft.patientId,
+      patient: triageChanged,
+      guardian: true,
+    );
+    await _loadChipStatus(db);
+  }
+
+  Future<void> _loadChipStatus(LocalDatabase db) async {
+    final status = await db.getChipStatus(_draft.patientId);
+    if (!mounted) return;
+    setState(() => _chipStatus = status);
+  }
+
+  /// Re-writes the chips that are marked stale, then clears their flags.
+  /// Writes only the affected chips: the wristband only if triage changed, the
+  /// guardian card whenever the record changed.
+  Future<void> _updateNfcChips() async {
+    if (_isUpdatingChips) return;
+    final scope = AppScope.of(context);
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+
+    final nfcKey = await scope.authRepository.getNfcEncryptionKey();
+    if (!mounted) return;
+    if (nfcKey == null || nfcKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isEs
+                ? 'No hay clave NFC disponible para grabar.'
+                : 'No NFC key available to write.',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final status = _chipStatus;
+    if (status == null || !status.anyDirty) return;
+
+    setState(() => _isUpdatingChips = true);
+    final codec = NfcPayloadCodec(hexKey: nfcKey);
+    final record = _draft;
+
+    if (status.patientChipDirty) {
+      final proceed = await _promptTap(
+        isEs
+            ? 'Acerque la pulsera del paciente'
+            : 'Bring the patient wristband',
+      );
+      if (!mounted) return;
+      if (proceed) {
+        final ok = await _writeChipWithRetry(
+          chipLabel:
+              isEs ? 'la pulsera del paciente' : 'the patient wristband',
+          write: () => NfcPayloadService(codec: codec).writeTriagePayload(
+            NfcTriagePayload.buildPatientPayload(record: record),
+            expectedUid: record.deviceUid,
+          ),
+        );
+        if (!mounted) return;
+        if (ok) {
+          await scope.localDatabase.clearChipsDirty(
+            record.patientId,
+            patient: true,
+          );
+        }
+      }
+    }
+
+    if (status.guardianChipDirty &&
+        (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty) {
+      final proceed = await _promptTap(
+        isEs ? 'Acerque la tarjeta del guardián' : 'Bring the guardian card',
+      );
+      if (!mounted) return;
+      if (proceed) {
+        final ok = await _writeChipWithRetry(
+          chipLabel: isEs ? 'la tarjeta del guardián' : 'the guardian card',
+          write: () {
+            final fit = NfcGuardianPayload.buildWithinCapacity(
+              record: record,
+              capacityBytes: _kGuardianCardCapacityBytes,
+              estimateSize: codec.estimateSize,
+            );
+            return NfcPayloadService(codec: codec).writeGuardianPayload(
+              fit.payload,
+              expectedUid: record.guardianInfo.deviceUid,
+            );
+          },
+        );
+        if (!mounted) return;
+        if (ok) {
+          await scope.localDatabase.clearChipsDirty(
+            record.patientId,
+            guardian: true,
+          );
+        }
+      }
+    }
+
+    if (!mounted) return;
+    await _loadChipStatus(scope.localDatabase);
+    if (!mounted) return;
+    setState(() => _isUpdatingChips = false);
+  }
+
+  Future<bool> _promptTap(String message) async {
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              isEs ? 'Cancelar' : 'Cancel',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              isEs ? 'Continuar' : 'Continue',
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  /// Attempts a chip write, looping on "Retry" and returning false on "Skip".
+  Future<bool> _writeChipWithRetry({
+    required String chipLabel,
+    required Future<NfcWriteResult> Function() write,
+  }) async {
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    while (true) {
+      _ChipUpdateOutcome outcome;
+      try {
+        await write();
+        outcome = _ChipUpdateOutcome.success;
+      } on NfcUidMismatchException catch (e) {
+        debugPrint('Chip UID mismatch: $e');
+        outcome = _ChipUpdateOutcome.mismatch;
+      } catch (e) {
+        debugPrint('Chip write failed: $e');
+        outcome = _ChipUpdateOutcome.failed;
+      }
+      if (outcome == _ChipUpdateOutcome.success) return true;
+      if (!mounted) return false;
+
+      final content = outcome == _ChipUpdateOutcome.mismatch
+          ? (isEs
+                ? 'El dispositivo que acercó no coincide con el registrado '
+                      'para $chipLabel.'
+                : 'The device you tapped does not match the one registered '
+                      'for $chipLabel.')
+          : (isEs
+                ? 'No se pudo grabar en $chipLabel.'
+                : 'Could not write to $chipLabel.');
+
+      final retry = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.gpp_bad_rounded, color: AppColors.error),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isEs ? 'Error de escritura NFC' : 'NFC Write Error',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Text(content),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(
+                isEs ? 'Omitir' : 'Skip',
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(
+                isEs ? 'Reintentar' : 'Retry',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (retry != true || !mounted) return false;
+    }
+  }
+
   Future<void> _saveAndPendingSync() async {
     try {
       final scope = AppScope.of(context);
       await scope.localDatabase.savePatient(_draft);
+      await _markNfcChipsDirtyIfChanged(scope.localDatabase);
 
       if (_hasInternet) {
         await _sync(silent: true);
@@ -380,6 +622,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     try {
       final scope = AppScope.of(context);
       await scope.localDatabase.savePatient(_draft);
+      await _markNfcChipsDirtyIfChanged(scope.localDatabase);
       await scope.syncEngine.syncAll();
       if (!mounted) return;
       setState(() {
@@ -646,6 +889,11 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                   onSync: () => _sync(silent: false),
                 ),
                 _ProfileTabsBar(controller: _tabController, draft: _draft),
+                if (!widget.readOnly && (_chipStatus?.anyDirty ?? false))
+                  _NfcStaleBanner(
+                    isUpdating: _isUpdatingChips,
+                    onUpdate: _updateNfcChips,
+                  ),
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
@@ -1789,6 +2037,61 @@ class _BgSection extends StatelessWidget {
             const Icon(Icons.edit_outlined, size: 16, color: AppColors.primary),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Outcome of a single chip write from the profile "update NFC" action.
+enum _ChipUpdateOutcome { success, mismatch, failed }
+
+/// Banner shown in the profile when the NFC backup is out of date, offering to
+/// re-write the affected chips.
+class _NfcStaleBanner extends StatelessWidget {
+  const _NfcStaleBanner({required this.isUpdating, required this.onUpdate});
+
+  final bool isUpdating;
+  final VoidCallback onUpdate;
+
+  @override
+  Widget build(BuildContext context) {
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFFF4E5),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(Icons.sync_problem, size: 20, color: Color(0xFFB26A00)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isEs ? 'Respaldo NFC desactualizado' : 'NFC backup out of date',
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF7A4F00),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (isUpdating)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            TextButton(
+              onPressed: onUpdate,
+              child: Text(
+                isEs ? 'Actualizar' : 'Update',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -204,6 +204,8 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       return;
     }
 
+    await scope.localDatabase.clearChipsDirty(record.patientId, patient: true);
+    if (!mounted) return;
     _afterPatientChip(codec, record);
   }
 
@@ -269,6 +271,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     NfcPayloadCodec codec,
     PatientFullRecord record,
   ) async {
+    final scope = AppScope.of(context);
     final outcome = await _attemptWrite(() {
       final fit = NfcGuardianPayload.buildWithinCapacity(
         record: record,
@@ -298,6 +301,8 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       return;
     }
 
+    await scope.localDatabase.clearChipsDirty(record.patientId, guardian: true);
+    if (!mounted) return;
     _completeFinalize();
   }
 

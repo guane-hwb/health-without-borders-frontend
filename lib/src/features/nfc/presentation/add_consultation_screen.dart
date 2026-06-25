@@ -211,6 +211,12 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     try {
       final scope = AppScope.of(context);
       await scope.localDatabase.savePatient(updatedRecord);
+      // Adding a consultation changes the full record (guardian card) but not
+      // the triage on the wristband.
+      await scope.localDatabase.markChipsDirty(
+        updatedRecord.patientId,
+        guardian: true,
+      );
 
       scope.syncEngine.syncAll().ignore();
 

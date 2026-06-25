@@ -438,6 +438,12 @@ void main() {
       when(
         () => scope.localDatabase.savePatient(any()),
       ).thenAnswer((_) async {});
+      when(
+        () => scope.localDatabase.markChipsDirty(
+          any(),
+          guardian: any(named: 'guardian'),
+        ),
+      ).thenAnswer((_) async {});
       when(() => scope.syncEngine.syncAll()).thenAnswer((_) async {});
 
       await tester.pumpWidget(_buildApp(patient: _fakePatient(), scope: scope));
