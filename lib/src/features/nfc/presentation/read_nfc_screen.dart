@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/nfc/nfc_guardian_payload.dart';
+import '../../../core/nfc/nfc_payload_codec.dart';
+import '../../../core/nfc/nfc_payload_service.dart' as payload;
 import '../../../core/nfc/nfc_service.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
@@ -51,25 +54,60 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       _scanning = true;
       _errorMessage = null;
     });
+
+    // Read the full chip payload up-front so we can fall back to it if the
+    // backend turns out to be unreachable. This needs the NFC key; if anything
+    // goes wrong reading the payload we degrade gracefully to a UID-only scan
+    // (the online path), which matches the previous behaviour.
+    payload.HwbChipReadResult? chip;
     try {
-      final uid = await NfcService.readDeviceUid();
-      _patientUidCtrl.text = uid;
-      await _submitPatient(uid);
-    } on NfcNotAvailableException {
+      final key =
+          await AppScope.of(context).authRepository.getNfcEncryptionKey();
+      if (key != null && key.isNotEmpty) {
+        chip = await payload.NfcPayloadService(
+          codec: NfcPayloadCodec(hexKey: key),
+        ).readHwbChip();
+      }
+    } on payload.NfcNotAvailableException {
       if (mounted) {
         setState(() {
           _scanning = false;
           _errorMessage = AppStrings.of(context).nfcNotAvailableHint;
         });
       }
-    } on NfcSessionException catch (e) {
-      if (mounted) {
-        setState(() {
-          _scanning = false;
-          _errorMessage = e.message;
-        });
+      return;
+    } catch (_) {
+      chip = null; // degrade to a UID-only scan below
+    }
+
+    String uid;
+    if (chip != null && chip.uid.isNotEmpty) {
+      uid = chip.uid;
+    } else {
+      try {
+        uid = await NfcService.readDeviceUid();
+      } on NfcNotAvailableException {
+        if (mounted) {
+          setState(() {
+            _scanning = false;
+            _errorMessage = AppStrings.of(context).nfcNotAvailableHint;
+          });
+        }
+        return;
+      } on NfcSessionException catch (e) {
+        if (mounted) {
+          setState(() {
+            _scanning = false;
+            _errorMessage = e.message;
+          });
+        }
+        return;
       }
     }
+
+    if (!mounted) return;
+    _patientUidCtrl.text = uid;
+    await _submitPatient(uid, chip: chip);
   }
 
   Future<void> _submitPatientFromForm() async {
@@ -78,7 +116,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     await _submitPatient(uid);
   }
 
-  Future<void> _submitPatient(String deviceUid) async {
+  Future<void> _submitPatient(String deviceUid, {payload.HwbChipReadResult? chip}) async {
     setState(() {
       _scanning = true;
       _errorMessage = null;
@@ -108,11 +146,28 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         });
       }
     } catch (e) {
+      // A non-API error means the backend is unreachable (offline). If we read
+      // a chip backup up-front, reconstruct the record from it and show it
+      // read-only; otherwise report that there is nothing to fall back to.
       if (!mounted) return;
-      setState(() {
-        _scanning = false;
-        _errorMessage = e.toString();
-      });
+      if (chip != null && chip.kind != payload.HwbChipKind.none) {
+        final record = NfcGuardianPayload.reconstruct(
+          triage: chip.triage,
+          guardianRecord: chip.guardianRecord,
+          patientDeviceUid: chip.uid,
+        );
+        if (!mounted) return;
+        _patientDeviceUid = deviceUid;
+        await _openProfile(record, readOnly: true, offline: true);
+      } else {
+        final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+        setState(() {
+          _scanning = false;
+          _errorMessage = isEs
+              ? 'Sin conexión y sin respaldo legible en el chip.'
+              : 'Offline and no readable backup on the chip.';
+        });
+      }
     }
   }
 
@@ -178,11 +233,19 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     }
   }
 
-  Future<void> _openProfile(PatientFullRecord patient) async {
+  Future<void> _openProfile(
+    PatientFullRecord patient, {
+    bool readOnly = false,
+    bool offline = false,
+  }) async {
     setState(() => _scanning = false);
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PatientProfileScreen(patient: patient),
+        builder: (_) => PatientProfileScreen(
+          patient: patient,
+          readOnly: readOnly,
+          offline: offline,
+        ),
       ),
     );
     // After returning from profile, reset the screen

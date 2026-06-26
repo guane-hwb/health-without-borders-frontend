@@ -38,6 +38,7 @@ class PatientProfileScreen extends StatefulWidget {
     required this.patient,
     this.lastSyncedAt,
     this.readOnly = false,
+    this.offline = false,
   });
 
   final PatientFullRecord patient;
@@ -47,6 +48,11 @@ class PatientProfileScreen extends StatefulWidget {
   /// affordance is hidden and all mutation entry points are inert. Used by the
   /// sync queue to preview a pending record without risk of altering it.
   final bool readOnly;
+
+  /// When true the record was reconstructed from an NFC chip because the
+  /// backend was unreachable. Shows an offline banner; always combined with
+  /// [readOnly] so the chip-sourced snapshot is never edited.
+  final bool offline;
 
   @override
   State<PatientProfileScreen> createState() => _PatientProfileScreenState();
@@ -780,6 +786,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                   onSync: () => _sync(silent: false),
                 ),
                 _ProfileTabsBar(controller: _tabController, draft: _draft),
+                if (widget.offline) const _OfflineBanner(),
                 if (!widget.readOnly && (_chipStatus?.anyDirty ?? false))
                   _NfcStaleBanner(
                     isUpdating: _isUpdatingChips,
@@ -1933,6 +1940,41 @@ class _BgSection extends StatelessWidget {
   }
 }
 
+
+/// Banner shown when the profile was reconstructed from an NFC chip because
+/// the backend was unreachable. The data may be partial (triage-only) or
+/// slightly behind the server, so the profile is always read-only here.
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFE7F0F7),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off, size: 20, color: Color(0xFF2A5A7A)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isEs
+                  ? 'Vista sin conexión · datos leídos del chip'
+                  : 'Offline view · data read from the chip',
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF1E4258),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Banner shown in the profile when the NFC backup is out of date, offering to
 /// re-write the affected chips.
