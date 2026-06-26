@@ -1,12 +1,4 @@
 // lib/src/core/nfc/nfc_payload_service.dart
-//
-// High-level service that combines NfcService (UID read) with
-// NfcPayloadCodec (encode/decode) and nfc_manager NDEF write/read.
-//
-// This service handles the full NFC lifecycle:
-//   1. Read factory UID (existing)
-//   2. Write encrypted triage payload to patient wristband
-//   3. Read and decrypt triage payload from patient wristband
 
 import 'dart:async';
 import 'dart:typed_data';
@@ -17,24 +9,21 @@ import 'nfc_payload_codec.dart';
 import 'nfc_triage_payload.dart';
 
 /// MIME type used for HWB NFC payloads.
-/// This allows the app to identify its own NDEF records.
 const String kHwbNdefMimeType = 'application/vnd.hwb.triage';
 
 /// High-level NFC operations for reading/writing encrypted payloads.
 class NfcPayloadService {
-  NfcPayloadService({required this.codec});
+  NfcPayloadService({required this.codec, NfcManager? nfcManager})
+    : _nfcManager = nfcManager ?? NfcManager.instance;
 
   final NfcPayloadCodec codec;
+  final NfcManager _nfcManager;
 
   /// Writes an encrypted triage payload to the NFC chip.
-  ///
-  /// Returns the factory UID of the chip that was written to.
-  /// Throws [NfcWriteException] if the chip doesn't have enough space
-  /// or if the write fails.
   Future<NfcWriteResult> writeTriagePayload(
     Map<String, dynamic> triagePayload,
   ) async {
-    if (!await NfcManager.instance.isAvailable()) {
+    if (!await _nfcManager.isAvailable()) {
       throw NfcNotAvailableException();
     }
 
@@ -43,11 +32,8 @@ class NfcPayloadService {
 
     final completer = Completer<NfcWriteResult>();
 
-    NfcManager.instance.startSession(
-      pollingOptions: {
-        NfcPollingOption.iso14443,
-        NfcPollingOption.iso15693,
-      },
+    _nfcManager.startSession(
+      pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
       onDiscovered: (NfcTag tag) async {
         try {
           // Extract UID
@@ -109,27 +95,27 @@ class NfcPayloadService {
           await ndef.write(ndefMessage);
 
           if (!completer.isCompleted) {
-            completer.complete(NfcWriteResult(
-              uid: uid,
-              bytesWritten: encrypted.length,
-              chipCapacity: capacity,
-            ));
+            completer.complete(
+              NfcWriteResult(
+                uid: uid,
+                bytesWritten: encrypted.length,
+                chipCapacity: capacity,
+              ),
+            );
           }
         } catch (e) {
           if (!completer.isCompleted) {
-            completer.completeError(
-              NfcWriteException('Write failed: $e'),
-            );
+            completer.completeError(NfcWriteException('Write failed: $e'));
           }
         } finally {
-          await NfcManager.instance.stopSession();
+          await _nfcManager.stopSession();
         }
       },
       onError: (dynamic error) async {
         if (!completer.isCompleted) {
           completer.completeError(NfcWriteException('NFC error: $error'));
         }
-        await NfcManager.instance.stopSession();
+        await _nfcManager.stopSession();
       },
     );
 
@@ -137,21 +123,15 @@ class NfcPayloadService {
   }
 
   /// Reads and decrypts a triage payload from an NFC chip.
-  ///
-  /// Returns [NfcReadResult] containing the UID and decoded triage data.
-  /// Returns null triage if the chip has no HWB payload (e.g., blank chip).
   Future<NfcReadResult> readTriagePayload() async {
-    if (!await NfcManager.instance.isAvailable()) {
+    if (!await _nfcManager.isAvailable()) {
       throw NfcNotAvailableException();
     }
 
     final completer = Completer<NfcReadResult>();
 
-    NfcManager.instance.startSession(
-      pollingOptions: {
-        NfcPollingOption.iso14443,
-        NfcPollingOption.iso15693,
-      },
+    _nfcManager.startSession(
+      pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
       onDiscovered: (NfcTag tag) async {
         try {
           // Extract UID
@@ -168,7 +148,6 @@ class NfcPayloadService {
           // Try to read NDEF
           final ndef = Ndef.from(tag);
           if (ndef == null) {
-            // Chip doesn't support NDEF — return UID only
             if (!completer.isCompleted) {
               completer.complete(NfcReadResult(uid: uid, triage: null));
             }
@@ -177,7 +156,6 @@ class NfcPayloadService {
 
           final cachedMessage = ndef.cachedMessage;
           if (cachedMessage == null || cachedMessage.records.isEmpty) {
-            // No NDEF message — chip is blank or formatted but empty
             if (!completer.isCompleted) {
               completer.complete(NfcReadResult(uid: uid, triage: null));
             }
@@ -197,7 +175,6 @@ class NfcPayloadService {
           }
 
           if (hwbPayload == null) {
-            // No HWB record found
             if (!completer.isCompleted) {
               completer.complete(NfcReadResult(uid: uid, triage: null));
             }
@@ -218,14 +195,14 @@ class NfcPayloadService {
             completer.completeError(NfcReadException('Read failed: $e'));
           }
         } finally {
-          await NfcManager.instance.stopSession();
+          await _nfcManager.stopSession();
         }
       },
       onError: (dynamic error) async {
         if (!completer.isCompleted) {
           completer.completeError(NfcReadException('NFC error: $error'));
         }
-        await NfcManager.instance.stopSession();
+        await _nfcManager.stopSession();
       },
     );
 
@@ -252,32 +229,23 @@ class NfcPayloadService {
   }
 }
 
-// ── Result types ────────────────────────────────────────────────────────────
-
 class NfcWriteResult {
   const NfcWriteResult({
     required this.uid,
     required this.bytesWritten,
     required this.chipCapacity,
   });
-
   final String uid;
   final int bytesWritten;
   final int chipCapacity;
-
   double get utilizationPercent => (bytesWritten / chipCapacity) * 100;
 }
 
 class NfcReadResult {
   const NfcReadResult({required this.uid, required this.triage});
-
   final String uid;
-
-  /// Null if the chip has no HWB payload (blank or different format).
   final TriageSummary? triage;
 }
-
-// ── Exceptions ──────────────────────────────────────────────────────────────
 
 class NfcNotAvailableException implements Exception {
   @override
