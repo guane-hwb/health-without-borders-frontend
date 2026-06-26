@@ -8,13 +8,13 @@ import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/hwb_logo.dart';
 import '../../../../shared/widgets/screen_bottom_handle.dart';
 import '../../domain/patient_record.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../core/nfc/nfc_payload_service.dart';
+import '../../../../core/nfc/nfc_guardian_payload.dart';
+import '../nfc_guided_write.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
-import 'steps/step1_wristband.dart';
 import 'steps/step2_guardian.dart';
 import 'steps/step3_patient_data.dart';
 import 'steps/step4_background.dart';
@@ -22,6 +22,11 @@ import 'steps/step5_review.dart';
 import 'steps/step6_success.dart';
 import '../../../../core/i18n/app_strings.dart';
 import '../../../home/presentation/home_screen.dart';
+
+/// Conservative usable NDEF capacity (bytes) for the guardian DESFire
+/// EV3 4K. The real limit is enforced by the chip at write time; this
+/// only pre-trims so we rarely hit that hard limit.
+const int _kGuardianCardCapacityBytes = 4000;
 
 class RegisterNfcScreen extends StatefulWidget {
   const RegisterNfcScreen({super.key});
@@ -49,7 +54,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   }
 
   void _next() {
-    if (_step < 5) setState(() => _step++);
+    if (_step < 4) setState(() => _step++);
   }
 
   void _stepBack() {
@@ -67,105 +72,16 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     );
   }
 
-  Future<void> _confirmRegistration() async {
+  /// Locks in the form data: persists locally and moves to the hub.
+  /// No chips are written here — that happens at _finalize().
+  Future<void> _confirm() async {
     final record = _draft.toRecord();
     final scope = AppScope.of(context);
-    final s = AppStrings.of(context);
-
     await scope.localDatabase.savePatient(record);
-
-    bool nfcWriteSuccess = true;
-
-    try {
-      final nfcKey = await scope.authRepository.getNfcEncryptionKey();
-      if (nfcKey != null && nfcKey.isNotEmpty) {
-        final codec = NfcPayloadCodec(hexKey: nfcKey);
-        final triageMap = NfcTriagePayload.buildPatientPayload(record: record);
-        final payloadSize = codec.estimateSize(triageMap);
-        debugPrint('NFC triage payload estimated size: $payloadSize bytes');
-
-        if (!kIsWeb) {
-          final payloadService = NfcPayloadService(codec: codec);
-          final writeResult = await payloadService.writeTriagePayload(
-            triageMap,
-          );
-          debugPrint(
-            'NFC write OK: ${writeResult.bytesWritten}/${writeResult.chipCapacity} bytes '
-            '(${writeResult.utilizationPercent.toStringAsFixed(1)}%)',
-          );
-        }
-      }
-    } catch (e) {
-      nfcWriteSuccess = false;
-      debugPrint('NFC write critically failed: $e');
-    }
-
     if (!mounted) return;
-
-    if (!nfcWriteSuccess) {
-      final isEs = s.welcome == 'Bienvenido';
-      final alertTitle = isEs ? 'Error de escritura NFC' : 'NFC Write Error';
-      final alertContent = isEs
-          ? 'Los datos se guardaron localmente, pero NO se pudieron grabar en la el dispositivo.\n\n'
-                'Por favor, asegúrese de no retirar el dispositivoy vuelva a intentarlo para evitar entregar un dispositivo vacío.'
-          : 'Data saved locally, but COULD NOT be written to the device.\n\n'
-                'Please verify the device contact and try again to avoid releasing an empty device.';
-      final retryBtn = isEs ? 'Reintentar escritura' : 'Retry writing';
-      final forceBtn = isEs ? 'Omitir y continuar' : 'Skip & continue';
-
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext dialogContext) {
-          return AlertDialog(
-            title: Row(
-              children: [
-                const Icon(Icons.gpp_bad_rounded, color: AppColors.error),
-                const SizedBox(width: 10),
-                Text(
-                  alertTitle,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            content: Text(alertContent),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(dialogContext).pop();
-                  _confirmRegistration();
-                },
-                child: Text(
-                  retryBtn,
-                  style: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(dialogContext).pop();
-                  setState(() {
-                    _savedRecord = record;
-                    _step = 5;
-                  });
-                },
-                child: Text(
-                  forceBtn,
-                  style: const TextStyle(color: AppColors.textSecondary),
-                ),
-              ),
-            ],
-          );
-        },
-      );
-      return;
-    }
-
     setState(() {
       _savedRecord = record;
-      _step = 5;
+      _step = 4;
     });
   }
 
@@ -243,10 +159,93 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     if (mounted) setState(() => _savedRecord = record);
   }
 
+  /// Writes the patient chip, queues the record for sync and shows the final
+  /// sealed-confirmation screen. The guardian card write is added in Patch 4.
+  // ── Finalize: write both chips with the guided overlay, then seal ──────────
+
+  /// Writes the patient wristband and (if any) the guardian card, each through
+  /// the guided NFC overlay, then shows the sealed confirmation screen.
   Future<void> _finalize() async {
     final scope = AppScope.of(context);
+    final record = _savedRecord;
+    if (record == null) {
+      _goToHomeDirectly();
+      return;
+    }
+
+    final nfcKey = await scope.authRepository.getNfcEncryptionKey();
+    if (!mounted) return;
+
+    // No NFC key (e.g. not provisioned): nothing to write, just queue sync.
+    if (nfcKey == null || nfcKey.isEmpty) {
+      _completeFinalize();
+      return;
+    }
+
+    final codec = NfcPayloadCodec(hexKey: nfcKey);
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+
+    // Patient wristband (triage).
+    final patientOk = await showNfcGuidedWrite(
+      context,
+      title: isEs ? 'Pulsera del paciente' : 'Patient wristband',
+      instruction: isEs
+          ? 'Acerque la pulsera del paciente al teléfono'
+          : 'Bring the patient wristband to the phone',
+      write: () => NfcPayloadService(codec: codec).writeTriagePayload(
+        NfcTriagePayload.buildPatientPayload(record: record),
+        expectedUid: record.deviceUid,
+      ),
+    );
+    if (!mounted) return;
+    if (patientOk) {
+      await scope.localDatabase.clearChipsDirty(
+        record.patientId,
+        patient: true,
+      );
+      if (!mounted) return;
+    }
+
+    // Guardian card (bounded full record), if the patient has one.
+    final hasGuardian =
+        (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
+    if (hasGuardian) {
+      final guardianOk = await showNfcGuidedWrite(
+        context,
+        title: isEs ? 'Tarjeta del guardián' : 'Guardian card',
+        instruction: isEs
+            ? 'Acerque la tarjeta del guardián al teléfono'
+            : 'Bring the guardian card to the phone',
+        write: () {
+          final fit = NfcGuardianPayload.buildWithinCapacity(
+            record: record,
+            capacityBytes: _kGuardianCardCapacityBytes,
+            estimateSize: codec.estimateSize,
+          );
+          return NfcPayloadService(codec: codec).writeGuardianPayload(
+            fit.payload,
+            expectedUid: record.guardianInfo.deviceUid,
+          );
+        },
+      );
+      if (!mounted) return;
+      if (guardianOk) {
+        await scope.localDatabase.clearChipsDirty(
+          record.patientId,
+          guardian: true,
+        );
+        if (!mounted) return;
+      }
+    }
+
+    _completeFinalize();
+  }
+
+  /// Queues sync and shows the sealed confirmation screen.
+  void _completeFinalize() {
+    final scope = AppScope.of(context);
     unawaited(scope.syncEngine.syncAll());
-    if (mounted) _goToHomeDirectly();
+    if (mounted) setState(() => _step = 5);
   }
 
   String _formatTimeNow(BuildContext context) {
@@ -262,7 +261,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final onSuccess = _step == 5;
+    final onSuccess = _step >= 4;
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FB),
       body: SafeArea(
@@ -273,9 +272,9 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
                 _WizardHeader(
                   title: s.newPatient,
                   onBack: onSuccess ? null : _goToHomeDirectly,
-                  stepText: onSuccess ? null : '${_step + 1}/5',
+                  stepText: onSuccess ? null : '${_step + 1}/4',
                 ),
-                if (!onSuccess) _ProgressBar(step: _step, total: 5),
+                if (!onSuccess) _ProgressBar(step: _step, total: 4),
                 Expanded(child: _buildStep()),
               ],
             ),
@@ -294,7 +293,11 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   Widget _buildStep() {
     switch (_step) {
       case 0:
-        return Step1Wristband(draft: _draft, onContinue: _next);
+        return Step3PatientData(
+          draft: _draft,
+          onBack: _stepBack,
+          onContinue: _next,
+        );
       case 1:
         return Step2Guardian(
           draft: _draft,
@@ -303,24 +306,18 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           onContinue: _next,
         );
       case 2:
-        return Step3PatientData(
-          draft: _draft,
-          onBack: _stepBack,
-          onContinue: _next,
-        );
-      case 3:
         return Step4Background(
           draft: _draft,
           onBack: _stepBack,
           onContinue: _next,
         );
-      case 4:
+      case 3:
         return Step5Review(
           draft: _draft,
           onBack: _stepBack,
-          onConfirm: _confirmRegistration,
+          onConfirm: _confirm,
         );
-      case 5:
+      case 4:
         final role = AppScope.of(context).authRepository.currentUser?.role;
         return Step6Success(
           patient: _savedRecord!,
@@ -330,6 +327,17 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           lastConsultationTime: _lastConsultationTime,
           lastVaccineTime: _lastVaccineTime,
           canAddConsultation: role?.canAddConsultation ?? true,
+        );
+      case 5:
+        return Step6Success(
+          patient: _savedRecord!,
+          sealed: true,
+          onGoHome: _goToHomeDirectly,
+          onAddConsultation: () {},
+          onAddVaccine: () {},
+          onFinish: () {},
+          lastConsultationTime: _lastConsultationTime,
+          lastVaccineTime: _lastVaccineTime,
         );
       default:
         return const SizedBox.shrink();
@@ -574,3 +582,4 @@ class RegisterDraft {
     );
   }
 }
+

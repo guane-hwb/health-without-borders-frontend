@@ -13,7 +13,7 @@ bool isMinor(DateTime? dob, DateTime now) {
 }
 
 /// _next
-int nextStep(int step) => step < 5 ? step + 1 : step;
+int nextStep(int step) => step < 4 ? step + 1 : step;
 
 /// _stepBack
 int prevStep(int step) => step > 0 ? step - 1 : step;
@@ -236,13 +236,12 @@ void main() {
     test('paso 1 → 2', () => expect(nextStep(1), equals(2)));
     test('paso 2 → 3', () => expect(nextStep(2), equals(3)));
     test('paso 3 → 4', () => expect(nextStep(3), equals(4)));
-    test('paso 4 → 5', () => expect(nextStep(4), equals(5)));
-    test('paso 5 NO avanza (límite)', () => expect(nextStep(5), equals(5)));
+    test('paso 4 NO avanza (límite)', () => expect(nextStep(4), equals(4)));
   });
 
   group('_stepBack — retroceso de pasos', () {
-    test('paso 5 → 4', () => expect(prevStep(5), equals(4)));
     test('paso 4 → 3', () => expect(prevStep(4), equals(3)));
+    test('paso 3 → 2', () => expect(prevStep(3), equals(2)));
     test('paso 1 → 0', () => expect(prevStep(1), equals(0)));
     test('paso 0 NO retrocede (va a Home = sigue en 0)', () {
       expect(prevStep(0), equals(0));
@@ -250,27 +249,27 @@ void main() {
   });
 
   group('_ProgressBar — lógica de activación por paso', () {
-    test('paso 0: índice 0 es activo, 1-4 inactivos', () {
+    test('paso 0: índice 0 es activo, 1-3 inactivos', () {
       expect(isStepActive(0, 0), isTrue);
       expect(isStepActive(1, 0), isFalse);
-      expect(isStepActive(4, 0), isFalse);
+      expect(isStepActive(3, 0), isFalse);
     });
 
-    test('paso 2: índices 0-2 activos, 3-4 inactivos', () {
-      expect(isStepActive(0, 2), isTrue);
-      expect(isStepActive(2, 2), isTrue);
-      expect(isStepActive(3, 2), isFalse);
+    test('paso 1: índices 0-1 activos, 2-3 inactivos', () {
+      expect(isStepActive(0, 1), isTrue);
+      expect(isStepActive(1, 1), isTrue);
+      expect(isStepActive(2, 1), isFalse);
     });
 
-    test('paso 4 (último): todos los índices 0-4 activos', () {
-      for (int i = 0; i <= 4; i++) {
-        expect(isStepActive(i, 4), isTrue);
+    test('paso 3 (último): todos los índices 0-3 activos', () {
+      for (int i = 0; i <= 3; i++) {
+        expect(isStepActive(i, 3), isTrue);
       }
     });
 
-    test('total de segmentos es siempre 5', () {
-      const total = 5;
-      expect(total, equals(5));
+    test('total de segmentos es siempre 4', () {
+      const total = 4;
+      expect(total, equals(4));
     });
   });
 
@@ -375,28 +374,28 @@ void main() {
   });
 
   group('stepText — generación del indicador de paso', () {
-    test('paso 0 → stepText es "1/5"', () {
+    test('paso 0 → stepText es "1/4"', () {
       final step = 0;
-      final stepText = '${step + 1}/5';
-      expect(stepText, equals('1/5'));
+      final stepText = '${step + 1}/4';
+      expect(stepText, equals('1/4'));
     });
 
-    test('paso 4 → stepText es "5/5"', () {
+    test('paso 3 → stepText es "4/4"', () {
+      final step = 3;
+      final stepText = '${step + 1}/4';
+      expect(stepText, equals('4/4'));
+    });
+
+    test('paso 4 (success) → stepText es null (no se muestra)', () {
       final step = 4;
-      final stepText = '${step + 1}/5';
-      expect(stepText, equals('5/5'));
-    });
-
-    test('paso 5 (success) → stepText es null (no se muestra)', () {
-      final step = 5;
-      final onSuccess = step == 5;
-      final stepText = onSuccess ? null : '${step + 1}/5';
+      final onSuccess = step == 4;
+      final stepText = onSuccess ? null : '${step + 1}/4';
       expect(stepText, isNull);
     });
 
-    test('paso 1 → stepText es "2/5"', () {
-      final stepText = '${1 + 1}/5';
-      expect(stepText, equals('2/5'));
+    test('paso 1 → stepText es "2/4"', () {
+      final stepText = '${1 + 1}/4';
+      expect(stepText, equals('2/4'));
     });
   });
 }

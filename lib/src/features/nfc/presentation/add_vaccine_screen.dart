@@ -170,6 +170,12 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
     try {
       final scope = AppScope.of(context);
       await scope.localDatabase.savePatient(updatedRecord);
+      // Adding a vaccine changes the full record (guardian card) but not the
+      // triage on the wristband.
+      await scope.localDatabase.markChipsDirty(
+        updatedRecord.patientId,
+        guardian: true,
+      );
 
       if (mounted) {
         setState(() {

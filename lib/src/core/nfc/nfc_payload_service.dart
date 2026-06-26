@@ -20,26 +20,66 @@ import 'nfc_triage_payload.dart';
 /// This allows the app to identify its own NDEF records.
 const String kHwbNdefMimeType = 'application/vnd.hwb.triage';
 
+/// MIME type for the guardian card's bounded full-record payload.
+/// A distinct type lets the reader tell a patient wristband apart from a
+/// guardian card and pick the right reconstructor.
+const String kHwbGuardianMimeType = 'application/vnd.hwb.guardian';
+
 /// High-level NFC operations for reading/writing encrypted payloads.
 class NfcPayloadService {
   NfcPayloadService({required this.codec});
 
   final NfcPayloadCodec codec;
 
-  /// Writes an encrypted triage payload to the NFC chip.
+  /// Writes the patient triage payload to the wristband (NTAG).
   ///
-  /// Returns the factory UID of the chip that was written to.
-  /// Throws [NfcWriteException] if the chip doesn't have enough space
-  /// or if the write fails.
+  /// Pass [expectedUid] to refuse writing unless the tapped chip matches the
+  /// UID recorded for this patient.
   Future<NfcWriteResult> writeTriagePayload(
-    Map<String, dynamic> triagePayload,
-  ) async {
+    Map<String, dynamic> triagePayload, {
+    String? expectedUid,
+  }) {
+    return _writePayload(
+      triagePayload,
+      mimeType: kHwbNdefMimeType,
+      expectedUid: expectedUid,
+    );
+  }
+
+  /// Writes the guardian's bounded full-record payload to the guardian card
+  /// (DESFire EV3 4K formatted as an NDEF / Type 4 tag).
+  ///
+  /// The map should be produced by NfcGuardianPayload.buildWithinCapacity so
+  /// it already fits the card. Pass [expectedUid] to refuse writing unless the
+  /// tapped card matches the guardian UID recorded for this patient.
+  Future<NfcWriteResult> writeGuardianPayload(
+    Map<String, dynamic> guardianPayload, {
+    String? expectedUid,
+  }) {
+    return _writePayload(
+      guardianPayload,
+      mimeType: kHwbGuardianMimeType,
+      expectedUid: expectedUid,
+    );
+  }
+
+  /// Shared NDEF write: encodes [payload], finds the chip, optionally verifies
+  /// its UID against [expectedUid], checks capacity, and writes one MIME record
+  /// of type [mimeType].
+  ///
+  /// Throws [NfcUidMismatchException] if [expectedUid] is given and the tapped
+  /// chip's UID differs, or [NfcWriteException] on any other failure.
+  Future<NfcWriteResult> _writePayload(
+    Map<String, dynamic> payload, {
+    required String mimeType,
+    String? expectedUid,
+  }) async {
     if (!await NfcManager.instance.isAvailable()) {
       throw NfcNotAvailableException();
     }
 
     // Encode the payload first to check size
-    final encrypted = await codec.encode(triagePayload);
+    final encrypted = await codec.encode(payload);
 
     final completer = Completer<NfcWriteResult>();
 
@@ -61,14 +101,25 @@ class NfcPayloadService {
             return;
           }
 
+          // Safeguard: never seal one person's data onto a different chip.
+          if (expectedUid != null &&
+              _normalizeUid(uid) != _normalizeUid(expectedUid)) {
+            if (!completer.isCompleted) {
+              completer.completeError(
+                NfcUidMismatchException(expected: expectedUid, actual: uid),
+              );
+            }
+            return;
+          }
+
           // Get NDEF interface
           final ndef = Ndef.from(tag);
           if (ndef == null) {
             if (!completer.isCompleted) {
               completer.completeError(
                 NfcWriteException(
-                  'Chip does not support NDEF. '
-                  'Make sure you are using NTAG 213/215/216.',
+                  'Chip is not NDEF-formatted. Use an NTAG (patient) or an '
+                  'NDEF-formatted DESFire (guardian).',
                 ),
               );
             }
@@ -92,17 +143,16 @@ class NfcPayloadService {
               completer.completeError(
                 NfcWriteException(
                   'Payload too large: ${encrypted.length} bytes, '
-                  'chip capacity: $capacity bytes. '
-                  'Reduce allergies/conditions or use a larger chip.',
+                  'chip capacity: $capacity bytes.',
                 ),
               );
             }
             return;
           }
 
-          // Build NDEF message with our MIME type
+          // Build NDEF message with the requested MIME type
           final ndefMessage = NdefMessage([
-            NdefRecord.createMime(kHwbNdefMimeType, encrypted),
+            NdefRecord.createMime(mimeType, encrypted),
           ]);
 
           // Write!
@@ -232,6 +282,110 @@ class NfcPayloadService {
     return completer.future;
   }
 
+  /// Reads any HWB chip — patient wristband or guardian card — in one tap.
+  ///
+  /// Returns the UID plus whichever payload was found, decoded and ready to
+  /// reconstruct a record. If both records are present the guardian one wins
+  /// (it is a superset). Returns [HwbChipKind.none] for a blank or non-HWB
+  /// chip (the UID is still populated when readable). Used for offline reads.
+  Future<HwbChipReadResult> readHwbChip() async {
+    if (!await NfcManager.instance.isAvailable()) {
+      throw NfcNotAvailableException();
+    }
+
+    final completer = Completer<HwbChipReadResult>();
+
+    NfcManager.instance.startSession(
+      pollingOptions: {
+        NfcPollingOption.iso14443,
+        NfcPollingOption.iso15693,
+      },
+      onDiscovered: (NfcTag tag) async {
+        try {
+          final uid = _extractUid(tag) ?? '';
+
+          final ndef = Ndef.from(tag);
+          final cached = ndef?.cachedMessage;
+          if (ndef == null || cached == null || cached.records.isEmpty) {
+            if (!completer.isCompleted) {
+              completer.complete(
+                HwbChipReadResult(uid: uid, kind: HwbChipKind.none),
+              );
+            }
+            return;
+          }
+
+          // Collect HWB records by MIME type (guardian preferred over triage).
+          Uint8List? guardianPayload;
+          Uint8List? triagePayload;
+          for (final record in cached.records) {
+            if (record.typeNameFormat == NdefTypeNameFormat.media) {
+              final type = String.fromCharCodes(record.type);
+              if (type == kHwbGuardianMimeType) {
+                guardianPayload = record.payload;
+              } else if (type == kHwbNdefMimeType) {
+                triagePayload = record.payload;
+              }
+            }
+          }
+
+          if (guardianPayload != null) {
+            final decoded = await codec.decode(guardianPayload);
+            if (!completer.isCompleted) {
+              completer.complete(
+                HwbChipReadResult(
+                  uid: uid,
+                  kind: decoded != null
+                      ? HwbChipKind.guardian
+                      : HwbChipKind.none,
+                  guardianRecord: decoded,
+                ),
+              );
+            }
+            return;
+          }
+
+          if (triagePayload != null) {
+            final decoded = await codec.decode(triagePayload);
+            final triage =
+                decoded != null ? NfcTriagePayload.fromPayload(decoded) : null;
+            if (!completer.isCompleted) {
+              completer.complete(
+                HwbChipReadResult(
+                  uid: uid,
+                  kind:
+                      triage != null ? HwbChipKind.triage : HwbChipKind.none,
+                  triage: triage,
+                ),
+              );
+            }
+            return;
+          }
+
+          if (!completer.isCompleted) {
+            completer.complete(
+              HwbChipReadResult(uid: uid, kind: HwbChipKind.none),
+            );
+          }
+        } catch (e) {
+          if (!completer.isCompleted) {
+            completer.completeError(NfcReadException('Read failed: $e'));
+          }
+        } finally {
+          await NfcManager.instance.stopSession();
+        }
+      },
+      onError: (dynamic error) async {
+        if (!completer.isCompleted) {
+          completer.completeError(NfcReadException('NFC error: $error'));
+        }
+        await NfcManager.instance.stopSession();
+      },
+    );
+
+    return completer.future;
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   static String? _extractUid(NfcTag tag) {
@@ -250,6 +404,12 @@ class NfcPayloadService {
     }
     return null;
   }
+
+  /// Normalizes a UID for comparison: keeps only hex digits, uppercased.
+  /// Tolerates formatting differences (colons, case) between the value read
+  /// at scan time and the value stored on the record.
+  static String _normalizeUid(String uid) =>
+      uid.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toUpperCase();
 }
 
 // ── Result types ────────────────────────────────────────────────────────────
@@ -277,6 +437,29 @@ class NfcReadResult {
   final TriageSummary? triage;
 }
 
+/// Which HWB payload a chip carries.
+enum HwbChipKind { none, triage, guardian }
+
+/// Result of reading an HWB chip with [NfcPayloadService.readHwbChip].
+///
+/// For [HwbChipKind.guardian], [guardianRecord] is the full-record JSON map
+/// (feed it to NfcGuardianPayload.reconstructFromGuardian). For
+/// [HwbChipKind.triage], [triage] is the decoded triage summary (feed it to
+/// NfcGuardianPayload.reconstructFromTriage).
+class HwbChipReadResult {
+  const HwbChipReadResult({
+    required this.uid,
+    required this.kind,
+    this.triage,
+    this.guardianRecord,
+  });
+
+  final String uid;
+  final HwbChipKind kind;
+  final TriageSummary? triage;
+  final Map<String, dynamic>? guardianRecord;
+}
+
 // ── Exceptions ──────────────────────────────────────────────────────────────
 
 class NfcNotAvailableException implements Exception {
@@ -289,6 +472,17 @@ class NfcWriteException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+/// Thrown when the tapped chip's UID does not match the expected UID, to avoid
+/// sealing one person's data onto a different device.
+class NfcUidMismatchException implements Exception {
+  NfcUidMismatchException({required this.expected, required this.actual});
+  final String expected;
+  final String actual;
+  @override
+  String toString() =>
+      'Scanned chip UID ($actual) does not match expected UID ($expected).';
 }
 
 class NfcReadException implements Exception {

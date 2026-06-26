@@ -1,8 +1,10 @@
 // lib/src/features/nfc/presentation/register/steps/step3_patient_data.dart
 import 'package:flutter/material.dart';
+import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../register_nfc_screen.dart';
 import '../../../../../core/i18n/app_strings.dart';
+import '../widgets/nfc_uid_field.dart';
 
 const _kEnabledBorder = OutlineInputBorder(
   borderRadius: BorderRadius.all(Radius.circular(10)),
@@ -77,6 +79,10 @@ class _Step3State extends State<Step3PatientData> {
         ? widget.draft.height!.toInt().toString()
         : '',
   );
+  late final _patientUid = TextEditingController(
+    text: widget.draft.deviceUid ?? '',
+  );
+  bool _scanningUid = false;
   String? _err;
 
   bool get _hasEthnicity {
@@ -97,7 +103,37 @@ class _Step3State extends State<Step3PatientData> {
     _ethnicComm.dispose();
     _weight.dispose();
     _height.dispose();
+    _patientUid.dispose();
     super.dispose();
+  }
+
+  Future<void> _scanPatientNfc() async {
+    final s = AppStrings.of(context);
+    setState(() => _scanningUid = true);
+    try {
+      final uid = await NfcService.readDeviceUid();
+      if (mounted) {
+        setState(() {
+          _patientUid.text = uid;
+          widget.draft.deviceUid = uid;
+          _scanningUid = false;
+        });
+      }
+    } on NfcNotAvailableException {
+      if (mounted) {
+        setState(() {
+          _scanningUid = false;
+          _err = s.nfcNotAvailable;
+        });
+      }
+    } on NfcSessionException catch (e) {
+      if (mounted) {
+        setState(() {
+          _scanningUid = false;
+          _err = e.message;
+        });
+      }
+    }
   }
 
   void _save() {
@@ -105,6 +141,9 @@ class _Step3State extends State<Step3PatientData> {
     final isEs = s.welcome == 'Bienvenido';
     final missing = <String>[];
 
+    if ((widget.draft.deviceUid ?? '').trim().isEmpty) {
+      missing.add(s.patientNfcDevice);
+    }
     if (_docNum.text.trim().isEmpty) missing.add(s.documentNumberLabel);
     if (_firstName.text.trim().isEmpty) missing.add(s.firstNameLabel);
     if (_firstLast.text.trim().isEmpty) missing.add(s.lastNameLabel);
@@ -131,6 +170,7 @@ class _Step3State extends State<Step3PatientData> {
     }
 
     final d = widget.draft;
+    d.deviceUid = _patientUid.text.trim();
     d.documentNumber = _docNum.text.trim();
     d.firstName = _firstName.text.trim();
     d.secondName = _secondName.text.trim().isEmpty
@@ -313,6 +353,28 @@ class _Step3State extends State<Step3PatientData> {
               ],
 
               const SizedBox(height: 18),
+
+              // ── Patient NFC device ─────────────────────────────────────────
+              _SectionCard(
+                children: [
+                  _SectionHeader(
+                    icon: Icons.nfc,
+                    title: s.patientNfcDevice,
+                  ),
+                  NfcUidField(
+                    controller: _patientUid,
+                    scanning: _scanningUid,
+                    onScan: _scanPatientNfc,
+                    onChanged: () => setState(
+                      () => widget.draft.deviceUid = _patientUid.text.trim(),
+                    ),
+                    hintText: s.manualPatientUidHint,
+                    prefixIcon: Icons.watch_outlined,
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 14),
 
               // ── Identification ─────────────────────────────────────────────
               _SectionCard(

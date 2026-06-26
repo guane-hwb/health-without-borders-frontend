@@ -1,10 +1,17 @@
 // lib/src/features/nfc/presentation/profile/patient_profile_screen.dart
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../../core/di/app_scope.dart';
 import '../../../../core/i18n/app_strings.dart';
+import '../../../../core/nfc/nfc_guardian_payload.dart';
+import '../../../../core/nfc/nfc_payload_codec.dart';
+import '../../../../core/nfc/nfc_payload_service.dart';
+import '../../../../core/nfc/nfc_triage_payload.dart';
+import '../../../../core/storage/local_database.dart';
+import '../nfc_guided_write.dart';
 import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/screen_bottom_handle.dart';
 import '../../../auth/domain/user_session.dart';
@@ -31,6 +38,7 @@ class PatientProfileScreen extends StatefulWidget {
     required this.patient,
     this.lastSyncedAt,
     this.readOnly = false,
+    this.offline = false,
   });
 
   final PatientFullRecord patient;
@@ -41,17 +49,27 @@ class PatientProfileScreen extends StatefulWidget {
   /// sync queue to preview a pending record without risk of altering it.
   final bool readOnly;
 
+  /// When true the record was reconstructed from an NFC chip because the
+  /// backend was unreachable. Shows an offline banner; always combined with
+  /// [readOnly] so the chip-sourced snapshot is never edited.
+  final bool offline;
+
   @override
   State<PatientProfileScreen> createState() => _PatientProfileScreenState();
 }
 
 class _PatientProfileScreenState extends State<PatientProfileScreen>
     with SingleTickerProviderStateMixin {
+  static const int _kGuardianCardCapacityBytes = 4000;
+
   late TabController _tabController;
   late PatientFullRecord _draft;
   late PatientFullRecord _original;
   bool _isSyncing = false;
   bool _hasInternet = true;
+  NfcChipStatus? _chipStatus;
+  bool _chipStatusLoaded = false;
+  bool _isUpdatingChips = false;
   late StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
 
   @override
@@ -63,6 +81,15 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
     _checkInitialConnectivity();
     _subscribeToConnectivity();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_chipStatusLoaded) {
+      _chipStatusLoaded = true;
+      _loadChipStatus(AppScope.of(context).localDatabase);
+    }
   }
 
   @override
@@ -104,10 +131,130 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   UserRole get _currentRole =>
       AppScope.of(context).authRepository.currentUser?.role ?? UserRole.doctor;
 
+  /// Marks the NFC backup stale after an edit: the guardian card always (it
+  /// holds the full record) and the patient wristband only when a
+  /// triage-relevant field changed. No-op when nothing changed.
+  Future<void> _markNfcChipsDirtyIfChanged(LocalDatabase db) async {
+    if (_draft.patientId.isEmpty) return;
+    if (_draft.toJson().toString() == _original.toJson().toString()) return;
+    final triageChanged =
+        jsonEncode(NfcTriagePayload.buildPatientPayload(record: _original)) !=
+            jsonEncode(NfcTriagePayload.buildPatientPayload(record: _draft));
+    await db.markChipsDirty(
+      _draft.patientId,
+      patient: triageChanged,
+      guardian: true,
+    );
+    await _loadChipStatus(db);
+  }
+
+  Future<void> _loadChipStatus(LocalDatabase db) async {
+    NfcChipStatus? status;
+    try {
+      status = await db.getChipStatus(_draft.patientId);
+    } catch (_) {
+      // The local database may be unavailable (e.g. in widget tests, or on a
+      // platform without sqflite). The stale-backup banner is a non-critical
+      // enhancement, so degrade silently instead of breaking the profile.
+      status = null;
+    }
+    if (!mounted) return;
+    setState(() => _chipStatus = status);
+  }
+
+  /// Re-writes the chips that are marked stale, then clears their flags.
+  /// Writes only the affected chips, walking the user through each tap with a
+  /// guided overlay.
+  Future<void> _updateNfcChips() async {
+    if (_isUpdatingChips) return;
+    final scope = AppScope.of(context);
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+
+    final nfcKey = await scope.authRepository.getNfcEncryptionKey();
+    if (!mounted) return;
+    if (nfcKey == null || nfcKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isEs
+                ? 'No hay clave NFC disponible para grabar.'
+                : 'No NFC key available to write.',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final status = _chipStatus;
+    if (status == null || !status.anyDirty) return;
+
+    setState(() => _isUpdatingChips = true);
+    final codec = NfcPayloadCodec(hexKey: nfcKey);
+    final record = _draft;
+
+    if (status.patientChipDirty) {
+      final ok = await showNfcGuidedWrite(
+        context,
+        title: isEs ? 'Pulsera del paciente' : 'Patient wristband',
+        instruction: isEs
+            ? 'Acerque la pulsera del paciente al teléfono'
+            : 'Bring the patient wristband to the phone',
+        write: () => NfcPayloadService(codec: codec).writeTriagePayload(
+          NfcTriagePayload.buildPatientPayload(record: record),
+          expectedUid: record.deviceUid,
+        ),
+      );
+      if (!mounted) return;
+      if (ok) {
+        await scope.localDatabase.clearChipsDirty(
+          record.patientId,
+          patient: true,
+        );
+      }
+    }
+    if (!mounted) return;
+
+    if (status.guardianChipDirty &&
+        (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty) {
+      final ok = await showNfcGuidedWrite(
+        context,
+        title: isEs ? 'Tarjeta del guardián' : 'Guardian card',
+        instruction: isEs
+            ? 'Acerque la tarjeta del guardián al teléfono'
+            : 'Bring the guardian card to the phone',
+        write: () {
+          final fit = NfcGuardianPayload.buildWithinCapacity(
+            record: record,
+            capacityBytes: _kGuardianCardCapacityBytes,
+            estimateSize: codec.estimateSize,
+          );
+          return NfcPayloadService(codec: codec).writeGuardianPayload(
+            fit.payload,
+            expectedUid: record.guardianInfo.deviceUid,
+          );
+        },
+      );
+      if (!mounted) return;
+      if (ok) {
+        await scope.localDatabase.clearChipsDirty(
+          record.patientId,
+          guardian: true,
+        );
+      }
+    }
+
+    if (!mounted) return;
+    await _loadChipStatus(scope.localDatabase);
+    if (!mounted) return;
+    setState(() => _isUpdatingChips = false);
+  }
+
   Future<void> _saveAndPendingSync() async {
     try {
       final scope = AppScope.of(context);
       await scope.localDatabase.savePatient(_draft);
+      await _markNfcChipsDirtyIfChanged(scope.localDatabase);
 
       if (_hasInternet) {
         await _sync(silent: true);
@@ -380,6 +527,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     try {
       final scope = AppScope.of(context);
       await scope.localDatabase.savePatient(_draft);
+      await _markNfcChipsDirtyIfChanged(scope.localDatabase);
       await scope.syncEngine.syncAll();
       if (!mounted) return;
       setState(() {
@@ -646,6 +794,12 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                   onSync: () => _sync(silent: false),
                 ),
                 _ProfileTabsBar(controller: _tabController, draft: _draft),
+                if (widget.offline) const _OfflineBanner(),
+                if (!widget.readOnly && (_chipStatus?.anyDirty ?? false))
+                  _NfcStaleBanner(
+                    isUpdating: _isUpdatingChips,
+                    onUpdate: _updateNfcChips,
+                  ),
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
@@ -1789,6 +1943,94 @@ class _BgSection extends StatelessWidget {
             const Icon(Icons.edit_outlined, size: 16, color: AppColors.primary),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+/// Banner shown when the profile was reconstructed from an NFC chip because
+/// the backend was unreachable. The data may be partial (triage-only) or
+/// slightly behind the server, so the profile is always read-only here.
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFE7F0F7),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off, size: 20, color: Color(0xFF2A5A7A)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isEs
+                  ? 'Vista sin conexión · datos leídos del chip'
+                  : 'Offline view · data read from the chip',
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF1E4258),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Banner shown in the profile when the NFC backup is out of date, offering to
+/// re-write the affected chips.
+class _NfcStaleBanner extends StatelessWidget {
+  const _NfcStaleBanner({required this.isUpdating, required this.onUpdate});
+
+  final bool isUpdating;
+  final VoidCallback onUpdate;
+
+  @override
+  Widget build(BuildContext context) {
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFFF4E5),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(Icons.sync_problem, size: 20, color: Color(0xFFB26A00)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isEs ? 'Respaldo NFC desactualizado' : 'NFC backup out of date',
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF7A4F00),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (isUpdating)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            TextButton(
+              onPressed: onUpdate,
+              child: Text(
+                isEs ? 'Actualizar' : 'Update',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

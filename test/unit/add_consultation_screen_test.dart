@@ -105,6 +105,7 @@ AppScope _scopeWithSave() {
   final db = _MockLocalDatabase();
   final sync = _MockSyncEngine();
   when(() => db.savePatient(any())).thenAnswer((_) async {});
+  when(() => db.markChipsDirty(any(), guardian: any(named: 'guardian'))).thenAnswer((_) async {});
   when(() => sync.syncAll()).thenAnswer((_) async {});
   return _defaultScope(db: db, sync: sync);
 }
@@ -828,6 +829,7 @@ void main() {
         final db = _MockLocalDatabase();
         final sync = _MockSyncEngine();
         when(() => db.savePatient(any())).thenAnswer((_) async {});
+        when(() => db.markChipsDirty(any(), guardian: any(named: 'guardian'))).thenAnswer((_) async {});
         when(() => sync.syncAll()).thenAnswer((_) async {});
 
         await tester.pumpWidget(

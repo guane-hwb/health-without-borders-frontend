@@ -15,6 +15,8 @@ class Step6Success extends StatelessWidget {
     this.lastConsultationTime,
     this.lastVaccineTime,
     this.canAddConsultation = true,
+    this.sealed = false,
+    this.onGoHome,
   });
 
   final PatientFullRecord patient;
@@ -24,6 +26,13 @@ class Step6Success extends StatelessWidget {
   final String? lastConsultationTime;
   final String? lastVaccineTime;
   final bool canAddConsultation;
+
+  /// When true the chips have already been written: show the sealed
+  /// confirmation and a single "go home" action instead of the hub actions.
+  final bool sealed;
+
+  /// Called by the "go home" button on the final (sealed) screen.
+  final VoidCallback? onGoHome;
 
   @override
   Widget build(BuildContext context) {
@@ -74,18 +83,31 @@ class Step6Success extends StatelessWidget {
 
         const SizedBox(height: 22),
 
-        // ── NFC wristband sealed ──
-        _ActivityRow(
-          icon: Icons.nfc,
-          iconColor: AppColors.primary,
-          bgColor: AppColors.primary.withValues(alpha: 0.1),
-          title: isEs
-              ? 'Datos de emergencia sellados en el dispositivo NFC'
-              : 'Emergency data sealed on the NFC device',
-          subtitle: isEs
-              ? 'Cifrado AES-256-GCM · Solo legible por la app'
-              : 'AES-256-GCM Encryption · Read-only by the app',
-        ),
+        // ── NFC status: sealed (final) vs pending (hub) ──
+        if (sealed)
+          _ActivityRow(
+            icon: Icons.nfc,
+            iconColor: AppColors.primary,
+            bgColor: AppColors.primary.withValues(alpha: 0.1),
+            title: isEs
+                ? 'Datos de emergencia sellados en el dispositivo NFC'
+                : 'Emergency data sealed on the NFC device',
+            subtitle: isEs
+                ? 'Cifrado AES-256-GCM · Solo legible por la app'
+                : 'AES-256-GCM Encryption · Read-only by the app',
+          )
+        else
+          _ActivityRow(
+            icon: Icons.nfc,
+            iconColor: AppColors.textSecondary,
+            bgColor: AppColors.textSecondary.withValues(alpha: 0.1),
+            title: isEs
+                ? 'Pendiente de grabar en el dispositivo NFC'
+                : 'Pending write to the NFC device',
+            subtitle: isEs
+                ? 'Toca "Finalizar" y acerca los dispositivos para sellar'
+                : 'Tap "Finish" and bring the devices to seal the data',
+          ),
         const SizedBox(height: 10),
 
         // ── Datos guardados localmente ──
@@ -128,7 +150,36 @@ class Step6Success extends StatelessWidget {
         const SizedBox(height: 28),
 
         // ── Action buttons ──
-        if (canAddConsultation) ...[
+        if (sealed)
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: onGoHome,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              icon: const Icon(
+                Icons.home_outlined,
+                color: AppColors.white,
+                size: 20,
+              ),
+              label: Text(
+                isEs ? 'Ir al inicio' : 'Go to home',
+                style: const TextStyle(
+                  color: AppColors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          )
+        else ...[
+          if (canAddConsultation) ...[
           SizedBox(
             width: double.infinity,
             height: 50,
@@ -235,6 +286,7 @@ class Step6Success extends StatelessWidget {
             ),
           ),
         ),
+        ],
       ],
     );
   }
