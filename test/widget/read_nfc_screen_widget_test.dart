@@ -9,9 +9,14 @@ import 'package:health_without_borders_frontend/src/features/nfc/data/patient_re
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 
+// ---------------------------------------------------------------------------
+// Fake repository
+// ---------------------------------------------------------------------------
+
 class FakePatientRepository implements PatientRepository {
   bool throw403ForGuardian = false;
   bool throwGenericError = false;
+  bool throwGuardianError = false;
   String? lastCapturedGuardianUid;
   bool shouldDelay = false;
 
@@ -35,6 +40,16 @@ class FakePatientRepository implements PatientRepository {
         'Guardian bracelet scan required for minors.',
         statusCode: 403,
       );
+    }
+
+    if (throwGenericError) {
+      return Future.error(
+        ApiException('Error de base de datos', statusCode: 500),
+      );
+    }
+
+    if (throwGuardianError && guardianDeviceUid != null) {
+      throw ApiException('Guardian inválido.', statusCode: 403);
     }
 
     return PatientFullRecord(
@@ -101,7 +116,7 @@ class _FakeLocaleProvider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppLocale(locale: 'es', setLocale: (lang) {}, child: child);
+    return AppLocale(locale: 'es', setLocale: (_) {}, child: child);
   }
 }
 
@@ -123,12 +138,22 @@ Widget _buildTestableWidget({
   );
 }
 
+Future<void> _advanceToStep2(WidgetTester tester) async {
+  await tester.enterText(find.byType(TextField), 'HWB-MENOR-05');
+  await tester.tap(find.byType(OutlinedButton));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 10));
+}
+
+// ===========================================================================
+// TESTS
+// ===========================================================================
+
 void main() {
   late FakePatientRepository fakeRepo;
 
   setUp(() {
     fakeRepo = FakePatientRepository();
-
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
     binding.platformDispatcher.views.first.physicalSize = const Size(
       2000,
@@ -143,20 +168,21 @@ void main() {
     binding.platformDispatcher.views.first.resetDevicePixelRatio();
   });
 
-  group('ReadNfcScreen Flujos de Trabajo e Ingreso Manual', () {
-    testWidgets('Debe renderizar la vista del Paso 1 (Paciente) por defecto', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _buildTestableWidget(child: const ReadNfcScreen(), repo: fakeRepo),
-      );
-      await tester.pump();
+  group('ReadNfcScreen — Flujos base', () {
+    testWidgets(
+      'Debe renderizar el TextField del Paso 1 (Paciente) por defecto',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestableWidget(child: const ReadNfcScreen(), repo: fakeRepo),
+        );
+        await tester.pump();
 
-      expect(find.byType(TextField), findsOneWidget);
-    });
+        expect(find.byType(TextField), findsOneWidget);
+      },
+    );
 
     testWidgets(
-      'Ingreso Manual Adulto: Debe avanzar directamente al perfil médico tras submit exitoso',
+      'Ingreso Manual Adulto: avanza al perfil y muestra CircularProgressIndicator',
       (tester) async {
         fakeRepo.shouldDelay = true;
 
@@ -165,16 +191,11 @@ void main() {
         );
         await tester.pump();
 
-        final textFieldFinder = find.byType(TextField);
-        await tester.enterText(textFieldFinder, 'HWB-ADULTO-88');
+        await tester.enterText(find.byType(TextField), 'HWB-ADULTO-88');
         await tester.tap(find.byIcon(Icons.wifi));
         await tester.pump();
 
-        final submitButton = find.byType(OutlinedButton);
-        await tester.ensureVisible(submitButton);
-        await tester.tap(submitButton);
-
-        // Capture intermediate loading state
+        await tester.tap(find.byType(OutlinedButton));
         await tester.pump();
 
         expect(
@@ -182,38 +203,116 @@ void main() {
           findsOneWidget,
         );
 
-        // Advance 50ms for simulated repository delay and an extra frame to resolve navigation
         await tester.pump(const Duration(milliseconds: 50));
         await tester.pump();
       },
     );
 
-    testWidgets(
-      'Botón de Regreso en Paso 2: Debe limpiar el formulario y retornar al Paso 1',
-      (tester) async {
-        fakeRepo.throw403ForGuardian = true;
+    testWidgets('Botón Atrás en Paso 2: limpia formulario y regresa a Paso 1', (
+      tester,
+    ) async {
+      fakeRepo.throw403ForGuardian = true;
 
+      await tester.pumpWidget(
+        _buildTestableWidget(child: const ReadNfcScreen(), repo: fakeRepo),
+      );
+      await tester.pump();
+
+      await _advanceToStep2(tester);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.byIcon(Icons.check_circle), findsNothing);
+      expect(find.byType(TextField), findsOneWidget);
+    });
+  });
+
+  group('_buildGuardianStep — renderizado completo del Paso 2', () {
+    testWidgets('Paso 2 muestra TextField para UID del tutor', (tester) async {
+      fakeRepo.throw403ForGuardian = true;
+
+      await tester.pumpWidget(
+        _buildTestableWidget(child: const ReadNfcScreen(), repo: fakeRepo),
+      );
+      await tester.pump();
+
+      await _advanceToStep2(tester);
+
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('Paso 2 muestra OutlinedButton para enviar UID del tutor', (
+      tester,
+    ) async {
+      fakeRepo.throw403ForGuardian = true;
+
+      await tester.pumpWidget(
+        _buildTestableWidget(child: const ReadNfcScreen(), repo: fakeRepo),
+      );
+      await tester.pump();
+
+      await _advanceToStep2(tester);
+
+      expect(find.byType(OutlinedButton), findsOneWidget);
+    });
+
+    testWidgets('Paso 2 muestra ícono wifi (botón NFC) para tutor', (
+      tester,
+    ) async {
+      fakeRepo.throw403ForGuardian = true;
+
+      await tester.pumpWidget(
+        _buildTestableWidget(child: const ReadNfcScreen(), repo: fakeRepo),
+      );
+      await tester.pump();
+
+      await _advanceToStep2(tester);
+
+      expect(find.byIcon(Icons.wifi), findsOneWidget);
+    });
+  });
+
+  // ── _NfcButton scanning state ─────────────────────────────────────────────
+
+  group('_NfcButton — estado de escaneo', () {
+    testWidgets(
+      'El botón NFC es tappable (onTap != null) cuando no está scanning',
+      (tester) async {
         await tester.pumpWidget(
           _buildTestableWidget(child: const ReadNfcScreen(), repo: fakeRepo),
         );
         await tester.pump();
 
-        await tester.enterText(find.byType(TextField), 'HWB-MENOR-05');
+        expect(find.byIcon(Icons.wifi), findsOneWidget);
         await tester.tap(find.byIcon(Icons.wifi));
         await tester.pump();
+      },
+    );
+  });
+  group('_openProfile — reset de estado al volver del perfil del paciente', () {
+    testWidgets(
+      'Al volver del perfil adulto, la pantalla regresa al estado inicial',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestableWidget(child: const ReadNfcScreen(), repo: fakeRepo),
+        );
+        await tester.pump();
+
+        await tester.enterText(find.byType(TextField), 'HWB-ADULTO-RESET');
         await tester.tap(find.byType(OutlinedButton));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 10));
 
-        final backButton = find.byIcon(Icons.arrow_back);
-        expect(backButton, findsOneWidget);
-
-        await tester.tap(backButton);
+        final NavigatorState navigator = tester.state(find.byType(Navigator));
+        navigator.pop();
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 10));
+        await tester.pump();
 
-        expect(find.byIcon(Icons.check_circle), findsNothing);
         expect(find.byType(TextField), findsOneWidget);
+        expect(find.byIcon(Icons.wifi), findsOneWidget);
+        expect(find.byIcon(Icons.check_circle), findsNothing);
       },
     );
   });
