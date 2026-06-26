@@ -149,7 +149,15 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   Future<void> _loadChipStatus(LocalDatabase db) async {
-    final status = await db.getChipStatus(_draft.patientId);
+    NfcChipStatus? status;
+    try {
+      status = await db.getChipStatus(_draft.patientId);
+    } catch (_) {
+      // The local database may be unavailable (e.g. in widget tests, or on a
+      // platform without sqflite). The stale-backup banner is a non-critical
+      // enhancement, so degrade silently instead of breaking the profile.
+      status = null;
+    }
     if (!mounted) return;
     setState(() => _chipStatus = status);
   }
