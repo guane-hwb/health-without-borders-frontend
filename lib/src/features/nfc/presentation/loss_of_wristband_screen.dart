@@ -123,9 +123,7 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(
-        () => _error = 'No se pudo completar la búsqueda. Inténtalo de nuevo.',
-      );
+      setState(() => _error = s.searchError);
     } finally {
       if (mounted) setState(() => _searching = false);
     }
@@ -346,7 +344,6 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
 }
 
 // ── Doc type dropdown ──────────────────────────────────────────────────────
-
 class _DocTypeDropdown extends StatelessWidget {
   const _DocTypeDropdown({
     required this.value,
@@ -366,26 +363,29 @@ class _DocTypeDropdown extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              s.documentTypeLabel,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            children: [
+              Text(
+                s.documentTypeLabel,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
               ),
-            ),
-            const SizedBox(width: 4),
-            const Text(
-              '*',
-              style: TextStyle(
-                color: AppColors.error,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
+              const SizedBox(width: 4),
+              const Text(
+                '*',
+                style: TextStyle(
+                  color: AppColors.error,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 6),
         Container(
@@ -393,10 +393,7 @@ class _DocTypeDropdown extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.white,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: const Color(0xFFB0B8C4),
-              width: 1.5,
-            ),
+            border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
@@ -448,7 +445,6 @@ class _DocTypeDropdown extends StatelessWidget {
 }
 
 // ── Labeled field ──────────────────────────────────────────────────────────
-
 class _LabeledField extends StatelessWidget {
   const _LabeledField({
     required this.label,
@@ -475,12 +471,14 @@ class _LabeledField extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
               ),
             ),
             if (requiredField) ...[
@@ -527,10 +525,7 @@ class _LabeledField extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: AppColors.primary,
-                width: 2,
-              ),
+              borderSide: const BorderSide(color: AppColors.primary, width: 2),
             ),
           ),
         ),
@@ -603,9 +598,7 @@ class _DateField extends StatelessWidget {
               color: AppColors.white,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: hasValue
-                    ? AppColors.primary
-                    : const Color(0xFFB0B8C4),
+                color: hasValue ? AppColors.primary : const Color(0xFFB0B8C4),
                 width: 1.5,
               ),
             ),
@@ -616,9 +609,7 @@ class _DateField extends StatelessWidget {
                     hasValue ? value : 'YYYY-MM-DD',
                     style: TextStyle(
                       fontSize: 15,
-                      fontWeight: hasValue
-                          ? FontWeight.w500
-                          : FontWeight.w400,
+                      fontWeight: hasValue ? FontWeight.w500 : FontWeight.w400,
                       color: hasValue
                           ? AppColors.textPrimary
                           : AppColors.textSecondary,

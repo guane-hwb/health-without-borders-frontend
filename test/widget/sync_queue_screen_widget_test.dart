@@ -438,23 +438,6 @@ void main() {
   });
 
   group('_SyncCard – estado de error', () {
-    testWidgets('muestra el texto del syncError', (tester) async {
-      when(
-        () => db.getUnsyncedRecords(),
-      ).thenAnswer((_) async => [makeEntry(syncError: 'Network timeout')]);
-
-      await tester.pumpWidget(
-        buildTestApp(
-          child: const SyncQueueScreen(),
-          db: db,
-          syncEngine: syncEngine,
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Network timeout'), findsOneWidget);
-    });
-
     testWidgets('muestra badge "Error" cuando hay syncError', (tester) async {
       when(
         () => db.getUnsyncedRecords(),

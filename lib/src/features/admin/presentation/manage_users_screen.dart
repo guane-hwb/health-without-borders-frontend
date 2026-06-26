@@ -1064,17 +1064,17 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     });
     try {
       await widget.onSubmit(email, name, _role, pass);
-    } on ApiException catch (e) {
+    } on ApiException catch (_) {
       if (mounted) {
         setState(() {
-          _error = e.message;
+          _error = s.userFormValidationError;
           _saving = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = s.userFormValidationError;
           _saving = false;
         });
       }
