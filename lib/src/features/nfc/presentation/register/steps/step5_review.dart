@@ -301,7 +301,7 @@ class _Step5State extends State<Step5Review> {
                     label: Text(
                       _saving
                           ? s.saving
-                          : (isEs ? 'Registrar paciente' : 'Register patient'),
+                          : (isEs ? 'Confirmar' : 'Confirm'),
                       style: const TextStyle(
                         color: AppColors.white,
                         fontSize: 15,
