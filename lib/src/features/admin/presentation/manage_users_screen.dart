@@ -857,6 +857,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   final _passCtrl = TextEditingController();
   late String _role;
   bool _saving = false;
+  bool _obscurePass = true;
   String? _error;
 
   List<MapEntry<String, String>> _getRoleOptions(AppStrings s) {
@@ -930,7 +931,9 @@ class _UserFormSheetState extends State<_UserFormSheet> {
               s.userFormPasswordLabel,
               _passCtrl,
               icon: Icons.lock,
-              obscure: true,
+              obscure: _obscurePass,
+              onToggleObscure: () =>
+                  setState(() => _obscurePass = !_obscurePass),
             ),
             const SizedBox(height: 12),
             Text(s.userFormRoleLabel, style: const TextStyle(fontSize: 13)),
@@ -995,6 +998,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     IconData? icon,
     TextInputType keyboard = TextInputType.text,
     bool obscure = false,
+    VoidCallback? onToggleObscure,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1014,6 +1018,16 @@ class _UserFormSheetState extends State<_UserFormSheet> {
             ),
             prefixIcon: icon != null
                 ? Icon(icon, size: 18, color: AppColors.secondary)
+                : null,
+            suffixIcon: onToggleObscure != null
+                ? IconButton(
+                    icon: Icon(
+                      obscure ? Icons.visibility_off : Icons.visibility,
+                      size: 20,
+                      color: AppColors.textSecondary,
+                    ),
+                    onPressed: onToggleObscure,
+                  )
                 : null,
           ),
         ),
