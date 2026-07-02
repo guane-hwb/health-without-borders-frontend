@@ -284,12 +284,12 @@ void main() {
       expect(find.byIcon(Icons.people_alt_outlined), findsOneWidget);
     });
 
-    testWidgets('muestra card de Historial de brigada', (tester) async {
+    testWidgets('NO muestra card de Historial de brigada', (tester) async {
       final user = _session(UserRole.orgAdmin);
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.history_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.history_rounded), findsNothing);
     });
 
     testWidgets('muestra card de Buscar paciente', (tester) async {

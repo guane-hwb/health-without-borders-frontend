@@ -16,7 +16,6 @@ import '../../admin/presentation/manage_organizations_screen.dart';
 import '../../admin/presentation/manage_users_screen.dart';
 import '../../auth/domain/user_session.dart';
 import '../../auth/presentation/login_screen.dart';
-import '../../nfc/presentation/brigade_history_screen.dart';
 import '../../nfc/presentation/loss_of_wristband_screen.dart';
 import '../../nfc/presentation/read_nfc_screen.dart';
 import '../../nfc/presentation/register/register_nfc_screen.dart';
@@ -171,17 +170,6 @@ class HomeScreen extends StatelessWidget {
           subtitle: s.actionSearchPatientSubAdmin,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const LossOfWristbandScreen()),
-          ),
-        ),
-        const SizedBox(height: 14),
-        _ActionCard(
-          icon: Icons.history_rounded,
-          iconBg: const Color(0xFFFFF3E0),
-          iconColor: const Color(0xFFE65100),
-          title: s.brigadeHistory,
-          subtitle: s.brigadeHistorySub,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const BrigadeHistoryScreen()),
           ),
         ),
         const SizedBox(height: 28),
