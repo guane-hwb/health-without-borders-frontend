@@ -85,6 +85,54 @@ class ApiClient {
     return _decodeListOrThrow(response);
   }
 
+  Future<Map<String, dynamic>> patchJson({
+    required String path,
+    required Map<String, dynamic> body,
+    Map<String, String>? headers,
+  }) async {
+    final Uri uri = Uri.parse('$baseUrl$path');
+    final http.Response response = await _client
+        .patch(
+          uri,
+          headers: <String, String>{
+            'Content-Type': 'application/json',
+            ...?headers,
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    return _decodeMapOrThrow(response);
+  }
+
+  /// Sends a DELETE request. Succeeds on any 2xx (including a 204 with an empty
+  /// body); throws [ApiException] carrying the backend `detail` on any error.
+  Future<void> delete({
+    required String path,
+    Map<String, String>? headers,
+  }) async {
+    final Uri uri = Uri.parse('$baseUrl$path');
+    final http.Response response = await _client
+        .delete(uri, headers: <String, String>{...?headers})
+        .timeout(const Duration(seconds: 20));
+
+    final bool isSuccess =
+        response.statusCode >= 200 && response.statusCode < 300;
+    if (isSuccess) return;
+
+    Object? decoded;
+    try {
+      decoded = response.body.isEmpty ? null : jsonDecode(response.body);
+    } catch (_) {
+      decoded = null;
+    }
+    final String message = (decoded is Map<String, dynamic>)
+        ? (decoded['detail']?.toString() ??
+              _httpErrorFallback(response.statusCode))
+        : _httpErrorFallback(response.statusCode);
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
   Map<String, dynamic> _decodeMapOrThrow(http.Response response) {
     final bool isSuccess =
         response.statusCode >= 200 && response.statusCode < 300;

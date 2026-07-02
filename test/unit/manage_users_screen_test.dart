@@ -69,6 +69,9 @@ String? submitGuard({
   if (trimmedEmail.isEmpty || trimmedName.isEmpty || pass.isEmpty) {
     return 'Completa todos los campos requeridos.';
   }
+  if (pass.length < 8) {
+    return 'La contraseña debe tener al menos 8 caracteres.';
+  }
   return null;
 }
 
@@ -198,8 +201,15 @@ void main() {
   group('_submit guard — validación', () {
     test('todos los campos llenos → retorna null (sin error)', () {
       expect(
-        submitGuard(email: 'a@b.com', name: 'Juan', pass: '123456'),
+        submitGuard(email: 'a@b.com', name: 'Juan', pass: 'password123'),
         isNull,
+      );
+    });
+
+    test('password corta (<8) → retorna error de longitud', () {
+      expect(
+        submitGuard(email: 'a@b.com', name: 'Juan', pass: '123456'),
+        'La contraseña debe tener al menos 8 caracteres.',
       );
     });
 

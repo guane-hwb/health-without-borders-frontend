@@ -52,6 +52,24 @@ class FakeUserRepository extends Fake implements UserRepository {
       organizationId: organizationId ?? 'org-1',
     );
   }
+
+  @override
+  Future<void> deleteUser(String id) async {
+    if (errorToThrow != null) throw errorToThrow!;
+  }
+
+  @override
+  Future<UserSession> setUserActive(String id, bool isActive) async {
+    if (errorToThrow != null) throw errorToThrow!;
+    return UserSession(
+      id: id,
+      fullName: 'User',
+      email: 'user@org.com',
+      role: UserRole.doctor,
+      isActive: isActive,
+      organizationId: 'org-1',
+    );
+  }
 }
 
 class FakeAuthRepository extends Fake implements AuthRepository {

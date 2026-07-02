@@ -82,14 +82,16 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
       ),
       builder: (_) => _OrgDetailSheet(
         org: org,
-        onDelete: () async {
-          // implement delete service
-          await Future<void>.delayed(const Duration(milliseconds: 800));
-
-          if (mounted) {
-            Navigator.of(context).pop();
-            _load();
-          }
+        onUpdated: (updated) {
+          if (!mounted) return;
+          setState(() {
+            final i = _orgs.indexWhere((o) => o.id == updated.id);
+            if (i != -1) _orgs[i] = updated;
+          });
+        },
+        onDeleted: () {
+          if (!mounted) return;
+          setState(() => _orgs.removeWhere((o) => o.id == org.id));
         },
       ),
     );
@@ -289,22 +291,33 @@ class _OrgCard extends StatelessWidget {
 // ── Org detail sheet ──────────────────────────────────────────────────────
 
 class _OrgDetailSheet extends StatefulWidget {
-  const _OrgDetailSheet({required this.org, required this.onDelete});
+  const _OrgDetailSheet({
+    required this.org,
+    required this.onUpdated,
+    required this.onDeleted,
+  });
 
   final OrgSummary org;
-  final Future<void> Function() onDelete;
+  final void Function(OrgSummary org) onUpdated;
+  final VoidCallback onDeleted;
 
   @override
   State<_OrgDetailSheet> createState() => _OrgDetailSheetState();
 }
 
 class _OrgDetailSheetState extends State<_OrgDetailSheet> {
+  late OrgSummary _org = widget.org;
   bool _isDeleting = false;
+  bool _isToggling = false;
   String? _error;
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final isEs = s.save == 'Guardar';
+    // Clinical records are irreversible: an org is deletable only when it has no
+    // patients. Its users (admin + staff) are cascaded by the backend on delete.
+    final canDelete = _org.patientCount == 0;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
@@ -323,16 +336,28 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
           ),
           const SizedBox(height: 20),
           Text(
-            widget.org.name,
+            _org.name,
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 20),
-          _row(Icons.fingerprint, s.orgDetailId, widget.org.id),
+          _row(Icons.fingerprint, s.orgDetailId, _org.id),
           const SizedBox(height: 8),
           _row(
             Icons.check_circle_outline,
             s.userDetailStatus,
-            widget.org.isActive ? s.userStatusActive : s.userStatusSuspended,
+            _org.isActive ? s.userStatusActive : s.userStatusSuspended,
+          ),
+          const SizedBox(height: 8),
+          _row(
+            Icons.people_alt_outlined,
+            isEs ? 'Usuarios' : 'Users',
+            '${_org.userCount}',
+          ),
+          const SizedBox(height: 8),
+          _row(
+            Icons.medical_information_outlined,
+            isEs ? 'Pacientes' : 'Patients',
+            '${_org.patientCount}',
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -344,14 +369,60 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
           ],
           const SizedBox(height: 24),
 
+          // Soft state — deactivate / reactivate
           SizedBox(
             width: double.infinity,
             height: 44,
             child: OutlinedButton.icon(
-              onPressed: _isDeleting ? null : _confirmAndDelete,
+              onPressed: (_isDeleting || _isToggling) ? null : _toggleActive,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: _isToggling
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primary,
+                      ),
+                    )
+                  : Icon(
+                      _org.isActive
+                          ? Icons.pause_circle_outline
+                          : Icons.play_circle_outline,
+                      size: 20,
+                    ),
+              label: Text(
+                _org.isActive
+                    ? (isEs ? 'Desactivar' : 'Deactivate')
+                    : (isEs ? 'Reactivar' : 'Reactivate'),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Hard delete — only when the organization is empty
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: OutlinedButton.icon(
+              onPressed: (_isDeleting || _isToggling || !canDelete)
+                  ? null
+                  : _confirmAndDelete,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.error,
-                side: const BorderSide(color: AppColors.error),
+                side: BorderSide(
+                  color: canDelete ? AppColors.error : AppColors.divider,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -375,6 +446,19 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
               ),
             ),
           ),
+          if (!canDelete) ...[
+            const SizedBox(height: 8),
+            Text(
+              isEs
+                  ? 'No puedes eliminar organizaciones con pacientes. Desactívala para retirarla.'
+                  : 'You cannot delete organizations that have patients. Deactivate it to retire it.',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
           const SizedBox(height: 16),
         ],
       ),
@@ -395,12 +479,41 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
     );
   }
 
+  Future<void> _toggleActive() async {
+    setState(() {
+      _isToggling = true;
+      _error = null;
+    });
+    try {
+      final updated = await AppScope.of(
+        context,
+      ).userRepository.setOrganizationActive(_org.id, !_org.isActive);
+      if (!mounted) return;
+      setState(() {
+        _org = updated;
+        _isToggling = false;
+      });
+      widget.onUpdated(updated);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e is ApiException ? e.message : e.toString();
+          _isToggling = false;
+        });
+      }
+    }
+  }
+
   Future<void> _confirmAndDelete() async {
     final s = AppStrings.of(context);
-    final contentMessage = s.orgDeleteDialogContent.replaceAll(
-      '{name}',
-      widget.org.name,
-    );
+    final isEs = s.save == 'Guardar';
+    final cascadeNote = _org.userCount > 0
+        ? (isEs
+              ? '\n\nSe eliminarán también sus usuarios.'
+              : '\n\nIts users will also be deleted.')
+        : '';
+    final contentMessage =
+        s.orgDeleteDialogContent.replaceAll('{name}', _org.name) + cascadeNote;
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -429,11 +542,13 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
     });
 
     try {
-      await widget.onDelete();
+      await AppScope.of(context).userRepository.deleteOrganization(_org.id);
+      widget.onDeleted();
+      if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = e is ApiException ? e.message : e.toString();
           _isDeleting = false;
         });
       }
@@ -515,15 +630,13 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
     try {
       final userRepo = AppScope.of(context).userRepository;
 
-      final org = await userRepo.createOrganization(orgName);
-      _createdOrg = org;
-
-      await userRepo.createOrgAdminUser(
-        fullName: adminName,
-        email: email,
-        password: pass,
-        organizationId: org.id,
+      final org = await userRepo.createOrganizationWithAdmin(
+        name: orgName,
+        adminFullName: adminName,
+        adminEmail: email,
+        adminPassword: pass,
       );
+      _createdOrg = org;
 
       if (mounted) {
         widget.onCreated(org);

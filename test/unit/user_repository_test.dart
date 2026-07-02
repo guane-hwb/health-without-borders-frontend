@@ -491,4 +491,183 @@ void main() {
       );
     });
   });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // createOrganizationWithAdmin (atomic org + admin)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('createOrganizationWithAdmin', () {
+    test('envía POST /organizations/ con name y bloque admin', () async {
+      Map<String, dynamic>? capturedBody;
+      String? capturedPath;
+
+      final client = MockClient((request) async {
+        capturedPath = request.url.path;
+        capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return _ok(kOrgJson);
+      });
+
+      final (:repo, fakeAuth: _) = _buildSut(client);
+      await repo.createOrganizationWithAdmin(
+        name: 'Org C',
+        adminFullName: 'Admin C',
+        adminEmail: 'admin_c@org.com',
+        adminPassword: 'provisional123',
+      );
+
+      expect(capturedPath, '/api/v1/organizations/');
+      expect(capturedBody, containsPair('name', 'Org C'));
+      final admin = capturedBody!['admin'] as Map<String, dynamic>;
+      expect(admin, containsPair('full_name', 'Admin C'));
+      expect(admin, containsPair('email', 'admin_c@org.com'));
+      expect(admin, containsPair('password', 'provisional123'));
+    });
+
+    test('mapea user_count y patient_count del response', () async {
+      final client = MockClient(
+        (_) async => _ok({
+          'id': 'org-9',
+          'name': 'Org C',
+          'is_active': true,
+          'user_count': 1,
+          'patient_count': 0,
+        }),
+      );
+      final (:repo, fakeAuth: _) = _buildSut(client);
+
+      final result = await repo.createOrganizationWithAdmin(
+        name: 'Org C',
+        adminFullName: 'A',
+        adminEmail: 'a@b.com',
+        adminPassword: 'password1',
+      );
+
+      expect(result.userCount, 1);
+      expect(result.patientCount, 0);
+      expect(result.isEmpty, isFalse);
+    });
+
+    test('propaga ApiException en 400', () async {
+      final client = MockClient((_) async => _err(400, 'exists'));
+      final (:repo, fakeAuth: _) = _buildSut(client);
+
+      await expectLater(
+        repo.createOrganizationWithAdmin(
+          name: 'Dup',
+          adminFullName: 'A',
+          adminEmail: 'a@b.com',
+          adminPassword: 'password1',
+        ),
+        throwsA(isA<ApiException>()),
+      );
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // setOrganizationActive / deleteOrganization
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('setOrganizationActive', () {
+    test('envía PATCH /organizations/{id} con is_active', () async {
+      Map<String, dynamic>? capturedBody;
+      String? capturedPath;
+      String? capturedMethod;
+
+      final client = MockClient((request) async {
+        capturedMethod = request.method;
+        capturedPath = request.url.path;
+        capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return _ok({'id': 'org-1', 'name': 'X', 'is_active': false});
+      });
+
+      final (:repo, fakeAuth: _) = _buildSut(client);
+      final result = await repo.setOrganizationActive('org-1', false);
+
+      expect(capturedMethod, 'PATCH');
+      expect(capturedPath, '/api/v1/organizations/org-1');
+      expect(capturedBody, containsPair('is_active', false));
+      expect(result.isActive, isFalse);
+    });
+  });
+
+  group('deleteOrganization', () {
+    test('envía DELETE /organizations/{id} y completa en 204', () async {
+      String? capturedMethod;
+      String? capturedPath;
+
+      final client = MockClient((request) async {
+        capturedMethod = request.method;
+        capturedPath = request.url.path;
+        return http.Response('', 204);
+      });
+
+      final (:repo, fakeAuth: _) = _buildSut(client);
+      await repo.deleteOrganization('org-1');
+
+      expect(capturedMethod, 'DELETE');
+      expect(capturedPath, '/api/v1/organizations/org-1');
+    });
+
+    test('propaga ApiException en 409 (organización no vacía)', () async {
+      final client = MockClient((_) async => _err(409, 'not empty'));
+      final (:repo, fakeAuth: _) = _buildSut(client);
+
+      await expectLater(
+        repo.deleteOrganization('org-1'),
+        throwsA(isA<ApiException>()),
+      );
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // setUserActive / deleteUser
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('setUserActive', () {
+    test('envía PATCH /users/{id} con is_active', () async {
+      Map<String, dynamic>? capturedBody;
+      String? capturedPath;
+
+      final client = MockClient((request) async {
+        capturedPath = request.url.path;
+        capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return _ok(kUserJson);
+      });
+
+      final (:repo, fakeAuth: _) = _buildSut(client);
+      await repo.setUserActive('user-1', false);
+
+      expect(capturedPath, '/api/v1/users/user-1');
+      expect(capturedBody, containsPair('is_active', false));
+    });
+  });
+
+  group('deleteUser', () {
+    test('envía DELETE /users/{id} y completa en 204', () async {
+      String? capturedMethod;
+      String? capturedPath;
+
+      final client = MockClient((request) async {
+        capturedMethod = request.method;
+        capturedPath = request.url.path;
+        return http.Response('', 204);
+      });
+
+      final (:repo, fakeAuth: _) = _buildSut(client);
+      await repo.deleteUser('user-1');
+
+      expect(capturedMethod, 'DELETE');
+      expect(capturedPath, '/api/v1/users/user-1');
+    });
+
+    test('propaga ApiException en 409 (último admin)', () async {
+      final client = MockClient((_) async => _err(409, 'last admin'));
+      final (:repo, fakeAuth: _) = _buildSut(client);
+
+      await expectLater(
+        repo.deleteUser('user-1'),
+        throwsA(isA<ApiException>()),
+      );
+    });
+  });
 }

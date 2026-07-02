@@ -205,13 +205,17 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       builder: (_) => _UserDetailSheet(
         user: user,
         onDelete: () async {
-          // Delet service
-          await Future<void>.delayed(const Duration(milliseconds: 800));
-
+          await AppScope.of(context).userRepository.deleteUser(user.id);
           if (mounted) {
             Navigator.of(context).pop();
             _load();
           }
+        },
+        onToggleActive: (isActive) async {
+          await AppScope.of(
+            context,
+          ).userRepository.setUserActive(user.id, isActive);
+          if (mounted) _load();
         },
       ),
     );
@@ -665,22 +669,30 @@ class _RoleBadge extends StatelessWidget {
 // ── User detail sheet (read-only) ────────────────────────────────────────
 
 class _UserDetailSheet extends StatefulWidget {
-  const _UserDetailSheet({required this.user, required this.onDelete});
+  const _UserDetailSheet({
+    required this.user,
+    required this.onDelete,
+    required this.onToggleActive,
+  });
 
   final UserSession user;
   final Future<void> Function() onDelete;
+  final Future<void> Function(bool isActive) onToggleActive;
 
   @override
   State<_UserDetailSheet> createState() => _UserDetailSheetState();
 }
 
 class _UserDetailSheetState extends State<_UserDetailSheet> {
+  late bool _isActive = widget.user.isActive;
   bool _isDeleting = false;
+  bool _isToggling = false;
   String? _error;
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final isEs = s.save == 'Guardar';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
@@ -722,7 +734,7 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
           _row(
             Icons.check_circle_outline,
             s.userDetailStatus,
-            widget.user.isActive ? s.userStatusActive : s.userStatusSuspended,
+            _isActive ? s.userStatusActive : s.userStatusSuspended,
           ),
 
           if (_error != null) ...[
@@ -736,11 +748,54 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
 
           const SizedBox(height: 24),
 
+          // Soft state — deactivate / reactivate
           SizedBox(
             width: double.infinity,
             height: 44,
             child: OutlinedButton.icon(
-              onPressed: _isDeleting ? null : _confirmAndDelete,
+              onPressed: (_isDeleting || _isToggling) ? null : _toggleActive,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: _isToggling
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primary,
+                      ),
+                    )
+                  : Icon(
+                      _isActive
+                          ? Icons.pause_circle_outline
+                          : Icons.play_circle_outline,
+                      size: 20,
+                    ),
+              label: Text(
+                _isActive
+                    ? (isEs ? 'Desactivar' : 'Deactivate')
+                    : (isEs ? 'Reactivar' : 'Reactivate'),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: OutlinedButton.icon(
+              onPressed: (_isDeleting || _isToggling)
+                  ? null
+                  : _confirmAndDelete,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.error,
                 side: const BorderSide(color: AppColors.error),
@@ -788,6 +843,28 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
     );
   }
 
+  Future<void> _toggleActive() async {
+    setState(() {
+      _isToggling = true;
+      _error = null;
+    });
+    try {
+      await widget.onToggleActive(!_isActive);
+      if (!mounted) return;
+      setState(() {
+        _isActive = !_isActive;
+        _isToggling = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e is ApiException ? e.message : e.toString();
+          _isToggling = false;
+        });
+      }
+    }
+  }
+
   Future<void> _confirmAndDelete() async {
     final s = AppStrings.of(context);
     final confirm = await showDialog<bool>(
@@ -821,7 +898,7 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = e is ApiException ? e.message : e.toString();
           _isDeleting = false;
         });
       }
@@ -1070,6 +1147,10 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     final pass = _passCtrl.text;
     if (email.isEmpty || name.isEmpty || pass.isEmpty) {
       setState(() => _error = s.userFormRequiredFieldsError);
+      return;
+    }
+    if (pass.length < 8) {
+      setState(() => _error = s.passwordTooShort.replaceAll('6', '8'));
       return;
     }
     setState(() {

@@ -93,6 +93,47 @@ class _FakeRepo implements UserRepository {
     required String password,
     String? organizationId,
   }) => throw UnimplementedError();
+
+  @override
+  Future<OrgSummary> createOrganizationWithAdmin({
+    required String name,
+    required String adminFullName,
+    required String adminEmail,
+    required String adminPassword,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    if (onCreateOrg != null) return onCreateOrg!(name);
+    return OrgSummary(id: 'new-org-123', name: name, isActive: true);
+  }
+
+  @override
+  Future<OrgSummary> setOrganizationActive(String id, bool isActive) async {
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    return OrgSummary(id: id, name: 'Org', isActive: isActive);
+  }
+
+  @override
+  Future<void> deleteOrganization(String id) async {
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+
+  @override
+  Future<UserSession> setUserActive(String id, bool isActive) async {
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    return UserSession(
+      id: id,
+      fullName: 'User',
+      email: 'user@org.com',
+      role: UserRole.doctor,
+      isActive: isActive,
+      organizationId: 'org-1',
+    );
+  }
+
+  @override
+  Future<void> deleteUser(String id) async {
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
 }
 
 // ── Helper ─────────────────────────────────────────────────────────

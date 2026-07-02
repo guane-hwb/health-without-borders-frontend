@@ -11,16 +11,25 @@ class OrgSummary {
     required this.id,
     required this.name,
     required this.isActive,
+    this.userCount = 0,
+    this.patientCount = 0,
   });
 
   final String id;
   final String name;
   final bool isActive;
+  final int userCount;
+  final int patientCount;
+
+  /// An organization is safe to hard-delete only when it has no members.
+  bool get isEmpty => userCount == 0 && patientCount == 0;
 
   factory OrgSummary.fromJson(Map<String, dynamic> j) => OrgSummary(
     id: j['id'] as String,
     name: j['name'] as String,
     isActive: (j['is_active'] as bool?) ?? true,
+    userCount: (j['user_count'] as num?)?.toInt() ?? 0,
+    patientCount: (j['patient_count'] as num?)?.toInt() ?? 0,
   );
 }
 
@@ -131,6 +140,75 @@ class UserRepository {
       role: 'org_admin',
       password: password,
       organizationId: organizationId,
+    );
+  }
+
+  // ── POST /api/v1/organizations/ (atomic org + admin) ──────────────────────
+  // superadmin only — crea la organización y su org_admin en UNA transacción.
+
+  Future<OrgSummary> createOrganizationWithAdmin({
+    required String name,
+    required String adminFullName,
+    required String adminEmail,
+    required String adminPassword,
+  }) async {
+    final data = await _apiClient.postJson(
+      path: '/api/v1/organizations/',
+      body: {
+        'name': name,
+        'is_active': true,
+        'admin': {
+          'full_name': adminFullName,
+          'email': adminEmail,
+          'password': adminPassword,
+        },
+      },
+      headers: await _authHeaders(),
+    );
+    return OrgSummary.fromJson(data);
+  }
+
+  // ── PATCH /api/v1/organizations/{id} ──────────────────────────────────────
+  // superadmin only — activa/desactiva (soft) una organización.
+
+  Future<OrgSummary> setOrganizationActive(String id, bool isActive) async {
+    final data = await _apiClient.patchJson(
+      path: '/api/v1/organizations/$id',
+      body: {'is_active': isActive},
+      headers: await _authHeaders(),
+    );
+    return OrgSummary.fromJson(data);
+  }
+
+  // ── DELETE /api/v1/organizations/{id} ─────────────────────────────────────
+  // superadmin only — hard-delete; el backend responde 409 si NO está vacía.
+
+  Future<void> deleteOrganization(String id) async {
+    await _apiClient.delete(
+      path: '/api/v1/organizations/$id',
+      headers: await _authHeaders(),
+    );
+  }
+
+  // ── PATCH /api/v1/users/{id} ──────────────────────────────────────────────
+  // superadmin / org_admin — activa/desactiva (soft) un usuario.
+
+  Future<UserSession> setUserActive(String id, bool isActive) async {
+    final data = await _apiClient.patchJson(
+      path: '/api/v1/users/$id',
+      body: {'is_active': isActive},
+      headers: await _authHeaders(),
+    );
+    return UserSession.fromJson(data);
+  }
+
+  // ── DELETE /api/v1/users/{id} ─────────────────────────────────────────────
+  // superadmin / org_admin — hard-delete con guards del backend.
+
+  Future<void> deleteUser(String id) async {
+    await _apiClient.delete(
+      path: '/api/v1/users/$id',
+      headers: await _authHeaders(),
     );
   }
 }
