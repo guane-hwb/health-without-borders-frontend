@@ -47,6 +47,19 @@ class _NullApiClient implements ApiClient {
     required Map<String, String> form,
     Map<String, String>? headers,
   }) async => throw UnsupportedError('_NullApiClient.postForm');
+
+  @override
+  Future<Map<String, dynamic>> patchJson({
+    required String path,
+    required Map<String, dynamic> body,
+    Map<String, String>? headers,
+  }) async => throw UnsupportedError('_NullApiClient.patchJson');
+
+  @override
+  Future<void> delete({
+    required String path,
+    Map<String, String>? headers,
+  }) async => throw UnsupportedError('_NullApiClient.delete');
 }
 
 class _FakeAuthRepository extends AuthRepository {

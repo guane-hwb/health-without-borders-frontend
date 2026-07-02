@@ -515,6 +515,11 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
     final contentMessage =
         s.orgDeleteDialogContent.replaceAll('{name}', _org.name) + cascadeNote;
 
+    // Capture before the first async gap (showDialog) so no BuildContext is used
+    // across an await further down.
+    final navigator = Navigator.of(context);
+    final repository = AppScope.of(context).userRepository;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -542,9 +547,9 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
     });
 
     try {
-      await AppScope.of(context).userRepository.deleteOrganization(_org.id);
+      await repository.deleteOrganization(_org.id);
       widget.onDeleted();
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) navigator.pop();
     } catch (e) {
       if (mounted) {
         setState(() {
