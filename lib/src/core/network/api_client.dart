@@ -12,6 +12,20 @@ class ApiException implements Exception {
   String toString() => 'ApiException(statusCode: $statusCode, message: $message)';
 }
 
+/// Renews access tokens on behalf of [ApiClient] without creating a dependency
+/// cycle: [ApiClient] depends only on this narrow interface, while the concrete
+/// implementation ([AuthRepository]) already depends on [ApiClient]. The
+/// provider is injected after construction via [ApiClient.tokenProvider].
+abstract class TokenProvider {
+  /// Attempts to obtain a fresh access token using the stored refresh token.
+  ///
+  /// Returns the new access token on success, or `null` when the session is
+  /// truly over (refresh token missing, expired, or revoked). On a transient
+  /// failure (network / 5xx) it throws, so the caller keeps its work pending
+  /// for a later retry instead of forcing a re-login.
+  Future<String?> refreshAccessToken();
+}
+
 class ApiClient {
   ApiClient({required this.baseUrl, http.Client? client})
       : _client = client ?? http.Client();
@@ -19,22 +33,73 @@ class ApiClient {
   final String baseUrl;
   final http.Client _client;
 
+  /// Routes that must NEVER carry a bearer token or trigger an auto-refresh.
+  /// `/login/refresh` is listed here so a 401 from the refresh call itself is
+  /// surfaced as-is instead of recursing into another refresh attempt.
+  static const List<String> _publicRoutes = <String>[
+    '/api/v1/login/access-token',
+    '/api/v1/login/refresh',
+  ];
+
+  TokenProvider? _tokenProvider;
+
+  /// Wires the component that can renew access tokens. Injected once at startup
+  /// (see `app.dart`). When null, no auto-refresh happens and a 401 propagates
+  /// unchanged — which keeps token-agnostic tests working as before.
+  set tokenProvider(TokenProvider? provider) => _tokenProvider = provider;
+
+  bool _isPublicRoute(String path) => _publicRoutes.contains(path);
+
+  /// Central request dispatcher. Runs [send], and — for a protected route that
+  /// comes back 401 while a [TokenProvider] is wired — renews the access token
+  /// ONCE and replays the request with the fresh bearer. Every authenticated
+  /// call routes through here, so the refresh-and-retry guarantee is structural
+  /// rather than something each caller has to remember to opt into.
+  Future<http.Response> _dispatch(
+    String path, {
+    required Map<String, String> headers,
+    required Future<http.Response> Function(Map<String, String> headers) send,
+  }) async {
+    final http.Response response =
+        await send(headers).timeout(const Duration(seconds: 20));
+
+    if (response.statusCode != 401 ||
+        _tokenProvider == null ||
+        _isPublicRoute(path)) {
+      return response;
+    }
+
+    final String? newToken = await _tokenProvider!.refreshAccessToken();
+    if (newToken == null || newToken.isEmpty) {
+      // Refresh failed: session is genuinely over. Surface the original 401.
+      return response;
+    }
+
+    final Map<String, String> retryHeaders = <String, String>{
+      ...headers,
+      'Authorization': 'Bearer $newToken',
+    };
+    return send(retryHeaders).timeout(const Duration(seconds: 20));
+  }
+
   Future<Map<String, dynamic>> postForm({
     required String path,
     required Map<String, String> form,
     Map<String, String>? headers,
   }) async {
     final Uri uri = Uri.parse('$baseUrl$path');
-    final http.Response response = await _client
-        .post(
-          uri,
-          headers: <String, String>{
-            'Content-Type': 'application/x-www-form-urlencoded',
-            ...?headers,
-          },
-          body: form,
-        )
-        .timeout(const Duration(seconds: 20));
+    final http.Response response = await _dispatch(
+      path,
+      headers: <String, String>{...?headers},
+      send: (Map<String, String> h) => _client.post(
+        uri,
+        headers: <String, String>{
+          'Content-Type': 'application/x-www-form-urlencoded',
+          ...h,
+        },
+        body: form,
+      ),
+    );
 
     return _decodeMapOrThrow(response);
   }
@@ -45,16 +110,15 @@ class ApiClient {
     Map<String, String>? headers,
   }) async {
     final Uri uri = Uri.parse('$baseUrl$path');
-    final http.Response response = await _client
-        .post(
-          uri,
-          headers: <String, String>{
-            'Content-Type': 'application/json',
-            ...?headers,
-          },
-          body: jsonEncode(body),
-        )
-        .timeout(const Duration(seconds: 20));
+    final http.Response response = await _dispatch(
+      path,
+      headers: <String, String>{...?headers},
+      send: (Map<String, String> h) => _client.post(
+        uri,
+        headers: <String, String>{'Content-Type': 'application/json', ...h},
+        body: jsonEncode(body),
+      ),
+    );
 
     return _decodeMapOrThrow(response);
   }
@@ -64,10 +128,13 @@ class ApiClient {
     Map<String, String>? headers,
     Map<String, String>? queryParams,
   }) async {
-    final Uri uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
-    final http.Response response = await _client
-        .get(uri, headers: <String, String>{...?headers})
-        .timeout(const Duration(seconds: 20));
+    final Uri uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
+    final http.Response response = await _dispatch(
+      path,
+      headers: <String, String>{...?headers},
+      send: (Map<String, String> h) => _client.get(uri, headers: h),
+    );
 
     return _decodeMapOrThrow(response);
   }
@@ -77,10 +144,13 @@ class ApiClient {
     Map<String, String>? headers,
     Map<String, String>? queryParams,
   }) async {
-    final Uri uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
-    final http.Response response = await _client
-        .get(uri, headers: <String, String>{...?headers})
-        .timeout(const Duration(seconds: 20));
+    final Uri uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
+    final http.Response response = await _dispatch(
+      path,
+      headers: <String, String>{...?headers},
+      send: (Map<String, String> h) => _client.get(uri, headers: h),
+    );
 
     return _decodeListOrThrow(response);
   }
@@ -91,16 +161,15 @@ class ApiClient {
     Map<String, String>? headers,
   }) async {
     final Uri uri = Uri.parse('$baseUrl$path');
-    final http.Response response = await _client
-        .patch(
-          uri,
-          headers: <String, String>{
-            'Content-Type': 'application/json',
-            ...?headers,
-          },
-          body: jsonEncode(body),
-        )
-        .timeout(const Duration(seconds: 20));
+    final http.Response response = await _dispatch(
+      path,
+      headers: <String, String>{...?headers},
+      send: (Map<String, String> h) => _client.patch(
+        uri,
+        headers: <String, String>{'Content-Type': 'application/json', ...h},
+        body: jsonEncode(body),
+      ),
+    );
 
     return _decodeMapOrThrow(response);
   }
@@ -112,9 +181,11 @@ class ApiClient {
     Map<String, String>? headers,
   }) async {
     final Uri uri = Uri.parse('$baseUrl$path');
-    final http.Response response = await _client
-        .delete(uri, headers: <String, String>{...?headers})
-        .timeout(const Duration(seconds: 20));
+    final http.Response response = await _dispatch(
+      path,
+      headers: <String, String>{...?headers},
+      send: (Map<String, String> h) => _client.delete(uri, headers: h),
+    );
 
     final bool isSuccess =
         response.statusCode >= 200 && response.statusCode < 300;

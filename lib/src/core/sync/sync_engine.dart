@@ -136,7 +136,11 @@ class SyncEngine {
       }
     } on ApiException catch (e) {
       // 400 = bad request (don't retry)
-      // 401 = token expired (need re-login, stop syncing)
+      // 401 = session over. The ApiClient already tried to auto-refresh the
+      //       access token before this surfaced, so a 401 here means the
+      //       refresh token itself is expired/revoked — a real re-login is
+      //       needed. Stop the batch; local records stay pending and will
+      //       sync once the user signs in again. Local data is never touched.
       // 403/422 = data issue (don't retry until user fixes)
       // 429 = rate limited (retry later)
       // 500 = server error (retry later)
