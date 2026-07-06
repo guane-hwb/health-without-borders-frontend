@@ -20,11 +20,14 @@ class SyncEngine {
   SyncEngine({
     required PatientRepository patientRepository,
     LocalDatabase? localDatabase,
-  })  : _patientRepo = patientRepository,
-        _localDb = localDatabase ?? LocalDatabase.instance;
+    Stream<List<ConnectivityResult>>? connectivityStream,
+  }) : _patientRepo = patientRepository,
+       _localDb = localDatabase ?? LocalDatabase.instance,
+       _connectivityStream = connectivityStream;
 
   final PatientRepository _patientRepo;
   final LocalDatabase _localDb;
+  final Stream<List<ConnectivityResult>>? _connectivityStream;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool _isSyncing = false;
@@ -50,8 +53,7 @@ class SyncEngine {
   void Function(int unsyncedCount)? onSyncStatusChanged;
 
   /// Callback fired when a specific record finishes syncing.
-  void Function(String patientId, bool success, String? error)?
-      onRecordSynced;
+  void Function(String patientId, bool success, String? error)? onRecordSynced;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -59,12 +61,10 @@ class SyncEngine {
   /// automatically attempts to sync all pending records.
   void start() {
     _connectivitySub?.cancel();
-    _connectivitySub = Connectivity()
-        .onConnectivityChanged
-        .listen((List<ConnectivityResult> results) {
-      final hasConnection = results.any(
-        (r) => r != ConnectivityResult.none,
-      );
+    final Stream<List<ConnectivityResult>> stream =
+        _connectivityStream ?? Connectivity().onConnectivityChanged;
+    _connectivitySub = stream.listen((List<ConnectivityResult> results) {
+      final hasConnection = results.any((r) => r != ConnectivityResult.none);
       if (hasConnection) {
         syncAll();
       }
@@ -92,8 +92,8 @@ class SyncEngine {
     _isSyncing = true;
 
     try {
-      final List<LocalPatientEntry> pending =
-          await _localDb.getUnsyncedRecords();
+      final List<LocalPatientEntry> pending = await _localDb
+          .getUnsyncedRecords();
 
       for (final entry in pending) {
         await _syncOne(entry);
@@ -116,8 +116,9 @@ class SyncEngine {
     }
 
     try {
-      final PatientSyncResponse response =
-          await _patientRepo.syncPatient(record);
+      final PatientSyncResponse response = await _patientRepo.syncPatient(
+        record,
+      );
 
       if (response.status == 'success') {
         // Mark synced and scrub clinical data per security policy
@@ -128,11 +129,7 @@ class SyncEngine {
           entry.patientId,
           'Sync returned status: ${response.status}',
         );
-        onRecordSynced?.call(
-          entry.patientId,
-          false,
-          response.message,
-        );
+        onRecordSynced?.call(entry.patientId, false, response.message);
       }
     } on ApiException catch (e) {
       // 400 = bad request (don't retry)
@@ -141,8 +138,7 @@ class SyncEngine {
       // 429 = rate limited (retry later)
       // 500 = server error (retry later)
       final shouldStopAll = e.statusCode == 401;
-      final shouldNotRetry =
-          e.statusCode == 400 || e.statusCode == 422;
+      final shouldNotRetry = e.statusCode == 400 || e.statusCode == 422;
 
       await _localDb.markSyncError(entry.patientId, e.message);
       onRecordSynced?.call(entry.patientId, false, e.message);
