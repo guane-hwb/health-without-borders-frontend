@@ -331,6 +331,37 @@ class _Step2State extends State<Step2Guardian> {
     d.guardianAuthAccepted = _authAccepted;
     d.guardianEmail = _email.text.trim().isEmpty ? null : _email.text.trim();
     d.guardianSignatureBase64 = sig1Base64;
+    d.guardianRelationship = d.guardianRelationship ?? '01';
+
+    if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
+      d.guardian2Name = _name2.text.trim();
+      d.guardian2Phone = _phone2.text.trim().isEmpty
+          ? null
+          : _phone2.text.trim();
+      d.guardian2DeviceUid = _uid2.text.trim().isEmpty
+          ? null
+          : _uid2.text.trim();
+      d.guardian2DocType = _selectedDocType2;
+      d.guardian2DocNumber = _docNumber2.text.trim().isEmpty
+          ? null
+          : _docNumber2.text.trim();
+      d.guardian2Relationship = _guardian2Relationship;
+      d.guardian2AuthAccepted = _auth2Accepted;
+      d.guardian2Email = _email2.text.trim().isEmpty
+          ? null
+          : _email2.text.trim();
+      d.guardian2SignatureBase64 = sig2Base64;
+    } else {
+      d.guardian2Name = null;
+      d.guardian2Phone = null;
+      d.guardian2DeviceUid = null;
+      d.guardian2DocType = null;
+      d.guardian2DocNumber = null;
+      d.guardian2Relationship = null;
+      d.guardian2AuthAccepted = null;
+      d.guardian2Email = null;
+      d.guardian2SignatureBase64 = null;
+    }
 
     if (_hasGuardian2) {
       d.guardian2Name = _name2.text.trim().isEmpty ? null : _name2.text.trim();
