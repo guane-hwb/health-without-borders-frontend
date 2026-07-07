@@ -53,6 +53,21 @@ class UserSession {
   final String? organizationName;
   final bool isActive;
 
+  /// Serializes the session for local persistence (secure storage), so the
+  /// app can restore the authenticated user offline after the OS kills the
+  /// process. Round-trips through [UserSession.fromJson]: [role] is emitted as
+  /// its backend wire string (e.g. `org_admin`), not the Dart enum name, so the
+  /// correct role is restored — never silently downgraded to the default.
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'email': email,
+        'full_name': fullName,
+        'role': role.wireValue,
+        'organization_id': organizationId,
+        'organization_name': organizationName,
+        'is_active': isActive,
+      };
+
   /// Greeting name: takes first two words of fullName.
   /// "Juan Carlos Pérez" → "Juan Carlos"
   /// "doctor.juan" → "Doctor Juan" (already humanized by factory)
@@ -127,4 +142,21 @@ enum UserRole {
   /// Can search patients (loss of wristband)
   bool get canSearchPatient =>
       this == doctor || this == nurse || this == orgAdmin;
+
+  /// Backend wire string for this role. Mirrors [UserSession._parseRole] so a
+  /// session survives a toJson/fromJson round-trip. Do NOT use `.name`: it would
+  /// emit `orgAdmin`, which `_parseRole` does not recognize and would collapse
+  /// to the doctor default on restore.
+  String get wireValue {
+    switch (this) {
+      case UserRole.superadmin:
+        return 'superadmin';
+      case UserRole.orgAdmin:
+        return 'org_admin';
+      case UserRole.doctor:
+        return 'doctor';
+      case UserRole.nurse:
+        return 'nurse';
+    }
+  }
 }

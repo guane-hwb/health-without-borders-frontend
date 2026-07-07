@@ -19,10 +19,13 @@ class AuthRepository implements TokenProvider {
   static const String refreshKey = _refreshKey;
   @visibleForTesting
   static const String nfcKeyKey = _nfcKeyKey;
+  @visibleForTesting
+  static const String sessionKey = _sessionKey;
 
   static const String _tokenKey = 'hwb_access_token';
   static const String _refreshKey = 'hwb_refresh_token';
   static const String _nfcKeyKey = 'hwb_nfc_key';
+  static const String _sessionKey = 'hwb_user_session';
 
   final ApiClient _apiClient;
   final FlutterSecureStorage _secureStorage;
@@ -77,6 +80,9 @@ class AuthRepository implements TokenProvider {
       } catch (_) {}
     }
     _session = await _fetchMe(accessToken);
+    // Persist the full profile so the session can be restored offline on the
+    // next cold start with the correct role (see [restoreSession]).
+    await _persistSession(_session!);
     return _session!;
   }
 
@@ -87,6 +93,43 @@ class AuthRepository implements TokenProvider {
     try {
       final token = await getAccessToken();
       _session = await _fetchMe(token);
+    } catch (_) {}
+    return _session;
+  }
+
+  /// Restores a previously authenticated session at app startup so the user is
+  /// not bounced to the login screen when the OS kills the app — including when
+  /// fully offline. Returns null when there is nothing to restore (no persisted
+  /// token, or the user logged out), signalling the app to show login.
+  ///
+  /// Local-first: an EXPIRED access token does not block restoration. The UI is
+  /// rebuilt from the persisted profile and the [ApiClient] interceptor renews
+  /// the token on the first authenticated request once connectivity returns.
+  Future<UserSession?> restoreSession() async {
+    if (_session != null) return _session;
+
+    // No persisted token => never logged in, or logged out. Nothing to restore.
+    final String? token = await _readStoredToken();
+    if (token == null || token.isEmpty) return null;
+    _cachedToken = token;
+
+    // Prefer the persisted profile: it carries the REAL role, so an admin or
+    // nurse is restored as themselves rather than the doctor default that a
+    // JWT-only session yields offline.
+    final UserSession? persisted = await _readPersistedSession();
+    if (persisted != null) {
+      _session = persisted;
+      return _session;
+    }
+
+    // No persisted profile (e.g. a session created before this feature shipped).
+    // Fall back to /users/me, which itself degrades to a minimal JWT-derived
+    // session when offline. Only persist a genuine profile (non-empty id), never
+    // the JWT fallback, so a wrong role is never cached to disk.
+    try {
+      final UserSession fetched = await _fetchMe(token);
+      _session = fetched;
+      if (fetched.id.isNotEmpty) await _persistSession(fetched);
     } catch (_) {}
     return _session;
   }
@@ -217,6 +260,9 @@ class AuthRepository implements TokenProvider {
     try {
       await _secureStorage.delete(key: _nfcKeyKey);
     } catch (_) {}
+    try {
+      await _secureStorage.delete(key: _sessionKey);
+    } catch (_) {}
   }
 
   bool get hasToken => _cachedToken?.isNotEmpty == true;
@@ -233,6 +279,37 @@ class AuthRepository implements TokenProvider {
       }
     } catch (_) {}
     return null;
+  }
+
+  Future<void> _persistSession(UserSession session) async {
+    try {
+      await _secureStorage.write(
+        key: _sessionKey,
+        value: jsonEncode(session.toJson()),
+      );
+    } catch (_) {}
+  }
+
+  Future<UserSession?> _readPersistedSession() async {
+    try {
+      final String? raw = await _secureStorage.read(key: _sessionKey);
+      if (raw == null || raw.isEmpty) return null;
+      final Object? decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return null;
+      return UserSession.fromJson(decoded);
+    } catch (_) {
+      // Corrupt or unreadable payload: ignore and let the caller re-fetch.
+      return null;
+    }
+  }
+
+  Future<String?> _readStoredToken() async {
+    if (_cachedToken?.isNotEmpty == true) return _cachedToken;
+    try {
+      return await _secureStorage.read(key: _tokenKey);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<UserSession> _fetchMe(String token) async {
