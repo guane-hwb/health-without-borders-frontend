@@ -45,6 +45,10 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp> {
   @override
   void initState() {
     super.initState();
+    // Cablea el auto-refresh de tokens: ante un 401 en una ruta protegida, el
+    // ApiClient renueva el access token con el refresh token y reintenta la
+    // petición, de forma transparente para toda la app.
+    _apiClient.tokenProvider = _authRepository;
     // Enciende el motor automático para escuchar cambios de red e iniciar sincronizaciones
     _syncEngine.start();
   }

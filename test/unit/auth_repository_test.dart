@@ -533,6 +533,142 @@ void main() {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
+  // refreshAccessToken()
+  // ───────────────────────────────────────────────────────────────────────────
+  group('refreshAccessToken()', () {
+    test('éxito: renueva el access token y persiste el par rotado', () async {
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => 'old-refresh');
+      when(
+        () => api.postJson(
+          path: '/api/v1/login/refresh',
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer(
+        (_) async => {
+          'access_token': 'new-access',
+          'refresh_token': 'new-refresh',
+        },
+      );
+
+      final token = await repo.refreshAccessToken();
+
+      expect(token, 'new-access');
+      verify(
+        () => storage.write(key: AuthRepository.tokenKey, value: 'new-access'),
+      ).called(1);
+      verify(
+        () => storage.write(
+          key: AuthRepository.refreshKey,
+          value: 'new-refresh',
+        ),
+      ).called(1);
+    });
+
+    test(
+      'sin refresh token almacenado → null sin llamar al backend',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => null);
+
+        final token = await repo.refreshAccessToken();
+
+        expect(token, isNull);
+        verifyNever(
+          () => api.postJson(
+            path: any(named: 'path'),
+            body: any(named: 'body'),
+          ),
+        );
+      },
+    );
+
+    test('refresh token expirado/revocado (401) → devuelve null', () async {
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => 'old-refresh');
+      when(
+        () => api.postJson(
+          path: '/api/v1/login/refresh',
+          body: any(named: 'body'),
+        ),
+      ).thenThrow(
+        ApiException('Invalid or expired refresh token', statusCode: 401),
+      );
+
+      final token = await repo.refreshAccessToken();
+
+      expect(token, isNull);
+    });
+
+    test('error transitorio (500) → se relanza para reintento posterior', () async {
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => 'old-refresh');
+      when(
+        () => api.postJson(
+          path: '/api/v1/login/refresh',
+          body: any(named: 'body'),
+        ),
+      ).thenThrow(ApiException('Server error', statusCode: 500));
+
+      await expectLater(
+        repo.refreshAccessToken(),
+        throwsA(isA<ApiException>().having((e) => e.statusCode, 'code', 500)),
+      );
+    });
+
+    test('respuesta sin access_token → devuelve null', () async {
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => 'old-refresh');
+      when(
+        () => api.postJson(
+          path: '/api/v1/login/refresh',
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer((_) async => <String, dynamic>{'refresh_token': 'x'});
+
+      final token = await repo.refreshAccessToken();
+
+      expect(token, isNull);
+    });
+
+    test(
+      'single-flight: dos llamadas concurrentes comparten un solo refresh',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => 'old-refresh');
+        var calls = 0;
+        when(
+          () => api.postJson(
+            path: '/api/v1/login/refresh',
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer((_) async {
+          calls++;
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          return {
+            'access_token': 'new-access',
+            'refresh_token': 'new-refresh',
+          };
+        });
+
+        final results = await Future.wait(<Future<String?>>[
+          repo.refreshAccessToken(),
+          repo.refreshAccessToken(),
+        ]);
+
+        expect(results, ['new-access', 'new-access']);
+        expect(calls, 1);
+      },
+    );
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
   // getCurrentUser()
   // ───────────────────────────────────────────────────────────────────────────
   group('getCurrentUser()', () {

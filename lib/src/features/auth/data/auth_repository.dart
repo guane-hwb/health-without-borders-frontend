@@ -6,7 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../core/network/api_client.dart';
 import '../domain/user_session.dart';
 
-class AuthRepository {
+class AuthRepository implements TokenProvider {
   AuthRepository({
     required ApiClient apiClient,
     FlutterSecureStorage? secureStorage,
@@ -30,6 +30,10 @@ class AuthRepository {
   String? _cachedToken;
   String? _cachedRefreshToken;
   UserSession? _session;
+
+  /// Guards against concurrent refreshes (single-flight). See
+  /// [refreshAccessToken] for why this matters with a rotating backend.
+  Future<String?>? _refreshInFlight;
 
   /// The currently authenticated user. Null before login.
   UserSession? get currentUser => _session;
@@ -100,6 +104,66 @@ class AuthRepository {
       'Session expired. Please log in again.',
       statusCode: 401,
     );
+  }
+
+  /// Renews the access token using the stored refresh token, rotating both
+  /// tokens on the server (`POST /api/v1/login/refresh`).
+  ///
+  /// Single-flight: concurrent 401s — e.g. a batch sync pushing many pending
+  /// records at once — all share ONE refresh round-trip. This is not a nicety
+  /// but a correctness requirement: the backend rotates refresh tokens (it
+  /// revokes the old one when issuing a new pair), so a second concurrent
+  /// refresh would present an already-revoked token and be rejected as a reuse
+  /// attempt, tearing down the whole session.
+  ///
+  /// Returns the new access token, or `null` when the session is truly over
+  /// (no refresh token, or the refresh token is expired/revoked). Transient
+  /// failures (network / 5xx) are rethrown so the caller keeps its work pending
+  /// instead of forcing a re-login.
+  @override
+  Future<String?> refreshAccessToken() {
+    return _refreshInFlight ??= _performRefresh().whenComplete(() {
+      _refreshInFlight = null;
+    });
+  }
+
+  Future<String?> _performRefresh() async {
+    final String? refreshToken = await _getRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) return null;
+
+    final Map<String, dynamic> data;
+    try {
+      data = await _apiClient.postJson(
+        path: '/api/v1/login/refresh',
+        body: <String, dynamic>{'refresh_token': refreshToken},
+      );
+    } on ApiException catch (e) {
+      // 401 => refresh token expired or revoked => the session is over.
+      if (e.statusCode == 401) return null;
+      // Transient error (network / 5xx): let the caller keep the work pending.
+      rethrow;
+    }
+
+    final String? newAccess = data['access_token']?.toString();
+    if (newAccess == null || newAccess.isEmpty) return null;
+
+    _cachedToken = newAccess;
+    try {
+      await _secureStorage.write(key: _tokenKey, value: newAccess);
+    } catch (_) {}
+
+    // Persist the ROTATED refresh token. The previous one is now revoked
+    // server-side, so failing to store the new one would break the next
+    // refresh and strand the user at the login screen.
+    final String? newRefresh = data['refresh_token']?.toString();
+    if (newRefresh != null && newRefresh.isNotEmpty) {
+      _cachedRefreshToken = newRefresh;
+      try {
+        await _secureStorage.write(key: _refreshKey, value: newRefresh);
+      } catch (_) {}
+    }
+
+    return newAccess;
   }
 
   /// Returns the global NFC master key for encrypting/decrypting NFC payloads.
