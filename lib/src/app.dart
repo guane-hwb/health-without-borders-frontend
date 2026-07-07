@@ -10,7 +10,7 @@ import 'core/sync/sync_engine.dart';
 import 'design/theme/app_theme.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/data/user_repository.dart';
-import 'features/auth/presentation/login_screen.dart';
+import 'features/auth/presentation/auth_gate.dart';
 import 'features/nfc/data/patient_repository.dart';
 
 class HealthWithoutBordersApp extends StatefulWidget {
@@ -78,7 +78,7 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp> {
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: ThemeMode.light,
-          home: const LoginScreen(),
+          home: AuthGate(authRepository: _authRepository),
         ),
       ),
     );

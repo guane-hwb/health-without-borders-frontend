@@ -46,6 +46,9 @@ class FakeAuthRepository implements AuthRepository {
   Future<String?> refreshAccessToken() async => null;
 
   @override
+  Future<UserSession?> restoreSession() async => session;
+
+  @override
   Future<void> clearSession() async {
     clearSessionCalled = true;
     session = null;

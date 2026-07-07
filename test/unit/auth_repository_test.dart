@@ -8,6 +8,7 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mocks
@@ -851,6 +852,172 @@ void main() {
     test('clearSession funciona aunque no hubiera sesión activa', () async {
       await expectLater(repo.clearSession(), completes);
       expect(repo.currentUser, isNull);
+    });
+
+    test('clearSession borra la sesión persistida (sessionKey)', () async {
+      await repo.clearSession();
+      verify(
+        () => storage.delete(key: AuthRepository.sessionKey),
+      ).called(1);
+    });
+  });
+
+  group('restoreSession()', () {
+    String persistedJson({
+      String id = '7',
+      String email = 'admin@hwb.org',
+      String fullName = 'Admin Real',
+      String role = 'org_admin',
+      String organizationId = 'org-1',
+    }) => jsonEncode(<String, dynamic>{
+      'id': id,
+      'email': email,
+      'full_name': fullName,
+      'role': role,
+      'organization_id': organizationId,
+    });
+
+    test('sin token persistido → null (debe ir a login)', () async {
+      when(
+        () => storage.read(key: AuthRepository.tokenKey),
+      ).thenAnswer((_) async => null);
+
+      final session = await repo.restoreSession();
+
+      expect(session, isNull);
+    });
+
+    test(
+      'con token + sesión persistida → restaura el rol REAL sin red',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenAnswer((_) async => _validJwt('admin@hwb.org'));
+        when(
+          () => storage.read(key: AuthRepository.sessionKey),
+        ).thenAnswer((_) async => persistedJson());
+
+        final session = await repo.restoreSession();
+
+        expect(session, isNotNull);
+        // The whole point: an org_admin is restored as org_admin, NOT downgraded
+        // to the doctor default that a JWT-only offline session would yield.
+        expect(session!.role, UserRole.orgAdmin);
+        expect(session.email, 'admin@hwb.org');
+        expect(session.id, '7');
+        expect(repo.currentUser, isNotNull);
+        // No network was needed to restore.
+        verifyNever(
+          () => api.getJson(
+            path: any(named: 'path'),
+            headers: any(named: 'headers'),
+          ),
+        );
+      },
+    );
+
+    test(
+      'con token pero sin sesión persistida → cae a /me y la persiste',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenAnswer((_) async => _validJwt('doc@hwb.org'));
+        when(
+          () => storage.read(key: AuthRepository.sessionKey),
+        ).thenAnswer((_) async => null);
+        when(
+          () => api.getJson(
+            path: any(named: 'path'),
+            headers: any(named: 'headers'),
+          ),
+        ).thenAnswer((_) async => _meResponse(email: 'doc@hwb.org'));
+
+        final session = await repo.restoreSession();
+
+        expect(session?.email, 'doc@hwb.org');
+        expect(session?.id, '42');
+        // A genuine profile (non-empty id) is persisted for exact future starts.
+        verify(
+          () => storage.write(
+            key: AuthRepository.sessionKey,
+            value: any(named: 'value'),
+          ),
+        ).called(1);
+      },
+    );
+
+    test('sesión persistida corrupta → cae a /me', () async {
+      when(
+        () => storage.read(key: AuthRepository.tokenKey),
+      ).thenAnswer((_) async => _validJwt('doc@hwb.org'));
+      when(
+        () => storage.read(key: AuthRepository.sessionKey),
+      ).thenAnswer((_) async => 'not-json-{{{');
+      when(
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer((_) async => _meResponse(email: 'doc@hwb.org'));
+
+      final session = await repo.restoreSession();
+
+      expect(session?.email, 'doc@hwb.org');
+    });
+
+    test('sesión ya cacheada → devuelve sin leer storage', () async {
+      when(
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
+      ).thenAnswer((_) async => {'access_token': _validJwt('a@b.com')});
+      when(
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer((_) async => _meResponse(email: 'a@b.com'));
+
+      await repo.login(email: 'a@b.com', password: 'x');
+      clearInteractions(storage);
+
+      final session = await repo.restoreSession();
+
+      expect(session?.email, 'a@b.com');
+      verifyNever(() => storage.read(key: any(named: 'key')));
+    });
+  });
+
+  group('session persistence', () {
+    test('login persiste la sesión con el rol como wire string', () async {
+      when(
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
+      ).thenAnswer((_) async => {'access_token': _validJwt('doc@hwb.org')});
+      when(
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer((_) async => _meResponse(email: 'doc@hwb.org'));
+
+      await repo.login(email: 'doc@hwb.org', password: 'x');
+
+      final List<dynamic> captured = verify(
+        () => storage.write(
+          key: AuthRepository.sessionKey,
+          value: captureAny(named: 'value'),
+        ),
+      ).captured;
+      expect(captured, isNotEmpty);
+      final Map<String, dynamic> decoded =
+          jsonDecode(captured.last as String) as Map<String, dynamic>;
+      expect(decoded['id'], '42');
+      expect(decoded['role'], 'doctor');
+      expect(decoded['email'], 'doc@hwb.org');
     });
   });
 
