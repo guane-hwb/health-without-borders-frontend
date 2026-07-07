@@ -10,7 +10,7 @@ import 'core/sync/sync_engine.dart';
 import 'design/theme/app_theme.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/data/user_repository.dart';
-import 'features/auth/presentation/login_screen.dart';
+import 'features/auth/presentation/auth_gate.dart';
 import 'features/nfc/data/patient_repository.dart';
 
 class HealthWithoutBordersApp extends StatefulWidget {
@@ -45,6 +45,10 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp> {
   @override
   void initState() {
     super.initState();
+    // Cablea el auto-refresh de tokens: ante un 401 en una ruta protegida, el
+    // ApiClient renueva el access token con el refresh token y reintenta la
+    // petición, de forma transparente para toda la app.
+    _apiClient.tokenProvider = _authRepository;
     // Enciende el motor automático para escuchar cambios de red e iniciar sincronizaciones
     _syncEngine.start();
   }
@@ -74,7 +78,7 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp> {
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: ThemeMode.light,
-          home: const LoginScreen(),
+          home: AuthGate(authRepository: _authRepository),
         ),
       ),
     );

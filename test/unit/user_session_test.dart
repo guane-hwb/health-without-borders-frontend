@@ -375,6 +375,64 @@ void main() {
       () => expect(UserRole.superadmin.canSearchPatient, isFalse),
     );
   });
+
+  group('UserSession.toJson', () {
+    test('round-trips a través de fromJson preservando campos', () {
+      final original = UserSession(
+        id: '9',
+        email: 'nurse@hwb.org',
+        fullName: 'Nurse Real',
+        role: UserRole.nurse,
+        organizationId: 'org-2',
+        organizationName: 'Clinic 2',
+        isActive: true,
+      );
+
+      final restored = UserSession.fromJson(original.toJson());
+
+      expect(restored.id, '9');
+      expect(restored.email, 'nurse@hwb.org');
+      expect(restored.fullName, 'Nurse Real');
+      expect(restored.role, UserRole.nurse);
+      expect(restored.organizationId, 'org-2');
+      expect(restored.organizationName, 'Clinic 2');
+      expect(restored.isActive, isTrue);
+    });
+
+    test('serializa el rol como wire string (org_admin), no enum name', () {
+      final session = UserSession(
+        id: '1',
+        email: 'a@b.com',
+        fullName: 'Admin',
+        role: UserRole.orgAdmin,
+        organizationId: 'o1',
+      );
+
+      expect(session.toJson()['role'], 'org_admin');
+    });
+  });
+
+  group('UserRole.wireValue', () {
+    test('cada rol mapea a su string de backend', () {
+      expect(UserRole.superadmin.wireValue, 'superadmin');
+      expect(UserRole.orgAdmin.wireValue, 'org_admin');
+      expect(UserRole.doctor.wireValue, 'doctor');
+      expect(UserRole.nurse.wireValue, 'nurse');
+    });
+
+    test('wireValue round-trips vía fromJson para todos los roles', () {
+      for (final role in UserRole.values) {
+        final json = <String, dynamic>{
+          'id': '1',
+          'email': 'a@b.com',
+          'full_name': 'X',
+          'role': role.wireValue,
+          'organization_id': 'o1',
+        };
+        expect(UserSession.fromJson(json).role, role);
+      }
+    });
+  });
 }
 
 // ─────────────────────────────────────────────

@@ -21,6 +21,9 @@ class _NullApiClient implements ApiClient {
   final String baseUrl = '';
 
   @override
+  set tokenProvider(TokenProvider? _) {}
+
+  @override
   Future<Map<String, dynamic>> getJson({
     required String path,
     Map<String, String>? headers,
