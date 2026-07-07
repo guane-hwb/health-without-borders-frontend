@@ -38,6 +38,14 @@ class AuthRepository implements TokenProvider {
   /// [refreshAccessToken] for why this matters with a rotating backend.
   Future<String?>? _refreshInFlight;
 
+  /// Flips to `true` when a refresh is authoritatively rejected by the backend
+  /// (expired/revoked refresh token) — the session is over and the user must
+  /// sign in again. A top-level listener routes to the login screen. Transient
+  /// or offline refresh failures do NOT flip this: the work stays pending and
+  /// the local-first UI is preserved.
+  final ValueNotifier<bool> _sessionExpired = ValueNotifier<bool>(false);
+  ValueListenable<bool> get sessionExpired => _sessionExpired;
+
   /// The currently authenticated user. Null before login.
   UserSession? get currentUser => _session;
 
@@ -47,6 +55,9 @@ class AuthRepository implements TokenProvider {
     required String email,
     required String password,
   }) async {
+    // A fresh sign-in clears any prior "session expired" state.
+    _sessionExpired.value = false;
+
     final Map<String, dynamic> tokenData = await _apiClient.postForm(
       path: '/api/v1/login/access-token',
       form: <String, String>{'username': email, 'password': password},
@@ -181,8 +192,12 @@ class AuthRepository implements TokenProvider {
         body: <String, dynamic>{'refresh_token': refreshToken},
       );
     } on ApiException catch (e) {
-      // 401 => refresh token expired or revoked => the session is over.
-      if (e.statusCode == 401) return null;
+      // 401 => refresh token expired or revoked => the session is definitively
+      // over: clear it locally and signal the UI to route to login.
+      if (e.statusCode == 401) {
+        await _invalidateSession();
+        return null;
+      }
       // Transient error (network / 5xx): let the caller keep the work pending.
       rethrow;
     }
@@ -263,6 +278,15 @@ class AuthRepository implements TokenProvider {
     try {
       await _secureStorage.delete(key: _sessionKey);
     } catch (_) {}
+  }
+
+  /// Forced sign-out when the backend rejects the refresh token. Clears the
+  /// auth state (tokens + persisted profile) but intentionally leaves the local
+  /// offline-first database untouched, so pending unsynced records survive the
+  /// re-authentication. Idempotent: the notifier only fires on a real change.
+  Future<void> _invalidateSession() async {
+    await clearSession();
+    _sessionExpired.value = true;
   }
 
   bool get hasToken => _cachedToken?.isNotEmpty == true;

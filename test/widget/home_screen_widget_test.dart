@@ -9,6 +9,7 @@
 //    • _SyncCard displays the pending badge when there are > 0
 //    • Redirection to LoginScreen when no user is present
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -65,6 +66,9 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<UserSession?> restoreSession() async => currentUser;
+
+  @override
+  ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
   Future<void> clearSession() async {

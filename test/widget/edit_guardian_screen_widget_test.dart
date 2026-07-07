@@ -14,6 +14,7 @@
 // • Editing the name field
 // • Editing the phone number field
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -57,6 +58,9 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<UserSession?> restoreSession() async => null;
+
+  @override
+  ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
   Future<String?> getNfcEncryptionKey() async => 'fake-nfc-key-12345';
