@@ -2,6 +2,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -59,6 +60,9 @@ class FakeAuthRepository implements AuthRepository {
   Future<UserSession?> restoreSession() async => null;
 
   @override
+  ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
+
+  @override
   Future<void> clearSession() async {}
 
   @override
@@ -75,7 +79,7 @@ void main() {
   late FakeAuthRepository mockAuthRepo;
 
   // ── Helper: wraps LoginScreen with all its required providers ─────────
-  Widget buildSubject({String locale = 'es'}) {
+  Widget buildSubject({String locale = 'es', bool showSessionExpired = false}) {
     final apiClient = ApiClient(baseUrl: 'https://example.com');
     final userRepository = UserRepository(
       apiClient: apiClient,
@@ -99,13 +103,40 @@ void main() {
         patientRepository: patientRepository,
         localDatabase: LocalDatabase.instance,
         syncEngine: syncEngine,
-        child: const MaterialApp(home: LoginScreen()),
+        child: MaterialApp(
+          home: LoginScreen(showSessionExpired: showSessionExpired),
+        ),
       ),
     );
   }
 
   setUp(() {
     mockAuthRepo = FakeAuthRepository();
+  });
+
+  group('Aviso de sesión expirada', () {
+    testWidgets('muestra el aviso cuando showSessionExpired es true', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject(showSessionExpired: true));
+      await tester.pump(); // dispara el post-frame callback -> showSnackBar
+      await tester.pump(const Duration(milliseconds: 500)); // deja aparecer
+
+      expect(
+        find.text('Sesión expirada. Inicie sesión nuevamente.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('no muestra el aviso por defecto', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(
+        find.text('Sesión expirada. Inicie sesión nuevamente.'),
+        findsNothing,
+      );
+    });
   });
 
   // ── Group 1: Initial Rendering ────────────────────────────────────────────

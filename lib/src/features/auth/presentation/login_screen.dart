@@ -10,7 +10,13 @@ import '../../../shared/widgets/hwb_logo.dart';
 import '../../home/presentation/home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.showSessionExpired = false});
+
+  /// When true, shows a one-time "session expired — sign in again" notice on the
+  /// first frame. Set when a forced sign-out (rejected refresh token) routed the
+  /// user back to login.
+  final bool showSessionExpired;
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -25,6 +31,22 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _rememberSession = true;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.showSessionExpired) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppStrings.of(context).sessionExpired),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      });
+    }
+  }
 
   @override
   void dispose() {

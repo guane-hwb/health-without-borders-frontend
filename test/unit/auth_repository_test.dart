@@ -670,6 +670,91 @@ void main() {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
+  // session expiry (forced re-auth)
+  // ───────────────────────────────────────────────────────────────────────────
+  group('session expiry (forced re-auth)', () {
+    test('refresh 401 → invalida la sesión y emite sessionExpired', () async {
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => 'old-refresh');
+      when(
+        () => api.postJson(
+          path: '/api/v1/login/refresh',
+          body: any(named: 'body'),
+        ),
+      ).thenThrow(
+        ApiException('Invalid or expired refresh token', statusCode: 401),
+      );
+
+      expect(repo.sessionExpired.value, isFalse);
+
+      final token = await repo.refreshAccessToken();
+
+      expect(token, isNull);
+      expect(repo.sessionExpired.value, isTrue);
+      expect(repo.currentUser, isNull);
+      // clearSession ran: the persisted profile was wiped.
+      verify(
+        () => storage.delete(key: AuthRepository.sessionKey),
+      ).called(1);
+    });
+
+    test('error transitorio (500) NO invalida la sesión', () async {
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => 'old-refresh');
+      when(
+        () => api.postJson(
+          path: '/api/v1/login/refresh',
+          body: any(named: 'body'),
+        ),
+      ).thenThrow(ApiException('Server error', statusCode: 500));
+
+      await expectLater(
+        repo.refreshAccessToken(),
+        throwsA(isA<ApiException>()),
+      );
+
+      expect(repo.sessionExpired.value, isFalse);
+      verifyNever(() => storage.delete(key: AuthRepository.sessionKey));
+    });
+
+    test('un login exitoso limpia el estado de sesión expirada', () async {
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => 'old-refresh');
+      when(
+        () => api.postJson(
+          path: '/api/v1/login/refresh',
+          body: any(named: 'body'),
+        ),
+      ).thenThrow(
+        ApiException('Invalid or expired refresh token', statusCode: 401),
+      );
+      await repo.refreshAccessToken();
+      expect(repo.sessionExpired.value, isTrue);
+
+      final jwt = _validJwt('doc@hwb.org');
+      when(
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
+      ).thenAnswer((_) async => {'access_token': jwt});
+      when(
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer((_) async => _meResponse(email: 'doc@hwb.org'));
+
+      await repo.login(email: 'doc@hwb.org', password: 'x');
+
+      expect(repo.sessionExpired.value, isFalse);
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
   // getCurrentUser()
   // ───────────────────────────────────────────────────────────────────────────
   group('getCurrentUser()', () {
