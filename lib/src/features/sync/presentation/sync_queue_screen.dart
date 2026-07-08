@@ -237,6 +237,22 @@ class _SyncCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasErr = entry.syncError?.isNotEmpty == true;
+    final isConflict = entry.syncErrorCode == 409;
+    // Locale probe — mirrors the in-file bilingual idiom used elsewhere so we
+    // don't have to touch app_strings.dart for a couple of conflict strings.
+    final isEs = s.save == 'Guardar';
+    final String? errorMessage = !hasErr
+        ? null
+        : isConflict
+        ? (isEs
+              ? 'Esta manilla ya está registrada para otro paciente. '
+                    'Registra al paciente con una manilla nueva.'
+              : 'This bracelet is already registered to another patient. '
+                    'Register the patient with a new bracelet.')
+        : entry.syncError;
+    final String badgeLabel = hasErr
+        ? (isConflict ? (isEs ? 'Duplicado' : 'Duplicate') : s.error)
+        : s.pending;
     final date = entry.createdAt.contains('T')
         ? entry.createdAt.split('T').first
         : entry.createdAt;
@@ -303,7 +319,7 @@ class _SyncCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    hasErr ? s.error : s.pending,
+                    badgeLabel,
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -314,13 +330,50 @@ class _SyncCard extends StatelessWidget {
               ],
             ),
           ),
+          if (errorMessage != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    isConflict
+                        ? Icons.nfc
+                        : Icons.error_outline,
+                    size: 15,
+                    color: AppColors.error,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      errorMessage,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        height: 1.3,
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: 10),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
             child: Row(
               children: [
-                _btn(Icons.cloud_upload, s.syncNow, AppColors.primary, onSync),
-                const SizedBox(width: 8),
+                // A 409 conflict can never sync as-is (duplicate device_uid), so
+                // hide the sync action and steer the user to review/delete +
+                // re-register with a new bracelet.
+                if (!isConflict) ...[
+                  _btn(
+                    Icons.cloud_upload,
+                    s.syncNow,
+                    AppColors.primary,
+                    onSync,
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 _btn(Icons.visibility, s.review, AppColors.secondary, onReview),
                 const Spacer(),
                 IconButton(

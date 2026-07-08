@@ -395,6 +395,16 @@ void main() {
       expect(all.single.syncError, equals('network error'));
     });
 
+    test('markSyncError stores the HTTP status code on the row', () async {
+      await localDb.savePatient(_buildRecord(patientId: 'p-f2'));
+      await localDb.markSyncError('p-f2', 'conflict', statusCode: 409);
+
+      final all = await localDb.getAllRecords();
+      final row = all.singleWhere((e) => e.patientId == 'p-f2');
+      expect(row.syncError, equals('conflict'));
+      expect(row.syncErrorCode, equals(409));
+    });
+
     test('deleteRecord removes the row regardless of sync status', () async {
       await localDb.savePatient(_buildRecord(patientId: 'p-g'));
       await localDb.deleteRecord('p-g');
