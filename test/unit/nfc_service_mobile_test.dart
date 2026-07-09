@@ -1,36 +1,40 @@
-// test/unit/nfc_service_mobile_test.dart
+// test/unit/`nfc_service_mobile_test.dart`
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nfc_manager/nfc_manager.dart';
 
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_service_mobile.dart';
 
-// ── Fake NfcManager ──────────────────────────────────────────────────────────
-bool _nfcAvailable = false;
+// ── Canal y mock ──────────────────────────────────────────────────────────────
 
-void _setUpMethodChannel({required bool nfcAvailable}) {
-  _nfcAvailable = nfcAvailable;
+const _channel = MethodChannel('plugins.flutter.io/nfc_manager');
 
+void _mockChannel({required bool nfcAvailable}) {
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(
-        const MethodChannel('plugins.flutter.io/nfc_manager'),
-        (MethodCall call) async {
-          switch (call.method) {
-            case 'Nfc#isAvailable':
-              return _nfcAvailable;
-
-            case 'Nfc#startSession':
-              return null;
-
-            case 'Nfc#stopSession':
-              return null;
-
-            default:
-              return null;
-          }
-        },
-      );
+      .setMockMethodCallHandler(_channel, (MethodCall call) async {
+        switch (call.method) {
+          case 'Nfc#isAvailable':
+            return nfcAvailable;
+          case 'Nfc#startSession':
+            return null;
+          case 'Nfc#stopSession':
+            return null;
+          case 'Nfc#disposeTag':
+            return null;
+          default:
+            return null;
+        }
+      });
 }
+
+// ── Helpers  ────────────────────────────────────────────────────────────────
+
+NfcTag _makeTag(Map<String, dynamic> data) {
+  return NfcTag(handle: 'test-handle', data: data);
+}
+
+// ── main ────────────────────────────────────────────────────────────────────
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -41,18 +45,15 @@ void main() {
 
   tearDownAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-          const MethodChannel('plugins.flutter.io/nfc_manager'),
-          null,
-        );
+        .setMockMethodCallHandler(_channel, null);
   });
 
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
   // overrideReadDeviceUid
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
   group('NfcService.readDeviceUid — override', () {
-    setUp(() => _setUpMethodChannel(nfcAvailable: false));
+    setUp(() => _mockChannel(nfcAvailable: false));
 
     test('retorna el UID del override cuando está definido', () async {
       NfcService.overrideReadDeviceUid = () async => '04:A1:B2:C3';
@@ -67,7 +68,7 @@ void main() {
     test('el override puede lanzar NfcNotAvailableException', () async {
       NfcService.overrideReadDeviceUid = () async =>
           throw NfcNotAvailableException();
-      expect(
+      await expectLater(
         NfcService.readDeviceUid(),
         throwsA(isA<NfcNotAvailableException>()),
       );
@@ -76,7 +77,7 @@ void main() {
     test('el override puede lanzar NfcSessionException', () async {
       NfcService.overrideReadDeviceUid = () async =>
           throw NfcSessionException('error simulado');
-      expect(
+      await expectLater(
         NfcService.readDeviceUid(),
         throwsA(
           isA<NfcSessionException>().having(
@@ -88,383 +89,40 @@ void main() {
       );
     });
 
-    test(
-      'lanza NfcNotAvailableException cuando override es null y NFC no disponible',
-      () async {
-        NfcService.overrideReadDeviceUid = null;
-        await expectLater(
-          NfcService.readDeviceUid(),
-          throwsA(isA<NfcNotAvailableException>()),
-        );
-      },
-    );
+    test('lanza NfcNotAvailableException cuando override es null '
+        'y NFC no disponible', () async {
+      NfcService.overrideReadDeviceUid = null;
+      await expectLater(
+        NfcService.readDeviceUid(),
+        throwsA(isA<NfcNotAvailableException>()),
+      );
+    });
   });
 
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
   // isAvailable
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
   group('NfcService.isAvailable', () {
     test('devuelve false cuando NFC no está disponible', () async {
-      _setUpMethodChannel(nfcAvailable: false);
+      _mockChannel(nfcAvailable: false);
       expect(await NfcService.isAvailable, isFalse);
     });
 
     test('devuelve true cuando NFC está disponible', () async {
-      _setUpMethodChannel(nfcAvailable: true);
+      _mockChannel(nfcAvailable: true);
       expect(await NfcService.isAvailable, isTrue);
     });
   });
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // readDeviceUid
-  // ════════════════════════════════════════════════════════════════════════════
-
-  group('NfcService.readDeviceUid — flujo real con NFC disponible', () {
-    test(
-      'lanza NfcNotAvailableException cuando NFC no está disponible y override es null',
-      () async {
-        _setUpMethodChannel(nfcAvailable: false);
-        NfcService.overrideReadDeviceUid = null;
-
-        await expectLater(
-          NfcService.readDeviceUid(),
-          throwsA(isA<NfcNotAvailableException>()),
-        );
-      },
-    );
-
-    test('_bytesToHex convierte bytes correctamente → "04:A1:B2"', () async {
-      NfcService.overrideReadDeviceUid = () async {
-        final bytes = Uint8List.fromList([0x04, 0xA1, 0xB2]);
-        return bytes
-            .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-            .join(':');
-      };
-      expect(await NfcService.readDeviceUid(), '04:A1:B2');
-    });
-
-    test('_bytesToHex convierte byte 0x00 con padding correcto', () async {
-      NfcService.overrideReadDeviceUid = () async {
-        final bytes = Uint8List.fromList([0x00, 0x0F, 0xFF]);
-        return bytes
-            .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-            .join(':');
-      };
-      expect(await NfcService.readDeviceUid(), '00:0F:FF');
-    });
-  });
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // _extractIdentifier
-  // ════════════════════════════════════════════════════════════════════════════
-
-  group('_extractIdentifier — todos los paths via override', () {
-    test('extrae UID desde clave "nfca"', () async {
-      NfcService.overrideReadDeviceUid = () async {
-        final data = <String, dynamic>{
-          'nfca': {
-            'identifier': [0x04, 0xA1, 0xB2, 0xC3],
-          },
-        };
-        Uint8List? result;
-        for (final key in ['nfca', 'nfcb', 'nfcv', 'nfcf', 'iso7816']) {
-          final tech = data[key] as Map<dynamic, dynamic>?;
-          if (tech != null) {
-            final id = tech['identifier'];
-            if (id is List) {
-              result = Uint8List.fromList(id.cast<int>());
-              break;
-            }
-          }
-        }
-        if (result == null || result.isEmpty) {
-          throw NfcSessionException('Could not read tag identifier.');
-        }
-        return result
-            .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-            .join(':');
-      };
-      expect(await NfcService.readDeviceUid(), '04:A1:B2:C3');
-    });
-
-    test('extrae UID desde clave "nfcb"', () async {
-      NfcService.overrideReadDeviceUid = () async {
-        final data = <String, dynamic>{
-          'nfcb': {
-            'identifier': [0x10, 0x20],
-          },
-        };
-        Uint8List? result;
-        for (final key in ['nfca', 'nfcb', 'nfcv', 'nfcf', 'iso7816']) {
-          final tech = data[key] as Map<dynamic, dynamic>?;
-          if (tech != null) {
-            final id = tech['identifier'];
-            if (id is List) {
-              result = Uint8List.fromList(id.cast<int>());
-              break;
-            }
-          }
-        }
-        if (result == null || result.isEmpty) {
-          throw NfcSessionException('Could not read tag identifier.');
-        }
-        return result
-            .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-            .join(':');
-      };
-      expect(await NfcService.readDeviceUid(), '10:20');
-    });
-
-    test('extrae UID desde clave "nfcv"', () async {
-      NfcService.overrideReadDeviceUid = () async {
-        final data = <String, dynamic>{
-          'nfcv': {
-            'identifier': [0xAA, 0xBB],
-          },
-        };
-        Uint8List? result;
-        for (final key in ['nfca', 'nfcb', 'nfcv', 'nfcf', 'iso7816']) {
-          final tech = data[key] as Map<dynamic, dynamic>?;
-          if (tech != null) {
-            final id = tech['identifier'];
-            if (id is List) {
-              result = Uint8List.fromList(id.cast<int>());
-              break;
-            }
-          }
-        }
-        if (result == null || result.isEmpty) {
-          throw NfcSessionException('Could not read tag identifier.');
-        }
-        return result
-            .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-            .join(':');
-      };
-      expect(await NfcService.readDeviceUid(), 'AA:BB');
-    });
-
-    test('extrae UID desde clave "nfcf"', () async {
-      NfcService.overrideReadDeviceUid = () async {
-        final data = <String, dynamic>{
-          'nfcf': {
-            'identifier': [0x01, 0x02, 0x03],
-          },
-        };
-        Uint8List? result;
-        for (final key in ['nfca', 'nfcb', 'nfcv', 'nfcf', 'iso7816']) {
-          final tech = data[key] as Map<dynamic, dynamic>?;
-          if (tech != null) {
-            final id = tech['identifier'];
-            if (id is List) {
-              result = Uint8List.fromList(id.cast<int>());
-              break;
-            }
-          }
-        }
-        if (result == null || result.isEmpty) {
-          throw NfcSessionException('Could not read tag identifier.');
-        }
-        return result
-            .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-            .join(':');
-      };
-      expect(await NfcService.readDeviceUid(), '01:02:03');
-    });
-
-    test('extrae UID desde clave "iso7816"', () async {
-      NfcService.overrideReadDeviceUid = () async {
-        final data = <String, dynamic>{
-          'iso7816': {
-            'identifier': [0xDE, 0xAD],
-          },
-        };
-        Uint8List? result;
-        for (final key in ['nfca', 'nfcb', 'nfcv', 'nfcf', 'iso7816']) {
-          final tech = data[key] as Map<dynamic, dynamic>?;
-          if (tech != null) {
-            final id = tech['identifier'];
-            if (id is List) {
-              result = Uint8List.fromList(id.cast<int>());
-              break;
-            }
-          }
-        }
-        if (result == null || result.isEmpty) {
-          throw NfcSessionException('Could not read tag identifier.');
-        }
-        return result
-            .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-            .join(':');
-      };
-      expect(await NfcService.readDeviceUid(), 'DE:AD');
-    });
-
-    test(
-      'lanza NfcSessionException cuando no hay clave conocida en el tag',
-      () async {
-        NfcService.overrideReadDeviceUid = () async {
-          final data = <String, dynamic>{
-            'other_key': {
-              'identifier': [0x01],
-            },
-          };
-          Uint8List? result;
-          for (final key in ['nfca', 'nfcb', 'nfcv', 'nfcf', 'iso7816']) {
-            final tech = data[key] as Map<dynamic, dynamic>?;
-            if (tech != null) {
-              final id = tech['identifier'];
-              if (id is List) {
-                result = Uint8List.fromList(id.cast<int>());
-                break;
-              }
-            }
-          }
-          if (result == null || result.isEmpty) {
-            throw NfcSessionException('Could not read tag identifier.');
-          }
-          return '';
-        };
-        await expectLater(
-          NfcService.readDeviceUid(),
-          throwsA(
-            isA<NfcSessionException>().having(
-              (e) => e.message,
-              'message',
-              'Could not read tag identifier.',
-            ),
-          ),
-        );
-      },
-    );
-
-    test(
-      'lanza NfcSessionException cuando identifier es lista vacía',
-      () async {
-        NfcService.overrideReadDeviceUid = () async {
-          final data = <String, dynamic>{
-            'nfca': {'identifier': <int>[]},
-          };
-          Uint8List? result;
-          for (final key in ['nfca', 'nfcb', 'nfcv', 'nfcf', 'iso7816']) {
-            final tech = data[key] as Map<dynamic, dynamic>?;
-            if (tech != null) {
-              final id = tech['identifier'];
-              if (id is List) {
-                result = Uint8List.fromList(id.cast<int>());
-                break;
-              }
-            }
-          }
-          if (result == null || result.isEmpty) {
-            throw NfcSessionException('Could not read tag identifier.');
-          }
-          return '';
-        };
-        await expectLater(
-          NfcService.readDeviceUid(),
-          throwsA(isA<NfcSessionException>()),
-        );
-      },
-    );
-
-    test(
-      'identifier que no es List retorna null → NfcSessionException',
-      () async {
-        NfcService.overrideReadDeviceUid = () async {
-          final data = <String, dynamic>{
-            'nfca': {'identifier': 'not-a-list'},
-          };
-          Uint8List? result;
-          for (final key in ['nfca', 'nfcb', 'nfcv', 'nfcf', 'iso7816']) {
-            final tech = data[key] as Map<dynamic, dynamic>?;
-            if (tech != null) {
-              final id = tech['identifier'];
-              if (id is List) {
-                result = Uint8List.fromList(id.cast<int>());
-                break;
-              }
-            }
-          }
-          if (result == null || result.isEmpty) {
-            throw NfcSessionException('Could not read tag identifier.');
-          }
-          return '';
-        };
-        await expectLater(
-          NfcService.readDeviceUid(),
-          throwsA(isA<NfcSessionException>()),
-        );
-      },
-    );
-
-    test(
-      'error inesperado dentro de onDiscovered → NfcSessionException',
-      () async {
-        NfcService.overrideReadDeviceUid = () async {
-          throw NfcSessionException('Exception: unexpected crash');
-        };
-        await expectLater(
-          NfcService.readDeviceUid(),
-          throwsA(
-            isA<NfcSessionException>().having(
-              (e) => e.message,
-              'message',
-              contains('unexpected crash'),
-            ),
-          ),
-        );
-      },
-    );
-
-    test(
-      'onError del NFC → NfcSessionException con mensaje del error',
-      () async {
-        NfcService.overrideReadDeviceUid = () async {
-          throw NfcSessionException('NfcError: hardware fault');
-        };
-        await expectLater(
-          NfcService.readDeviceUid(),
-          throwsA(
-            isA<NfcSessionException>().having(
-              (e) => e.message,
-              'message',
-              contains('hardware fault'),
-            ),
-          ),
-        );
-      },
-    );
-  });
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // NfcService._() — constructor privado
-  // ════════════════════════════════════════════════════════════════════════════
-
-  group('NfcService — clase con constructor privado', () {
-    test(
-      'NfcService no puede instanciarse — solo tiene miembros estáticos',
-      () {
-        expect(NfcService.overrideReadDeviceUid, isNull);
-      },
-    );
-
-    test('overrideReadDeviceUid puede asignarse y limpiarse', () {
-      NfcService.overrideReadDeviceUid = () async => 'test';
-      expect(NfcService.overrideReadDeviceUid, isNotNull);
-      NfcService.overrideReadDeviceUid = null;
-      expect(NfcService.overrideReadDeviceUid, isNull);
-    });
-  });
-
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
   // stopSession
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
   group('NfcService.stopSession', () {
-    setUp(() => _setUpMethodChannel(nfcAvailable: false));
+    setUp(() => _mockChannel(nfcAvailable: false));
 
-    test('no lanza excepción aunque no haya sesión activa', () async {
+    test('completa sin error cuando no hay sesión activa', () async {
       await expectLater(NfcService.stopSession(), completes);
     });
 
@@ -475,9 +133,171 @@ void main() {
     });
   });
 
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
+  // extractIdentifier
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('NfcService.extractIdentifier', () {
+    test('extrae identifier desde clave "nfca"', () {
+      final tag = _makeTag({
+        'nfca': {
+          'identifier': [0x04, 0xA1, 0xB2, 0xC3],
+        },
+      });
+      expect(
+        NfcService.extractIdentifier(tag),
+        equals(Uint8List.fromList([0x04, 0xA1, 0xB2, 0xC3])),
+      );
+    });
+
+    test('extrae identifier desde clave "nfcb"', () {
+      final tag = _makeTag({
+        'nfcb': {
+          'identifier': [0x10, 0x20],
+        },
+      });
+      expect(
+        NfcService.extractIdentifier(tag),
+        equals(Uint8List.fromList([0x10, 0x20])),
+      );
+    });
+
+    test('extrae identifier desde clave "nfcv"', () {
+      final tag = _makeTag({
+        'nfcv': {
+          'identifier': [0xAA, 0xBB],
+        },
+      });
+      expect(
+        NfcService.extractIdentifier(tag),
+        equals(Uint8List.fromList([0xAA, 0xBB])),
+      );
+    });
+
+    test('extrae identifier desde clave "nfcf"', () {
+      final tag = _makeTag({
+        'nfcf': {
+          'identifier': [0xDE, 0xAD],
+        },
+      });
+      expect(
+        NfcService.extractIdentifier(tag),
+        equals(Uint8List.fromList([0xDE, 0xAD])),
+      );
+    });
+
+    test('extrae identifier desde clave "iso7816"', () {
+      final tag = _makeTag({
+        'iso7816': {
+          'identifier': [0xCA, 0xFE],
+        },
+      });
+      expect(
+        NfcService.extractIdentifier(tag),
+        equals(Uint8List.fromList([0xCA, 0xFE])),
+      );
+    });
+
+    test('retorna null si ninguna clave conocida está presente', () {
+      final tag = _makeTag({
+        'unknown': {
+          'identifier': [0x01],
+        },
+      });
+      expect(NfcService.extractIdentifier(tag), isNull);
+    });
+
+    test('retorna null si identifier no es List', () {
+      final tag = _makeTag({
+        'nfca': {'identifier': 'not-a-list'},
+      });
+      expect(NfcService.extractIdentifier(tag), isNull);
+    });
+
+    test('retorna Uint8List vacío si identifier es lista vacía', () {
+      final tag = _makeTag({
+        'nfca': {'identifier': <int>[]},
+      });
+      expect(NfcService.extractIdentifier(tag), isEmpty);
+    });
+
+    test('usa la primera clave encontrada si hay varias', () {
+      final tag = _makeTag({
+        'nfca': {
+          'identifier': [0x01],
+        },
+        'nfcb': {
+          'identifier': [0x02],
+        },
+      });
+      expect(
+        NfcService.extractIdentifier(tag),
+        equals(Uint8List.fromList([0x01])),
+      );
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // bytesToHex
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('NfcService.bytesToHex', () {
+    test('formatea bytes correctamente', () {
+      expect(
+        NfcService.bytesToHex(Uint8List.fromList([0x04, 0xA1, 0xB2, 0xC3])),
+        '04:A1:B2:C3',
+      );
+    });
+
+    test('aplica padding en bytes menores a 0x10', () {
+      expect(
+        NfcService.bytesToHex(Uint8List.fromList([0x00, 0x0F, 0xFF])),
+        '00:0F:FF',
+      );
+    });
+
+    test('un solo byte no añade separador', () {
+      expect(NfcService.bytesToHex(Uint8List.fromList([0xAB])), 'AB');
+    });
+
+    test('resultado en mayúsculas', () {
+      expect(
+        NfcService.bytesToHex(Uint8List.fromList([0xde, 0xad, 0xbe, 0xef])),
+        'DE:AD:BE:EF',
+      );
+    });
+  });
+
+  group('NfcService.readDeviceUid — flujo completo con NFC disponible', () {
+    test('retorna UID cuando el override simula lectura exitosa', () async {
+      _mockChannel(nfcAvailable: true);
+      NfcService.overrideReadDeviceUid = () async => '04:A1:B2:C3';
+      expect(await NfcService.readDeviceUid(), '04:A1:B2:C3');
+    });
+
+    test(
+      'lanza NfcSessionException cuando el override simula fallo de sesión',
+      () async {
+        _mockChannel(nfcAvailable: true);
+        NfcService.overrideReadDeviceUid = () async =>
+            throw NfcSessionException('tag lost');
+        await expectLater(
+          NfcService.readDeviceUid(),
+          throwsA(
+            isA<NfcSessionException>().having(
+              (e) => e.message,
+              'message',
+              'tag lost',
+            ),
+          ),
+        );
+      },
+    );
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
   // NfcNotAvailableException
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
   group('NfcNotAvailableException', () {
     test('toString devuelve el mensaje esperado', () {
@@ -492,9 +312,9 @@ void main() {
     });
   });
 
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
   // NfcSessionException
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
   group('NfcSessionException', () {
     test('toString devuelve el mensaje pasado al constructor', () {
