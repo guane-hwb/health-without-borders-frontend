@@ -17,7 +17,7 @@ class LocalDatabase {
   static final LocalDatabase instance = LocalDatabase._();
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 3;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
 
@@ -58,6 +58,7 @@ class LocalDatabase {
             record_json   TEXT NOT NULL,
             is_synced     INTEGER NOT NULL DEFAULT 0,
             sync_error    TEXT,
+            sync_error_code INTEGER,
             created_at    TEXT NOT NULL,
             synced_at     TEXT
           )
@@ -68,6 +69,13 @@ class LocalDatabase {
       onUpgrade: (Database db, int oldVersion, int newVersion) async {
         if (oldVersion < 2) {
           await _createChipStatusTable(db);
+        }
+        if (oldVersion < 3) {
+          // Persist the HTTP status of the last sync failure so the queue UI
+          // can tell a permanent conflict (409) apart from a retryable error.
+          await db.execute(
+            'ALTER TABLE $_table ADD COLUMN sync_error_code INTEGER',
+          );
         }
       },
     );
@@ -97,6 +105,7 @@ class LocalDatabase {
       'record_json': jsonEncode(record.toJson()),
       'is_synced': 0,
       'sync_error': null,
+      'sync_error_code': null,
       'created_at': DateTime.now().toIso8601String(),
       'synced_at': null,
     };
@@ -164,17 +173,25 @@ class LocalDatabase {
     await db!.delete(_table, where: 'patient_id = ?', whereArgs: [patientId]);
   }
 
-  Future<void> markSyncError(String patientId, String error) async {
+  Future<void> markSyncError(
+    String patientId,
+    String error, {
+    int? statusCode,
+  }) async {
     if (_isWeb) {
       if (_webStore.containsKey(patientId)) {
-        _webStore[patientId] = {..._webStore[patientId]!, 'sync_error': error};
+        _webStore[patientId] = {
+          ..._webStore[patientId]!,
+          'sync_error': error,
+          'sync_error_code': statusCode,
+        };
       }
       return;
     }
     final db = await _database;
     await db!.update(
       _table,
-      {'sync_error': error},
+      {'sync_error': error, 'sync_error_code': statusCode},
       where: 'patient_id = ?',
       whereArgs: [patientId],
     );
@@ -292,6 +309,7 @@ class LocalPatientEntry {
     required this.recordJson,
     required this.isSynced,
     this.syncError,
+    this.syncErrorCode,
     required this.createdAt,
     this.syncedAt,
   });
@@ -304,6 +322,7 @@ class LocalPatientEntry {
       recordJson: row['record_json'] as String,
       isSynced: (row['is_synced'] as int) == 1,
       syncError: row['sync_error'] as String?,
+      syncErrorCode: row['sync_error_code'] as int?,
       createdAt: row['created_at'] as String,
       syncedAt: row['synced_at'] as String?,
     );
@@ -315,6 +334,7 @@ class LocalPatientEntry {
   final String recordJson;
   final bool isSynced;
   final String? syncError;
+  final int? syncErrorCode;
   final String createdAt;
   final String? syncedAt;
 

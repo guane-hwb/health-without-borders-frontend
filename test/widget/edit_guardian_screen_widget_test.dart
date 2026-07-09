@@ -92,7 +92,11 @@ class FakeLocalDatabase implements LocalDatabase {
   Future<List<LocalPatientEntry>> getUnsyncedRecords() async => [];
 
   @override
-  Future<void> markSyncError(String patientId, String error) async {}
+  Future<void> markSyncError(
+    String patientId,
+    String error, {
+    int? statusCode,
+  }) async {}
 
   @override
   Future<void> markSynced(String patientId) async {}
