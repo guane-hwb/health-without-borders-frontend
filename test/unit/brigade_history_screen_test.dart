@@ -1,11 +1,7 @@
-// test/unit/features/nfc/brigade_history_screen_unit_test.dart
+// test/unit/features/nfc/brigade_history_screen_test.dart
 //
 // Unit tests for BrigadeHistoryScreen.
-// Covers the pure logic that does NOT require the widget tree:
-// • _SyncStatus — enum values ​​and order
-// • _headerColor — color based on sync status
-// • _PatientRow getters — _icon, _color, _label based on _SyncStatus
-// • _simulateSync — state sequence (transition logic)
+// Covers the pure logic that does NOT require the widget tree.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,28 +11,24 @@ import 'package:health_without_borders_frontend/src/design/tokens/app_colors.dar
 enum SyncStatus { pending, synchronizing, synchronized }
 
 Color headerColor(SyncStatus status) => switch (status) {
-      SyncStatus.pending       => const Color(0xFFD4A017),
-      SyncStatus.synchronizing => AppColors.secondary,
-      SyncStatus.synchronized  => const Color(0xFF2E7D32),
-    };
+  SyncStatus.pending => const Color(0xFFD4A017),
+  SyncStatus.synchronizing => AppColors.secondary,
+  SyncStatus.synchronized => const Color(0xFF2E7D32),
+};
 
 IconData rowIcon(SyncStatus status) => switch (status) {
-      SyncStatus.pending       => Icons.cloud_upload_outlined,
-      SyncStatus.synchronizing => Icons.sync,
-      SyncStatus.synchronized  => Icons.cloud_done,
-    };
+  SyncStatus.pending => Icons.cloud_upload_outlined,
+  SyncStatus.synchronizing => Icons.sync,
+  SyncStatus.synchronized => Icons.cloud_done,
+};
 
 Color rowColor(SyncStatus status) => switch (status) {
-      SyncStatus.pending       => const Color(0xFFD4A017),
-      SyncStatus.synchronizing => AppColors.primary,
-      SyncStatus.synchronized  => const Color(0xFF2E7D32),
-    };
+  SyncStatus.pending => const Color(0xFFD4A017),
+  SyncStatus.synchronizing => AppColors.primary,
+  SyncStatus.synchronized => const Color(0xFF2E7D32),
+};
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Tests
-// ─────────────────────────────────────────────────────────────────────────────
 void main() {
-
   // ── Group 1: _SyncStatus — enum definition ────────────────────────────
   group('_SyncStatus — enum', () {
     test('tiene exactamente 3 valores', () {
@@ -55,7 +47,6 @@ void main() {
     });
 
     test('el estado inicial es pending', () {
-      // The widget initializes _status = _SyncStatus.pending
       const initial = SyncStatus.pending;
       expect(initial, equals(SyncStatus.pending));
     });
@@ -80,11 +71,17 @@ void main() {
     });
 
     test('synchronizing → AppColors.secondary (azul)', () {
-      expect(headerColor(SyncStatus.synchronizing), equals(AppColors.secondary));
+      expect(
+        headerColor(SyncStatus.synchronizing),
+        equals(AppColors.secondary),
+      );
     });
 
     test('synchronized → Color(0xFF2E7D32) (verde)', () {
-      expect(headerColor(SyncStatus.synchronized), equals(const Color(0xFF2E7D32)));
+      expect(
+        headerColor(SyncStatus.synchronized),
+        equals(const Color(0xFF2E7D32)),
+      );
     });
 
     test('pending y synchronizing tienen colores distintos', () {
@@ -140,7 +137,10 @@ void main() {
     });
 
     test('synchronized → Color(0xFF2E7D32) (verde)', () {
-      expect(rowColor(SyncStatus.synchronized), equals(const Color(0xFF2E7D32)));
+      expect(
+        rowColor(SyncStatus.synchronized),
+        equals(const Color(0xFF2E7D32)),
+      );
     });
 
     test('pending y synchronizing tienen colores distintos en el row', () {
@@ -166,21 +166,18 @@ void main() {
   // ── Group 5: State Transition Sequence ───────────────────────────
   group('_simulateSync — secuencia de transición de estados', () {
     test('el estado inicial es siempre pending', () {
-      // Documented: the widget starts in pending state before any delay
       const s = SyncStatus.pending;
       expect(s, equals(SyncStatus.pending));
     });
 
     test('pending → synchronizing es una transición válida', () {
       var status = SyncStatus.pending;
-      // Simulate first delay (2 s)
       status = SyncStatus.synchronizing;
       expect(status, equals(SyncStatus.synchronizing));
     });
 
     test('synchronizing → synchronized es una transición válida', () {
       var status = SyncStatus.synchronizing;
-      // Simulates a second delay (3 s)
       status = SyncStatus.synchronized;
       expect(status, equals(SyncStatus.synchronized));
     });
@@ -196,11 +193,14 @@ void main() {
       status = SyncStatus.synchronized;
       history.add(status);
 
-      expect(history, equals([
-        SyncStatus.pending,
-        SyncStatus.synchronizing,
-        SyncStatus.synchronized,
-      ]));
+      expect(
+        history,
+        equals([
+          SyncStatus.pending,
+          SyncStatus.synchronizing,
+          SyncStatus.synchronized,
+        ]),
+      );
     });
 
     test('el estado final es siempre synchronized', () {

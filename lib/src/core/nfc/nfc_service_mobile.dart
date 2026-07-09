@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 
 /// Reads the factory UID from NFC wristbands.
@@ -31,13 +31,10 @@ class NfcService {
     final Completer<String> completer = Completer<String>();
 
     NfcManager.instance.startSession(
-      pollingOptions: {
-        NfcPollingOption.iso14443,
-        NfcPollingOption.iso15693,
-      },
+      pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
       onDiscovered: (NfcTag tag) async {
         try {
-          final Uint8List? id = _extractIdentifier(tag);
+          final Uint8List? id = extractIdentifier(tag);
           if (id == null || id.isEmpty) {
             if (!completer.isCompleted) {
               completer.completeError(
@@ -46,7 +43,7 @@ class NfcService {
             }
           } else {
             if (!completer.isCompleted) {
-              completer.complete(_bytesToHex(id));
+              completer.complete(bytesToHex(id));
             }
           }
         } catch (e) {
@@ -77,12 +74,10 @@ class NfcService {
 
   // ── Private helpers ─────────────────────────────────────────────────────
 
-  static Uint8List? _extractIdentifier(NfcTag tag) {
-    // Extract identifier from tag.data map — works across all nfc_manager versions
-    // and avoids platform-specific tech class imports that confuse the web analyzer.
+  @visibleForTesting
+  static Uint8List? extractIdentifier(NfcTag tag) {
     final data = tag.data;
 
-    // Try each technology key in order of likelihood for NTAG/MIFARE wristbands
     for (final key in ['nfca', 'nfcb', 'nfcv', 'nfcf', 'iso7816']) {
       final tech = data[key] as Map<dynamic, dynamic>?;
       if (tech != null) {
@@ -97,7 +92,8 @@ class NfcService {
   }
 
   /// [0x04, 0xA1, 0xB2] → "04:A1:B2"
-  static String _bytesToHex(Uint8List bytes) {
+  @visibleForTesting
+  static String bytesToHex(Uint8List bytes) {
     return bytes
         .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
         .join(':');

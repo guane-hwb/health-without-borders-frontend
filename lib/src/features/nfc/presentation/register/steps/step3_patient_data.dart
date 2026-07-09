@@ -357,10 +357,7 @@ class _Step3State extends State<Step3PatientData> {
               // ── Patient NFC device ─────────────────────────────────────────
               _SectionCard(
                 children: [
-                  _SectionHeader(
-                    icon: Icons.nfc,
-                    title: s.patientNfcDevice,
-                  ),
+                  _SectionHeader(icon: Icons.nfc, title: s.patientNfcDevice),
                   NfcUidField(
                     controller: _patientUid,
                     scanning: _scanningUid,
@@ -806,7 +803,13 @@ class _StyledDropdown<T> extends StatelessWidget {
     children: [
       Row(
         children: [
-          Text(label, style: _kLabelStyle),
+          Expanded(
+            child: Text(
+              label,
+              style: _kLabelStyle,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           if (required) const Text(' *', style: _kReqStyle),
         ],
       ),

@@ -1,14 +1,4 @@
 // test/widget/features/nfc/brigade_history_screen_widget_test.dart
-//
-// Widget testing for BrigadeHistoryScreen.
-// Covers what the widget tree DOES require:
-// • Initial state (pending) — offline banner visible, yellow header
-// • Synchronizing state (after 2 seconds) — hidden banner, blue header, sync icon
-// • Synchronized state (after 5 seconds) — green header, cloud_done icon
-// • Empty list — "patientsAppearHere" text and people_outline icon
-// • List with patients — name and date rendered
-// • _PatientRow — correct icon and color for each state
-// • ScreenBottomHandle — visible in the layout
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,9 +8,10 @@ import 'package:health_without_borders_frontend/src/design/tokens/app_colors.dar
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/brigade_history_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/shared_read_nfc_header.dart';
 import 'package:health_without_borders_frontend/src/shared/widgets/screen_bottom_handle.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Helper — minimal tree
+//  Helpers — minimal tree & mocks
 // ─────────────────────────────────────────────────────────────────────────────
 Widget _wrap() => AppLocale(
   locale: 'es',
@@ -28,15 +19,43 @@ Widget _wrap() => AppLocale(
   child: const MaterialApp(home: BrigadeHistoryScreen()),
 );
 
+PatientFullRecord _createMockPatient() {
+  return PatientFullRecord(
+    patientId: '1234-5678',
+    deviceUid: 'NFC-999-ABC',
+    patientInfo: PatientInfo(
+      identification: PatientIdentification(
+        documentType: 'CC',
+        documentNumber: '1000200300',
+      ),
+      firstName: 'Juan',
+      secondName: 'Carlos',
+      firstLastName: 'Pérez',
+      secondLastName: 'Gómez',
+      dob: '1990-05-15',
+      biologicalSex: 'M',
+      address: Address(city: 'Bogotá', state: 'Cundinamarca'),
+    ),
+    guardianInfo: GuardianInfo(
+      name: 'María Gómez',
+      relationship: 'Madre',
+      phone: '3001234567',
+    ),
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Tests
 // ─────────────────────────────────────────────────────────────────────────────
 void main() {
+  tearDown(() {
+    BrigadeHistoryScreen.debugPatients = null;
+  });
+
   // ── Group 1: Initial state (pending) ─────────────────────────────────────
   group('BrigadeHistoryScreen — estado inicial (pending)', () {
     testWidgets('muestra el banner offline amarillo', (tester) async {
       await tester.pumpWidget(_wrap());
-      // Without advancing time → pending state
       await tester.pump();
 
       expect(find.byIcon(Icons.warning), findsOneWidget);
@@ -102,16 +121,12 @@ void main() {
       await tester.pumpWidget(_wrap());
       await tester.pump();
 
-      // Confirm that the banner exists in pending
       expect(find.byIcon(Icons.warning), findsOneWidget);
 
-      // Advance 2 seconds → transition to synchronizing
       await tester.pump(const Duration(seconds: 2));
       await tester.pump();
 
-      // The banner is only shown in pending state
       expect(find.byIcon(Icons.warning), findsNothing);
-      // Drain Future.delayed of _simulateSync (2 s + 3 s).
       await tester.pump(const Duration(seconds: 6));
     });
 
@@ -128,7 +143,6 @@ void main() {
         return d is BoxDecoration && d.color == AppColors.secondary;
       });
       expect(hasSecondaryHeader, isTrue);
-      // Drain Future.delayed of _simulateSync (2 s + 3 s).
       await tester.pump(const Duration(seconds: 6));
     });
   });
@@ -139,7 +153,6 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(_wrap());
-      // 2 s → synchronizing, 3 s más → synchronized = 5 s total
       await tester.pump(const Duration(seconds: 5));
       await tester.pump();
 
@@ -149,7 +162,6 @@ void main() {
         return d is BoxDecoration && d.color == const Color(0xFF2E7D32);
       });
       expect(hasGreenHeader, isTrue);
-      // Drain Future.delayed of _simulateSync (2 s + 3 s).
       await tester.pump(const Duration(seconds: 6));
     });
 
@@ -159,7 +171,6 @@ void main() {
       await tester.pump();
 
       expect(find.byIcon(Icons.warning), findsNothing);
-      // Drain Future.delayed of _simulateSync (2 s + 3 s).
       await tester.pump(const Duration(seconds: 6));
     });
   });
@@ -195,44 +206,48 @@ void main() {
     });
   });
 
-  // ── Group 5: _PatientRow — status icons ──────────────────────────────
-  // BrigadeHistoryScreen starts with an empty list; the _PatientRows are only
-  // rendered if there are patients. These tests verify the logic of
-  // icons through an accessible state without injecting data directly.
-  group('_PatientRow — íconos según estado', () {
-    testWidgets(
-      'en pending — cloud_upload_outlined no está en pantalla (lista vacía)',
-      (tester) async {
-        await tester.pumpWidget(_wrap());
-        await tester.pump();
-
-        expect(find.byIcon(Icons.cloud_upload_outlined), findsNothing);
-        await tester.pump(const Duration(seconds: 6));
-      },
-    );
-
-    testWidgets('en synchronizing — sync no está en pantalla (lista vacía)', (
+  // ── Group 5: _PatientRow
+  group('_PatientRow — íconos según estado con Datos Reales', () {
+    testWidgets('renderiza datos de paciente y maneja estado pending', (
       tester,
     ) async {
+      BrigadeHistoryScreen.debugPatients = [_createMockPatient()];
+
+      await tester.pumpWidget(_wrap());
+      await tester.pump();
+
+      expect(find.byIcon(Icons.person), findsOneWidget);
+      expect(find.textContaining('Juan Carlos Pérez Gómez'), findsOneWidget);
+      expect(find.byIcon(Icons.cloud_upload_outlined), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('renderiza fila en estado de sincronización (synchronizing)', (
+      tester,
+    ) async {
+      BrigadeHistoryScreen.debugPatients = [_createMockPatient()];
+
       await tester.pumpWidget(_wrap());
       await tester.pump(const Duration(seconds: 2));
       await tester.pump();
 
-      expect(find.byIcon(Icons.sync), findsNothing);
+      expect(find.byIcon(Icons.sync), findsOneWidget);
       await tester.pump(const Duration(seconds: 6));
     });
 
-    testWidgets(
-      'en synchronized — cloud_done no está en pantalla (lista vacía)',
-      (tester) async {
-        await tester.pumpWidget(_wrap());
-        await tester.pump(const Duration(seconds: 5));
-        await tester.pump();
+    testWidgets('renderiza fila en estado sincronizado (synchronized)', (
+      tester,
+    ) async {
+      BrigadeHistoryScreen.debugPatients = [_createMockPatient()];
 
-        expect(find.byIcon(Icons.cloud_done), findsNothing);
-        await tester.pump(const Duration(seconds: 6));
-      },
-    );
+      await tester.pumpWidget(_wrap());
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump();
+
+      expect(find.byIcon(Icons.cloud_done), findsOneWidget);
+      await tester.pump(const Duration(seconds: 6));
+    });
   });
 
   // ── Group 6: General screen structure ────────────────────────────
@@ -298,18 +313,14 @@ void main() {
         await tester.pumpWidget(_wrap());
         await tester.pump();
 
-        // Banner visible in pending
         expect(find.byIcon(Icons.warning), findsOneWidget);
 
-        // Just before the 2-second mark, the banner is still visible
         await tester.pump(const Duration(milliseconds: 1999));
         expect(find.byIcon(Icons.warning), findsOneWidget);
 
-        // The banner disappears at exactly 2 seconds.
         await tester.pump(const Duration(milliseconds: 1));
-        await tester.pump(); // rebuild
+        await tester.pump();
         expect(find.byIcon(Icons.warning), findsNothing);
-        // Drain Future.delayed from _simulateSync (2 s + 3 s).
         await tester.pump(const Duration(seconds: 6));
       },
     );
@@ -321,7 +332,6 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       await tester.pump();
 
-      // Just before the 5-second mark, the header is still secondary
       await tester.pump(const Duration(milliseconds: 2999));
       final containersB4 = tester.widgetList<Container>(find.byType(Container));
       final stillSecondary = containersB4.any((c) {
@@ -330,7 +340,6 @@ void main() {
       });
       expect(stillSecondary, isTrue);
 
-      // When it reaches 5 seconds, the header changes to green.
       await tester.pump(const Duration(milliseconds: 1));
       await tester.pump();
       final containersAfter = tester.widgetList<Container>(
