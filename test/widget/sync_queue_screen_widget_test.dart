@@ -31,6 +31,7 @@ LocalPatientEntry makeEntry({
   String recordJson = '{"patientId":"p-001"}',
   bool isSynced = false,
   String? syncError,
+  int? syncErrorCode,
   String createdAt = '2024-05-01T10:00:00',
 }) => LocalPatientEntry(
   patientId: patientId,
@@ -39,6 +40,7 @@ LocalPatientEntry makeEntry({
   recordJson: recordJson,
   isSynced: isSynced,
   syncError: syncError,
+  syncErrorCode: syncErrorCode,
   createdAt: createdAt,
 );
 
@@ -397,6 +399,78 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.text('Sync ahora'), findsOneWidget);
+    });
+
+    testWidgets('un conflicto 409 muestra el estado de manilla duplicada', (
+      tester,
+    ) async {
+      when(() => db.getUnsyncedRecords()).thenAnswer(
+        (_) async => [
+          makeEntry(
+            syncError: 'A patient is already registered with this device tag.',
+            syncErrorCode: 409,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Duplicado'), findsOneWidget);
+      expect(
+        find.textContaining('ya está registrada para otro paciente'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('un conflicto 409 oculta el botón Sync ahora', (tester) async {
+      when(() => db.getUnsyncedRecords()).thenAnswer(
+        (_) async => [
+          makeEntry(syncError: 'conflict', syncErrorCode: 409),
+        ],
+      );
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Retrying a duplicate device_uid can never succeed, so the action is gone.
+      expect(find.text('Sync ahora'), findsNothing);
+      // Review stays available so the user can inspect and re-register.
+      expect(find.text('Revisar'), findsOneWidget);
+    });
+
+    testWidgets('un error no-409 muestra el mensaje y conserva Sync ahora', (
+      tester,
+    ) async {
+      when(() => db.getUnsyncedRecords()).thenAnswer(
+        (_) async => [
+          makeEntry(syncError: 'error de servidor', syncErrorCode: 500),
+        ],
+      );
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('error de servidor'), findsOneWidget);
       expect(find.text('Sync ahora'), findsOneWidget);
     });
 

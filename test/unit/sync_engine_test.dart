@@ -68,6 +68,13 @@ void main() {
     when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
     when(() => localDb.markSynced(any())).thenAnswer((_) async {});
     when(() => localDb.markSyncError(any(), any())).thenAnswer((_) async {});
+    when(
+      () => localDb.markSyncError(
+        any(),
+        any(),
+        statusCode: any(named: 'statusCode'),
+      ),
+    ).thenAnswer((_) async {});
 
     engine = SyncEngine(patientRepository: patientRepo, localDatabase: localDb);
   });
@@ -240,7 +247,9 @@ void main() {
 
         await engine.syncAll();
 
-        verify(() => localDb.markSyncError('A', 'token expirado')).called(1);
+        verify(
+          () => localDb.markSyncError('A', 'token expirado', statusCode: 401),
+        ).called(1);
         expect(success, false);
       },
     );
@@ -253,7 +262,31 @@ void main() {
 
       await engine.syncAll();
 
-      verify(() => localDb.markSyncError('A', 'solicitud inválida')).called(1);
+      verify(
+        () => localDb.markSyncError('A', 'solicitud inválida', statusCode: 400),
+      ).called(1);
+    });
+
+    test('ApiException 409 marca conflicto de manilla y no reintenta', () async {
+      final entry = buildEntry('A', record: MockPatientFullRecord());
+      when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => [entry]);
+      final exception = buildApiException(
+        409,
+        'A patient is already registered with this device tag.',
+      );
+      when(() => patientRepo.syncPatient(any())).thenThrow(exception);
+
+      await engine.syncAll();
+
+      // The 409 status is persisted so the queue UI can render a dedicated
+      // conflict state and skip the (futile) sync action.
+      verify(
+        () => localDb.markSyncError(
+          'A',
+          'A patient is already registered with this device tag.',
+          statusCode: 409,
+        ),
+      ).called(1);
     });
 
     test('ApiException 422 marca error y no reintenta', () async {
@@ -265,7 +298,11 @@ void main() {
       await engine.syncAll();
 
       verify(
-        () => localDb.markSyncError('A', 'entidad no procesable'),
+        () => localDb.markSyncError(
+          'A',
+          'entidad no procesable',
+          statusCode: 422,
+        ),
       ).called(1);
     });
 
@@ -281,7 +318,9 @@ void main() {
 
         await engine.syncAll();
 
-        verify(() => localDb.markSyncError('A', 'rate limited')).called(1);
+        verify(
+          () => localDb.markSyncError('A', 'rate limited', statusCode: 429),
+        ).called(1);
       },
     );
 
@@ -297,7 +336,9 @@ void main() {
 
         await engine.syncAll();
 
-        verify(() => localDb.markSyncError('A', 'error de servidor')).called(1);
+        verify(
+          () => localDb.markSyncError('A', 'error de servidor', statusCode: 500),
+        ).called(1);
       },
     );
 

@@ -139,12 +139,19 @@ class SyncEngine {
       //       needed. Stop the batch; local records stay pending and will
       //       sync once the user signs in again. Local data is never touched.
       // 403/422 = data issue (don't retry until user fixes)
+      // 409 = device_uid conflict (bracelet already registered to another
+      //       patient). Permanent — retrying can never succeed, so don't retry.
       // 429 = rate limited (retry later)
       // 500 = server error (retry later)
       final shouldStopAll = e.statusCode == 401;
-      final shouldNotRetry = e.statusCode == 400 || e.statusCode == 422;
+      final shouldNotRetry =
+          e.statusCode == 400 || e.statusCode == 409 || e.statusCode == 422;
 
-      await _localDb.markSyncError(entry.patientId, e.message);
+      await _localDb.markSyncError(
+        entry.patientId,
+        e.message,
+        statusCode: e.statusCode,
+      );
       onRecordSynced?.call(entry.patientId, false, e.message);
 
       if (shouldStopAll) {
