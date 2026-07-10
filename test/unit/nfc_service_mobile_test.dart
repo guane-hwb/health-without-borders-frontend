@@ -1,4 +1,4 @@
-// test/unit/`nfc_service_mobile_test.dart`
+// test/unit/nfc_service_mobile_test.dart
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,7 +10,10 @@ import 'package:health_without_borders_frontend/src/core/nfc/nfc_service_mobile.
 
 const _channel = MethodChannel('plugins.flutter.io/nfc_manager');
 
-void _mockChannel({required bool nfcAvailable}) {
+void _mockChannel({
+  required bool nfcAvailable,
+  bool throwOnStopSession = false,
+}) {
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(_channel, (MethodCall call) async {
         switch (call.method) {
@@ -19,6 +22,9 @@ void _mockChannel({required bool nfcAvailable}) {
           case 'Nfc#startSession':
             return null;
           case 'Nfc#stopSession':
+            if (throwOnStopSession) {
+              throw PlatformException(code: 'stop_session_error');
+            }
             return null;
           case 'Nfc#disposeTag':
             return null;
@@ -39,8 +45,11 @@ NfcTag _makeTag(Map<String, dynamic> data) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  final defaultStartSessionImpl = NfcService.startSessionImpl;
+
   tearDown(() {
     NfcService.overrideReadDeviceUid = null;
+    NfcService.startSessionImpl = defaultStartSessionImpl;
   });
 
   tearDownAll(() {
@@ -130,6 +139,11 @@ void main() {
       await NfcService.stopSession();
       await NfcService.stopSession();
       await NfcService.stopSession();
+    });
+
+    test('captura silenciosamente errores del canal nativo', () async {
+      _mockChannel(nfcAvailable: false, throwOnStopSession: true);
+      await expectLater(NfcService.stopSession(), completes);
     });
   });
 
@@ -337,6 +351,200 @@ void main() {
 
     test('es una Exception', () {
       expect(NfcSessionException('x'), isA<Exception>());
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // startSessionImpl — implementación real por defecto
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('NfcService.startSessionImpl — implementación real', () {
+    setUp(() => _mockChannel(nfcAvailable: true));
+
+    test(
+      'invoca NfcManager.instance.startSession real cuando no fue sobrescrito',
+      () {
+        expect(
+          () => NfcService.startSessionImpl(
+            pollingOptions: {NfcPollingOption.iso14443},
+            onDiscovered: (_) async {},
+            onError: (_) async {},
+          ),
+          returnsNormally,
+        );
+      },
+    );
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // readDeviceUid
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('NfcService.readDeviceUid — flujo real (onDiscovered)', () {
+    setUp(() {
+      _mockChannel(nfcAvailable: true);
+      NfcService.overrideReadDeviceUid = null;
+    });
+
+    test(
+      'retorna el UID cuando se descubre un tag con identifier válido',
+      () async {
+        final tag = _makeTag({
+          'nfca': {
+            'identifier': [0x04, 0xA1],
+          },
+        });
+        NfcService.startSessionImpl =
+            ({
+              required pollingOptions,
+              required onDiscovered,
+              required onError,
+            }) {
+              onDiscovered(tag);
+            };
+
+        expect(await NfcService.readDeviceUid(), '04:A1');
+      },
+    );
+
+    test(
+      'lanza NfcSessionException cuando el tag no tiene identifier (id null)',
+      () async {
+        final tag = _makeTag({'unknown': {}});
+        NfcService.startSessionImpl =
+            ({
+              required pollingOptions,
+              required onDiscovered,
+              required onError,
+            }) {
+              onDiscovered(tag);
+            };
+
+        await expectLater(
+          NfcService.readDeviceUid(),
+          throwsA(
+            isA<NfcSessionException>().having(
+              (e) => e.message,
+              'message',
+              'Could not read tag identifier.',
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
+      'lanza NfcSessionException cuando el identifier es una lista vacía',
+      () async {
+        final tag = _makeTag({
+          'nfca': {'identifier': <int>[]},
+        });
+        NfcService.startSessionImpl =
+            ({
+              required pollingOptions,
+              required onDiscovered,
+              required onError,
+            }) {
+              onDiscovered(tag);
+            };
+
+        await expectLater(
+          NfcService.readDeviceUid(),
+          throwsA(
+            isA<NfcSessionException>().having(
+              (e) => e.message,
+              'message',
+              'Could not read tag identifier.',
+            ),
+          ),
+        );
+      },
+    );
+
+    test('envuelve en NfcSessionException cualquier excepción lanzada '
+        'al procesar el tag', () async {
+      final tag = _makeTag({
+        'nfca': {
+          'identifier': ['no-es-un-entero'],
+        },
+      });
+      NfcService.startSessionImpl =
+          ({required pollingOptions, required onDiscovered, required onError}) {
+            onDiscovered(tag);
+          };
+
+      await expectLater(
+        NfcService.readDeviceUid(),
+        throwsA(isA<NfcSessionException>()),
+      );
+    });
+
+    test('ignora invocaciones adicionales de onDiscovered tras completar '
+        'el completer', () async {
+      final tag = _makeTag({
+        'nfca': {
+          'identifier': [0x01],
+        },
+      });
+      NfcService.startSessionImpl =
+          ({required pollingOptions, required onDiscovered, required onError}) {
+            onDiscovered(tag);
+            onDiscovered(tag);
+          };
+
+      expect(await NfcService.readDeviceUid(), '01');
+    });
+  });
+
+  group('NfcService.readDeviceUid — flujo real (onError)', () {
+    setUp(() {
+      _mockChannel(nfcAvailable: true);
+      NfcService.overrideReadDeviceUid = null;
+    });
+
+    test(
+      'lanza NfcSessionException con el mensaje del error de la plataforma',
+      () async {
+        NfcService.startSessionImpl =
+            ({
+              required pollingOptions,
+              required onDiscovered,
+              required onError,
+            }) {
+              onError('tag lost');
+            };
+
+        await expectLater(
+          NfcService.readDeviceUid(),
+          throwsA(
+            isA<NfcSessionException>().having(
+              (e) => e.message,
+              'message',
+              'tag lost',
+            ),
+          ),
+        );
+      },
+    );
+
+    test('ignora invocaciones adicionales de onError tras completar '
+        'el completer', () async {
+      NfcService.startSessionImpl =
+          ({required pollingOptions, required onDiscovered, required onError}) {
+            onError('primer error');
+            onError('segundo error');
+          };
+
+      await expectLater(
+        NfcService.readDeviceUid(),
+        throwsA(
+          isA<NfcSessionException>().having(
+            (e) => e.message,
+            'message',
+            'primer error',
+          ),
+        ),
+      );
     });
   });
 }

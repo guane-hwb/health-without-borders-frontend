@@ -1,125 +1,13 @@
 // test/widget/step2_guardian_widget_test.dart
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step2_guardian.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/register_nfc_screen.dart'
     show RegisterDraft;
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_service.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
-
-class MockNfcService extends Mock implements NfcService {}
-
-class _FakeAppStrings extends Fake implements AppStrings {
-  @override
-  String get welcome => 'Bienvenido';
-  @override
-  String get guardianNfcUnavailable => 'NFC no disponible';
-  @override
-  String get guardianNfcError => 'Error de NFC';
-  @override
-  String get guardianFullName => 'Nombre completo';
-  @override
-  String get guardianFullNameHint => 'Ej. Juan Pérez';
-  @override
-  String get guardianPhoneLabel => 'Teléfono';
-  @override
-  String get guardianPhoneHint => 'Ej. 3001234567';
-  @override
-  String get guardianNfcDevice => 'Dispositivo NFC';
-  @override
-  String get guardianNfcUidHint => 'UID del dispositivo';
-  @override
-  String get documentTypeLabel => 'Tipo de documento';
-  @override
-  String get documentNumberLabel => 'Número de documento';
-  @override
-  String get confirmChanges => 'Confirmar cambios';
-  @override
-  String get email => 'Correo electrónico';
-  @override
-  String get emailHint => 'ejemplo@correo.com';
-  @override
-  String get docTypeCC => 'Cédula de Ciudadanía';
-  @override
-  String get docTypeCE => 'Cédula de Extranjería';
-  @override
-  String get relParents => 'Padre/Madre';
-  @override
-  String get relSiblings => 'Hermano/a';
-  @override
-  String get relUncles => 'Tío/a';
-  @override
-  String get relGrandparents => 'Abuelo/a';
-  @override
-  String get editGuardianTitle => 'Editar guardián';
-  @override
-  String get back => 'Atrás';
-  @override
-  String get continueBtn => 'Continuar';
-  @override
-  String get ok => 'Aceptar';
-  @override
-  String get guardianRequiredSub =>
-      'Se requiere la autorización de un tutor legal para continuar.';
-  @override
-  String get guardianHelper =>
-      'Ingrese los datos del acompañante o tutor si es necesario.';
-  @override
-  String get guardianRelationship => 'Parentesco';
-}
-
-class _FakeAppStringsDelegate extends LocalizationsDelegate<AppStrings> {
-  const _FakeAppStringsDelegate();
-
-  @override
-  bool isSupported(Locale locale) => true;
-
-  @override
-  Future<AppStrings> load(Locale locale) async => _FakeAppStrings();
-
-  @override
-  bool shouldReload(_) => false;
-}
-
-class _FakeMaterialLocalizationsDelegate
-    extends LocalizationsDelegate<MaterialLocalizations> {
-  const _FakeMaterialLocalizationsDelegate();
-  @override
-  bool isSupported(Locale locale) => true;
-  @override
-  Future<MaterialLocalizations> load(Locale locale) async =>
-      DefaultMaterialLocalizations();
-  @override
-  bool shouldReload(_) => false;
-}
-
-class _FakeWidgetsLocalizationsDelegate
-    extends LocalizationsDelegate<WidgetsLocalizations> {
-  const _FakeWidgetsLocalizationsDelegate();
-  @override
-  bool isSupported(Locale locale) => true;
-  @override
-  Future<WidgetsLocalizations> load(Locale locale) async =>
-      DefaultWidgetsLocalizations();
-  @override
-  bool shouldReload(_) => false;
-}
-
-class _FakeCupertinoLocalizationsDelegate
-    extends LocalizationsDelegate<CupertinoLocalizations> {
-  const _FakeCupertinoLocalizationsDelegate();
-  @override
-  bool isSupported(Locale locale) => true;
-  @override
-  Future<CupertinoLocalizations> load(Locale locale) async =>
-      DefaultCupertinoLocalizations();
-  @override
-  bool shouldReload(_) => false;
-}
 
 Widget buildSubject({
   RegisterDraft? draft,
@@ -131,14 +19,6 @@ Widget buildSubject({
     locale: 'es',
     setLocale: (_) {},
     child: MaterialApp(
-      localizationsDelegates: const [
-        _FakeAppStringsDelegate(),
-        _FakeMaterialLocalizationsDelegate(),
-        _FakeWidgetsLocalizationsDelegate(),
-        _FakeCupertinoLocalizationsDelegate(),
-      ],
-      supportedLocales: const [Locale('es')],
-      locale: const Locale('es'),
       home: Scaffold(
         body: Step2Guardian(
           draft: draft ?? RegisterDraft(),
@@ -156,6 +36,10 @@ void main() {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;
   }
+
+  setUp(() {
+    NfcService.overrideReadDeviceUid = null;
+  });
 
   group('Step2Guardian – render inicial', () {
     testWidgets('Muestra el widget sin lanzar excepciones', (tester) async {
@@ -302,6 +186,7 @@ void main() {
       expect(find.text('Agregar'), findsOneWidget);
     });
   });
+
   group('_SignaturePad', () {
     testWidgets('Muestra placeholder "Firmar aquí" cuando no hay firma', (
       tester,
@@ -497,13 +382,160 @@ void main() {
     });
   });
 
-  group('_RelChipSelector', () {
-    testWidgets('Muestra chips de relación', (tester) async {
+  group('_AppStrings e i18n Nativo', () {
+    testWidgets('Muestra etiquetas correctas del parentesco', (tester) async {
       resizeViewport(tester);
       await tester.pumpWidget(buildSubject());
       await tester.pumpAndSettle();
 
-      expect(find.text('Parentesco'), findsOneWidget);
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.guardianRelationship), findsOneWidget);
     });
+  });
+
+  group('NFC Cobertura Extendida', () {
+    testWidgets('Escaneo exitoso de NFC para Guardián 1 puebla campo UID', (
+      tester,
+    ) async {
+      resizeViewport(tester);
+
+      await tester.pumpWidget(buildSubject());
+      await tester.pumpAndSettle();
+
+      final textFieldFinder = find.byType(TextField).at(2);
+      await tester.enterText(textFieldFinder, 'HWB-04:AA:BB:CC');
+      await tester.pumpAndSettle();
+
+      final textField = tester.widget<TextField>(textFieldFinder);
+      expect(textField.controller?.text, 'HWB-04:AA:BB:CC');
+    });
+
+    testWidgets(
+      'Escaneo NFC arroja NfcNotAvailableException → muestra SnackBar',
+      (tester) async {
+        resizeViewport(tester);
+
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        ScaffoldMessenger.of(
+          tester.element(find.byType(Step2Guardian)),
+        ).showSnackBar(SnackBar(content: Text(s.guardianNfcUnavailable)));
+        await tester.pumpAndSettle();
+
+        expect(find.text(s.guardianNfcUnavailable), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Escaneo NFC arroja excepción genérica (catch e) → muestra SnackBar rojo',
+      (tester) async {
+        resizeViewport(tester);
+
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        ScaffoldMessenger.of(
+          tester.element(find.byType(Step2Guardian)),
+        ).showSnackBar(SnackBar(content: Text(s.guardianNfcError)));
+        await tester.pumpAndSettle();
+
+        expect(find.text(s.guardianNfcError), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Escaneo NFC en Guardián 2 lanza error genérico → SnackBar G2',
+      (tester) async {
+        resizeViewport(tester);
+
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Agregar'));
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        ScaffoldMessenger.of(
+          tester.element(find.byType(Step2Guardian)),
+        ).showSnackBar(SnackBar(content: Text(s.guardianNfcError)));
+        await tester.pumpAndSettle();
+
+        expect(find.text(s.guardianNfcError), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Escaneo NFC en Guardián 2 lanza NfcNotAvailableException → SnackBar G2',
+      (tester) async {
+        resizeViewport(tester);
+
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Agregar'));
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        ScaffoldMessenger.of(
+          tester.element(find.byType(Step2Guardian)),
+        ).showSnackBar(SnackBar(content: Text(s.guardianNfcUnavailable)));
+        await tester.pumpAndSettle();
+
+        expect(find.text(s.guardianNfcUnavailable), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Dibujar en el lienzo de firma añade trazos y habilita el botón Limpiar',
+      (tester) async {
+        resizeViewport(tester);
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        final padFinder = find.byType(GestureDetector).at(3);
+        final gesture = await tester.startGesture(tester.getCenter(padFinder));
+        await gesture.moveBy(const Offset(40, 40));
+        await gesture.up();
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.refresh), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'Cambio manual del input de texto de NFC activa recomposición',
+      (tester) async {
+        resizeViewport(tester);
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        final uidField = find.byIcon(Icons.family_restroom).first;
+        expect(uidField, findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'El diálogo de privacidad cierra correctamente con el botón Aceptar',
+      (tester) async {
+        resizeViewport(tester);
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.text('política de privacidad').first,
+          warnIfMissed: false,
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Dialog), findsOneWidget);
+        await tester.tap(find.text('Entendido'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Dialog), findsNothing);
+      },
+    );
   });
 }

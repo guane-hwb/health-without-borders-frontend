@@ -20,6 +20,11 @@ List<String> validateGuardianForm({
   required String name2,
   required List<List<Offset>> signatureStrokes2,
   required bool auth2Accepted,
+  String email = '',
+  String docNumber2 = '',
+  String phone2 = '',
+  String email2 = '',
+  bool isEs = true,
   String guardianFullName = 'Nombre completo',
   String guardianPhoneLabel = 'Teléfono',
   String guardianNfcDevice = 'Dispositivo NFC',
@@ -38,11 +43,70 @@ List<String> validateGuardianForm({
     if (signatureStrokes.isEmpty) missing.add(bioSigLabel);
   }
 
+  final String cleanDoc = docNumber.trim();
+  if (cleanDoc.isNotEmpty) {
+    final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
+    if (!docRegex.hasMatch(cleanDoc)) {
+      missing.add(
+        isEs
+            ? 'Documento de guardián inválido'
+            : 'Invalid Guardian Document format',
+      );
+    }
+  }
+
+  final String cleanPhone = phone.trim();
+  if (cleanPhone.isNotEmpty) {
+    final phoneRegex = RegExp(r'^\+?[0-9]{7,15}$');
+    if (!phoneRegex.hasMatch(cleanPhone)) {
+      missing.add(isEs ? 'Teléfono inválido' : 'Invalid Phone format');
+    }
+  }
+
+  final String cleanEmail = email.trim();
+  if (cleanEmail.isNotEmpty) {
+    final emailRegex = RegExp(
+      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    );
+    if (!emailRegex.hasMatch(cleanEmail)) {
+      missing.add(
+        isEs ? 'Correo electrónico inválido' : 'Invalid Email format',
+      );
+    }
+  }
+
   if (signatureStrokes.isNotEmpty) {
     if (!authAccepted) missing.add(confirmChanges);
   }
 
   if (hasGuardian2 && name2.trim().isNotEmpty) {
+    final String cleanDoc2 = docNumber2.trim();
+    final String cleanPhone2 = phone2.trim();
+    final String cleanEmail2 = email2.trim();
+
+    if (cleanDoc2.isNotEmpty &&
+        !RegExp(r'^[a-zA-Z0-9-]{5,20}$').hasMatch(cleanDoc2)) {
+      missing.add(
+        isEs
+            ? 'Documento de Guardián 2 inválido'
+            : 'Invalid Guardian 2 Document',
+      );
+    }
+    if (cleanPhone2.isNotEmpty &&
+        !RegExp(r'^\+?[0-9]{7,15}$').hasMatch(cleanPhone2)) {
+      missing.add(
+        isEs ? 'Teléfono de Guardián 2 inválido' : 'Invalid Guardian 2 Phone',
+      );
+    }
+    if (cleanEmail2.isNotEmpty &&
+        !RegExp(
+          r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+        ).hasMatch(cleanEmail2)) {
+      missing.add(
+        isEs ? 'Correo de Guardián 2 inválido' : 'Invalid Guardian 2 Email',
+      );
+    }
+
     if (signatureStrokes2.isNotEmpty) {
       if (!auth2Accepted) missing.add(auth2Label);
     }
@@ -186,7 +250,7 @@ void main() {
           signatureStrokes: [
             [const Offset(0, 0), const Offset(10, 10)],
           ],
-          authAccepted: false, // ← sin aceptar
+          authAccepted: false,
           hasGuardian2: false,
           name2: '',
           signatureStrokes2: [],
@@ -448,6 +512,82 @@ void main() {
       final draft = RegisterDraft();
       final accepted = draft.guardianAuthAccepted ?? false;
       expect(accepted, isFalse);
+    });
+  });
+
+  group('Validaciones de formato extendidas (Regex branches)', () {
+    test('Documento con formato inválido lanza error', () {
+      final missing = validateGuardianForm(
+        requiredForMinor: false,
+        name: '',
+        phone: '',
+        uid: '',
+        docNumber: '123',
+        signatureStrokes: [],
+        authAccepted: false,
+        hasGuardian2: false,
+        name2: '',
+        signatureStrokes2: [],
+        auth2Accepted: false,
+      );
+      expect(missing, contains('Documento de guardián inválido'));
+    });
+
+    test('Teléfono con letras rompe la validación', () {
+      final missing = validateGuardianForm(
+        requiredForMinor: false,
+        name: '',
+        phone: '300-ABC-123',
+        uid: '',
+        docNumber: '',
+        signatureStrokes: [],
+        authAccepted: false,
+        hasGuardian2: false,
+        name2: '',
+        signatureStrokes2: [],
+        auth2Accepted: false,
+      );
+      expect(missing, contains('Teléfono inválido'));
+    });
+
+    test('Correo sin arroba o estructura inválida falla', () {
+      final missing = validateGuardianForm(
+        requiredForMinor: false,
+        name: '',
+        phone: '',
+        uid: '',
+        docNumber: '',
+        signatureStrokes: [],
+        authAccepted: false,
+        hasGuardian2: false,
+        name2: '',
+        signatureStrokes2: [],
+        auth2Accepted: false,
+        email: 'test_invalido.com',
+      );
+      expect(missing, contains('Correo electrónico inválido'));
+    });
+
+    test('Guardián 2 con formatos Regex rotos agrega múltiples errores', () {
+      final missing = validateGuardianForm(
+        requiredForMinor: false,
+        name: '',
+        phone: '',
+        uid: '',
+        docNumber: '',
+        signatureStrokes: [],
+        authAccepted: false,
+        hasGuardian2: true,
+        name2: 'Carlos López',
+        signatureStrokes2: [],
+        auth2Accepted: false,
+        docNumber2: '12',
+        phone2: 'letras',
+        email2: 'no-email',
+      );
+      expect(missing, contains('Documento de Guardián 2 inválido'));
+      expect(missing, contains('Teléfono de Guardián 2 inválido'));
+      expect(missing, contains('Correo de Guardián 2 inválido'));
     });
   });
 }
