@@ -11,6 +11,7 @@ import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../nfc/presentation/shared_read_nfc_header.dart';
 import '../data/stats_repository.dart';
 import '../domain/brigade_stats.dart';
+import '../domain/stats_date_range.dart';
 
 /// Sentinel for "no organization filter", distinct from any real organization id.
 const String kAllOrgsFilterId = 'all';
@@ -44,6 +45,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
   BrigadeStats? _stats;
   List<_OrgFilter> _orgs = const <_OrgFilter>[];
   String _selectedOrgId = kAllOrgsFilterId;
+  StatsDateRange _range = StatsDateRange.all;
   bool _loading = true;
   _Failure? _failure;
   String? _errorDetail;
@@ -88,6 +90,8 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
 
       final stats = await scope.statsRepository.fetchOverview(
         organizationId: _requestedOrgId,
+        dateFrom: _range.from,
+        dateTo: _range.to,
       );
       if (!mounted) return;
       setState(() {
@@ -115,6 +119,43 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
         _loading = false;
       });
     }
+  }
+
+  /// Handles a tap on a date-range chip. Presets apply immediately; "custom"
+  /// opens the native range picker and applies only if the user commits. A tap
+  /// on the already-selected preset is a no-op, so no needless refetch fires.
+  Future<void> _onRangeSelected(StatsRangeKind kind) async {
+    if (kind == StatsRangeKind.custom) {
+      await _pickCustomRange();
+      return;
+    }
+    if (kind == _range.kind) return;
+
+    final StatsDateRange next = switch (kind) {
+      StatsRangeKind.all => StatsDateRange.all,
+      StatsRangeKind.thisMonth => StatsDateRange.thisMonth(),
+      StatsRangeKind.last30Days => StatsDateRange.last30Days(),
+      StatsRangeKind.custom => _range, // unreachable; handled above
+    };
+    setState(() => _range = next);
+    _load();
+  }
+
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 5),
+      lastDate: now,
+      initialDateRange: _range.isBounded
+          ? DateTimeRange(start: _range.from!, end: _range.to!)
+          : null,
+      helpText: AppStrings.of(context).statsRangeCustom,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _range = StatsDateRange.custom(picked.start, picked.end));
+    _load();
   }
 
   @override
@@ -180,6 +221,12 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
             ),
             const SizedBox(height: 16),
           ],
+          _DateRangeBar(selected: _range.kind, onSelected: _onRangeSelected),
+          if (_range.isBounded) ...[
+            const SizedBox(height: 6),
+            _ActiveRangeLabel(range: _range),
+          ],
+          const SizedBox(height: 16),
           if (stats.isEmpty)
             _EmptyView(message: s.statsEmpty)
           else ...[
@@ -349,6 +396,118 @@ class _OrgFilterBar extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// The date-range chips: three presets plus a "custom" entry that opens the
+/// native range picker. Same visual language as [_OrgFilterBar].
+class _DateRangeBar extends StatelessWidget {
+  const _DateRangeBar({required this.selected, required this.onSelected});
+
+  final StatsRangeKind selected;
+  final ValueChanged<StatsRangeKind> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final chips = <(StatsRangeKind, String, IconData?)>[
+      (StatsRangeKind.all, s.statsRangeAll, null),
+      (StatsRangeKind.thisMonth, s.statsRangeThisMonth, null),
+      (StatsRangeKind.last30Days, s.statsRangeLast30, null),
+      (StatsRangeKind.custom, s.statsRangeCustom, Icons.calendar_today_rounded),
+    ];
+
+    return SizedBox(
+      height: 34,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: chips.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final (kind, label, icon) = chips[i];
+          final sel = kind == selected;
+          return GestureDetector(
+            onTap: () => onSelected(kind),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: sel ? AppColors.primary : AppColors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: sel ? AppColors.primary : AppColors.divider,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    Icon(
+                      icon,
+                      size: 12,
+                      color: sel ? AppColors.white : AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 5),
+                  ],
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: sel ? AppColors.white : AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// A small caption showing the concrete active window, e.g. "1 jun – 15 jun
+/// 2026". Only shown when a bounded range is active, so the "custom" trend
+/// ("vs. previous period") is anchored to something the user can see.
+class _ActiveRangeLabel extends StatelessWidget {
+  const _ActiveRangeLabel({required this.range});
+
+  final StatsDateRange range;
+
+  /// Localized three-letter month abbreviation, reusing the app's existing
+  /// `monEne`..`monDic` strings rather than adding a date-formatting dependency.
+  static String _month(AppStrings s, int month) => switch (month) {
+    1 => s.monEne,
+    2 => s.monFeb,
+    3 => s.monMar,
+    4 => s.monAbr,
+    5 => s.monMay,
+    6 => s.monJun,
+    7 => s.monJul,
+    8 => s.monAgo,
+    9 => s.monSep,
+    10 => s.monOct,
+    11 => s.monNov,
+    _ => s.monDic,
+  };
+
+  static String _fmt(DateTime d, AppStrings s) =>
+      '${d.day} ${_month(s, d.month)} ${d.year}';
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: 2),
+      child: Text(
+        '${_fmt(range.from!, s)} – ${_fmt(range.to!, s)}',
+        style: const TextStyle(
+          fontSize: 11,
+          color: AppColors.textSecondary,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }

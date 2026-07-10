@@ -69,6 +69,8 @@ class FakeStatsRepository extends StatsRepository {
 
   int callCount = 0;
   final List<String?> requestedOrgIds = <String?>[];
+  final List<DateTime?> requestedFrom = <DateTime?>[];
+  final List<DateTime?> requestedTo = <DateTime?>[];
 
   @override
   Future<BrigadeStats> fetchOverview({
@@ -78,6 +80,8 @@ class FakeStatsRepository extends StatsRepository {
   }) async {
     callCount++;
     requestedOrgIds.add(organizationId);
+    requestedFrom.add(dateFrom);
+    requestedTo.add(dateTo);
     final r = result;
     if (r is BrigadeStats) return r;
     throw r;
@@ -529,6 +533,101 @@ void main() {
 
       expect(find.text('All'), findsOneWidget);
       expect(find.text('— no prior data'), findsOneWidget);
+    });
+  });
+
+  group('date range', () {
+    testWidgets('defaults to "Todo" and sends no date window', (tester) async {
+      final statsRepo = FakeStatsRepository(_stats());
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: statsRepo,
+        ),
+      );
+
+      expect(find.text('Todo'), findsOneWidget);
+      expect(find.text('Este mes'), findsOneWidget);
+      expect(find.text('Últimos 30 días'), findsOneWidget);
+      expect(find.text('Personalizado'), findsOneWidget);
+      expect(statsRepo.requestedFrom, [null]);
+      expect(statsRepo.requestedTo, [null]);
+    });
+
+    testWidgets('"Este mes" refetches with a bounded window', (tester) async {
+      final statsRepo = FakeStatsRepository(_stats(period: 'custom'));
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: statsRepo,
+        ),
+      );
+
+      await tester.tap(find.text('Este mes'));
+      await tester.pumpAndSettle();
+
+      expect(statsRepo.callCount, 2);
+      final from = statsRepo.requestedFrom.last;
+      final to = statsRepo.requestedTo.last;
+      expect(from, isNotNull);
+      expect(to, isNotNull);
+      // First of the current month.
+      expect(from!.day, 1);
+    });
+
+    testWidgets('re-tapping the active range does not refetch', (tester) async {
+      final statsRepo = FakeStatsRepository(_stats());
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: statsRepo,
+        ),
+      );
+
+      await tester.tap(find.text('Todo'));
+      await tester.pumpAndSettle();
+
+      expect(statsRepo.callCount, 1);
+    });
+
+    testWidgets('a bounded range shows the active-range caption', (tester) async {
+      final statsRepo = FakeStatsRepository(_stats(period: 'custom'));
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: statsRepo,
+        ),
+      );
+
+      // "Todo" shows no caption.
+      expect(find.textContaining('–'), findsNothing);
+
+      await tester.tap(find.text('Últimos 30 días'));
+      await tester.pumpAndSettle();
+
+      // The caption uses an en dash between two localized dates.
+      expect(find.textContaining('–'), findsOneWidget);
+    });
+
+    testWidgets('the range filter is shown for an org_admin too', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_stats()),
+          scopeToOwnOrganization: true,
+        ),
+      );
+
+      // No organization filter, but the date range is still available.
+      expect(find.text('Todas'), findsNothing);
+      expect(find.text('Este mes'), findsOneWidget);
     });
   });
 }

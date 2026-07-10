@@ -605,6 +605,10 @@ class AppStrings {
   String get statsEmpty => _get('statsEmpty');
   String get statsOfflineHint => _get('statsOfflineHint');
   String get statsForbidden => _get('statsForbidden');
+  String get statsRangeAll => _get('statsRangeAll');
+  String get statsRangeThisMonth => _get('statsRangeThisMonth');
+  String get statsRangeLast30 => _get('statsRangeLast30');
+  String get statsRangeCustom => _get('statsRangeCustom');
   String get manageOrgsScreenTitle => _get('manageOrgsScreenTitle');
   String get orgsNoOrganizations => _get('orgsNoOrganizations');
   String get orgsCreateOrgTitle => _get('orgsCreateOrgTitle');
@@ -1170,6 +1174,10 @@ class AppStrings {
     'statsOfflineHint':
         'Las estadísticas requieren conexión. Revisa tu red e inténtalo de nuevo.',
     'statsForbidden': 'Tu rol no tiene acceso a las estadísticas.',
+    'statsRangeAll': 'Todo',
+    'statsRangeThisMonth': 'Este mes',
+    'statsRangeLast30': 'Últimos 30 días',
+    'statsRangeCustom': 'Personalizado',
     'manageOrgsScreenTitle': 'Organizaciones',
     'orgsNoOrganizations': 'No hay organizaciones registradas.',
     'orgsCreateOrgTitle': 'Crear organización',
@@ -1727,6 +1735,10 @@ class AppStrings {
     'statsOfflineHint':
         'Statistics require a connection. Check your network and try again.',
     'statsForbidden': 'Your role does not have access to statistics.',
+    'statsRangeAll': 'All time',
+    'statsRangeThisMonth': 'This month',
+    'statsRangeLast30': 'Last 30 days',
+    'statsRangeCustom': 'Custom',
     'manageOrgsScreenTitle': 'Organizations',
     'orgsNoOrganizations': 'No organizations registered.',
     'orgsCreateOrgTitle': 'Create organization',
