@@ -599,6 +599,12 @@ class AppStrings {
   String get statsAllergyDistribution => _get('statsAllergyDistribution');
   String get statsNationalityDistribution =>
       _get('statsNationalityDistribution');
+  String get statsScreenTitleOrg => _get('statsScreenTitleOrg');
+  String get statsFilterAll => _get('statsFilterAll');
+  String get statsTotalEncounters => _get('statsTotalEncounters');
+  String get statsEmpty => _get('statsEmpty');
+  String get statsOfflineHint => _get('statsOfflineHint');
+  String get statsForbidden => _get('statsForbidden');
   String get manageOrgsScreenTitle => _get('manageOrgsScreenTitle');
   String get orgsNoOrganizations => _get('orgsNoOrganizations');
   String get orgsCreateOrgTitle => _get('orgsCreateOrgTitle');
@@ -1157,6 +1163,13 @@ class AppStrings {
     'statsVaccineDistribution': 'Distribución de Vacunas',
     'statsAllergyDistribution': 'Distribución de Alergias',
     'statsNationalityDistribution': 'Distribución por Nacionalidad',
+    'statsScreenTitleOrg': 'Estadísticas de mi Organización',
+    'statsFilterAll': 'Todas',
+    'statsTotalEncounters': 'Consultas Médicas',
+    'statsEmpty': 'Aún no hay datos para este período.',
+    'statsOfflineHint':
+        'Las estadísticas requieren conexión. Revisa tu red e inténtalo de nuevo.',
+    'statsForbidden': 'Tu rol no tiene acceso a las estadísticas.',
     'manageOrgsScreenTitle': 'Organizaciones',
     'orgsNoOrganizations': 'No hay organizaciones registradas.',
     'orgsCreateOrgTitle': 'Crear organización',
@@ -1707,6 +1720,13 @@ class AppStrings {
     'statsVaccineDistribution': 'Vaccine Distribution',
     'statsAllergyDistribution': 'Allergy Distribution',
     'statsNationalityDistribution': 'Nationality Distribution',
+    'statsScreenTitleOrg': "My Organization's Statistics",
+    'statsFilterAll': 'All',
+    'statsTotalEncounters': 'Clinical Encounters',
+    'statsEmpty': 'No data yet for this period.',
+    'statsOfflineHint':
+        'Statistics require a connection. Check your network and try again.',
+    'statsForbidden': 'Your role does not have access to statistics.',
     'manageOrgsScreenTitle': 'Organizations',
     'orgsNoOrganizations': 'No organizations registered.',
     'orgsCreateOrgTitle': 'Create organization',

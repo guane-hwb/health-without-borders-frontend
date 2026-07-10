@@ -13,6 +13,7 @@ import 'package:health_without_borders_frontend/src/features/auth/domain/user_se
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/admin/presentation/manage_users_screen.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Fakes
@@ -139,6 +140,10 @@ Widget buildTestApp(
         patientRepository: FakePatientRepository(),
         localDatabase: FakeLocalDatabase(),
         syncEngine: FakeSyncEngine(),
+        statsRepository: StatsRepository(
+          apiClient: ApiClient(baseUrl: 'http://localhost'),
+          authRepository: fakeAuth ?? FakeAuthRepository(),
+        ),
         child: const ManageUsersScreen(),
       ),
     ),

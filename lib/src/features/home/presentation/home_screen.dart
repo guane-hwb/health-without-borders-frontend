@@ -172,6 +172,22 @@ class HomeScreen extends StatelessWidget {
             MaterialPageRoute(builder: (_) => const LossOfWristbandScreen()),
           ),
         ),
+        const SizedBox(height: 14),
+        // Same endpoint as the superadmin card. The backend pins the scope to
+        // this admin's own organization, so no filter is offered here.
+        _ActionCard(
+          icon: Icons.bar_chart_rounded,
+          iconBg: const Color(0xFFEDE7F6),
+          iconColor: const Color(0xFF5E35B1),
+          title: s.brigadeStatsTitle,
+          subtitle: s.brigadeStatsSubtitle,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) =>
+                  const BrigadeStatsScreen(scopeToOwnOrganization: true),
+            ),
+          ),
+        ),
         const SizedBox(height: 28),
         _LogoutButton(onTap: () => _logout(context)),
       ],

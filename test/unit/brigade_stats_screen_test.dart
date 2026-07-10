@@ -1,350 +1,284 @@
 // test/unit/brigade_stats_screen_test.dart
+//
+// Unit tests for the brigade statistics domain models and the country catalog.
+//
+// The previous version of this file re-implemented the screen's formatting
+// helpers locally and asserted against hard-coded mock constants. Those copies
+// could — and did — drift from the widgets they claimed to cover. The models
+// are public now, so these tests exercise the real code.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-String fmt(int n) => n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}K' : '$n';
-
-int minorCount(int totalPatients, double minorsPct) =>
-    (totalPatients * minorsPct / 100).round();
-
-double vaccineRatio(int count, int maxCount) =>
-    maxCount > 0 ? count / maxCount : 0.0;
-
-Color allergyBg(String cat) => switch (cat) {
-  'med' => const Color(0xFFFAECE7),
-  'food' => const Color(0xFFFAEEDA),
-  'env' => const Color(0xFFE1F5EE),
-  _ => const Color(0xFFF1EFE8),
-};
-
-Color allergyFg(String cat) => switch (cat) {
-  'med' => const Color(0xFF712B13),
-  'food' => const Color(0xFF633806),
-  'env' => const Color(0xFF085041),
-  _ => const Color(0xFF5F5E5A),
-};
-
-bool isLastItem(int index, int totalLength) => index == totalLength - 1;
-
-class BrigadeStatsMock {
-  static const int totalPatients = 1284;
-  static const int totalVaccines = 847;
-  static const int totalAllergies = 203;
-  static const double minorsPct = 31.0;
-  static const int vaccineBreakdownLength = 5;
-  static const int allergyBreakdownLength = 8;
-  static const int nationalityBreakdownLength = 5;
-}
+import 'package:health_without_borders_frontend/src/features/admin/domain/brigade_stats.dart';
+import 'package:health_without_borders_frontend/src/shared/country_display.dart';
 
 // ============================================================================
+// FIXTURES
+// ============================================================================
+
+Map<String, dynamic> _payload({
+  Object? deltaPct = 11.8,
+  String period = 'month',
+  int patients = 1284,
+  List<Map<String, dynamic>>? vaccines,
+  List<Map<String, dynamic>>? allergies,
+  List<Map<String, dynamic>>? nationalities,
+}) => <String, dynamic>{
+  'scope': {'organization_id': null, 'organization_name': null},
+  'generated_at': '2026-07-09T14:22:01-05:00',
+  'window': {'date_from': null, 'date_to': null},
+  'totals': {
+    'patients': patients,
+    'patients_with_birth_date': 1240,
+    'minors': 384,
+    'minors_pct': 30.97,
+    'vaccine_doses': 847,
+    'allergies': 203,
+    'encounters': 512,
+  },
+  'trend': {
+    'period': period,
+    'patients': {'current': 142, 'previous': 127, 'delta_pct': deltaPct},
+    'vaccine_doses': {'current': 98, 'previous': 0, 'delta_pct': null},
+    'encounters': {'current': 61, 'previous': 55, 'delta_pct': 10.9},
+  },
+  'vaccines':
+      vaccines ??
+      [
+        {'code': '141', 'name': 'Influenza Trivalente', 'count': 312},
+        {'code': '208', 'name': 'COVID-19 (ARNm)', 'count': 228},
+      ],
+  'allergies':
+      allergies ??
+      [
+        {'allergen': 'Ibuprofeno', 'category': '01', 'count': 41},
+        {'allergen': 'Mariscos', 'category': '02', 'count': 29},
+        {'allergen': 'Polen', 'category': '03', 'count': 18},
+      ],
+  'allergies_others': 7,
+  'nationalities':
+      nationalities ??
+      [
+        {'code': 'COL', 'count': 542},
+        {'code': 'VEN', 'count': 489},
+      ],
+  'nationalities_others': 12,
+};
+
+// ============================================================================
+// BrigadeStats.fromJson
+// ============================================================================
+
 void main() {
-  group('_KpiGrid._fmt · formateo de números', () {
-    test('0 → "0" (menor a 1000)', () {
-      expect(fmt(0), '0');
+  group('BrigadeStats.fromJson', () {
+    test('parses the full payload', () {
+      final stats = BrigadeStats.fromJson(_payload());
+
+      expect(stats.totals.patients, 1284);
+      expect(stats.totals.patientsWithBirthDate, 1240);
+      expect(stats.totals.minors, 384);
+      expect(stats.totals.minorsPct, closeTo(30.97, 0.001));
+      expect(stats.totals.vaccineDoses, 847);
+      expect(stats.totals.encounters, 512);
+      expect(stats.trend.period, 'month');
+      expect(stats.trend.isMonthly, isTrue);
+      expect(stats.vaccines, hasLength(2));
+      expect(stats.allergiesOthers, 7);
+      expect(stats.nationalitiesOthers, 12);
+      expect(stats.generatedAt, isNotNull);
     });
 
-    test('999 → "999" (límite inferior de < 1000)', () {
-      expect(fmt(999), '999');
+    test('a null delta_pct stays null and is not coerced to zero', () {
+      final stats = BrigadeStats.fromJson(_payload(deltaPct: null));
+
+      expect(stats.trend.patients.deltaPct, isNull);
+      expect(stats.trend.patients.hasNoBaseline, isTrue);
+      // The vaccine metric has previous = 0 in the fixture.
+      expect(stats.trend.vaccineDoses.deltaPct, isNull);
+      // A real delta is preserved.
+      expect(stats.trend.encounters.deltaPct, closeTo(10.9, 0.001));
+      expect(stats.trend.encounters.hasNoBaseline, isFalse);
     });
 
-    test('1000 → "1.0K" (límite exacto de >= 1000)', () {
-      expect(fmt(1000), '1.0K');
-    });
-
-    test('1284 → "1.3K" (dato real de mock totalPatients)', () {
-      expect(fmt(1284), '1.3K');
-    });
-
-    test('1500 → "1.5K"', () {
-      expect(fmt(1500), '1.5K');
-    });
-
-    test('10000 → "10.0K"', () {
-      expect(fmt(10000), '10.0K');
-    });
-
-    test('847 → "847" (totalVaccines del mock, sin K)', () {
-      expect(fmt(847), '847');
-    });
-
-    test('203 → "203" (totalAllergies del mock, sin K)', () {
-      expect(fmt(203), '203');
-    });
-
-    test('número negativo < 0 → string del número sin K', () {
-      expect(fmt(-5), '-5');
-    });
-  });
-
-  group('_KpiGrid minorCount · cálculo de menores', () {
-    test('1284 pacientes × 31% → 398 menores', () {
-      expect(minorCount(1284, 31.0), 398);
-    });
-
-    test('100 pacientes × 50% → 50 menores', () {
-      expect(minorCount(100, 50.0), 50);
-    });
-
-    test('100 pacientes × 0% → 0 menores', () {
-      expect(minorCount(100, 0.0), 0);
-    });
-
-    test('100 pacientes × 100% → 100 menores', () {
-      expect(minorCount(100, 100.0), 100);
-    });
-
-    test('0 pacientes → 0 menores sin importar el porcentaje', () {
-      expect(minorCount(0, 31.0), 0);
-    });
-
-    test(
-      'resultado se redondea correctamente: 1 paciente × 50% → round de 0.5 = 1',
-      () {
-        expect(minorCount(1, 50.0), 1);
-      },
-    );
-
-    test('10 pacientes × 33% → round(3.3) = 3', () {
-      expect(minorCount(10, 33.0), 3);
-    });
-
-    test('10 pacientes × 35% → round(3.5) = 4', () {
-      expect(minorCount(10, 35.0), 4);
-    });
-  });
-
-  group('_VaccineBarChart ratio · cálculo de proporción', () {
-    test('count == maxCount → ratio 1.0 (barra llena)', () {
-      expect(vaccineRatio(312, 312), 1.0);
-    });
-
-    test('count == 0 → ratio 0.0 (barra vacía)', () {
-      expect(vaccineRatio(0, 312), 0.0);
-    });
-
-    test(
-      'maxCount == 0 → ratio 0.0 (guard clause, evita división por cero)',
-      () {
-        expect(vaccineRatio(100, 0), 0.0);
-      },
-    );
-
-    test('228 / 312 ≈ 0.7308 (COVID-19 del mock)', () {
-      expect(vaccineRatio(228, 312), closeTo(0.7308, 0.001));
-    });
-
-    test('147 / 312 ≈ 0.4712 (Hepatitis B del mock)', () {
-      expect(vaccineRatio(147, 312), closeTo(0.4712, 0.001));
-    });
-
-    test('62 / 312 ≈ 0.1987 (Fiebre Amarilla del mock)', () {
-      expect(vaccineRatio(62, 312), closeTo(0.1987, 0.001));
-    });
-
-    test('ratio nunca excede 1.0 cuando count <= maxCount', () {
-      expect(vaccineRatio(100, 100), lessThanOrEqualTo(1.0));
-    });
-
-    test('ratio siempre es >= 0.0', () {
-      expect(vaccineRatio(0, 500), greaterThanOrEqualTo(0.0));
-    });
-  });
-
-  group('_AllergyChips._bg · colores de fondo', () {
-    test('categoría "med" → Color(0xFFFAECE7)', () {
-      expect(allergyBg('med'), const Color(0xFFFAECE7));
-    });
-
-    test('categoría "food" → Color(0xFFFAEEDA)', () {
-      expect(allergyBg('food'), const Color(0xFFFAEEDA));
-    });
-
-    test('categoría "env" → Color(0xFFE1F5EE)', () {
-      expect(allergyBg('env'), const Color(0xFFE1F5EE));
-    });
-
-    test('categoría "other" → Color(0xFFF1EFE8)', () {
-      expect(allergyBg('other'), const Color(0xFFF1EFE8));
-    });
-
-    test('categoría desconocida → fallback Color(0xFFF1EFE8)', () {
-      expect(allergyBg('unknown'), const Color(0xFFF1EFE8));
-    });
-
-    test('string vacío → fallback Color(0xFFF1EFE8)', () {
-      expect(allergyBg(''), const Color(0xFFF1EFE8));
-    });
-
-    test('categorías son case-sensitive: "Med" != "med" → fallback', () {
-      expect(allergyBg('Med'), const Color(0xFFF1EFE8));
-    });
-  });
-
-  group('_AllergyChips._fg · colores de texto', () {
-    test('categoría "med" → Color(0xFF712B13)', () {
-      expect(allergyFg('med'), const Color(0xFF712B13));
-    });
-
-    test('categoría "food" → Color(0xFF633806)', () {
-      expect(allergyFg('food'), const Color(0xFF633806));
-    });
-
-    test('categoría "env" → Color(0xFF085041)', () {
-      expect(allergyFg('env'), const Color(0xFF085041));
-    });
-
-    test('categoría "other" → Color(0xFF5F5E5A)', () {
-      expect(allergyFg('other'), const Color(0xFF5F5E5A));
-    });
-
-    test('categoría desconocida → fallback Color(0xFF5F5E5A)', () {
-      expect(allergyFg('xyz'), const Color(0xFF5F5E5A));
-    });
-
-    test('string vacío → fallback Color(0xFF5F5E5A)', () {
-      expect(allergyFg(''), const Color(0xFF5F5E5A));
-    });
-
-    test('_bg y _fg producen colores distintos para la misma categoría', () {
-      for (final cat in ['med', 'food', 'env', 'other']) {
-        expect(allergyBg(cat), isNot(equals(allergyFg(cat))));
-      }
-    });
-  });
-
-  group('_NationalityList isLast · lógica del divisor', () {
-    test('lista de 1 elemento: índice 0 es el último', () {
-      expect(isLastItem(0, 1), isTrue);
-    });
-
-    test('lista de 5: índice 4 es el último', () {
-      expect(isLastItem(4, 5), isTrue);
-    });
-
-    test('lista de 5: índice 0 NO es el último', () {
-      expect(isLastItem(0, 5), isFalse);
-    });
-
-    test('lista de 5: índice 3 NO es el último', () {
-      expect(isLastItem(3, 5), isFalse);
-    });
-
-    test('lista de 5: índice 2 (mitad) NO es el último', () {
-      expect(isLastItem(2, 5), isFalse);
-    });
-
-    test('reflejo del mock: 5 nacionalidades → índice 4 es último', () {
+    test('a negative delta survives parsing', () {
+      final json = _payload(deltaPct: -50.0);
       expect(
-        isLastItem(
-          BrigadeStatsMock.nationalityBreakdownLength - 1,
-          BrigadeStatsMock.nationalityBreakdownLength,
+        BrigadeStats.fromJson(json).trend.patients.deltaPct,
+        closeTo(-50.0, 0.001),
+      );
+    });
+
+    test('period "custom" is reported as non-monthly', () {
+      final stats = BrigadeStats.fromJson(_payload(period: 'custom'));
+      expect(stats.trend.isMonthly, isFalse);
+    });
+
+    test('integers arriving as doubles are truncated, not dropped', () {
+      final json = _payload();
+      (json['totals'] as Map<String, dynamic>)['patients'] = 1284.0;
+      expect(BrigadeStats.fromJson(json).totals.patients, 1284);
+    });
+
+    test('a missing or malformed payload degrades to zeros, not a crash', () {
+      final stats = BrigadeStats.fromJson(<String, dynamic>{});
+
+      expect(stats.totals.patients, 0);
+      expect(stats.totals.minorsPct, 0.0);
+      expect(stats.vaccines, isEmpty);
+      expect(stats.allergies, isEmpty);
+      expect(stats.nationalities, isEmpty);
+      expect(stats.trend.period, 'month');
+      expect(stats.trend.patients.deltaPct, isNull);
+      expect(stats.generatedAt, isNull);
+      expect(stats.isEmpty, isTrue);
+    });
+
+    test('non-list breakdowns are ignored rather than throwing', () {
+      final json = _payload();
+      json['vaccines'] = 'not-a-list';
+      json['nationalities'] = <Object>[42, 'nope'];
+
+      final stats = BrigadeStats.fromJson(json);
+      expect(stats.vaccines, isEmpty);
+      expect(stats.nationalities, isEmpty);
+    });
+  });
+
+  // ==========================================================================
+  // Derived values
+  // ==========================================================================
+
+  group('BrigadeStats derived values', () {
+    test('isEmpty is true only when every headline count is zero', () {
+      final json = _payload(patients: 0);
+      final totals = json['totals'] as Map<String, dynamic>;
+      totals['patients'] = 0;
+      totals['vaccine_doses'] = 0;
+      totals['encounters'] = 0;
+      totals['allergies'] = 0;
+
+      expect(BrigadeStats.fromJson(json).isEmpty, isTrue);
+
+      totals['encounters'] = 1;
+      expect(BrigadeStats.fromJson(json).isEmpty, isFalse);
+    });
+
+    test('maxVaccineCount does not assume the backend sorted the list', () {
+      final stats = BrigadeStats.fromJson(
+        _payload(
+          vaccines: [
+            {'code': 'A', 'name': 'A', 'count': 5},
+            {'code': 'B', 'name': 'B', 'count': 90},
+            {'code': 'C', 'name': 'C', 'count': 12},
+          ],
         ),
-        isTrue,
       );
+      expect(stats.maxVaccineCount, 90);
+    });
+
+    test('maxVaccineCount is zero for an empty list, so bars never divide by 0', () {
+      final stats = BrigadeStats.fromJson(_payload(vaccines: <Map<String, dynamic>>[]));
+      expect(stats.maxVaccineCount, 0);
+    });
+
+    test('allergyCategoryCount counts distinct categories, not entries', () {
+      final stats = BrigadeStats.fromJson(
+        _payload(
+          allergies: [
+            {'allergen': 'Ibuprofeno', 'category': '01', 'count': 41},
+            {'allergen': 'Penicilina', 'category': '01', 'count': 38},
+            {'allergen': 'Mariscos', 'category': '02', 'count': 29},
+          ],
+        ),
+      );
+      expect(stats.allergies, hasLength(3));
+      expect(stats.allergyCategoryCount, 2);
     });
   });
 
-  group('_BrigadeStats.mock · integridad de datos', () {
-    test('totalPatients == 1284', () {
-      expect(BrigadeStatsMock.totalPatients, 1284);
-    });
+  // ==========================================================================
+  // Sentinels
+  // ==========================================================================
 
-    test('totalVaccines == 847', () {
-      expect(BrigadeStatsMock.totalVaccines, 847);
-    });
-
-    test('totalAllergies == 203', () {
-      expect(BrigadeStatsMock.totalAllergies, 203);
-    });
-
-    test('minorsPct == 31.0', () {
-      expect(BrigadeStatsMock.minorsPct, 31.0);
-    });
-
-    test('vaccineBreakdown tiene 5 entradas', () {
-      expect(BrigadeStatsMock.vaccineBreakdownLength, 5);
-    });
-
-    test('allergyBreakdown tiene 8 entradas', () {
-      expect(BrigadeStatsMock.allergyBreakdownLength, 8);
-    });
-
-    test('nationalityBreakdown tiene 5 entradas', () {
-      expect(BrigadeStatsMock.nationalityBreakdownLength, 5);
-    });
-
-    test('minorCount derivado del mock: round(1284 × 31% / 100) = 398', () {
-      expect(
-        minorCount(BrigadeStatsMock.totalPatients, BrigadeStatsMock.minorsPct),
-        398,
+  group('backend sentinels', () {
+    test('a vaccine with no CVX code is flagged as uncoded', () {
+      final stats = BrigadeStats.fromJson(
+        _payload(
+          vaccines: [
+            {'code': 'UNCODED', 'name': '', 'count': 4},
+            {'code': '141', 'name': 'Influenza', 'count': 9},
+          ],
+        ),
       );
+      expect(stats.vaccines.first.isUncoded, isTrue);
+      expect(stats.vaccines.last.isUncoded, isFalse);
     });
 
-    test('fmt del totalPatients del mock → "1.3K"', () {
-      expect(fmt(BrigadeStatsMock.totalPatients), '1.3K');
+    test('a patient with no nationality is flagged as unknown', () {
+      final stats = BrigadeStats.fromJson(
+        _payload(
+          nationalities: [
+            {'code': 'UNK', 'count': 3},
+            {'code': 'COL', 'count': 7},
+          ],
+        ),
+      );
+      expect(stats.nationalities.first.isUnknown, isTrue);
+      expect(stats.nationalities.last.isUnknown, isFalse);
     });
 
-    test('fmt del totalVaccines del mock → "847" (sin K)', () {
-      expect(fmt(BrigadeStatsMock.totalVaccines), '847');
-    });
-  });
-
-  group('Consistencia _bg/_fg para categorías del mock', () {
-    const categorias = ['med', 'food', 'env', 'other'];
-
-    for (final cat in categorias) {
-      test('$cat: _bg y _fg no son nulos y son distintos', () {
-        final bg = allergyBg(cat);
-        final fg = allergyFg(cat);
-        expect(bg, isNotNull);
-        expect(fg, isNotNull);
-        expect(bg, isNot(equals(fg)));
+    test('an allergy with no category defaults to "otra"', () {
+      final stat = AllergyStat.fromJson(<String, dynamic>{
+        'allergen': 'Látex',
+        'count': 2,
       });
-    }
-  });
-
-  group('_fmt · propiedades invariantes', () {
-    test('siempre retorna un string no vacío', () {
-      for (final n in [0, 1, 999, 1000, 9999, 100000]) {
-        expect(fmt(n).isNotEmpty, isTrue, reason: 'falló para n=$n');
-      }
-    });
-
-    test('números >= 1000 siempre terminan en "K"', () {
-      for (final n in [1000, 1500, 2000, 10000]) {
-        expect(fmt(n).endsWith('K'), isTrue, reason: 'falló para n=$n');
-      }
-    });
-
-    test('números < 1000 nunca contienen "K"', () {
-      for (final n in [0, 1, 100, 999]) {
-        expect(fmt(n).contains('K'), isFalse, reason: 'falló para n=$n');
-      }
+      expect(stat.category, '06');
     });
   });
 
-  group('vaccineRatio · propiedades invariantes', () {
-    test('ratio está siempre en [0.0, 1.0] para valores normales', () {
-      final casos = [(0, 100), (50, 100), (100, 100), (312, 312), (62, 312)];
-      for (final (count, max) in casos) {
-        final r = vaccineRatio(count, max);
-        expect(
-          r,
-          greaterThanOrEqualTo(0.0),
-          reason: 'ratio < 0 para count=$count max=$max',
-        );
-        expect(
-          r,
-          lessThanOrEqualTo(1.0),
-          reason: 'ratio > 1 para count=$count max=$max',
-        );
+  // ==========================================================================
+  // Country catalog
+  // ==========================================================================
+
+  group('countryDisplay', () {
+    test('resolves the nationalities the registration form offers', () {
+      for (final code in ['COL', 'VEN', 'ECU', 'PER', 'HTI', 'CUB']) {
+        expect(isKnownCountry(code), isTrue, reason: code);
+        expect(countryDisplay(code).flag, isNot('🌍'), reason: code);
       }
     });
 
-    test('maxCount == 0 siempre retorna 0.0 (no lanza excepción)', () {
-      expect(() => vaccineRatio(999, 0), returnsNormally);
-      expect(vaccineRatio(999, 0), 0.0);
+    test('is case and whitespace insensitive', () {
+      expect(countryDisplay(' col ').nameEs, 'Colombia');
+      expect(countryDisplay('ven').nameEn, 'Venezuela');
+    });
+
+    test('localizes the name', () {
+      expect(countryDisplay('PER').name(isEs: true), 'Perú');
+      expect(countryDisplay('PER').name(isEs: false), 'Peru');
+    });
+
+    test('"UNK" reads as not recorded, which is not the same as "other"', () {
+      final unknown = countryDisplay('UNK');
+      expect(unknown.nameEs, 'Sin registrar');
+      expect(unknown.nameEn, 'Not recorded');
+      expect(unknown.nameEs, isNot(othersDisplay.nameEs));
+    });
+
+    test('an empty code reads as not recorded', () {
+      expect(countryDisplay('').nameEs, 'Sin registrar');
+    });
+
+    test('an unrecognised code falls back to the globe rather than vanishing', () {
+      expect(isKnownCountry('ZZZ'), isFalse);
+      expect(countryDisplay('ZZZ').flag, '🌍');
+      expect(countryDisplay('ZZZ').nameEs, 'Otros');
+    });
+
+    test('the others bucket is the globe', () {
+      expect(othersDisplay.flag, '🌍');
+      expect(othersDisplay.name(isEs: true), 'Otros');
+      expect(othersDisplay.name(isEs: false), 'Other');
     });
   });
 }

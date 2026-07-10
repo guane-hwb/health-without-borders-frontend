@@ -14,6 +14,7 @@ import 'package:health_without_borders_frontend/src/features/auth/domain/user_se
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/patient_profile_screen.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
 class _NullApiClient implements ApiClient {
   const _NullApiClient();
@@ -164,6 +165,10 @@ Widget _wrap(
           ),
           localDatabase: LocalDatabase.instance,
           syncEngine: fakeSyncEngine,
+          statsRepository: StatsRepository(
+            apiClient: ApiClient(baseUrl: 'http://localhost'),
+            authRepository: fakeAuth,
+          ),
           child: navigatorChild!,
         );
       },

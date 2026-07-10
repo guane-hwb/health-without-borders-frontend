@@ -16,6 +16,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
 class FakeAuthRepository implements AuthRepository {
   bool loginCalled = false;
@@ -103,6 +104,10 @@ void main() {
         patientRepository: patientRepository,
         localDatabase: LocalDatabase.instance,
         syncEngine: syncEngine,
+        statsRepository: StatsRepository(
+          apiClient: ApiClient(baseUrl: 'http://localhost'),
+          authRepository: mockAuthRepo,
+        ),
         child: MaterialApp(
           home: LoginScreen(showSessionExpired: showSessionExpired),
         ),

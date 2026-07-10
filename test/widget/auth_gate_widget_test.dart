@@ -21,6 +21,7 @@ import 'package:health_without_borders_frontend/src/features/auth/presentation/a
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
 import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
 /// Controllable AuthRepository fake. Only restoreSession/currentUser/logout are
 /// exercised here; the rest is left to Fake's noSuchMethod (never called).
@@ -81,6 +82,10 @@ Widget _wrap(_GateAuth auth) {
       patientRepository: patientRepository,
       localDatabase: LocalDatabase.instance,
       syncEngine: syncEngine,
+      statsRepository: StatsRepository(
+        apiClient: ApiClient(baseUrl: 'http://localhost'),
+        authRepository: auth,
+      ),
       child: MaterialApp(home: AuthGate(authRepository: auth)),
     ),
   );

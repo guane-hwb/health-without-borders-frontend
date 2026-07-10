@@ -13,6 +13,8 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/sync/presentation/sync_queue_screen.dart';
 import 'package:health_without_borders_frontend/src/shared/widgets/screen_bottom_handle.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
 class MockLocalDatabase extends Mock implements LocalDatabase {}
 
@@ -59,6 +61,10 @@ Widget buildTestApp({
         patientRepository: MockPatientRepository(),
         localDatabase: db,
         syncEngine: syncEngine,
+        statsRepository: StatsRepository(
+          apiClient: ApiClient(baseUrl: 'http://localhost'),
+          authRepository: MockAuthRepository(),
+        ),
         child: child,
       ),
     ),
@@ -763,6 +769,10 @@ void main() {
               patientRepository: MockPatientRepository(),
               localDatabase: db,
               syncEngine: syncEngine,
+              statsRepository: StatsRepository(
+                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                authRepository: MockAuthRepository(),
+              ),
               child: Builder(
                 builder: (ctx) => ElevatedButton(
                   onPressed: () => Navigator.of(ctx).push(
@@ -773,6 +783,10 @@ void main() {
                         patientRepository: MockPatientRepository(),
                         localDatabase: db,
                         syncEngine: syncEngine,
+                        statsRepository: StatsRepository(
+                          apiClient: ApiClient(baseUrl: 'http://localhost'),
+                          authRepository: MockAuthRepository(),
+                        ),
                         child: const _LocaleWrapper(
                           locale: 'es',
                           child: SyncQueueScreen(),

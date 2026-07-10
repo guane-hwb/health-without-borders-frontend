@@ -7390,6 +7390,52 @@ void main() {
     });
   });
 
+  group('AppStrings - statistics keys', () {
+    // Every key added for the brigade statistics screen must resolve in both
+    // locales. `_get` returns the key itself on a miss, so comparing against
+    // the key name catches a map entry that was never added.
+    const keys = <String>[
+      'statsScreenTitleOrg',
+      'statsFilterAll',
+      'statsTotalEncounters',
+      'statsEmpty',
+      'statsOfflineHint',
+      'statsForbidden',
+    ];
+
+    List<String> valuesFor(AppStrings s) => <String>[
+      s.statsScreenTitleOrg,
+      s.statsFilterAll,
+      s.statsTotalEncounters,
+      s.statsEmpty,
+      s.statsOfflineHint,
+      s.statsForbidden,
+    ];
+
+    for (final locale in ['es', 'en']) {
+      test('$locale resolves every statistics key', () {
+        final values = valuesFor(AppStrings.forTesting(locale));
+        for (var i = 0; i < keys.length; i++) {
+          expect(values[i].isNotEmpty, isTrue, reason: '${keys[i]} ($locale)');
+          expect(
+            values[i],
+            isNot(keys[i]),
+            reason: '${keys[i]} ($locale) is missing from the map',
+          );
+        }
+      });
+    }
+
+    test('the two locales differ, so nothing was copy-pasted', () {
+      final es = valuesFor(AppStrings.forTesting('es'));
+      final en = valuesFor(AppStrings.forTesting('en'));
+      expect(es[0], 'Estadísticas de mi Organización');
+      expect(en[0], "My Organization's Statistics");
+      expect(es[1], 'Todas');
+      expect(en[1], 'All');
+    });
+  });
+
   group('AppStrings - duplicate-key getters stay in sync', () {
     test('monMarString and monMar return the same value', () {
       final es = AppStrings.forTesting('es');

@@ -8,6 +8,7 @@ import 'core/network/api_client.dart';
 import 'core/storage/local_database.dart';
 import 'core/sync/sync_engine.dart';
 import 'design/theme/app_theme.dart';
+import 'features/admin/data/stats_repository.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/data/user_repository.dart';
 import 'features/auth/presentation/auth_gate.dart';
@@ -34,6 +35,10 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp> {
     authRepository: _authRepository,
   );
   late final PatientRepository _patientRepository = PatientRepository(
+    apiClient: _apiClient,
+    authRepository: _authRepository,
+  );
+  late final StatsRepository _statsRepository = StatsRepository(
     apiClient: _apiClient,
     authRepository: _authRepository,
   );
@@ -89,6 +94,7 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp> {
         authRepository: _authRepository,
         userRepository: _userRepository,
         patientRepository: _patientRepository,
+        statsRepository: _statsRepository,
         localDatabase: _localDatabase,
         syncEngine: _syncEngine,
         child: MaterialApp(
