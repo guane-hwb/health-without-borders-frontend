@@ -13,6 +13,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/add_consultation_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/add_vaccine_screen.dart';
@@ -36,6 +37,8 @@ class MockPatientRepository extends Mock implements PatientRepository {}
 class MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class MockSyncEngine extends Mock implements SyncEngine {}
+
+class MockStatsRepository extends Mock implements StatsRepository {}
 
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
 
@@ -117,6 +120,7 @@ void main() {
             patientRepository: patientRepo,
             localDatabase: db,
             syncEngine: sync,
+            statsRepository: MockStatsRepository(),
             child: child!,
           ),
         ),
