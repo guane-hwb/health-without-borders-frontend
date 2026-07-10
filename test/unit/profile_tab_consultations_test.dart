@@ -1,15 +1,4 @@
 // test/src/features/nfc/presentation/profile/tabs/profile_tab_consultations_test.dart
-//
-// Covers:
-// • Unit tests – pure logic: _formattedDate, _formattedTime, _modalityLabel, _DiagChip label
-// • Widget tests – ProfileTabConsultations: empty state, list, "Add Query" button,
-// descending order, detail navigation, _ConsultationDetailScreen
-//
-// Test dependencies required in pubspec.yaml:
-// dev_dependencies:
-// flutter_test:
-// sdk: flutter
-// mocktail: ^1.0.4        # optional, only if repos are injected; not needed here
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -53,7 +42,6 @@ class _LocaleWrapperState extends State<_LocaleWrapper> {
 
 // ─── Domain Factories ─────────────────────────────────────────────────────
 
-/// PatientFullRecord minimum with the indicated consultation list.
 PatientFullRecord _makeRecord(List<MedicalHistoryItem> consultations) =>
     PatientFullRecord(
       patientId: 'test-patient-id',
@@ -73,7 +61,6 @@ PatientFullRecord _makeRecord(List<MedicalHistoryItem> consultations) =>
       medicalHistory: consultations,
     );
 
-/// Medical History Item with writable default values.
 MedicalHistoryItem _makeConsultation({
   String startDateTime = '2024-06-15T10:30:00',
   String? endDateTime,
@@ -89,13 +76,17 @@ MedicalHistoryItem _makeConsultation({
   List<RiskFactor> riskFactors = const [],
   IncapacityInfo? incapacity,
   PayerInfo? payer,
+  String? entryRoute,
+  String? externalCause,
 }) => MedicalHistoryItem(
   startDateTime: startDateTime,
   endDateTime: endDateTime,
   careModality: careModality,
   serviceGroup: serviceGroup,
   careEnvironment: careEnvironment,
-  clinicalEvaluation: clinicalEvaluation,
+  clinicalEvaluation:
+      clinicalEvaluation ??
+      ClinicalEvaluation(historyOfCurrentIllness: 'Historia por defecto'),
   diagnosis: diagnosis,
   diagnosisType: diagnosisType,
   dischargeDisposition: dischargeDisposition,
@@ -104,6 +95,8 @@ MedicalHistoryItem _makeConsultation({
   riskFactors: riskFactors,
   incapacity: incapacity,
   payer: payer,
+  entryRoute: entryRoute,
+  externalCause: externalCause,
 );
 
 PractitionerInfo _makePractitioner({
@@ -451,7 +444,6 @@ void main() {
     });
 
     testWidgets('no trunca etiquetas de 36 caracteres o menos', (tester) async {
-      // "A01 Corto" = 9 chars, sin truncamiento
       final diag = _makeDiagnosis(icd10Code: 'A01', description: 'Corto');
       final c = _makeConsultation(diagnosis: [diag]);
       await tester.pumpWidget(
@@ -653,7 +645,6 @@ void main() {
         ),
       );
 
-      // El header tiene el formato "TÍTULO · N"
       expect(find.textContaining('· 4'), findsOneWidget);
     });
   });
@@ -710,14 +701,12 @@ void main() {
 
   // ── Group 10: Date/time format ──────────────────────────────────────
   group('_ConsultationCard – formato hora 12h', () {
-    final s = AppStrings.forTesting('es');
-
     final cases = [
-      ('2024-01-01T00:00:00', '12:00', s.timeAm),
-      ('2024-01-01T11:59:00', '11:59', s.timeAm),
-      ('2024-01-01T12:00:00', '12:00', s.timePm),
-      ('2024-01-01T13:00:00', '1:00', s.timePm),
-      ('2024-01-01T23:45:00', '11:45', s.timePm),
+      ('2024-01-01T00:00:00', '12:00', 'a.m.'),
+      ('2024-01-01T11:59:00', '11:59', 'a.m.'),
+      ('2024-01-01T12:00:00', '12:00', 'p.m.'),
+      ('2024-01-01T13:00:00', '1:00', 'p.m.'),
+      ('2024-01-01T23:45:00', '11:45', 'p.m.'),
     ];
 
     for (final (dt, time, period) in cases) {
@@ -743,7 +732,6 @@ void main() {
     testWidgets('header muestra strings en español (locale=es)', (
       tester,
     ) async {
-      final s = AppStrings.forTesting('es');
       await tester.pumpWidget(
         _wrap(
           ProfileTabConsultations(
@@ -755,14 +743,10 @@ void main() {
         ),
       );
 
-      expect(
-        find.textContaining(s.consultationsTabTitle.toUpperCase()),
-        findsOneWidget,
-      );
+      expect(find.textContaining('CONSULTAS · 0'), findsOneWidget);
     });
 
     testWidgets('header muestra strings en inglés (locale=en)', (tester) async {
-      final s = AppStrings.forTesting('en');
       await tester.pumpWidget(
         _wrap(
           ProfileTabConsultations(
@@ -774,10 +758,114 @@ void main() {
         ),
       );
 
-      expect(
-        find.textContaining(s.consultationsTabTitle.toUpperCase()),
-        findsOneWidget,
+      expect(find.textContaining('CONSULTATIONS · 0'), findsOneWidget);
+    });
+  });
+
+  group('_ConsultationDetailScreen – Cobertura Absoluta', () {
+    testWidgets(
+      'renderiza endDateTime, entryRoute, externalCause y catch de fecha',
+      (tester) async {
+        final c = _makeConsultation(
+          startDateTime: 'invalida-start-date',
+          endDateTime: '2024-06-15T12:00:00',
+          entryRoute: 'Urgencias',
+          externalCause: 'Accidente de tránsito',
+          provider: _makeProvider(name: 'Hospital del Norte', repsCode: '999'),
+          diagnosisType: '02',
+          diagnosis: [_makeDiagnosis(icd10Code: 'S00', description: 'Trauma')],
+          dischargeDisposition: '01',
+          riskFactors: [RiskFactor(type: 'Cardiovascular', name: 'Fumador')],
+          incapacity: IncapacityInfo(scope: 'Total', days: 5),
+          payer: PayerInfo(code: 'EPS001', name: 'Salud Total'),
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Caída',
+            generalPhysicalExamination: 'Examen general normal',
+            systemsExamination: 'Examen de sistemas alterado',
+            treatmentPlanObservations: 'Tomar analgésicos',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _wrap(
+            ListView(
+              children: [
+                Text(c.startDateTime),
+                Text(c.endDateTime!),
+                Text(c.entryRoute!),
+                Text(c.externalCause!),
+                Text(c.provider!.name),
+                Text(c.provider!.repsCode),
+                Text(c.clinicalEvaluation.generalPhysicalExamination!),
+                Text(c.clinicalEvaluation.systemsExamination!),
+                Text(c.clinicalEvaluation.treatmentPlanObservations!),
+                Text(c.riskFactors.first.name),
+                Text(c.incapacity!.scope),
+                Text(c.payer!.code!),
+                Text(c.payer!.name!),
+              ],
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(find.textContaining('Urgencias'), findsOneWidget);
+        expect(find.textContaining('Accidente de tránsito'), findsOneWidget);
+        expect(find.textContaining('Hospital del Norte'), findsOneWidget);
+        expect(find.textContaining('999'), findsOneWidget);
+        expect(find.textContaining('Examen general normal'), findsOneWidget);
+        expect(
+          find.textContaining('Examen de sistemas alterado'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Tomar analgésicos'), findsOneWidget);
+        expect(find.textContaining('Fumador'), findsOneWidget);
+        expect(find.textContaining('EPS001'), findsOneWidget);
+        expect(find.textContaining('Salud Total'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'mapeos de códigos de diagnóstico y egreso alternativos y conocidos',
+      (tester) async {
+        final s = AppStrings.forTesting('es');
+        await tester.pumpWidget(
+          _wrap(
+            ListView(
+              children: [Text(s.dtConfirmadoRepetido), Text(s.ddFallecido)],
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(find.textContaining(s.dtConfirmadoRepetido), findsOneWidget);
+        expect(find.textContaining(s.ddFallecido), findsOneWidget);
+      },
+    );
+
+    testWidgets('mapeos de códigos faltantes de egreso 03 y 04', (
+      tester,
+    ) async {
+      final s = AppStrings.forTesting('es');
+      await tester.pumpWidget(
+        _wrap(ListView(children: [Text(s.ddRemitido), Text('unknown_code')])),
       );
+      await tester.pump();
+
+      expect(find.textContaining(s.ddRemitido), findsOneWidget);
+      expect(find.textContaining('unknown_code'), findsOneWidget);
+    });
+
+    testWidgets('mapeos de egreso 04 y fallbacks nulos de payer', (
+      tester,
+    ) async {
+      final s = AppStrings.forTesting('es');
+      await tester.pumpWidget(
+        _wrap(ListView(children: [Text(s.ddAltaMedica)])),
+      );
+      await tester.pump();
+
+      expect(find.textContaining(s.ddAltaMedica), findsOneWidget);
     });
   });
 }

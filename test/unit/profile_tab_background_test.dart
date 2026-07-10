@@ -62,9 +62,6 @@ PatientFullRecord _record({BackgroundHistory? backgroundHistory}) {
 // ---------------------------------------------------------------------------
 // Unit tests – pure logic (_FamilyHistoryCard._relationshipLabel)
 // ---------------------------------------------------------------------------
-//
-// The private helper is tested indirectly through the rendered text, but we
-// can also extract the mapping into a standalone table-driven test.
 
 const _relationshipCases = <String, String>{
   '01': 'Padres',
@@ -82,7 +79,6 @@ void main() {
   // ── Unit: relationship label mapping ─────────────────────────────────────
 
   group('_relationshipLabel (unit)', () {
-    // Because the method is private we verify it via the rendered widget text.
     for (final entry in _relationshipCases.entries) {
       testWidgets('code "${entry.key}" renders label "${entry.value}"', (
         tester,
@@ -194,6 +190,19 @@ void main() {
         find.text('Sin antecedentes familiares registrados.'),
         findsOneWidget,
       );
+      expect(find.text('Sin medicamentos registrados.'), findsOneWidget);
+    });
+
+    testWidgets('shows placeholder when medications is empty', (tester) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(medications: const []),
+          ),
+        ),
+      );
+
+      expect(find.text('Sin medicamentos registrados.'), findsOneWidget);
     });
   });
 
@@ -217,6 +226,30 @@ void main() {
       expect(find.text(value), findsOneWidget);
       expect(find.text('Sin condiciones crónicas registradas.'), findsNothing);
     });
+
+    testWidgets(
+      'renders CIE-10 and CIE-11 in chronicConditions when both are present',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildSubject(
+            draft: _record(
+              backgroundHistory: BackgroundHistory(
+                chronicConditions: [
+                  ChronicConditionItem(
+                    chronicDescription: 'Diabetes',
+                    chronicCie10Code: 'E11',
+                    chronicCie11Code: '5A11',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        expect(find.textContaining('CIE-10: E11'), findsOneWidget);
+        expect(find.textContaining('CIE-11: 5A11'), findsOneWidget);
+      },
+    );
 
     testWidgets('renders personalHistory text when present', (tester) async {
       const value = 'Apendicectomía 2010';
@@ -256,7 +289,6 @@ void main() {
 
       expect(find.text('Hipertensión'), findsOneWidget);
       expect(find.text('Asma'), findsOneWidget);
-      // Empty-state placeholder must NOT appear.
       expect(
         find.text('Sin antecedentes familiares registrados.'),
         findsNothing,
@@ -306,6 +338,89 @@ void main() {
     });
   });
 
+  // ── Widget: Medications translation & formatting ──────────────────────────
+
+  group('Medication translation & formatting', () {
+    final statusTranslationCases = <String, String>{
+      'active': 'Activo',
+      'completed': 'Completado',
+      'stopped': 'Suspendido',
+      'unknown': 'Desconocido',
+      'custom_status': 'custom_status', // unknown raw string fallback
+    };
+
+    for (final entry in statusTranslationCases.entries) {
+      testWidgets(
+        'status "${entry.key}" translates correctly to "${entry.value}"',
+        (tester) async {
+          await tester.pumpWidget(
+            _buildSubject(
+              draft: _record(
+                backgroundHistory: BackgroundHistory(
+                  medications: [
+                    MedicationStatementItem(
+                      medicationName: 'Metformina',
+                      status: entry.key,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+
+          expect(find.textContaining(entry.value), findsOneWidget);
+        },
+      );
+    }
+
+    testWidgets('shows dosage alongside translated status when provided', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(
+              medications: [
+                MedicationStatementItem(
+                  medicationName: 'Losartán',
+                  status: 'active',
+                  dosage: '50mg cada 12 horas',
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.textContaining('Activo · 50mg cada 12 horas'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('does not show dosage separator when dosage is null', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(
+              medications: [
+                MedicationStatementItem(
+                  medicationName: 'Metformina',
+                  status: 'active',
+                  dosage: null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('Activo ·'), findsNothing);
+    });
+  });
+
   // ── Widget: section headers & icons ──────────────────────────────────────
 
   group('Section headers', () {
@@ -325,6 +440,12 @@ void main() {
       await tester.pumpWidget(_buildSubject(draft: _record()));
 
       expect(find.text('ANTECEDENTES FAMILIARES'), findsOneWidget);
+    });
+
+    testWidgets('renders MEDICAMENTOS header', (tester) async {
+      await tester.pumpWidget(_buildSubject(draft: _record()));
+
+      expect(find.text('MEDICAMENTOS'), findsOneWidget);
     });
   });
 
@@ -346,6 +467,31 @@ void main() {
       expect(called, isTrue);
     });
 
+    testWidgets('onRemoveChronic fires when delete button is tapped', (
+      tester,
+    ) async {
+      int? removedIndex;
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(
+              chronicConditions: [
+                ChronicConditionItem(chronicDescription: 'Asma'),
+                ChronicConditionItem(chronicDescription: 'Diabetes'),
+              ],
+            ),
+          ),
+          onRemoveChronic: (i) => removedIndex = i,
+        ),
+      );
+
+      final deleteButtons = find.byIcon(Icons.delete_outline);
+      await tester.tap(deleteButtons.at(1));
+      await tester.pump();
+
+      expect(removedIndex, equals(1));
+    });
+
     testWidgets('onEditPersonal fires when Editar (personal) is tapped', (
       tester,
     ) async {
@@ -361,23 +507,71 @@ void main() {
       expect(called, isTrue);
     });
 
-    testWidgets('onAddFamilyHistory fires when Agregar is tapped', (
+    testWidgets('onAddMedication fires when Agregar (medication) is tapped', (
       tester,
     ) async {
       var called = false;
       await tester.pumpWidget(
-        _buildSubject(
-          draft: _record(),
-          onAddFamilyHistory: () => called = true,
-        ),
+        _buildSubject(draft: _record(), onAddMedication: () => called = true),
       );
 
       final agregarButtons = find.text('Agregar');
-      await tester.tap(agregarButtons.at(2));
+      await tester.tap(agregarButtons.at(1));
       await tester.pump();
 
       expect(called, isTrue);
     });
+
+    testWidgets(
+      'onRemoveMedication fires when medication delete button is tapped',
+      (tester) async {
+        int? removedIndex;
+        await tester.pumpWidget(
+          _buildSubject(
+            draft: _record(
+              backgroundHistory: BackgroundHistory(
+                medications: [
+                  MedicationStatementItem(
+                    medicationName: 'Med A',
+                    status: 'active',
+                  ),
+                  MedicationStatementItem(
+                    medicationName: 'Med B',
+                    status: 'completed',
+                  ),
+                ],
+              ),
+            ),
+            onRemoveMedication: (i) => removedIndex = i,
+          ),
+        );
+
+        final deleteButtons = find.byIcon(Icons.delete_outline);
+        await tester.tap(deleteButtons.at(1));
+        await tester.pump();
+
+        expect(removedIndex, equals(1));
+      },
+    );
+
+    testWidgets(
+      'onAddFamilyHistory fires when Agregar (family history) is tapped',
+      (tester) async {
+        var called = false;
+        await tester.pumpWidget(
+          _buildSubject(
+            draft: _record(),
+            onAddFamilyHistory: () => called = true,
+          ),
+        );
+
+        final agregarButtons = find.text('Agregar');
+        await tester.tap(agregarButtons.at(2));
+        await tester.pump();
+
+        expect(called, isTrue);
+      },
+    );
 
     testWidgets(
       'onRemoveFamilyHistory fires with the correct index on delete tap',
@@ -405,7 +599,6 @@ void main() {
           ),
         );
 
-        // Tap the delete button on the second card (index 1).
         final deleteButtons = find.byIcon(Icons.delete_outline);
         await tester.tap(deleteButtons.at(1));
         await tester.pump();

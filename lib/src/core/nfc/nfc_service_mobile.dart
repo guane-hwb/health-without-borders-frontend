@@ -12,6 +12,14 @@ class NfcService {
 
   static Future<String> Function()? overrideReadDeviceUid;
 
+  @visibleForTesting
+  static void Function({
+    required Set<NfcPollingOption> pollingOptions,
+    required Future<void> Function(NfcTag) onDiscovered,
+    required Future<void> Function(dynamic) onError,
+  })
+  startSessionImpl = NfcManager.instance.startSession;
+
   /// Whether the device hardware supports NFC.
   static Future<bool> get isAvailable => NfcManager.instance.isAvailable();
 
@@ -30,7 +38,7 @@ class NfcService {
 
     final Completer<String> completer = Completer<String>();
 
-    NfcManager.instance.startSession(
+    NfcService.startSessionImpl(
       pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
       onDiscovered: (NfcTag tag) async {
         try {
