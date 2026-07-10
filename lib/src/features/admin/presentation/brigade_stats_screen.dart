@@ -1,103 +1,19 @@
 // lib/src/features/admin/presentation/brigade_stats_screen.dart
-//
-// ⚠️  NOTA: /api/v1/stats/brigades no existe aún en el backend.
-//     La pantalla usa datos mock automáticamente hasta que sea implementado.
-//     Para activar el endpoint real, descomenta las líneas marcadas en _load().
 
 import 'package:flutter/material.dart';
 
-import '../../../core/network/api_client.dart';
 import '../../../core/di/app_scope.dart';
-import '../../../design/tokens/app_colors.dart';
 import '../../../core/i18n/app_strings.dart';
+import '../../../core/network/api_client.dart';
+import '../../../design/tokens/app_colors.dart';
+import '../../../shared/country_display.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../nfc/presentation/shared_read_nfc_header.dart';
+import '../data/stats_repository.dart';
+import '../domain/brigade_stats.dart';
 
-// ── Domain models ─────────────────────────────────────────────────────────
-
-class _BrigadeStats {
-  const _BrigadeStats({
-    required this.totalPatients,
-    required this.totalVaccines,
-    required this.totalAllergies,
-    required this.minorsPct,
-    required this.vaccineBreakdown,
-    required this.allergyBreakdown,
-    required this.nationalityBreakdown,
-  });
-
-  final int totalPatients;
-  final int totalVaccines;
-  final int totalAllergies;
-  final double minorsPct;
-  final List<_VaccineStat> vaccineBreakdown;
-  final List<_AllergyStat> allergyBreakdown;
-  final List<_NationalityStat> nationalityBreakdown;
-
-  factory _BrigadeStats.mock() => const _BrigadeStats(
-    totalPatients: 1284,
-    totalVaccines: 847,
-    totalAllergies: 203,
-    minorsPct: 31.0,
-    vaccineBreakdown: [
-      _VaccineStat(name: 'Influenza Trivalente', count: 312, maxCount: 312),
-      _VaccineStat(name: 'COVID-19 (ARNm)', count: 228, maxCount: 312),
-      _VaccineStat(name: 'Hepatitis B', count: 147, maxCount: 312),
-      _VaccineStat(name: 'Sarampión (MMR)', count: 98, maxCount: 312),
-      _VaccineStat(name: 'Fiebre Amarilla', count: 62, maxCount: 312),
-    ],
-    allergyBreakdown: [
-      _AllergyStat(name: 'Ibuprofeno', count: 41, category: 'med'),
-      _AllergyStat(name: 'Penicilina', count: 38, category: 'med'),
-      _AllergyStat(name: 'Mariscos', count: 29, category: 'food'),
-      _AllergyStat(name: 'Maní', count: 24, category: 'food'),
-      _AllergyStat(name: 'Polen', count: 18, category: 'env'),
-      _AllergyStat(name: 'Polvo', count: 15, category: 'env'),
-      _AllergyStat(name: 'Látex', count: 12, category: 'other'),
-      _AllergyStat(name: 'Picadura insecto', count: 9, category: 'other'),
-    ],
-    nationalityBreakdown: [
-      _NationalityStat(flag: '🇨🇴', country: 'Colombia', count: 542),
-      _NationalityStat(flag: '🇻🇪', country: 'Venezuela', count: 489),
-      _NationalityStat(flag: '🇪🇨', country: 'Ecuador', count: 134),
-      _NationalityStat(flag: '🇵🇪', country: 'Perú', count: 87),
-      _NationalityStat(flag: '🌍', country: 'Otros', count: 32),
-    ],
-  );
-}
-
-class _VaccineStat {
-  const _VaccineStat({
-    required this.name,
-    required this.count,
-    required this.maxCount,
-  });
-  final String name;
-  final int count;
-  final int maxCount;
-}
-
-class _AllergyStat {
-  const _AllergyStat({
-    required this.name,
-    required this.count,
-    required this.category,
-  });
-  final String name;
-  final int count;
-  final String category;
-}
-
-class _NationalityStat {
-  const _NationalityStat({
-    required this.flag,
-    required this.country,
-    required this.count,
-  });
-  final String flag;
-  final String country;
-  final int count;
-}
+/// Sentinel for "no organization filter", distinct from any real organization id.
+const String kAllOrgsFilterId = 'all';
 
 class _OrgFilter {
   const _OrgFilter({required this.id, required this.name});
@@ -105,21 +21,32 @@ class _OrgFilter {
   final String name;
 }
 
+enum _Failure { forbidden, offline, other }
+
 // ── Screen ────────────────────────────────────────────────────────────────
 
 class BrigadeStatsScreen extends StatefulWidget {
-  const BrigadeStatsScreen({super.key});
+  const BrigadeStatsScreen({super.key, this.scopeToOwnOrganization = false});
+
+  /// When true the screen renders for an org_admin: the organization filter is
+  /// hidden and, crucially, `listOrganizations()` is never called — that
+  /// endpoint is superadmin-only and would answer 403.
+  ///
+  /// Passed explicitly by the caller rather than derived from the session role,
+  /// so the screen stays testable without standing up an authenticated scope.
+  final bool scopeToOwnOrganization;
 
   @override
   State<BrigadeStatsScreen> createState() => _BrigadeStatsScreenState();
 }
 
 class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
-  _BrigadeStats? _stats;
-  List<_OrgFilter> _orgs = [const _OrgFilter(id: 'all', name: 'Todas')];
-  String _selectedOrgId = 'all';
+  BrigadeStats? _stats;
+  List<_OrgFilter> _orgs = const <_OrgFilter>[];
+  String _selectedOrgId = kAllOrgsFilterId;
   bool _loading = true;
-  String? _error;
+  _Failure? _failure;
+  String? _errorDetail;
 
   @override
   void initState() {
@@ -127,49 +54,72 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
+  bool get _showFilter => !widget.scopeToOwnOrganization;
+
+  /// The organization id sent to the backend. An org_admin sends nothing: the
+  /// backend pins the scope to their own tenant regardless of what is passed.
+  String? get _requestedOrgId {
+    if (widget.scopeToOwnOrganization) return null;
+    return _selectedOrgId == kAllOrgsFilterId ? null : _selectedOrgId;
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
-      _error = null;
+      _failure = null;
+      _errorDetail = null;
     });
+
+    final scope = AppScope.of(context);
     try {
-      // Cargar lista de orgs para los chips de filtro
-      final orgList = await AppScope.of(
-        context,
-      ).userRepository.listOrganizations();
-      final filters = <_OrgFilter>[
-        const _OrgFilter(id: 'all', name: 'Todas'),
-        ...orgList.map((o) => _OrgFilter(id: o.id, name: o.name)),
-      ];
-
-      final stats = _BrigadeStats.mock();
-
-      if (mounted) {
-        setState(() {
-          _orgs = filters;
-          _stats = stats;
-          _loading = false;
-        });
+      // Only a superadmin may enumerate organizations, and only the superadmin
+      // view shows the filter. Fetched once, then reused across refetches.
+      if (_showFilter && _orgs.isEmpty) {
+        final orgs = await scope.userRepository.listOrganizations();
+        if (!mounted) return;
+        _orgs = <_OrgFilter>[
+          _OrgFilter(
+            id: kAllOrgsFilterId,
+            name: AppStrings.of(context).statsFilterAll,
+          ),
+          ...orgs.map((o) => _OrgFilter(id: o.id, name: o.name)),
+        ];
       }
-    } on ApiException catch (_) {
-      if (mounted) {
-        setState(() {
-          _stats = _BrigadeStats.mock();
-          _loading = false;
-        });
-      }
+
+      final stats = await scope.statsRepository.fetchOverview(
+        organizationId: _requestedOrgId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _stats = stats;
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _failure = e.statusCode == 403 ? _Failure.forbidden : _Failure.other;
+        _errorDetail = e.message;
+        _loading = false;
+      });
+    } on StatsUnavailableException catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _failure = _Failure.offline;
+        _loading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _loading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _failure = _Failure.other;
+        _errorDetail = e.toString();
+        _loading = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFFEBF2F8),
       body: SafeArea(
@@ -178,7 +128,9 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
             Column(
               children: [
                 SharedReadNfcHeader(
-                  title: AppStrings.of(context).statsScreenTitle,
+                  title: widget.scopeToOwnOrganization
+                      ? s.statsScreenTitleOrg
+                      : s.statsScreenTitle,
                   onBack: () => Navigator.of(context).pop(),
                 ),
                 Expanded(child: _buildBody()),
@@ -197,63 +149,62 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
   }
 
   Widget _buildBody() {
-    final sStrings = AppStrings.of(context);
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-            const SizedBox(height: 12),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.error),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _load,
-              icon: const Icon(Icons.refresh),
-              label: Text(sStrings.retry),
-            ),
-          ],
-        ),
+    if (_failure != null) {
+      return _FailureView(
+        failure: _failure!,
+        detail: _errorDetail,
+        onRetry: _load,
       );
     }
 
-    final s = _stats!;
+    final s = AppStrings.of(context);
+    final stats = _stats!;
+
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
         children: [
-          _OrgFilterBar(
-            orgs: _orgs,
-            selected: _selectedOrgId,
-            onChanged: (id) {
-              setState(() => _selectedOrgId = id);
-              _load();
-            },
-          ),
-          const SizedBox(height: 16),
-          _SectionTitle(title: sStrings.tabSummary),
-          const SizedBox(height: 10),
-          _KpiGrid(stats: s),
-          const SizedBox(height: 20),
-          _SectionTitle(title: sStrings.statsVaccineDistribution),
-          const SizedBox(height: 10),
-          _VaccineBarChart(vaccines: s.vaccineBreakdown),
-          const SizedBox(height: 20),
-          _SectionTitle(title: sStrings.statsAllergyDistribution),
-          const SizedBox(height: 10),
-          _AllergyChips(allergies: s.allergyBreakdown),
-          const SizedBox(height: 20),
-          _SectionTitle(title: sStrings.statsNationalityDistribution),
-          const SizedBox(height: 10),
-          _NationalityList(nationalities: s.nationalityBreakdown),
+          if (_showFilter) ...[
+            _OrgFilterBar(
+              orgs: _orgs,
+              selected: _selectedOrgId,
+              onChanged: (id) {
+                if (id == _selectedOrgId) return;
+                setState(() => _selectedOrgId = id);
+                _load();
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (stats.isEmpty)
+            _EmptyView(message: s.statsEmpty)
+          else ...[
+            _SectionTitle(title: s.tabSummary),
+            const SizedBox(height: 10),
+            _KpiGrid(stats: stats),
+            const SizedBox(height: 20),
+            _SectionTitle(title: s.statsVaccineDistribution),
+            const SizedBox(height: 10),
+            _VaccineBarChart(stats: stats),
+            const SizedBox(height: 20),
+            _SectionTitle(title: s.statsAllergyDistribution),
+            const SizedBox(height: 10),
+            _AllergyChips(
+              allergies: stats.allergies,
+              others: stats.allergiesOthers,
+            ),
+            const SizedBox(height: 20),
+            _SectionTitle(title: s.statsNationalityDistribution),
+            const SizedBox(height: 10),
+            _NationalityList(
+              nationalities: stats.nationalities,
+              others: stats.nationalitiesOthers,
+            ),
+          ],
         ],
       ),
     );
@@ -274,6 +225,83 @@ class _SectionTitle extends StatelessWidget {
       fontWeight: FontWeight.w700,
       color: AppColors.textSecondary,
       letterSpacing: 0.6,
+    ),
+  );
+}
+
+class _FailureView extends StatelessWidget {
+  const _FailureView({
+    required this.failure,
+    required this.onRetry,
+    this.detail,
+  });
+
+  final _Failure failure;
+  final String? detail;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    IconData icon = Icons.error_outline;
+    String message = detail ?? s.statsEmpty;
+    if (failure == _Failure.forbidden) {
+      icon = Icons.lock_outline;
+      message = s.statsForbidden;
+    } else if (failure == _Failure.offline) {
+      icon = Icons.cloud_off_rounded;
+      message = s.statsOfflineHint;
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: AppColors.error),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.error),
+            ),
+            const SizedBox(height: 16),
+            // A 403 will not resolve on retry: the role is what it is.
+            if (failure != _Failure.forbidden)
+              ElevatedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: Text(s.retry),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyView extends StatelessWidget {
+  const _EmptyView({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+    child: Column(
+      children: [
+        const Icon(
+          Icons.insights_outlined,
+          size: 48,
+          color: AppColors.textSecondary,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+      ],
     ),
   );
 }
@@ -326,52 +354,135 @@ class _OrgFilterBar extends StatelessWidget {
   }
 }
 
+/// Formats a [TrendMetric] as a signed percentage against the previous period.
+///
+/// A null `deltaPct` means the previous period was empty. It renders as an em
+/// dash in a neutral colour: there is genuinely nothing to compare against, and
+/// showing "+100%" would invent a baseline that never existed.
+class _TrendLabel {
+  const _TrendLabel(this.text, this.color);
+  final String text;
+  final Color color;
+
+  static const Color up = Color(0xFF2E7D32);
+  static const Color down = Color(0xFFC62828);
+
+  factory _TrendLabel.from(
+    TrendMetric metric, {
+    required bool monthly,
+    required bool isEs,
+  }) {
+    final String period = monthly
+        ? (isEs ? 'vs. mes anterior' : 'vs. last month')
+        : (isEs ? 'vs. período anterior' : 'vs. previous period');
+
+    final double? delta = metric.deltaPct;
+    if (delta == null) {
+      return _TrendLabel(
+        isEs ? '— sin referencia previa' : '— no prior data',
+        AppColors.textSecondary,
+      );
+    }
+    if (delta == 0) {
+      return _TrendLabel('→ 0% $period', AppColors.textSecondary);
+    }
+    final String arrow = delta > 0 ? '↑' : '↓';
+    final String magnitude = delta.abs().toStringAsFixed(1);
+    return _TrendLabel('$arrow $magnitude% $period', delta > 0 ? up : down);
+  }
+}
+
 class _KpiGrid extends StatelessWidget {
   const _KpiGrid({required this.stats});
-  final _BrigadeStats stats;
+  final BrigadeStats stats;
 
-  static String _fmt(int n) =>
+  static String fmt(int n) =>
       n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}K' : '$n';
 
   @override
   Widget build(BuildContext context) {
-    final sStrings = AppStrings.of(context);
-    final minorCount = (stats.totalPatients * stats.minorsPct / 100).round();
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 1.8,
+    final s = AppStrings.of(context);
+    final bool isEs = s.save == 'Guardar';
+    final bool monthly = stats.trend.isMonthly;
+
+    final patientsTrend = _TrendLabel.from(
+      stats.trend.patients,
+      monthly: monthly,
+      isEs: isEs,
+    );
+    final vaccinesTrend = _TrendLabel.from(
+      stats.trend.vaccineDoses,
+      monthly: monthly,
+      isEs: isEs,
+    );
+    final encountersTrend = _TrendLabel.from(
+      stats.trend.encounters,
+      monthly: monthly,
+      isEs: isEs,
+    );
+
+    final int categories = stats.allergyCategoryCount;
+    final String allergySub = isEs
+        ? 'en $categories ${categories == 1 ? 'categoría' : 'categorías'}'
+        : 'in $categories ${categories == 1 ? 'category' : 'categories'}';
+
+    final int minors = stats.totals.minors;
+    final String minorsSub = isEs
+        ? '$minors ${minors == 1 ? 'paciente' : 'pacientes'}'
+        : '$minors ${minors == 1 ? 'patient' : 'patients'}';
+
+    return Column(
       children: [
-        _KpiCard(
-          icon: Icons.people_outline,
-          label: sStrings.statsTotalPatients,
-          value: _fmt(stats.totalPatients),
-          sub: '↑ 12% este mes',
-          iconColor: AppColors.primary,
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 1.8,
+          children: [
+            _KpiCard(
+              icon: Icons.people_outline,
+              label: s.statsTotalPatients,
+              value: fmt(stats.totals.patients),
+              sub: patientsTrend.text,
+              subColor: patientsTrend.color,
+              iconColor: AppColors.primary,
+            ),
+            _KpiCard(
+              icon: Icons.vaccines,
+              label: s.statsTotalVaccines,
+              value: fmt(stats.totals.vaccineDoses),
+              sub: vaccinesTrend.text,
+              subColor: vaccinesTrend.color,
+              iconColor: const Color(0xFF1565C0),
+            ),
+            _KpiCard(
+              icon: Icons.warning_amber_rounded,
+              label: s.statsTotalAllergies,
+              value: fmt(stats.totals.allergies),
+              sub: allergySub,
+              iconColor: const Color(0xFFD84315),
+            ),
+            _KpiCard(
+              icon: Icons.child_care,
+              label: s.statsMinorsPercentage,
+              // The backend divides by the patients that actually have a birth
+              // date on file, so never rebuild this from patients x pct.
+              value: '${stats.totals.minorsPct.toStringAsFixed(0)}%',
+              sub: minorsSub,
+              iconColor: const Color(0xFF6A1B9A),
+            ),
+          ],
         ),
+        const SizedBox(height: 10),
         _KpiCard(
-          icon: Icons.vaccines,
-          label: sStrings.statsTotalVaccines,
-          value: _fmt(stats.totalVaccines),
-          sub: 'en ${stats.vaccineBreakdown.length} tipos',
-          iconColor: const Color(0xFF1565C0),
-        ),
-        _KpiCard(
-          icon: Icons.warning_amber_rounded,
-          label: sStrings.statsTotalAllergies,
-          value: _fmt(stats.totalAllergies),
-          sub: 'en 3 categorías',
-          iconColor: const Color(0xFFD84315),
-        ),
-        _KpiCard(
-          icon: Icons.child_care,
-          label: sStrings.statsMinorsPercentage,
-          value: '${stats.minorsPct.toStringAsFixed(0)}%',
-          sub: '$minorCount pacientes',
-          iconColor: const Color(0xFF6A1B9A),
+          icon: Icons.medical_information_outlined,
+          label: s.statsTotalEncounters,
+          value: fmt(stats.totals.encounters),
+          sub: encountersTrend.text,
+          subColor: encountersTrend.color,
+          iconColor: const Color(0xFF00695C),
         ),
       ],
     );
@@ -385,10 +496,12 @@ class _KpiCard extends StatelessWidget {
     required this.value,
     required this.sub,
     required this.iconColor,
+    this.subColor,
   });
   final IconData icon;
   final String label, value, sub;
   final Color iconColor;
+  final Color? subColor;
 
   @override
   Widget build(BuildContext context) {
@@ -437,9 +550,11 @@ class _KpiCard extends StatelessWidget {
           ),
           Text(
             sub,
-            style: const TextStyle(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
               fontSize: 10,
-              color: AppColors.textSecondary,
+              color: subColor ?? AppColors.textSecondary,
             ),
           ),
         ],
@@ -449,11 +564,24 @@ class _KpiCard extends StatelessWidget {
 }
 
 class _VaccineBarChart extends StatelessWidget {
-  const _VaccineBarChart({required this.vaccines});
-  final List<_VaccineStat> vaccines;
+  const _VaccineBarChart({required this.stats});
+  final BrigadeStats stats;
+
+  /// The endpoint returns every code it saw. A brigade with a broad catalogue
+  /// would otherwise push the rest of the page off screen.
+  static const int maxRows = 8;
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final bool isEs = s.save == 'Guardar';
+    final int maxCount = stats.maxVaccineCount;
+    final rows = stats.vaccines.take(maxRows).toList();
+
+    if (rows.isEmpty) {
+      return _EmptyView(message: s.statsEmpty);
+    }
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -468,8 +596,11 @@ class _VaccineBarChart extends StatelessWidget {
         ],
       ),
       child: Column(
-        children: vaccines.map((v) {
-          final ratio = v.maxCount > 0 ? v.count / v.maxCount : 0.0;
+        children: rows.map((v) {
+          final ratio = maxCount > 0 ? v.count / maxCount : 0.0;
+          final String label = v.name.isNotEmpty
+              ? v.name
+              : (v.isUncoded ? (isEs ? 'Sin código' : 'Uncoded') : v.code);
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
@@ -477,7 +608,7 @@ class _VaccineBarChart extends StatelessWidget {
                 SizedBox(
                   width: 130,
                   child: Text(
-                    v.name,
+                    label,
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.textPrimary,
@@ -501,7 +632,7 @@ class _VaccineBarChart extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 SizedBox(
-                  width: 28,
+                  width: 32,
                   child: Text(
                     '${v.count}',
                     textAlign: TextAlign.right,
@@ -521,57 +652,115 @@ class _VaccineBarChart extends StatelessWidget {
 }
 
 class _AllergyChips extends StatelessWidget {
-  const _AllergyChips({required this.allergies});
-  final List<_AllergyStat> allergies;
+  const _AllergyChips({required this.allergies, required this.others});
+  final List<AllergyStat> allergies;
+  final int others;
 
-  static Color _bg(String cat) => switch (cat) {
-    'med' => const Color(0xFFFAECE7),
-    'food' => const Color(0xFFFAEEDA),
-    'env' => const Color(0xFFE1F5EE),
-    _ => const Color(0xFFF1EFE8),
+  /// Res. 866/2021 Elem. 47.1 defines six categories. The previous palette had
+  /// four, so skin substances and insect bites both fell through to grey.
+  static Color bg(String category) => switch (category) {
+    '01' => const Color(0xFFFAECE7), // Medicamento
+    '02' => const Color(0xFFFAEEDA), // Alimento
+    '03' => const Color(0xFFE1F5EE), // Sustancia ambiente
+    '04' => const Color(0xFFEDE7F6), // Sustancia piel
+    '05' => const Color(0xFFFFF3E0), // Picadura de insectos
+    _ => const Color(0xFFF1EFE8), // Otra
   };
 
-  static Color _fg(String cat) => switch (cat) {
-    'med' => const Color(0xFF712B13),
-    'food' => const Color(0xFF633806),
-    'env' => const Color(0xFF085041),
+  static Color fg(String category) => switch (category) {
+    '01' => const Color(0xFF712B13),
+    '02' => const Color(0xFF633806),
+    '03' => const Color(0xFF085041),
+    '04' => const Color(0xFF3F2A6B),
+    '05' => const Color(0xFF6D3B00),
     _ => const Color(0xFF5F5E5A),
   };
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final bool isEs = s.save == 'Guardar';
+
+    if (allergies.isEmpty && others == 0) {
+      return _EmptyView(message: s.statsEmpty);
+    }
+
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: allergies
-          .map(
-            (a) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: _bg(a.category),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${a.name} (${a.count})',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: _fg(a.category),
-                ),
+      children: [
+        ...allergies.map(
+          (a) => Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: bg(a.category),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '${a.allergen} (${a.count})',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: fg(a.category),
               ),
             ),
-          )
-          .toList(),
+          ),
+        ),
+        if (others > 0)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1EFE8),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              isEs ? '+$others más' : '+$others more',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF5F5E5A),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
 
+class _NationalityRow {
+  const _NationalityRow(this.flag, this.name, this.count);
+  final String flag;
+  final String name;
+  final int count;
+}
+
 class _NationalityList extends StatelessWidget {
-  const _NationalityList({required this.nationalities});
-  final List<_NationalityStat> nationalities;
+  const _NationalityList({required this.nationalities, required this.others});
+  final List<NationalityStat> nationalities;
+  final int others;
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final bool isEs = s.save == 'Guardar';
+
+    if (nationalities.isEmpty && others == 0) {
+      return _EmptyView(message: s.statsEmpty);
+    }
+
+    final rows = <_NationalityRow>[
+      ...nationalities.map((n) {
+        final display = countryDisplay(n.code);
+        return _NationalityRow(display.flag, display.name(isEs: isEs), n.count);
+      }),
+      if (others > 0)
+        _NationalityRow(
+          othersDisplay.flag,
+          othersDisplay.name(isEs: isEs),
+          others,
+        ),
+    ];
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -586,20 +775,20 @@ class _NationalityList extends StatelessWidget {
         ],
       ),
       child: Column(
-        children: nationalities.asMap().entries.map((entry) {
-          final n = entry.value;
-          final isLast = entry.key == nationalities.length - 1;
+        children: rows.asMap().entries.map((entry) {
+          final row = entry.value;
+          final isLast = entry.key == rows.length - 1;
           return Column(
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
                   children: [
-                    Text(n.flag, style: const TextStyle(fontSize: 20)),
+                    Text(row.flag, style: const TextStyle(fontSize: 20)),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        n.country,
+                        row.name,
                         style: const TextStyle(
                           fontSize: 13,
                           color: AppColors.textPrimary,
@@ -607,7 +796,7 @@ class _NationalityList extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${n.count}',
+                      '${row.count}',
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,

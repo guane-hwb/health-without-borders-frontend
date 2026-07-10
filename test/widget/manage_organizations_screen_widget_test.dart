@@ -15,6 +15,7 @@ import 'package:health_without_borders_frontend/src/features/auth/domain/user_se
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/admin/presentation/manage_organizations_screen.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
 // ============================================================================
 // FAKES
@@ -147,6 +148,10 @@ Widget _build(_FakeRepo repo, {String locale = 'es'}) => AppLocale(
     patientRepository: _StubPatients(),
     localDatabase: _StubDb(),
     syncEngine: _StubSync(),
+    statsRepository: StatsRepository(
+      apiClient: ApiClient(baseUrl: 'http://localhost'),
+      authRepository: _StubAuth(),
+    ),
     child: const MaterialApp(home: Scaffold(body: ManageOrganizationsScreen())),
   ),
 );

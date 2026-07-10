@@ -28,6 +28,8 @@ import 'package:health_without_borders_frontend/src/features/nfc/data/patient_re
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/add_vaccine_screen.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
 // ---------------------------------------------------------------------------
 // Fakes & mocks
@@ -102,6 +104,10 @@ Widget _buildApp({
     patientRepository: wrapper.patientRepository,
     localDatabase: wrapper.localDatabase,
     syncEngine: wrapper.syncEngine,
+    statsRepository: StatsRepository(
+      apiClient: ApiClient(baseUrl: 'http://localhost'),
+      authRepository: wrapper.authRepository,
+    ),
     child: AppLocale(
       locale: locale,
       setLocale: (_) {},
@@ -130,6 +136,10 @@ AppScope _defaultScope() {
     patientRepository: repo,
     localDatabase: db,
     syncEngine: sync,
+    statsRepository: StatsRepository(
+      apiClient: ApiClient(baseUrl: 'http://localhost'),
+      authRepository: auth,
+    ),
     child: const SizedBox.shrink(),
   );
 }
@@ -529,6 +539,10 @@ void main() {
           patientRepository: scope.patientRepository,
           localDatabase: scope.localDatabase,
           syncEngine: scope.syncEngine,
+          statsRepository: StatsRepository(
+            apiClient: ApiClient(baseUrl: 'http://localhost'),
+            authRepository: scope.authRepository,
+          ),
           child: AppLocale(
             locale: 'es',
             setLocale: (_) {},
@@ -545,6 +559,10 @@ void main() {
                               patientRepository: scope.patientRepository,
                               localDatabase: scope.localDatabase,
                               syncEngine: scope.syncEngine,
+                              statsRepository: StatsRepository(
+                                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                                authRepository: scope.authRepository,
+                              ),
                               child: AppLocale(
                                 locale: 'es',
                                 setLocale: (_) {},

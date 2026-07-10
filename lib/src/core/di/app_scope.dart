@@ -1,6 +1,7 @@
 // lib/src/core/di/app_scope.dart
 import 'package:flutter/material.dart';
 
+import '../../features/admin/data/stats_repository.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/data/user_repository.dart';
 import '../../features/auth/domain/user_session.dart';
@@ -14,6 +15,7 @@ class AppScope extends InheritedWidget {
     required this.authRepository,
     required this.userRepository,
     required this.patientRepository,
+    required this.statsRepository,
     required this.localDatabase,
     required this.syncEngine,
     required super.child,
@@ -22,6 +24,7 @@ class AppScope extends InheritedWidget {
   final AuthRepository authRepository;
   final UserRepository userRepository;
   final PatientRepository patientRepository;
+  final StatsRepository statsRepository;
   final LocalDatabase localDatabase;
   final SyncEngine syncEngine;
 

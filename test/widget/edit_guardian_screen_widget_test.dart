@@ -29,6 +29,7 @@ import 'package:health_without_borders_frontend/src/features/auth/domain/user_se
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/edit_guardian_screen.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Fakes
@@ -187,6 +188,10 @@ Widget _buildSubject({
       patientRepository: patientRepo,
       localDatabase: FakeLocalDatabase(),
       syncEngine: syncEngine,
+      statsRepository: StatsRepository(
+        apiClient: ApiClient(baseUrl: 'http://localhost'),
+        authRepository: authRepo,
+      ),
       child: MaterialApp(home: EditGuardianScreen(patient: patient)),
     ),
   );

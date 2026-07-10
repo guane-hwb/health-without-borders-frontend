@@ -1,20 +1,26 @@
 // test/widget/brigade_stats_screen_widget_test.dart
-
-import 'dart:async';
+//
+// Widget tests for BrigadeStatsScreen against a fake StatsRepository.
+//
+// The screen previously fell back to hard-coded figures whenever the API threw,
+// which meant a 403 rendered 1,284 imaginary patients. These tests pin the
+// failure paths so that can never come back.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
+import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
+import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/features/admin/domain/brigade_stats.dart';
 import 'package:health_without_borders_frontend/src/features/admin/presentation/brigade_stats_screen.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
-import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
-import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
-import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 
 // ============================================================================
 // FAKES
@@ -52,6 +58,32 @@ class FakeUserRepository extends UserRepository {
   }
 }
 
+/// Extends rather than implements, so a new method on [StatsRepository] does
+/// not silently leave this fake unimplemented.
+class FakeStatsRepository extends StatsRepository {
+  FakeStatsRepository(this.result)
+    : super(apiClient: _NoOpApiClient(), authRepository: _FakeAuthRepository());
+
+  /// A [BrigadeStats] to return, or an [Object] to throw.
+  final Object result;
+
+  int callCount = 0;
+  final List<String?> requestedOrgIds = <String?>[];
+
+  @override
+  Future<BrigadeStats> fetchOverview({
+    String? organizationId,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+  }) async {
+    callCount++;
+    requestedOrgIds.add(organizationId);
+    final r = result;
+    if (r is BrigadeStats) return r;
+    throw r;
+  }
+}
+
 class _FakePatientRepository extends PatientRepository {
   _FakePatientRepository()
     : super(apiClient: _NoOpApiClient(), authRepository: _FakeAuthRepository());
@@ -71,10 +103,97 @@ class _FakeSyncEngine extends SyncEngine {
 }
 
 // ============================================================================
+// FIXTURES
+// ============================================================================
+
+OrgSummary _org(String id, String name) =>
+    OrgSummary(id: id, name: name, isActive: true);
+
+BrigadeStats _stats({
+  int patients = 1284,
+  Object? patientsDelta = 11.8,
+  String period = 'month',
+  int vaccineDoses = 847,
+  int allergies = 203,
+  int encounters = 512,
+  int allergiesOthers = 0,
+  int nationalitiesOthers = 0,
+}) => BrigadeStats.fromJson(<String, dynamic>{
+  'scope': {'organization_id': null, 'organization_name': null},
+  'generated_at': '2026-07-09T14:22:01-05:00',
+  'window': {'date_from': null, 'date_to': null},
+  'totals': {
+    'patients': patients,
+    'patients_with_birth_date': 1240,
+    'minors': 384,
+    'minors_pct': 31.0,
+    'vaccine_doses': vaccineDoses,
+    'allergies': allergies,
+    'encounters': encounters,
+  },
+  'trend': {
+    'period': period,
+    'patients': {'current': 142, 'previous': 127, 'delta_pct': patientsDelta},
+    'vaccine_doses': {'current': 98, 'previous': 90, 'delta_pct': 8.9},
+    'encounters': {'current': 61, 'previous': 70, 'delta_pct': -12.9},
+  },
+  'vaccines': [
+    {'code': '141', 'name': 'Influenza Trivalente', 'count': 312},
+    {'code': '208', 'name': 'COVID-19 (ARNm)', 'count': 228},
+  ],
+  'allergies': [
+    {'allergen': 'Ibuprofeno', 'category': '01', 'count': 41},
+    {'allergen': 'Mariscos', 'category': '02', 'count': 29},
+  ],
+  'allergies_others': allergiesOthers,
+  'nationalities': [
+    {'code': 'COL', 'count': 542},
+    {'code': 'VEN', 'count': 489},
+  ],
+  'nationalities_others': nationalitiesOthers,
+});
+
+BrigadeStats _emptyStats() => BrigadeStats.fromJson(<String, dynamic>{});
+
+// ============================================================================
 // HELPERS
 // ============================================================================
 
-Widget _buildScreen(FakeUserRepository userRepo, {String locale = 'es'}) {
+/// Widening the surface is what makes "does this render" assertions mean what
+/// they say, but a ListView is still lazy — see [_settle] for the rest.
+Future<void> _pump(WidgetTester tester, Widget screen) async {
+  await tester.binding.setSurfaceSize(const Size(800, 2400));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+  await tester.pumpWidget(screen);
+  await tester.pumpAndSettle();
+}
+
+
+/// Scrolls the screen's ListView until [finder] is on screen, then asserts it.
+///
+/// A ListView is lazy: widening the test surface is not enough, because the
+/// viewport height comes from the Scaffold, not the surface, so off-screen
+/// rows are never built. This drives the scrollable the way a user would.
+Future<void> _expectAfterScroll(WidgetTester tester, Finder finder) async {
+  // If the row is already on screen, scrollUntilVisible would have nothing to
+  // do and can throw; only scroll when it is genuinely off screen.
+  if (finder.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      finder,
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+  }
+  expect(finder, findsOneWidget);
+}
+
+Widget _buildScreen({
+  required FakeUserRepository userRepo,
+  required FakeStatsRepository statsRepo,
+  bool scopeToOwnOrganization = false,
+  String locale = 'es',
+}) {
   return AppLocale(
     locale: locale,
     setLocale: (_) {},
@@ -84,645 +203,332 @@ Widget _buildScreen(FakeUserRepository userRepo, {String locale = 'es'}) {
       patientRepository: _FakePatientRepository(),
       localDatabase: _FakeLocalDatabase(),
       syncEngine: _FakeSyncEngine(),
-      child: const MaterialApp(home: BrigadeStatsScreen()),
+      statsRepository: statsRepo,
+      child: MaterialApp(
+        home: BrigadeStatsScreen(
+          scopeToOwnOrganization: scopeToOwnOrganization,
+        ),
+      ),
     ),
   );
 }
-
-OrgSummary _org(String id, String name) =>
-    OrgSummary(id: id, name: name, isActive: true);
 
 // ============================================================================
 // TESTS
 // ============================================================================
 
 void main() {
-  void configureMobileScreenSize(WidgetTester tester) {
-    final binding = TestWidgetsFlutterBinding.ensureInitialized();
-    binding.platformDispatcher.views.first.physicalSize = const Size(
-      412 * 3,
-      892 * 3,
-    );
-    binding.platformDispatcher.views.first.devicePixelRatio = 3.0;
-  }
-
-  group('BrigadeStatsScreen · estado loading', () {
-    testWidgets(
-      'muestra CircularProgressIndicator mientras la carga está en vuelo',
-      (tester) async {
-        configureMobileScreenSize(tester);
-        final completer = Completer<List<OrgSummary>>();
-        final repo = FakeUserRepository(orgsResult: completer.future);
-
-        await tester.pumpWidget(_buildScreen(repo));
-        await tester.pump();
-
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
-
-        completer.complete([]);
-        await tester.pumpAndSettle();
-      },
-    );
-
-    testWidgets('NO muestra secciones de stats durante loading', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      final completer = Completer<List<OrgSummary>>();
-      final repo = FakeUserRepository(orgsResult: completer.future);
-
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-
-      final s = AppStrings.forTesting('es');
-      expect(find.text(s.tabSummary.toUpperCase()), findsNothing);
-      expect(find.text(s.statsVaccineDistribution.toUpperCase()), findsNothing);
-
-      completer.complete([]);
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('muestra el título de pantalla durante loading', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      final completer = Completer<List<OrgSummary>>();
-      final repo = FakeUserRepository(orgsResult: completer.future);
-
-      await tester.pumpWidget(_buildScreen(repo));
-
-      final s = AppStrings.forTesting('es');
-      expect(find.text(s.statsScreenTitle), findsOneWidget);
-
-      completer.complete([]);
-      await tester.pumpAndSettle();
-    });
-  });
-
-  group('BrigadeStatsScreen · estado error genérico', () {
-    testWidgets('muestra ícono error_outline', (tester) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(orgsResult: Exception('Network failure'));
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.byIcon(Icons.error_outline), findsOneWidget);
-    });
-
-    testWidgets('muestra el mensaje del error', (tester) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(orgsResult: Exception('Network failure'));
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('Network failure'), findsOneWidget);
-    });
-
-    testWidgets('muestra botón "Reintentar" con ícono refresh', (tester) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(orgsResult: Exception('fallo'));
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.text('Reintentar'), findsOneWidget);
-      expect(find.byIcon(Icons.refresh), findsOneWidget);
-    });
-
-    testWidgets('tap en Reintentar vuelve a llamar listOrganizations', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(orgsResult: Exception('fallo'));
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final callsAntes = repo.callCount;
-      await tester.tap(find.text('Reintentar'));
-      await tester.pumpAndSettle();
-
-      expect(repo.callCount, greaterThan(callsAntes));
-    });
-
-    testWidgets('NO muestra secciones del dashboard en estado error', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(orgsResult: Exception('fallo'));
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final s = AppStrings.forTesting('es');
-      expect(find.text(s.tabSummary.toUpperCase()), findsNothing);
-    });
-
-    testWidgets('NO muestra CircularProgressIndicator tras error', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(orgsResult: Exception('fallo'));
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.byType(CircularProgressIndicator), findsNothing);
-    });
-  });
-
-  group('BrigadeStatsScreen · ApiException silenciosa', () {
-    testWidgets('NO muestra pantalla de error cuando lanza ApiException', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(
-        orgsResult: ApiException('Not Found', statusCode: 404),
-      );
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.byIcon(Icons.error_outline), findsNothing);
-      expect(find.text('Reintentar'), findsNothing);
-    });
-
-    testWidgets('muestra las stats mock tras ApiException', (tester) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(
-        orgsResult: ApiException('Not Found', statusCode: 404),
-      );
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.text('1.3K'), findsOneWidget);
-    });
-
-    testWidgets('muestra secciones del dashboard tras ApiException', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(
-        orgsResult: ApiException('Server Error', statusCode: 500),
-      );
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final s = AppStrings.forTesting('es');
-      expect(find.text(s.tabSummary.toUpperCase()), findsOneWidget);
-    });
-
-    testWidgets('no lanza excepción no controlada con ApiException', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(
-        orgsResult: ApiException('error', statusCode: 403),
-      );
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(tester.takeException(), isNull);
-    });
-  });
-  group('BrigadeStatsScreen · estado éxito · estructura', () {
-    late FakeUserRepository repo;
-    setUp(() => repo = FakeUserRepository(orgsResult: <OrgSummary>[]));
-
-    testWidgets('muestra RefreshIndicator', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-      expect(find.byType(RefreshIndicator), findsOneWidget);
-    });
-
-    testWidgets('muestra los 4 títulos de sección en mayúsculas', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final s = AppStrings.forTesting('es');
-      expect(find.text(s.tabSummary.toUpperCase()), findsOneWidget);
-      expect(
-        find.text(s.statsVaccineDistribution.toUpperCase()),
-        findsOneWidget,
-      );
-      expect(
-        find.text(s.statsAllergyDistribution.toUpperCase()),
-        findsOneWidget,
+  group('superadmin view', () {
+    testWidgets('renders the figures returned by the API', (tester) async {
+      final statsRepo = FakeStatsRepository(_stats());
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: [_org('o1', 'Org A')]),
+          statsRepo: statsRepo,
+        ),
       );
 
-      final verticalScroll = find.byType(Scrollable).first;
-      final targetTitle = find.text(
-        s.statsNationalityDistribution.toUpperCase(),
-      );
-      await tester.scrollUntilVisible(
-        targetTitle,
-        150.0,
-        scrollable: verticalScroll,
-      );
-
-      expect(targetTitle, findsOneWidget);
+      expect(statsRepo.callCount, 1);
+      expect(statsRepo.requestedOrgIds, [null]);
+      // Above the fold.
+      expect(find.text('1.3K'), findsOneWidget); // 1284 patients
+      expect(find.text('31%'), findsOneWidget); // minors_pct
+      // Further down the ListView; scroll each into view before asserting.
+      await _expectAfterScroll(tester, find.text('Influenza Trivalente'));
+      await _expectAfterScroll(tester, find.text('Ibuprofeno (41)'));
+      await _expectAfterScroll(tester, find.text('Colombia'));
     });
 
-    testWidgets('_SectionTitle usa toUpperCase (versión mixta no existe)', (
+    testWidgets('shows the organization filter with an "all" chip', (
       tester,
     ) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final s = AppStrings.forTesting('es');
-      expect(find.text(s.tabSummary), findsNothing);
-      expect(find.text(s.tabSummary.toUpperCase()), findsOneWidget);
-    });
-
-    testWidgets('NO muestra spinner después de cargar', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-      expect(find.byType(CircularProgressIndicator), findsNothing);
-    });
-  });
-
-  group('_KpiGrid · tarjetas KPI', () {
-    late FakeUserRepository repo;
-    setUp(() => repo = FakeUserRepository(orgsResult: <OrgSummary>[]));
-
-    testWidgets('valor pacientes formateado "1.3K"', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-      expect(find.text('1.3K'), findsOneWidget);
-    });
-
-    testWidgets('label "Pacientes atendidos"', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final s = AppStrings.forTesting('es');
-      expect(find.text(s.statsTotalPatients), findsOneWidget);
-    });
-
-    testWidgets('subtexto "↑ 12% este mes"', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-      expect(find.text('↑ 12% este mes'), findsOneWidget);
-    });
-
-    testWidgets('valor vacunas "847" (sin K)', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-      expect(find.text('847'), findsOneWidget);
-    });
-
-    testWidgets('label "Vacunas administradas"', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final s = AppStrings.forTesting('es');
-      expect(find.text(s.statsTotalVaccines), findsOneWidget);
-    });
-
-    testWidgets('subtexto "en 5 tipos"', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-      expect(find.text('en 5 tipos'), findsOneWidget);
-    });
-
-    testWidgets('valor alergias "203"', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-      expect(find.text('203'), findsOneWidget);
-    });
-
-    testWidgets('label "Alergias registradas"', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final s = AppStrings.forTesting('es');
-      expect(find.text(s.statsTotalAllergies), findsOneWidget);
-    });
-
-    testWidgets('porcentaje de menores "31%"', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-      expect(find.text('31%'), findsOneWidget);
-    });
-
-    testWidgets('label "Menores de edad"', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final s = AppStrings.forTesting('es');
-      expect(find.text(s.statsMinorsPercentage), findsOneWidget);
-    });
-
-    testWidgets('subtexto menores "398 pacientes" (round de 1284×31%)', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-      expect(find.text('398 pacientes'), findsOneWidget);
-    });
-
-    testWidgets('los 4 íconos de KpiCard están presentes', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.byIcon(Icons.people_outline), findsOneWidget);
-      expect(find.byIcon(Icons.vaccines), findsAtLeastNWidgets(1));
-      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.child_care), findsOneWidget);
-    });
-  });
-
-  group('_VaccineBarChart · barras de vacunas', () {
-    late FakeUserRepository repo;
-    setUp(() => repo = FakeUserRepository(orgsResult: <OrgSummary>[]));
-
-    testWidgets('muestra los 5 nombres de vacuna', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.text('Influenza Trivalente'), findsOneWidget);
-      expect(find.text('COVID-19 (ARNm)'), findsOneWidget);
-      expect(find.text('Hepatitis B'), findsOneWidget);
-      expect(find.text('Sarampión (MMR)'), findsOneWidget);
-      expect(find.text('Fiebre Amarilla'), findsOneWidget);
-    });
-
-    testWidgets('muestra los 5 conteos de vacunas', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.text('312'), findsAtLeastNWidgets(1));
-      expect(find.text('228'), findsOneWidget);
-      expect(find.text('147'), findsOneWidget);
-      expect(find.text('98'), findsOneWidget);
-      expect(find.text('62'), findsOneWidget);
-    });
-
-    testWidgets('renderiza exactamente 5 LinearProgressIndicator', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.byType(LinearProgressIndicator), findsNWidgets(5));
-    });
-  });
-
-  group('_AllergyChips · chips de alergias', () {
-    late FakeUserRepository repo;
-    setUp(() => repo = FakeUserRepository(orgsResult: <OrgSummary>[]));
-
-    testWidgets('muestra los 8 chips con formato "Nombre (count)"', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.text('Ibuprofeno (41)'), findsOneWidget);
-      expect(find.text('Penicilina (38)'), findsOneWidget);
-      expect(find.text('Mariscos (29)'), findsOneWidget);
-      expect(find.text('Maní (24)'), findsOneWidget);
-      expect(find.text('Polen (18)'), findsOneWidget);
-      expect(find.text('Polvo (15)'), findsOneWidget);
-      expect(find.text('Látex (12)'), findsOneWidget);
-      expect(find.text('Picadura insecto (9)'), findsOneWidget);
-    });
-  });
-
-  group('_NationalityList · lista de procedencia', () {
-    late FakeUserRepository repo;
-    setUp(() => repo = FakeUserRepository(orgsResult: <OrgSummary>[]));
-
-    testWidgets('muestra los 5 países', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final targetCountry = find.text('Colombia');
-      await tester.scrollUntilVisible(
-        targetCountry,
-        150.0,
-        scrollable: find.byType(Scrollable).first,
+      final userRepo = FakeUserRepository(
+        orgsResult: [_org('o1', 'Org A'), _org('o2', 'Org B')],
+      );
+      await _pump(
+        tester,
+        _buildScreen(userRepo: userRepo, statsRepo: FakeStatsRepository(_stats())),
       );
 
-      expect(targetCountry, findsOneWidget);
-      expect(find.text('Venezuela'), findsOneWidget);
-      expect(find.text('Ecuador'), findsOneWidget);
-      expect(find.text('Perú'), findsOneWidget);
-      expect(find.text('Otros'), findsOneWidget);
-    });
-
-    testWidgets('muestra los conteos de pacientes por país', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final targetCount = find.text('542');
-      await tester.scrollUntilVisible(
-        targetCount,
-        150.0,
-        scrollable: find.byType(Scrollable).first,
-      );
-
-      expect(targetCount, findsOneWidget);
-      expect(find.text('489'), findsOneWidget);
-      expect(find.text('134'), findsOneWidget);
-      expect(find.text('87'), findsOneWidget);
-      expect(find.text('32'), findsOneWidget);
-    });
-
-    testWidgets('muestra las 5 banderas emoji', (tester) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final targetFlag = find.text('🇨🇴');
-      await tester.scrollUntilVisible(
-        targetFlag,
-        150.0,
-        scrollable: find.byType(Scrollable).first,
-      );
-
-      expect(targetFlag, findsOneWidget);
-      expect(find.text('🇻🇪'), findsOneWidget);
-      expect(find.text('🇪🇨'), findsOneWidget);
-      expect(find.text('🇵🇪'), findsOneWidget);
-      expect(find.text('🌍'), findsOneWidget);
-    });
-
-    testWidgets('muestra 4 Dividers (no hay divisor después del último país)', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final targetCountry = find.text('Colombia');
-      await tester.scrollUntilVisible(
-        targetCountry,
-        150.0,
-        scrollable: find.byType(Scrollable).first,
-      );
-
-      final dividers = tester
-          .widgetList<Divider>(find.byType(Divider))
-          .toList();
-      expect(dividers.length, 4);
-    });
-  });
-
-  group('_OrgFilterBar · chips de filtro de organización', () {
-    testWidgets('muestra sólo chip "Todas" cuando no hay orgs en el repo', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(orgsResult: <OrgSummary>[]);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
+      expect(userRepo.callCount, 1);
       expect(find.text('Todas'), findsOneWidget);
+      expect(find.text('Org A'), findsOneWidget);
+      expect(find.text('Org B'), findsOneWidget);
     });
 
-    testWidgets('muestra chip "Todas" + chips de orgs del repositorio', (
+    testWidgets('tapping an organization chip refetches scoped to that org', (
       tester,
     ) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(
-        orgsResult: [_org('o1', 'Cruz Roja'), _org('o2', 'OPS')],
+      final statsRepo = FakeStatsRepository(_stats());
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: [_org('o2', 'Org B')]),
+          statsRepo: statsRepo,
+        ),
       );
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
+
+      await tester.tap(find.text('Org B'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Todas'), findsOneWidget);
-      expect(find.text('Cruz Roja'), findsOneWidget);
-      expect(find.text('OPS'), findsOneWidget);
+      expect(statsRepo.callCount, 2);
+      expect(statsRepo.requestedOrgIds, [null, 'o2']);
     });
 
-    testWidgets('tap en chip de org incrementa callCount (_load se relanza)', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(orgsResult: [_org('o1', 'Cruz Roja')]);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      final callsAntes = repo.callCount;
-      await tester.tap(find.text('Cruz Roja'));
-      await tester.pumpAndSettle();
-
-      expect(repo.callCount, greaterThan(callsAntes));
-    });
-
-    testWidgets('tap en chip "Todas" no lanza excepción', (tester) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(orgsResult: [_org('o1', 'Cruz Roja')]);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
+    testWidgets('re-tapping the selected chip does not refetch', (tester) async {
+      final statsRepo = FakeStatsRepository(_stats());
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: [_org('o1', 'Org A')]),
+          statsRepo: statsRepo,
+        ),
+      );
 
       await tester.tap(find.text('Todas'));
       await tester.pumpAndSettle();
 
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('3 orgs → barra muestra 4 chips en total (Todas + 3)', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(
-        orgsResult: [
-          _org('o1', 'Org A'),
-          _org('o2', 'Org B'),
-          _org('o3', 'Org C'),
-        ],
-      );
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.text('Todas'), findsOneWidget);
-      expect(find.text('Org A'), findsOneWidget);
-      expect(find.text('Org B'), findsOneWidget);
-      expect(find.text('Org C'), findsOneWidget);
+      expect(statsRepo.callCount, 1);
     });
   });
 
-  group('BrigadeStatsScreen · pull-to-refresh', () {
-    testWidgets('fling hacia abajo sobre ListView relanza _load', (
+  group('org_admin view', () {
+    testWidgets('hides the filter and never lists organizations', (
       tester,
     ) async {
-      configureMobileScreenSize(tester);
-      final repo = FakeUserRepository(orgsResult: <OrgSummary>[]);
-      await tester.pumpWidget(_buildScreen(repo));
-      await tester.pump();
-      await tester.pumpAndSettle();
+      final userRepo = FakeUserRepository(
+        orgsResult: Exception('listOrganizations must not be called'),
+      );
+      final statsRepo = FakeStatsRepository(_stats());
 
-      final callsAntes = repo.callCount;
-
-      final mainVerticalListView = find.byWidgetPredicate(
-        (widget) =>
-            widget is ListView && widget.scrollDirection == Axis.vertical,
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: userRepo,
+          statsRepo: statsRepo,
+          scopeToOwnOrganization: true,
+        ),
       );
 
-      await tester.fling(mainVerticalListView, const Offset(0, 400), 1000);
+      // listOrganizations is superadmin-only; calling it would answer 403.
+      expect(userRepo.callCount, 0);
+      expect(find.text('Todas'), findsNothing);
+      expect(statsRepo.requestedOrgIds, [null]);
+      expect(find.text('1.3K'), findsOneWidget);
+    });
+
+    testWidgets('uses the organization-scoped title', (tester) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_stats()),
+          scopeToOwnOrganization: true,
+        ),
+      );
+
+      expect(find.text('Estadísticas de mi Organización'), findsOneWidget);
+      expect(find.text('Estadísticas Globales'), findsNothing);
+    });
+  });
+
+  group('trend sub-labels', () {
+    testWidgets('a real delta renders with a direction arrow', (tester) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_stats(patientsDelta: 11.8)),
+        ),
+      );
+
+      expect(find.text('↑ 11.8% vs. mes anterior'), findsOneWidget);
+      expect(find.text('↓ 12.9% vs. mes anterior'), findsOneWidget);
+    });
+
+    testWidgets('a null delta renders an em dash, never a fabricated percent', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_stats(patientsDelta: null)),
+        ),
+      );
+
+      expect(find.text('— sin referencia previa'), findsOneWidget);
+      expect(find.text('↑ 100.0% vs. mes anterior'), findsNothing);
+    });
+
+    testWidgets('a custom window compares against the previous period', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_stats(period: 'custom')),
+        ),
+      );
+
+      expect(find.text('↑ 11.8% vs. período anterior'), findsOneWidget);
+      expect(find.textContaining('vs. mes anterior'), findsNothing);
+    });
+  });
+
+  group('failure states', () {
+    testWidgets('a 403 shows the forbidden message and no retry button', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(
+            ApiException('Not enough privileges', statusCode: 403),
+          ),
+        ),
+      );
+
+      expect(
+        find.text('Tu rol no tiene acceso a las estadísticas.'),
+        findsOneWidget,
+      );
+      expect(find.text('Reintentar'), findsNothing);
+      // The mock must never resurface.
+      expect(find.text('1.3K'), findsNothing);
+    });
+
+    testWidgets('an unreachable backend shows the offline hint and a retry', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(
+            StatsUnavailableException('no route to host'),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('requieren conexión'), findsOneWidget);
+      expect(find.text('Reintentar'), findsOneWidget);
+      // The mock must never resurface.
+      expect(find.text('1.3K'), findsNothing);
+    });
+
+    testWidgets('a 500 surfaces the backend detail and offers a retry', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(
+            ApiException('boom', statusCode: 500),
+          ),
+        ),
+      );
+
+      expect(find.text('boom'), findsOneWidget);
+      expect(find.text('Reintentar'), findsOneWidget);
+    });
+
+    testWidgets('retry re-invokes the repository', (tester) async {
+      final statsRepo = FakeStatsRepository(
+        ApiException('boom', statusCode: 500),
+      );
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: statsRepo,
+        ),
+      );
+
+      await tester.tap(find.text('Reintentar'));
       await tester.pumpAndSettle();
 
-      expect(repo.callCount, greaterThan(callsAntes));
+      expect(statsRepo.callCount, 2);
+    });
+  });
+
+  group('empty state', () {
+    testWidgets('an organization with no data shows a message, not zeroed bars', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_emptyStats()),
+          scopeToOwnOrganization: true,
+        ),
+      );
+
+      expect(find.text('Aún no hay datos para este período.'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+    });
+  });
+
+  group('truncated buckets', () {
+    testWidgets('allergies_others renders as a "+N más" chip', (tester) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_stats(allergiesOthers: 7)),
+        ),
+      );
+
+      await _expectAfterScroll(tester, find.text('+7 más'));
+    });
+
+    testWidgets('nationalities_others renders as an "Otros" row', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_stats(nationalitiesOthers: 12)),
+        ),
+      );
+
+      await _expectAfterScroll(tester, find.text('Otros'));
+      expect(find.text('12'), findsOneWidget);
+    });
+
+    testWidgets('a zero others bucket adds no row or chip', (tester) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_stats()),
+        ),
+      );
+
+      expect(find.text('Otros'), findsNothing);
+      expect(find.textContaining('más'), findsNothing);
+    });
+  });
+
+  group('localization', () {
+    testWidgets('English locale renders English sub-labels', (tester) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_stats(patientsDelta: null)),
+          locale: 'en',
+        ),
+      );
+
+      expect(find.text('All'), findsOneWidget);
+      expect(find.text('— no prior data'), findsOneWidget);
     });
   });
 }

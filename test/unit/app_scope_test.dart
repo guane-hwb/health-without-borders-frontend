@@ -11,6 +11,8 @@ import 'package:health_without_borders_frontend/src/features/auth/data/auth_repo
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
 class MockAuthRepository extends Mock implements AuthRepository {}
 
@@ -56,6 +58,10 @@ void main() {
       patientRepository: patient ?? patientRepository,
       localDatabase: db ?? localDatabase,
       syncEngine: sync ?? syncEngine,
+      statsRepository: StatsRepository(
+        apiClient: ApiClient(baseUrl: 'http://localhost'),
+        authRepository: auth ?? authRepository,
+      ),
       child: child,
     );
   }
