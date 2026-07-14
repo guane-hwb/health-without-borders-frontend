@@ -271,7 +271,10 @@ class ProfileTabSummary extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               _IdRow(
-                left: _IdCell(label: s.dobLabel, value: _formatDob(p.dob)),
+                left: _IdCell(
+                  label: s.dobLabel,
+                  value: _formatDob(p.dob, isEs),
+                ),
                 right: _IdCell(
                   label: s.gender.toUpperCase(),
                   value: _sexLabel(context, p.biologicalSex),
@@ -499,29 +502,47 @@ class ProfileTabSummary extends StatelessWidget {
     }[c];
   }
 
-  String _formatDob(String dob) {
+  String _formatDob(String dob, bool isEs) {
     if (dob.isEmpty || !dob.contains('-')) return dob;
     final p = dob.split('-');
     if (p.length != 3) return dob;
 
-    const mEs = [
-      'enero',
-      'febrero',
-      'marzo',
-      'abril',
-      'mayo',
-      'junio',
-      'julio',
-      'agosto',
-      'septiembre',
-      'octubre',
-      'noviembre',
-      'diciembre',
-    ];
-
     final mi = int.tryParse(p[1]);
     if (mi == null || mi < 1 || mi > 12) return dob;
-    return '${int.parse(p[2])} de ${mEs[mi - 1]} de ${p[0]}';
+
+    if (isEs) {
+      const mEs = [
+        'enero',
+        'febrero',
+        'marzo',
+        'abril',
+        'mayo',
+        'junio',
+        'julio',
+        'agosto',
+        'septiembre',
+        'octubre',
+        'noviembre',
+        'diciembre',
+      ];
+      return '${int.parse(p[2])} de ${mEs[mi - 1]} de ${p[0]}';
+    } else {
+      const mEn = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
+      return '${mEn[mi - 1]} ${int.parse(p[2])}, ${p[0]}';
+    }
   }
 }
 

@@ -114,12 +114,20 @@ class _VaccineCard extends StatelessWidget {
 
   final VaccinationRecordItem item;
 
-  String get _formattedDate {
+  String _formattedDate(BuildContext context) {
     if (item.date.length < 10) return item.date;
     final datePart = item.date.substring(0, 10);
     final p = datePart.split('-');
     if (p.length != 3) return datePart;
-    return '${p[2]}/${p[1]}/${p[0]}';
+
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
+    if (isEs) {
+      return '${p[2]}/${p[1]}/${p[0]}';
+    } else {
+      return '${p[1]}/${p[2]}/${p[0]}';
+    }
   }
 
   @override
@@ -160,7 +168,7 @@ class _VaccineCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '${s.doseLabel} ${item.dose} · $_formattedDate · CVX ${item.vaccineCode}',
+                    '${s.doseLabel} ${item.dose} · ${_formattedDate(context)} · CVX ${item.vaccineCode}',
                     style: const TextStyle(
                       fontSize: 11,
                       color: AppColors.textSecondary,
