@@ -107,6 +107,38 @@ class FakeLocalDatabase extends Fake implements LocalDatabase {}
 
 class FakeSyncEngine extends Fake implements SyncEngine {}
 
+class _TestLocaleWrapper extends StatefulWidget {
+  const _TestLocaleWrapper({required this.initialLocale, required this.child});
+  final String initialLocale;
+  final Widget child;
+
+  @override
+  State<_TestLocaleWrapper> createState() => _TestLocaleWrapperState();
+}
+
+class _TestLocaleWrapperState extends State<_TestLocaleWrapper> {
+  late String _locale;
+
+  @override
+  void initState() {
+    super.initState();
+    _locale = widget.initialLocale;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppLocale(
+      locale: _locale,
+      setLocale: (newLocale) {
+        setState(() {
+          _locale = newLocale;
+        });
+      },
+      child: widget.child,
+    );
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 UserSession buildUser({
@@ -130,9 +162,8 @@ Widget buildTestApp(
   String locale = 'es',
   FakeAuthRepository? fakeAuth,
 }) {
-  return AppLocale(
-    locale: locale,
-    setLocale: (_) {},
+  return _TestLocaleWrapper(
+    initialLocale: locale,
     child: MaterialApp(
       home: AppScope(
         authRepository: fakeAuth ?? FakeAuthRepository(),
@@ -390,12 +421,6 @@ void main() {
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
 
-      final todosWidgets = find.textContaining('Todos');
-      debugPrint('=== Widgets con Todos: ${todosWidgets.evaluate().length}');
-      for (final e in todosWidgets.evaluate()) {
-        debugPrint('  → ${e.widget}');
-      }
-
       final docChip = find.textContaining('Doctores');
       await tester.ensureVisible(docChip);
       await tester.tap(docChip, warnIfMissed: false);
@@ -404,16 +429,10 @@ void main() {
       expect(find.text('Nurse Dos'), findsNothing);
 
       final todosAfter = find.textContaining('Todos');
-      debugPrint(
-        '=== Widgets con Todos DESPUÉS: ${todosAfter.evaluate().length}',
-      );
-      for (final e in todosAfter.evaluate()) {
-        debugPrint('  → tipo: ${e.widget.runtimeType}, texto: ${e.widget}');
-      }
-
-      final scrollables = find.byType(Scrollable);
-      debugPrint('=== Scrollables: ${scrollables.evaluate().length}');
+      await tester.tap(todosAfter.first, warnIfMissed: false);
+      await tester.pumpAndSettle();
     });
+
     testWidgets('los contadores de filtro son correctos', (tester) async {
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
@@ -633,7 +652,7 @@ void main() {
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
 
-      final backButton = find.byIcon(Icons.arrow_back);
+      final backButton = find.byIcon(Icons.arrow_back_rounded);
       expect(backButton, findsOneWidget);
 
       await tester.tap(backButton);
@@ -749,7 +768,7 @@ void main() {
       await tester.pumpWidget(buildTestApp(fakeRepo));
       await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
     });
   });
 
@@ -775,7 +794,30 @@ void main() {
           await tester.pumpAndSettle();
         }
 
-        addTearDown(tester.view.resetPhysicalSize);
+        tester.view.resetPhysicalSize();
+      },
+    );
+  });
+
+  group('Cambio de idioma (Localization)', () {
+    testWidgets(
+      'Alternar el idioma de ES a EN actualiza de inmediato las cadenas traducidas',
+      (tester) async {
+        configureMobileScreenSize(tester);
+        fakeRepo.usersToReturn = [];
+        await tester.pumpWidget(buildTestApp(fakeRepo, locale: 'es'));
+        await tester.pumpAndSettle();
+
+        final sEs = AppStrings.forTesting('es');
+        final sEn = AppStrings.forTesting('en');
+
+        expect(find.text(sEs.manageUsersTitle), findsOneWidget);
+
+        await tester.tap(find.text('EN'));
+        await tester.pumpAndSettle();
+
+        expect(find.text(sEn.manageUsersTitle), findsOneWidget);
+        expect(find.text(sEs.manageUsersTitle), findsNothing);
       },
     );
   });

@@ -6,7 +6,6 @@ import '../../../core/storage/local_database.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../nfc/presentation/profile/patient_profile_screen.dart';
-import '../../nfc/presentation/shared_read_nfc_header.dart';
 
 class SyncQueueScreen extends StatefulWidget {
   const SyncQueueScreen({super.key});
@@ -111,9 +110,36 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
           children: [
             Column(
               children: [
-                SharedReadNfcHeader(
-                  title: s.syncTitle,
-                  onBack: () => Navigator.of(context).pop(),
+                Container(
+                  color: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: AppColors.white,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          s.syncTitle,
+                          style: const TextStyle(
+                            color: AppColors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      _LocaleSwitcher(),
+                    ],
+                  ),
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
@@ -217,6 +243,47 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _LocaleSwitcher extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final locale = AppLocale.of(context).locale;
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: ['es', 'en'].map((lang) {
+          final selected = locale == lang;
+          return GestureDetector(
+            onTap: () => AppLocale.of(context).setLocale(lang),
+            child: Container(
+              margin: const EdgeInsets.only(left: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.95)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                lang.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? AppColors.primary : AppColors.white,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -337,9 +404,7 @@ class _SyncCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    isConflict
-                        ? Icons.nfc
-                        : Icons.error_outline,
+                    isConflict ? Icons.nfc : Icons.error_outline,
                     size: 15,
                     color: AppColors.error,
                   ),
