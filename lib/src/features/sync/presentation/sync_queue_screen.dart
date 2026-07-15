@@ -303,26 +303,28 @@ class _SyncCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasErr = entry.syncError?.isNotEmpty == true;
     final isConflict = entry.syncErrorCode == 409;
-    // Locale probe — mirrors the in-file bilingual idiom used elsewhere so we
-    // don't have to touch app_strings.dart for a couple of conflict strings.
+
+    final hasErr = entry.syncError?.isNotEmpty == true && isConflict;
+
     final isEs = s.save == 'Guardar';
+
     final String? errorMessage = !hasErr
         ? null
-        : isConflict
-        ? (isEs
+        : (isEs
               ? 'Esta manilla ya está registrada para otro paciente. '
                     'Registra al paciente con una manilla nueva.'
               : 'This bracelet is already registered to another patient. '
-                    'Register the patient with a new bracelet.')
-        : entry.syncError;
+                    'Register the patient with a new bracelet.');
+
     final String badgeLabel = hasErr
-        ? (isConflict ? (isEs ? 'Duplicado' : 'Duplicate') : s.error)
+        ? (isEs ? 'Duplicado' : 'Duplicate')
         : s.pending;
+
     final date = entry.createdAt.contains('T')
         ? entry.createdAt.split('T').first
         : entry.createdAt;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -403,11 +405,7 @@ class _SyncCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    isConflict ? Icons.nfc : Icons.error_outline,
-                    size: 15,
-                    color: AppColors.error,
-                  ),
+                  const Icon(Icons.nfc, size: 15, color: AppColors.error),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -427,9 +425,6 @@ class _SyncCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
             child: Row(
               children: [
-                // A 409 conflict can never sync as-is (duplicate device_uid), so
-                // hide the sync action and steer the user to review/delete +
-                // re-register with a new bracelet.
                 if (!isConflict) ...[
                   _btn(
                     Icons.cloud_upload,
