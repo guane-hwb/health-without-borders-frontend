@@ -238,6 +238,7 @@ class _Step3State extends State<Step3PatientData> {
       'PER': isEs ? 'Peruana' : 'Peruvian',
       'HTI': isEs ? 'Haitiana' : 'Haitian',
       'CUB': isEs ? 'Cubana' : 'Cuban',
+      'OTHER': isEs ? 'Otra' : 'Other',
     };
 
     final eth = {
