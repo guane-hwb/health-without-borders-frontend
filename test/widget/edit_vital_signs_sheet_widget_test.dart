@@ -290,10 +290,10 @@ void main() {
 
   group('EditVitalSignsSheet — Internationalization Matrix Checks', () {
     testWidgets(
-      'ES Locale: Configures weight descriptive heading label exactly to "PESO (KG)"',
+      'ES Locale: Configures weight descriptive heading label exactly to "Peso (KG)"',
       (tester) async {
         await tester.pumpWidget(_wrap(locale: 'es'));
-        expect(find.text('PESO (KG)'), findsOneWidget);
+        expect(find.text('Peso (KG)'), findsOneWidget);
       },
     );
 
@@ -301,15 +301,15 @@ void main() {
       'EN Locale: Configures weight descriptive heading label exactly to "WEIGHT (KG)"',
       (tester) async {
         await tester.pumpWidget(_wrap(locale: 'en'));
-        expect(find.text('WEIGHT (KG)'), findsOneWidget);
+        expect(find.text('Weight (KG)'), findsOneWidget);
       },
     );
 
     testWidgets(
-      'ES Locale: Configures height descriptive heading label exactly to "ALTURA (CM)"',
+      'ES Locale: Configures height descriptive heading label exactly to "Altura (CM)"',
       (tester) async {
         await tester.pumpWidget(_wrap(locale: 'es'));
-        expect(find.text('ALTURA (CM)'), findsOneWidget);
+        expect(find.text('Altura (CM)'), findsOneWidget);
       },
     );
 
@@ -317,7 +317,7 @@ void main() {
       'EN Locale: Configures height descriptive heading label exactly to "HEIGHT (CM)"',
       (tester) async {
         await tester.pumpWidget(_wrap(locale: 'en'));
-        expect(find.text('HEIGHT (CM)'), findsOneWidget);
+        expect(find.text('Height (CM)'), findsOneWidget);
       },
     );
 
@@ -341,13 +341,13 @@ void main() {
       'Switching runtime locale contexts safely shifts typography text copy values from ES into EN',
       (tester) async {
         await tester.pumpWidget(_wrap(locale: 'es'));
-        expect(find.text('PESO (KG)'), findsOneWidget);
-        expect(find.text('WEIGHT (KG)'), findsNothing);
+        expect(find.text('Peso (KG)'), findsOneWidget);
+        expect(find.text('Weight (KG)'), findsNothing);
 
         await tester.pumpWidget(_wrap(locale: 'en'));
         await tester.pumpAndSettle();
-        expect(find.text('WEIGHT (KG)'), findsOneWidget);
-        expect(find.text('PESO (KG)'), findsNothing);
+        expect(find.text('Weight (KG)'), findsOneWidget);
+        expect(find.text('Peso (KG)'), findsNothing);
       },
     );
 
@@ -355,11 +355,11 @@ void main() {
       'Switching runtime locale contexts safely shifts height section headings from ES into EN',
       (tester) async {
         await tester.pumpWidget(_wrap(locale: 'es'));
-        expect(find.text('ALTURA (CM)'), findsOneWidget);
+        expect(find.text('Altura (CM)'), findsOneWidget);
 
         await tester.pumpWidget(_wrap(locale: 'en'));
         await tester.pumpAndSettle();
-        expect(find.text('HEIGHT (CM)'), findsOneWidget);
+        expect(find.text('Height (CM)'), findsOneWidget);
       },
     );
   });
@@ -369,7 +369,7 @@ void main() {
       'ES Locale: Weight header text styling specifies exactly fontSize=11 properties',
       (tester) async {
         await tester.pumpWidget(_wrap(locale: 'es'));
-        final label = tester.widget<Text>(find.text('PESO (KG)'));
+        final label = tester.widget<Text>(find.text('Peso (KG)'));
         expect(label.style?.fontSize, equals(11));
       },
     );
@@ -378,7 +378,7 @@ void main() {
       'ES Locale: Weight header text styling enforces bold w700 structural weights',
       (tester) async {
         await tester.pumpWidget(_wrap(locale: 'es'));
-        final label = tester.widget<Text>(find.text('PESO (KG)'));
+        final label = tester.widget<Text>(find.text('Peso (KG)'));
         expect(label.style?.fontWeight, equals(FontWeight.w700));
       },
     );
@@ -387,7 +387,7 @@ void main() {
       'ES Locale: Weight heading typography assigns matching AppColors.textSecondary color palettes',
       (tester) async {
         await tester.pumpWidget(_wrap(locale: 'es'));
-        final label = tester.widget<Text>(find.text('PESO (KG)'));
+        final label = tester.widget<Text>(find.text('Peso (KG)'));
         expect(label.style?.color, equals(AppColors.textSecondary));
       },
     );
@@ -396,7 +396,7 @@ void main() {
       'EN Locale: Height heading typography preserves identical font size and layout weights styling parameters',
       (tester) async {
         await tester.pumpWidget(_wrap(locale: 'en'));
-        final label = tester.widget<Text>(find.text('HEIGHT (CM)'));
+        final label = tester.widget<Text>(find.text('Height (CM)'));
         expect(label.style?.fontSize, equals(11));
         expect(label.style?.fontWeight, equals(FontWeight.w700));
       },
