@@ -1,4 +1,4 @@
-// test/widget/features/nfc/register/register_nfc_screen_widget_test.dart
+// test/widget/register_nfc_screen_widget_test.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,6 +41,34 @@ class MockSyncEngine extends Mock implements SyncEngine {}
 class MockStatsRepository extends Mock implements StatsRepository {}
 
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
+
+class _TestLocaleWrapper extends StatefulWidget {
+  const _TestLocaleWrapper({required this.initialLocale, required this.child});
+  final String initialLocale;
+  final Widget child;
+
+  @override
+  State<_TestLocaleWrapper> createState() => _TestLocaleWrapperState();
+}
+
+class _TestLocaleWrapperState extends State<_TestLocaleWrapper> {
+  late String _locale;
+
+  @override
+  void initState() {
+    super.initState();
+    _locale = widget.initialLocale;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppLocale(
+      locale: _locale,
+      setLocale: (l) => setState(() => _locale = l),
+      child: widget.child,
+    );
+  }
+}
 
 void main() {
   late final void Function(FlutterErrorDetails details)? originalOnError;
@@ -111,9 +139,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        builder: (context, child) => AppLocale(
-          locale: locale,
-          setLocale: (_) {},
+        builder: (context, child) => _TestLocaleWrapper(
+          initialLocale: locale,
           child: AppScope(
             authRepository: auth,
             userRepository: userRepo,
@@ -495,11 +522,25 @@ void main() {
     },
   );
 
-  group('RegisterNfcScreen — locale en inglés', () {
+  group('RegisterNfcScreen — locale en inglés y alternancia', () {
     testWidgets('renderiza correctamente con locale "en"', (tester) async {
       await pumpScreen(tester, locale: 'en');
       expect(find.byType(Step3PatientData), findsOneWidget);
       expect(find.text('1/4'), findsOneWidget);
     });
+
+    testWidgets(
+      'alternar de ES a EN actualiza de forma reactiva las traducciones del formulario',
+      (tester) async {
+        await pumpScreen(tester, locale: 'es');
+
+        expect(find.byType(Step3PatientData), findsOneWidget);
+
+        await tester.tap(find.text('EN'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Step3PatientData), findsOneWidget);
+      },
+    );
   });
 }

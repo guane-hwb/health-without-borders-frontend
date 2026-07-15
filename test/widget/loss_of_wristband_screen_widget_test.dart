@@ -65,6 +65,38 @@ class _FakePatientRepository extends Fake implements PatientRepository {
   }
 }
 
+class _TestLocaleWrapper extends StatefulWidget {
+  const _TestLocaleWrapper({required this.initialLocale, required this.child});
+  final String initialLocale;
+  final Widget child;
+
+  @override
+  State<_TestLocaleWrapper> createState() => _TestLocaleWrapperState();
+}
+
+class _TestLocaleWrapperState extends State<_TestLocaleWrapper> {
+  late String _locale;
+
+  @override
+  void initState() {
+    super.initState();
+    _locale = widget.initialLocale;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppLocale(
+      locale: _locale,
+      setLocale: (newLocale) {
+        setState(() {
+          _locale = newLocale;
+        });
+      },
+      child: widget.child,
+    );
+  }
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 void _setMobileScreenSize(WidgetTester tester) {
@@ -80,11 +112,11 @@ Widget _wrap(
   Widget child, {
   _FakePatientRepository? patientRepo,
   NavigatorObserver? observer,
+  String initialLocale = 'es',
 }) {
   final repo = patientRepo ?? _FakePatientRepository();
-  return AppLocale(
-    locale: 'es',
-    setLocale: (_) {},
+  return _TestLocaleWrapper(
+    initialLocale: initialLocale,
     child: AppScope(
       authRepository: _FakeAuthRepository(),
       userRepository: _FakeUserRepository(),
@@ -117,7 +149,7 @@ void main() {
 
       final s = AppStrings.forTesting('es');
 
-      expect(find.text(s.searchPatientTitle), findsNWidgets(2));
+      expect(find.text(s.searchPatientTitle), findsWidgets);
       expect(find.text(s.searchSubtitle), findsOneWidget);
       expect(find.text(s.searchPrivacyNotice), findsOneWidget);
       expect(find.text(s.searchFooterNote), findsOneWidget);
@@ -208,9 +240,8 @@ void main() {
       final engine = _FakeSyncEngine();
 
       await tester.pumpWidget(
-        AppLocale(
-          locale: 'es',
-          setLocale: (_) {},
+        _TestLocaleWrapper(
+          initialLocale: 'es',
           child: AppScope(
             authRepository: authRepo,
             userRepository: userRepo,
@@ -241,13 +272,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final s = AppStrings.forTesting('es');
-      expect(find.text(s.searchPatientTitle), findsNWidgets(2));
+      expect(find.text(s.searchPatientTitle), findsWidgets);
 
       final backButtonIcon = find.byWidgetPredicate(
-        (widget) =>
-            widget is Icon &&
-            (widget.icon == Icons.arrow_back_ios_new_rounded ||
-                widget.icon == Icons.arrow_back),
+        (widget) => widget is Icon && widget.icon == Icons.arrow_back_rounded,
       );
 
       await tester.tap(backButtonIcon.first);
@@ -601,6 +629,32 @@ void main() {
       await tester.pump();
 
       expect(find.byType(Stack), findsWidgets);
+      _resetScreenSize(tester);
+    });
+  });
+
+  // ── 12. Localization Switcher ────────────────────────────────────────────
+  group('Localization Switcher', () {
+    testWidgets('switching language from ES to EN updates UI strings', (
+      tester,
+    ) async {
+      _setMobileScreenSize(tester);
+      await tester.pumpWidget(
+        _wrap(const LossOfWristbandScreen(), initialLocale: 'es'),
+      );
+      await tester.pump();
+
+      final sEs = AppStrings.forTesting('es');
+      final sEn = AppStrings.forTesting('en');
+
+      expect(find.text(sEs.searchPatientTitle), findsWidgets);
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(sEn.searchPatientTitle), findsWidgets);
+      expect(find.text(sEs.searchPatientTitle), findsNothing);
+
       _resetScreenSize(tester);
     });
   });

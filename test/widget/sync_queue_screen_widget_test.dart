@@ -1,3 +1,5 @@
+// test/widget/sync_queue_screen_widget_test.dart
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -438,9 +440,7 @@ void main() {
 
     testWidgets('un conflicto 409 oculta el botón Sync ahora', (tester) async {
       when(() => db.getUnsyncedRecords()).thenAnswer(
-        (_) async => [
-          makeEntry(syncError: 'conflict', syncErrorCode: 409),
-        ],
+        (_) async => [makeEntry(syncError: 'conflict', syncErrorCode: 409)],
       );
 
       await tester.pumpWidget(
@@ -812,5 +812,40 @@ void main() {
 
       expect(find.byType(SyncQueueScreen), findsNothing);
     });
+
+    testWidgets(
+      'alternar el idioma de ES a EN actualiza los componentes textuales de forma reactiva',
+      (tester) async {
+        when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final BuildContext context = tester.element(
+          find.byType(SyncQueueScreen),
+        );
+        final sEs = AppStrings.of(context);
+
+        expect(find.text(sEs.allSynced), findsOneWidget);
+
+        await tester.tap(find.text('EN'));
+        await tester.pumpAndSettle();
+
+        final BuildContext contextEn = tester.element(
+          find.byType(SyncQueueScreen),
+        );
+        final sEn = AppStrings.of(contextEn);
+
+        expect(find.text(sEn.allSynced), findsOneWidget);
+        expect(find.text(sEs.allSynced), findsNothing);
+      },
+    );
   });
 }

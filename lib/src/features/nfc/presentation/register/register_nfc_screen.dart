@@ -207,8 +207,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     }
 
     // Guardian card (bounded full record), if the patient has one.
-    final hasGuardian =
-        (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
+    final hasGuardian = (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
     if (hasGuardian) {
       final guardianOk = await showNfcGuidedWrite(
         context,
@@ -399,7 +398,7 @@ class _WizardHeader extends StatelessWidget {
               ),
             ),
           ),
-          if (stepText != null)
+          if (stepText != null) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
@@ -415,9 +414,52 @@ class _WizardHeader extends StatelessWidget {
                 ),
               ),
             ),
-          if (stepText == null && onBack == null) const SizedBox(width: 40),
+            const SizedBox(width: 8),
+          ],
+          _LocaleSwitcher(),
           const SizedBox(width: 4),
         ],
+      ),
+    );
+  }
+}
+
+class _LocaleSwitcher extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final locale = AppLocale.of(context).locale;
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: ['es', 'en'].map((lang) {
+          final selected = locale == lang;
+          return GestureDetector(
+            onTap: () => AppLocale.of(context).setLocale(lang),
+            child: Container(
+              margin: const EdgeInsets.only(left: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.95)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                lang.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? AppColors.primary : AppColors.white,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -582,4 +624,3 @@ class RegisterDraft {
     );
   }
 }
-

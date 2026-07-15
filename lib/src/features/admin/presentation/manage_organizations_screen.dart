@@ -8,7 +8,6 @@ import '../../../design/tokens/app_colors.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../auth/data/user_repository.dart';
-import '../../nfc/presentation/shared_read_nfc_header.dart';
 
 class ManageOrganizationsScreen extends StatefulWidget {
   const ManageOrganizationsScreen({super.key});
@@ -113,9 +112,36 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
           children: [
             Column(
               children: [
-                SharedReadNfcHeader(
-                  title: s.manageOrgsScreenTitle,
-                  onBack: () => Navigator.of(context).pop(),
+                Container(
+                  color: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: AppColors.white,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          s.manageOrgsScreenTitle,
+                          style: const TextStyle(
+                            color: AppColors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      _LocaleSwitcher(),
+                    ],
+                  ),
                 ),
                 Expanded(child: _buildBody()),
               ],
@@ -175,6 +201,47 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (_, i) =>
             _OrgCard(org: _orgs[i], onTap: () => _showOrgDetailSheet(_orgs[i])),
+      ),
+    );
+  }
+}
+
+class _LocaleSwitcher extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final locale = AppLocale.of(context).locale;
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: ['es', 'en'].map((lang) {
+          final selected = locale == lang;
+          return GestureDetector(
+            onTap: () => AppLocale.of(context).setLocale(lang),
+            child: Container(
+              margin: const EdgeInsets.only(left: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.95)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                lang.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? AppColors.primary : AppColors.white,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }

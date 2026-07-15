@@ -162,13 +162,32 @@ void main() {
       expect(find.text('Isabella María Martínez Silva'), findsOneWidget);
     });
 
-    testWidgets('muestra la fecha de nacimiento formateada', (tester) async {
+    testWidgets('muestra la fecha de nacimiento formateada en español', (
+      tester,
+    ) async {
       configureMobileScreenSize(tester);
       await tester.pumpWidget(
-        buildTestApp(draft: buildDraft(dob: DateTime(2015, 8, 22))),
+        buildTestApp(
+          draft: buildDraft(dob: DateTime(2015, 8, 22)),
+          locale: 'es',
+        ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('2015-08-22'), findsOneWidget);
+      expect(find.text('22 de agosto de 2015'), findsOneWidget);
+    });
+
+    testWidgets('muestra la fecha de nacimiento formateada en inglés', (
+      tester,
+    ) async {
+      configureMobileScreenSize(tester);
+      await tester.pumpWidget(
+        buildTestApp(
+          draft: buildDraft(dob: DateTime(2015, 8, 22)),
+          locale: 'en',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('August 22, 2015'), findsOneWidget);
     });
 
     testWidgets('muestra "Femenino" para sexo F', (tester) async {
