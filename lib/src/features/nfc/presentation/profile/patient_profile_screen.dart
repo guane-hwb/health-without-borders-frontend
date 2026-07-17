@@ -139,7 +139,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (_draft.toJson().toString() == _original.toJson().toString()) return;
     final triageChanged =
         jsonEncode(NfcTriagePayload.buildPatientPayload(record: _original)) !=
-        jsonEncode(NfcTriagePayload.buildPatientPayload(record: _draft));
+            jsonEncode(NfcTriagePayload.buildPatientPayload(record: _draft));
     await db.markChipsDirty(
       _draft.patientId,
       patient: triageChanged,
@@ -820,12 +820,14 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                       ProfileTabConsultations(
                         draft: _draft,
                         canAdd:
-                            !widget.readOnly && _currentRole.canAddConsultation,
+                            !widget.readOnly &&
+                            _currentRole.canAddConsultation,
                         onAdd: _navigateAddConsultation,
                       ),
                       ProfileTabVaccines(
                         draft: _draft,
-                        canEdit: !widget.readOnly && _currentRole.canAddVaccine,
+                        canEdit:
+                            !widget.readOnly && _currentRole.canAddVaccine,
                         onAdd: _navigateAddVaccine,
                       ),
                     ],
@@ -1945,6 +1947,7 @@ class _BgSection extends StatelessWidget {
     );
   }
 }
+
 
 /// Banner shown when the profile was reconstructed from an NFC chip because
 /// the backend was unreachable. The data may be partial (triage-only) or

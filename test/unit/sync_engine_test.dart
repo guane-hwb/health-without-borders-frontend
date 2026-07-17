@@ -267,32 +267,27 @@ void main() {
       ).called(1);
     });
 
-    test(
-      'ApiException 409 marca conflicto de manilla y no reintenta',
-      () async {
-        final entry = buildEntry('A', record: MockPatientFullRecord());
-        when(
-          () => localDb.getUnsyncedRecords(),
-        ).thenAnswer((_) async => [entry]);
-        final exception = buildApiException(
-          409,
+    test('ApiException 409 marca conflicto de manilla y no reintenta', () async {
+      final entry = buildEntry('A', record: MockPatientFullRecord());
+      when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => [entry]);
+      final exception = buildApiException(
+        409,
+        'A patient is already registered with this device tag.',
+      );
+      when(() => patientRepo.syncPatient(any())).thenThrow(exception);
+
+      await engine.syncAll();
+
+      // The 409 status is persisted so the queue UI can render a dedicated
+      // conflict state and skip the (futile) sync action.
+      verify(
+        () => localDb.markSyncError(
+          'A',
           'A patient is already registered with this device tag.',
-        );
-        when(() => patientRepo.syncPatient(any())).thenThrow(exception);
-
-        await engine.syncAll();
-
-        // The 409 status is persisted so the queue UI can render a dedicated
-        // conflict state and skip the (futile) sync action.
-        verify(
-          () => localDb.markSyncError(
-            'A',
-            'A patient is already registered with this device tag.',
-            statusCode: 409,
-          ),
-        ).called(1);
-      },
-    );
+          statusCode: 409,
+        ),
+      ).called(1);
+    });
 
     test('ApiException 422 marca error y no reintenta', () async {
       final entry = buildEntry('A', record: MockPatientFullRecord());
@@ -342,8 +337,7 @@ void main() {
         await engine.syncAll();
 
         verify(
-          () =>
-              localDb.markSyncError('A', 'error de servidor', statusCode: 500),
+          () => localDb.markSyncError('A', 'error de servidor', statusCode: 500),
         ).called(1);
       },
     );

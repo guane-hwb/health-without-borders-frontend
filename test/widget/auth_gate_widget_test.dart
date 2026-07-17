@@ -51,12 +51,12 @@ class _GateAuth extends Fake implements AuthRepository {
 // Superadmin => HomeScreen renders the admin body (static cards, no sync card),
 // so no local database access is triggered during the render.
 UserSession _superadmin() => UserSession(
-  id: 'uid-sa',
-  email: 'root@hwb.org',
-  fullName: 'Root Admin',
-  role: UserRole.superadmin,
-  organizationId: 'org-0',
-);
+      id: 'uid-sa',
+      email: 'root@hwb.org',
+      fullName: 'Root Admin',
+      role: UserRole.superadmin,
+      organizationId: 'org-0',
+    );
 
 Widget _wrap(_GateAuth auth) {
   final apiClient = ApiClient(baseUrl: 'https://example.com');

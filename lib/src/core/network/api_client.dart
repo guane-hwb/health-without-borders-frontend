@@ -9,8 +9,7 @@ class ApiException implements Exception {
   final int? statusCode;
 
   @override
-  String toString() =>
-      'ApiException(statusCode: $statusCode, message: $message)';
+  String toString() => 'ApiException(statusCode: $statusCode, message: $message)';
 }
 
 /// Renews access tokens on behalf of [ApiClient] without creating a dependency
@@ -29,7 +28,7 @@ abstract class TokenProvider {
 
 class ApiClient {
   ApiClient({required this.baseUrl, http.Client? client})
-    : _client = client ?? http.Client();
+      : _client = client ?? http.Client();
 
   final String baseUrl;
   final http.Client _client;
@@ -61,9 +60,8 @@ class ApiClient {
     required Map<String, String> headers,
     required Future<http.Response> Function(Map<String, String> headers) send,
   }) async {
-    final http.Response response = await send(
-      headers,
-    ).timeout(const Duration(seconds: 20));
+    final http.Response response =
+        await send(headers).timeout(const Duration(seconds: 20));
 
     if (response.statusCode != 401 ||
         _tokenProvider == null ||
@@ -130,9 +128,8 @@ class ApiClient {
     Map<String, String>? headers,
     Map<String, String>? queryParams,
   }) async {
-    final Uri uri = Uri.parse(
-      '$baseUrl$path',
-    ).replace(queryParameters: queryParams);
+    final Uri uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
@@ -147,9 +144,8 @@ class ApiClient {
     Map<String, String>? headers,
     Map<String, String>? queryParams,
   }) async {
-    final Uri uri = Uri.parse(
-      '$baseUrl$path',
-    ).replace(queryParameters: queryParams);
+    final Uri uri =
+        Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},

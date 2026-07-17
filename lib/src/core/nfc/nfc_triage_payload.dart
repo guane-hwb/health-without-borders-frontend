@@ -94,13 +94,11 @@ class NfcTriagePayload {
     if (algList is List) {
       for (final a in algList) {
         if (a is Map) {
-          allergies.add(
-            TriageAllergy(
-              category: a['c']?.toString() ?? '',
-              allergen: a['a']?.toString() ?? '',
-              reaction: a['r']?.toString() ?? '',
-            ),
-          );
+          allergies.add(TriageAllergy(
+            category: a['c']?.toString() ?? '',
+            allergen: a['a']?.toString() ?? '',
+            reaction: a['r']?.toString() ?? '',
+          ));
         }
       }
     }

@@ -38,10 +38,8 @@ PatientFullRecord _record({
     patientId: 'patient-uuid-1',
     deviceUid: 'PATIENT:UID',
     patientInfo: PatientInfo(
-      identification: PatientIdentification(
-        documentType: 'CC',
-        documentNumber: '123',
-      ),
+      identification:
+          PatientIdentification(documentType: 'CC', documentNumber: '123'),
       firstLastName: 'Pérez',
       firstName: 'Ana',
       dob: '2010-05-04',
@@ -49,8 +47,7 @@ PatientFullRecord _record({
       address: Address(city: 'Cúcuta', state: 'NSA'),
       bloodType: 'O+',
     ),
-    guardianInfo:
-        guardian ??
+    guardianInfo: guardian ??
         GuardianInfo(
           name: 'María Pérez',
           relationship: 'Madre',
@@ -111,9 +108,8 @@ void main() {
 
       final vaccines = payload['vaccinationRecord'] as List<dynamic>;
       expect(vaccines.length, 2);
-      final dates = vaccines
-          .map((dynamic e) => (e as Map)['date'] as String)
-          .toList();
+      final dates =
+          vaccines.map((dynamic e) => (e as Map)['date'] as String).toList();
       expect(dates, <String>['2026-06-01', '2025-05-05']);
     });
 
@@ -208,11 +204,7 @@ void main() {
         guardian2DeviceUid: null,
         chronicConditions: 'Asma; Diabetes',
         allergies: <TriageAllergy>[
-          TriageAllergy(
-            category: '01',
-            allergen: 'Penicilina',
-            reaction: 'Rash',
-          ),
+          TriageAllergy(category: '01', allergen: 'Penicilina', reaction: 'Rash'),
         ],
         vidaCode: null,
       );
@@ -295,16 +287,18 @@ void main() {
 
       expect(fit.fits, isTrue);
       expect(fit.estimatedBytes, lessThanOrEqualTo(budget));
-      expect(fit.includedConsultations + fit.includedVaccines, lessThan(6));
+      expect(
+        fit.includedConsultations + fit.includedVaccines,
+        lessThan(6),
+      );
     });
   });
 
   group('reconstruct dispatcher', () {
     test('prefers the guardian record when both sources are present', () {
       final record = _record();
-      final guardianPayload = NfcGuardianPayload.buildGuardianPayload(
-        record: record,
-      );
+      final guardianPayload =
+          NfcGuardianPayload.buildGuardianPayload(record: record);
 
       const triage = TriageSummary(
         firstName: 'Otro',

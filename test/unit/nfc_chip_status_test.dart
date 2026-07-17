@@ -22,17 +22,17 @@ void main() {
     });
 
     test('ORs with existing flags, never clearing them', () {
-      final s = NfcChipStatus.clean(
-        'p1',
-      ).markDirty(patient: true).markDirty(guardian: true);
+      final s = NfcChipStatus.clean('p1')
+          .markDirty(patient: true)
+          .markDirty(guardian: true);
       expect(s.patientChipDirty, isTrue);
       expect(s.guardianChipDirty, isTrue);
     });
 
     test('marking an already-dirty chip keeps it dirty', () {
-      final s = NfcChipStatus.clean(
-        'p1',
-      ).markDirty(guardian: true).markDirty(guardian: true);
+      final s = NfcChipStatus.clean('p1')
+          .markDirty(guardian: true)
+          .markDirty(guardian: true);
       expect(s.guardianChipDirty, isTrue);
     });
 

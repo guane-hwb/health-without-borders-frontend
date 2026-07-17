@@ -180,60 +180,29 @@ class Step6Success extends StatelessWidget {
           )
         else ...[
           if (canAddConsultation) ...[
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: onAddConsultation,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-                icon: const Icon(
-                  Icons.medical_services_outlined,
-                  color: AppColors.white,
-                  size: 22,
-                ),
-                label: Text(
-                  hasConsultations
-                      ? (isEs
-                            ? 'Añadir otra consulta'
-                            : 'Add another consultation')
-                      : s.addConsultation,
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
           SizedBox(
             width: double.infinity,
             height: 50,
             child: ElevatedButton.icon(
-              onPressed: onAddVaccine,
+              onPressed: onAddConsultation,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.secondary,
+                backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
                 elevation: 0,
               ),
               icon: const Icon(
-                Icons.vaccines_outlined,
+                Icons.medical_services_outlined,
                 color: AppColors.white,
                 size: 22,
               ),
               label: Text(
-                hasVaccines
-                    ? (isEs ? 'Añadir otra vacuna' : 'Add another vaccine')
-                    : s.addVaccineButton,
+                hasConsultations
+                    ? (isEs
+                          ? 'Añadir otra consulta'
+                          : 'Add another consultation')
+                    : s.addConsultation,
                 style: const TextStyle(
                   color: AppColors.white,
                   fontSize: 15,
@@ -243,49 +212,80 @@ class Step6Success extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-
-          // ── Finalizar ──
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton.icon(
-              onPressed: onFinish,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.success,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
+        ],
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton.icon(
+            onPressed: onAddVaccine,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.secondary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              icon: const Icon(
-                Icons.check_circle_outline,
-                color: AppColors.white,
-                size: 20,
-              ),
-              label: Text(
-                isEs ? 'Finalizar' : 'Finish',
-                style: const TextStyle(
-                  color: AppColors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              elevation: 0,
             ),
-          ),
-          const SizedBox(height: 6),
-          Center(
-            child: Text(
-              isEs
-                  ? 'Al finalizar, el registro se envía a la cola de sincronización.'
-                  : 'Upon completion, the record is sent to the synchronization queue.',
-              textAlign: TextAlign.center,
+            icon: const Icon(
+              Icons.vaccines_outlined,
+              color: AppColors.white,
+              size: 22,
+            ),
+            label: Text(
+              hasVaccines
+                  ? (isEs ? 'Añadir otra vacuna' : 'Add another vaccine')
+                  : s.addVaccineButton,
               style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.textSecondary,
-                height: 1.4,
+                color: AppColors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
+        ),
+        const SizedBox(height: 10),
+
+        // ── Finalizar ──
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton.icon(
+            onPressed: onFinish,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.success,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+            ),
+            icon: const Icon(
+              Icons.check_circle_outline,
+              color: AppColors.white,
+              size: 20,
+            ),
+            label: Text(
+              isEs ? 'Finalizar' : 'Finish',
+              style: const TextStyle(
+                color: AppColors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Center(
+          child: Text(
+            isEs
+                ? 'Al finalizar, el registro se envía a la cola de sincronización.'
+                : 'Upon completion, the record is sent to the synchronization queue.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+        ),
         ],
       ],
     );

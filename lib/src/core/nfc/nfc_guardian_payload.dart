@@ -64,12 +64,10 @@ class NfcGuardianPayload {
       maxVaccines,
     );
 
-    map['medicalHistory'] = consultations
-        .map((MedicalHistoryItem m) => m.toJson())
-        .toList();
-    map['vaccinationRecord'] = vaccines
-        .map((VaccinationRecordItem v) => v.toJson())
-        .toList();
+    map['medicalHistory'] =
+        consultations.map((MedicalHistoryItem m) => m.toJson()).toList();
+    map['vaccinationRecord'] =
+        vaccines.map((VaccinationRecordItem v) => v.toJson()).toList();
 
     _stripConsentSignature(map['guardianInfo']);
     _stripConsentSignature(map['guardian2Info']);
@@ -99,8 +97,7 @@ class NfcGuardianPayload {
     // Never ask for more than the record actually holds, so the trim loop does
     // not waste iterations on empty slots.
     if (n > record.medicalHistory.length) n = record.medicalHistory.length;
-    if (m > record.vaccinationRecord.length)
-      m = record.vaccinationRecord.length;
+    if (m > record.vaccinationRecord.length) m = record.vaccinationRecord.length;
 
     var payload = buildGuardianPayload(
       record: record,
@@ -176,8 +173,7 @@ class NfcGuardianPayload {
         )
         .toList();
 
-    final hasGuardian2 =
-        triage.guardian2DeviceUid != null &&
+    final hasGuardian2 = triage.guardian2DeviceUid != null &&
         triage.guardian2DeviceUid!.isNotEmpty;
 
     return PatientFullRecord(
@@ -185,17 +181,15 @@ class NfcGuardianPayload {
       deviceUid: deviceUid,
       patientInfo: PatientInfo(
         identification: PatientIdentification(
-          documentType: triage.documentType.isEmpty
-              ? 'MS'
-              : triage.documentType,
+          documentType:
+              triage.documentType.isEmpty ? 'MS' : triage.documentType,
           documentNumber: triage.documentNumber,
         ),
         firstLastName: triage.lastName,
         firstName: triage.firstName,
         dob: triage.dob,
-        biologicalSex: triage.biologicalSex.isEmpty
-            ? 'I'
-            : triage.biologicalSex,
+        biologicalSex:
+            triage.biologicalSex.isEmpty ? 'I' : triage.biologicalSex,
         address: Address(city: '', state: ''),
         bloodType: triage.bloodType.isEmpty ? null : triage.bloodType,
       ),
@@ -215,9 +209,8 @@ class NfcGuardianPayload {
               deviceUid: triage.guardian2DeviceUid,
             )
           : null,
-      backgroundHistory: chronic.isEmpty
-          ? null
-          : BackgroundHistory(chronicConditions: chronic),
+      backgroundHistory:
+          chronic.isEmpty ? null : BackgroundHistory(chronicConditions: chronic),
       allergies: allergies,
     );
   }

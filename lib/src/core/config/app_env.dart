@@ -3,10 +3,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class AppEnv {
   const AppEnv._();
 
-  static String get apiBaseUrl => _optional(
-    'API_BASE_URL',
-    defaultValue: 'http://localhost:8000',
-  ).replaceFirst(RegExp(r'/$'), '');
+  static String get apiBaseUrl =>
+      _optional('API_BASE_URL', defaultValue: 'http://localhost:8000')
+          .replaceFirst(RegExp(r'/$'), '');
 
   static String _optional(String key, {required String defaultValue}) {
     final String? value = _readEnvValue(key);

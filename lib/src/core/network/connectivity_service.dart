@@ -31,22 +31,22 @@ class ConnectivityService {
   /// Must be called once at app startup (before [runApp]).
   Future<void> init() async {
     // Read current state
-    final List<ConnectivityResult> results = await _connectivity
-        .checkConnectivity();
+    final List<ConnectivityResult> results =
+        await _connectivity.checkConnectivity();
     _isOnline = _hasConnection(results);
 
     // Subscribe to changes
-    _sub = _connectivity.onConnectivityChanged.listen((
-      List<ConnectivityResult> results,
-    ) {
-      final bool online = _hasConnection(results);
-      if (online != _isOnline) {
-        _isOnline = online;
-        _controller.add(
-          online ? ConnectivityStatus.online : ConnectivityStatus.offline,
-        );
-      }
-    });
+    _sub = _connectivity.onConnectivityChanged.listen(
+      (List<ConnectivityResult> results) {
+        final bool online = _hasConnection(results);
+        if (online != _isOnline) {
+          _isOnline = online;
+          _controller.add(
+            online ? ConnectivityStatus.online : ConnectivityStatus.offline,
+          );
+        }
+      },
+    );
   }
 
   /// Releases the connectivity subscription.

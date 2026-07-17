@@ -13,20 +13,13 @@ import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_
 
 String categoryLabel(String c) {
   switch (c) {
-    case '01':
-      return 'Medicamento';
-    case '02':
-      return 'Alimento';
-    case '03':
-      return 'Sust. ambiente';
-    case '04':
-      return 'Sust. piel';
-    case '05':
-      return 'Picadura';
-    case '06':
-      return 'Otra';
-    default:
-      return c;
+    case '01': return 'Medicamento';
+    case '02': return 'Alimento';
+    case '03': return 'Sust. ambiente';
+    case '04': return 'Sust. piel';
+    case '05': return 'Picadura';
+    case '06': return 'Otra';
+    default:   return c;
   }
 }
 
@@ -37,12 +30,17 @@ AllergyInfo _allergy({
   required String category,
   required String allergen,
   String? reaction,
-}) => AllergyInfo(category: category, allergen: allergen, reaction: reaction);
+}) => AllergyInfo(
+      category: category,
+      allergen: allergen,
+      reaction: reaction,
+    );
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Tests
 // ─────────────────────────────────────────────────────────────────────────────
 void main() {
+
   // ── Group 1: _categoryLabel — all known codes ─────────────────
   group('_categoryLabel — mapeo código → etiqueta', () {
     test('01 → Medicamento', () {
@@ -77,13 +75,10 @@ void main() {
       expect(categoryLabel(''), equals(''));
     });
 
-    test(
-      'código en mayúsculas no coincide con ningún caso (case-sensitive)',
-      () {
-        // The codes are always '01'-'06'; this test documents the behavior.
-        expect(categoryLabel('A1'), equals('A1'));
-      },
-    );
+    test('código en mayúsculas no coincide con ningún caso (case-sensitive)', () {
+      // The codes are always '01'-'06'; this test documents the behavior.
+      expect(categoryLabel('A1'), equals('A1'));
+    });
   });
 
   // ── Group 2: AllergyInfo — data integrity ────────────────────────────
