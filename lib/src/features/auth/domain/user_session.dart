@@ -59,14 +59,14 @@ class UserSession {
   /// its backend wire string (e.g. `org_admin`), not the Dart enum name, so the
   /// correct role is restored — never silently downgraded to the default.
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'email': email,
-        'full_name': fullName,
-        'role': role.wireValue,
-        'organization_id': organizationId,
-        'organization_name': organizationName,
-        'is_active': isActive,
-      };
+    'id': id,
+    'email': email,
+    'full_name': fullName,
+    'role': role.wireValue,
+    'organization_id': organizationId,
+    'organization_name': organizationName,
+    'is_active': isActive,
+  };
 
   /// Greeting name: takes first two words of fullName.
   /// "Juan Carlos Pérez" → "Juan Carlos"

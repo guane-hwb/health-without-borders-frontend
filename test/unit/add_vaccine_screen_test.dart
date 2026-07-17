@@ -560,7 +560,9 @@ void main() {
                               localDatabase: scope.localDatabase,
                               syncEngine: scope.syncEngine,
                               statsRepository: StatsRepository(
-                                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                                apiClient: ApiClient(
+                                  baseUrl: 'http://localhost',
+                                ),
                                 authRepository: scope.authRepository,
                               ),
                               child: AppLocale(

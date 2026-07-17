@@ -22,7 +22,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-    final _formKey = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>();
 
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
@@ -159,8 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               icon: Icons.mail_outline,
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
-                              onSubmitted: (_) =>
-                                  _passwordFocus.requestFocus(),
+                              onSubmitted: (_) => _passwordFocus.requestFocus(),
                               validator: (v) {
                                 if (v == null || v.trim().isEmpty) {
                                   return s.emailRequired;
@@ -319,9 +318,9 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     try {
       await AppScope.of(context).authRepository.login(
-            email: _emailCtrl.text.trim(),
-            password: _passwordCtrl.text,
-          );
+        email: _emailCtrl.text.trim(),
+        password: _passwordCtrl.text,
+      );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
@@ -387,7 +386,7 @@ class _LabeledField extends StatelessWidget {
   final TextInputAction textInputAction;
   final ValueChanged<String>? onSubmitted;
   final Widget? suffix;
-  final FormFieldValidator<String>? validator; 
+  final FormFieldValidator<String>? validator;
 
   @override
   Widget build(BuildContext context) {
@@ -444,17 +443,11 @@ class _LabeledField extends StatelessWidget {
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(
-                color: Colors.red.shade400,
-                width: 1.2,
-              ),
+              borderSide: BorderSide(color: Colors.red.shade400, width: 1.2),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(
-                color: Colors.red.shade600,
-                width: 1.5,
-              ),
+              borderSide: BorderSide(color: Colors.red.shade600, width: 1.5),
             ),
             errorStyle: TextStyle(
               fontSize: 11,

@@ -32,8 +32,8 @@ class AppScope extends InheritedWidget {
   UserSession? get currentUser => authRepository.currentUser;
 
   static AppScope of(BuildContext context) {
-    final AppScope? scope =
-        context.dependOnInheritedWidgetOfExactType<AppScope>();
+    final AppScope? scope = context
+        .dependOnInheritedWidgetOfExactType<AppScope>();
     if (scope == null) throw StateError('AppScope not found in widget tree.');
     return scope;
   }

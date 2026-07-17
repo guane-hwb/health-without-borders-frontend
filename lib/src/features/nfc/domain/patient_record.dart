@@ -411,22 +411,22 @@ class BackgroundHistory {
     final rawCC = json['chronicConditions'];
     final chronicConditions = (rawCC is List)
         ? rawCC
-            .map(
-              (dynamic e) =>
-                  ChronicConditionItem.fromJson(e as Map<String, dynamic>),
-            )
-            .toList()
+              .map(
+                (dynamic e) =>
+                    ChronicConditionItem.fromJson(e as Map<String, dynamic>),
+              )
+              .toList()
         : <ChronicConditionItem>[];
 
     // Defensive: medications may be absent (old schema)
     final rawMeds = json['medications'];
     final medications = (rawMeds is List)
         ? rawMeds
-            .map(
-              (dynamic e) =>
-                  MedicationStatementItem.fromJson(e as Map<String, dynamic>),
-            )
-            .toList()
+              .map(
+                (dynamic e) =>
+                    MedicationStatementItem.fromJson(e as Map<String, dynamic>),
+              )
+              .toList()
         : <MedicationStatementItem>[];
 
     return BackgroundHistory(
@@ -875,8 +875,7 @@ class MedicalHistoryItem {
   final PayerInfo? payer;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    if (encounterIdentifier != null)
-      'encounterIdentifier': encounterIdentifier,
+    if (encounterIdentifier != null) 'encounterIdentifier': encounterIdentifier,
     'type': type,
     'startDateTime': startDateTime,
     if (endDateTime != null) 'endDateTime': endDateTime,

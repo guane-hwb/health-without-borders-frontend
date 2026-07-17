@@ -61,8 +61,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     // (the online path), which matches the previous behaviour.
     payload.HwbChipReadResult? chip;
     try {
-      final key =
-          await AppScope.of(context).authRepository.getNfcEncryptionKey();
+      final key = await AppScope.of(
+        context,
+      ).authRepository.getNfcEncryptionKey();
       if (key != null && key.isNotEmpty) {
         chip = await payload.NfcPayloadService(
           codec: NfcPayloadCodec(hexKey: key),
@@ -116,7 +117,10 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     await _submitPatient(uid);
   }
 
-  Future<void> _submitPatient(String deviceUid, {payload.HwbChipReadResult? chip}) async {
+  Future<void> _submitPatient(
+    String deviceUid, {
+    payload.HwbChipReadResult? chip,
+  }) async {
     setState(() {
       _scanning = true;
       _errorMessage = null;

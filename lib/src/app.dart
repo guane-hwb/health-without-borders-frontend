@@ -1,10 +1,13 @@
 // lib/src/app.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'core/config/app_env.dart';
 import 'core/di/app_scope.dart';
 import 'core/i18n/app_strings.dart';
 import 'core/network/api_client.dart';
+import 'core/nfc/nfc_session_manager.dart';
 import 'core/storage/local_database.dart';
 import 'core/sync/sync_engine.dart';
 import 'design/theme/app_theme.dart';
@@ -61,6 +64,12 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp> {
     _authRepository.sessionExpired.addListener(_onSessionExpired);
     // Enciende el motor automático para escuchar cambios de red e iniciar sincronizaciones
     _syncEngine.start();
+    // Toma posesión de la radio NFC mientras la app esté en primer plano. Sin
+    // esto el SO es dueño de la radio y despacha cualquier chip que se acerque
+    // a su propio visor de etiquetas ("Nueva etiqueta escaneada"). Los chips
+    // que lleguen sin que una pantalla los haya pedido se descartan en
+    // silencio: seguimos leyendo sólo cuando el clínico oprime el botón.
+    unawaited(NfcSessionManager.instance.attach());
   }
 
   // 🧹 Limpia los recursos cuando la aplicación se destruye o se recarga

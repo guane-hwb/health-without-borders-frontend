@@ -214,10 +214,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(
-        find.text('Pending write to the NFC device'),
-        findsOneWidget,
-      );
+      expect(find.text('Pending write to the NFC device'), findsOneWidget);
       expect(
         find.text('Tap "Finish" and bring the devices to seal the data'),
         findsOneWidget,

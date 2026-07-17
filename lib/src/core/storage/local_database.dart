@@ -372,16 +372,16 @@ class NfcChipStatus {
   });
 
   factory NfcChipStatus.clean(String patientId) => NfcChipStatus(
-        patientId: patientId,
-        patientChipDirty: false,
-        guardianChipDirty: false,
-      );
+    patientId: patientId,
+    patientChipDirty: false,
+    guardianChipDirty: false,
+  );
 
   factory NfcChipStatus.fromRow(Map<String, dynamic> row) => NfcChipStatus(
-        patientId: row['patient_id'] as String,
-        patientChipDirty: (row['patient_chip_dirty'] as int? ?? 0) == 1,
-        guardianChipDirty: (row['guardian_chip_dirty'] as int? ?? 0) == 1,
-      );
+    patientId: row['patient_id'] as String,
+    patientChipDirty: (row['patient_chip_dirty'] as int? ?? 0) == 1,
+    guardianChipDirty: (row['guardian_chip_dirty'] as int? ?? 0) == 1,
+  );
 
   final String patientId;
   final bool patientChipDirty;
@@ -404,8 +404,8 @@ class NfcChipStatus {
       );
 
   Map<String, dynamic> toRow() => <String, dynamic>{
-        'patient_id': patientId,
-        'patient_chip_dirty': patientChipDirty ? 1 : 0,
-        'guardian_chip_dirty': guardianChipDirty ? 1 : 0,
-      };
+    'patient_id': patientId,
+    'patient_chip_dirty': patientChipDirty ? 1 : 0,
+    'guardian_chip_dirty': guardianChipDirty ? 1 : 0,
+  };
 }

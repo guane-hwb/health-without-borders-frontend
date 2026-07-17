@@ -176,10 +176,15 @@ void main() {
       expect(stats.maxVaccineCount, 90);
     });
 
-    test('maxVaccineCount is zero for an empty list, so bars never divide by 0', () {
-      final stats = BrigadeStats.fromJson(_payload(vaccines: <Map<String, dynamic>>[]));
-      expect(stats.maxVaccineCount, 0);
-    });
+    test(
+      'maxVaccineCount is zero for an empty list, so bars never divide by 0',
+      () {
+        final stats = BrigadeStats.fromJson(
+          _payload(vaccines: <Map<String, dynamic>>[]),
+        );
+        expect(stats.maxVaccineCount, 0);
+      },
+    );
 
     test('allergyCategoryCount counts distinct categories, not entries', () {
       final stats = BrigadeStats.fromJson(
@@ -269,11 +274,14 @@ void main() {
       expect(countryDisplay('').nameEs, 'Sin registrar');
     });
 
-    test('an unrecognised code falls back to the globe rather than vanishing', () {
-      expect(isKnownCountry('ZZZ'), isFalse);
-      expect(countryDisplay('ZZZ').flag, '🌍');
-      expect(countryDisplay('ZZZ').nameEs, 'Otros');
-    });
+    test(
+      'an unrecognised code falls back to the globe rather than vanishing',
+      () {
+        expect(isKnownCountry('ZZZ'), isFalse);
+        expect(countryDisplay('ZZZ').flag, '🌍');
+        expect(countryDisplay('ZZZ').nameEs, 'Otros');
+      },
+    );
 
     test('the others bucket is the globe', () {
       expect(othersDisplay.flag, '🌍');

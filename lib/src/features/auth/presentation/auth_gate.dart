@@ -26,8 +26,8 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   // Kick off the restore once. Held in a field so a rebuild does not re-run it
   // (FutureBuilder would otherwise restart the future on every build).
-  late final Future<UserSession?> _restore =
-      widget.authRepository.restoreSession();
+  late final Future<UserSession?> _restore = widget.authRepository
+      .restoreSession();
 
   @override
   Widget build(BuildContext context) {
@@ -39,9 +39,7 @@ class _AuthGateState extends State<AuthGate> {
         }
         // A restored session (correct role) => straight to Home. Otherwise, or
         // on any restore error, fall through to login.
-        return snapshot.data != null
-            ? const HomeScreen()
-            : const LoginScreen();
+        return snapshot.data != null ? const HomeScreen() : const LoginScreen();
       },
     );
   }
