@@ -279,7 +279,15 @@ void main() {
     });
 
     test('descarta cualquier caracter no hexadecimal', () {
-      expect(normalizeNfcUid('uid=04:A1!'), '04A1');
+      expect(normalizeNfcUid('04:A1!?*'), '04A1');
+    });
+
+    test('absorbe las letras hex de un prefijo — filtra, no valida', () {
+      // Deliberado, y peligroso: normalizeNfcUid quita lo no-hexadecimal, y
+      // las letras A-F de un prefijo SON hexadecimal. Nunca le pases un UID
+      // con prefijo; pasale sólo el UID.
+      expect(normalizeNfcUid('HWB-04:A1'), 'B04A1');
+      expect(normalizeNfcUid('uid=04:A1'), 'D04A1');
     });
 
     test('string vacío queda vacío', () {

@@ -148,8 +148,9 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
           final value = await action(_adapt(raw));
           if (!completer.isCompleted) completer.complete(value);
         } catch (error, stackTrace) {
-          if (!completer.isCompleted)
+          if (!completer.isCompleted) {
             completer.completeError(error, stackTrace);
+          }
         } finally {
           release();
         }
