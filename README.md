@@ -3,6 +3,7 @@
 ![Flutter](https://img.shields.io/badge/Flutter-3.41.5-blue.svg)
 ![Dart](https://img.shields.io/badge/Dart-3.8.0-0175C2.svg)
 ![License](https://img.shields.io/badge/license-MIT-green)
+[![CI](https://github.com/guane-hwb/health-without-borders-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/guane-hwb/health-without-borders-frontend/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/guane-hwb/health-without-borders-frontend/graph/badge.svg)](https://codecov.io/gh/guane-hwb/health-without-borders-frontend)
 
 Cross-platform mobile and web client for the Health Without Borders initiative.
