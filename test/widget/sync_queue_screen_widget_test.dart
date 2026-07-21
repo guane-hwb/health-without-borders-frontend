@@ -108,6 +108,8 @@ void main() {
   setUp(() {
     db = MockLocalDatabase();
     syncEngine = MockSyncEngine();
+
+    when(() => syncEngine.refreshPendingCount()).thenAnswer((_) async {});
   });
 
   group('SyncQueueScreen – estado vacío', () {
@@ -192,8 +194,6 @@ void main() {
     testWidgets('muestra CircularProgressIndicator mientras carga', (
       tester,
     ) async {
-      // Using a Completer that never completes avoids active timers at the end of the test,
-      // unlike Future.delayed with a long duration.
       final completer = Completer<List<LocalPatientEntry>>();
       when(() => db.getUnsyncedRecords()).thenAnswer((_) => completer.future);
 
@@ -208,7 +208,6 @@ void main() {
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-      // Complete before the widget tree is disposed to prevent leaks.
       completer.complete([]);
       await tester.pumpAndSettle();
     });
@@ -232,7 +231,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // maskedName: "Ana A." and "Bruno B."
       expect(find.text('Ana A.'), findsOneWidget);
       expect(find.text('Bruno B.'), findsOneWidget);
     });
@@ -297,7 +295,6 @@ void main() {
       await tester.tap(find.text('Sincronizar todo'));
       await tester.pumpAndSettle();
 
-      // At least 2 calls: 1 during initState + 1 after syncAll.
       verify(() => db.getUnsyncedRecords()).called(greaterThanOrEqualTo(2));
     });
   });
@@ -389,7 +386,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The Padding holding the error message is only rendered when hasErr is true.
       expect(find.text('Error'), findsNothing);
     });
 
@@ -452,33 +448,32 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Retrying a duplicate device_uid can never succeed, so the action is gone.
       expect(find.text('Sync ahora'), findsNothing);
-      // Review stays available so the user can inspect and re-register.
       expect(find.text('Revisar'), findsOneWidget);
     });
 
-    testWidgets('un error no-409 muestra el mensaje y conserva Sync ahora', (
-      tester,
-    ) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer(
-        (_) async => [
-          makeEntry(syncError: 'error de servidor', syncErrorCode: 500),
-        ],
-      );
+    testWidgets(
+      'un error no-409 conserva el estado pendiente y el botón Sync ahora',
+      (tester) async {
+        when(() => db.getUnsyncedRecords()).thenAnswer(
+          (_) async => [
+            makeEntry(syncError: 'error de servidor', syncErrorCode: 500),
+          ],
+        );
 
-      await tester.pumpWidget(
-        buildTestApp(
-          child: const SyncQueueScreen(),
-          db: db,
-          syncEngine: syncEngine,
-        ),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.text('error de servidor'), findsOneWidget);
-      expect(find.text('Sync ahora'), findsOneWidget);
-    });
+        expect(find.text('Pendiente'), findsOneWidget);
+        expect(find.text('Sync ahora'), findsOneWidget);
+      },
+    );
 
     testWidgets('botón Review está presente por cada card', (tester) async {
       when(
@@ -518,10 +513,17 @@ void main() {
   });
 
   group('_SyncCard – estado de error', () {
-    testWidgets('muestra badge "Error" cuando hay syncError', (tester) async {
-      when(
-        () => db.getUnsyncedRecords(),
-      ).thenAnswer((_) async => [makeEntry(syncError: 'Fallo')]);
+    testWidgets('muestra badge "Duplicado" cuando hay conflicto 409', (
+      tester,
+    ) async {
+      when(() => db.getUnsyncedRecords()).thenAnswer(
+        (_) async => [
+          makeEntry(
+            syncError: 'A patient is already registered with this device tag.',
+            syncErrorCode: 409,
+          ),
+        ],
+      );
 
       await tester.pumpWidget(
         buildTestApp(
@@ -532,13 +534,20 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Error'), findsOneWidget);
+      expect(find.text('Duplicado'), findsOneWidget);
     });
 
-    testWidgets('la card tiene borde cuando hay error', (tester) async {
-      when(
-        () => db.getUnsyncedRecords(),
-      ).thenAnswer((_) async => [makeEntry(syncError: 'Fail')]);
+    testWidgets('la card tiene borde cuando hay error de conflicto', (
+      tester,
+    ) async {
+      when(() => db.getUnsyncedRecords()).thenAnswer(
+        (_) async => [
+          makeEntry(
+            syncError: 'A patient is already registered with this device tag.',
+            syncErrorCode: 409,
+          ),
+        ],
+      );
 
       await tester.pumpWidget(
         buildTestApp(
@@ -549,7 +558,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Finds the Container of the card that applies the border.
       final containers = tester.widgetList<Container>(find.byType(Container));
       final hasBorder = containers.any((c) {
         final deco = c.decoration as BoxDecoration?;
@@ -677,7 +685,6 @@ void main() {
       await tester.tap(find.byIcon(Icons.delete_outline));
       await tester.pumpAndSettle();
 
-      // maskedName appears both in the card and the dialog, so we scope the search to the AlertDialog.
       expect(
         find.descendant(
           of: find.byType(AlertDialog),
@@ -707,7 +714,6 @@ void main() {
       await tester.tap(find.byIcon(Icons.delete_outline));
       await tester.pumpAndSettle();
 
-      // The confirm button (Eliminar) is the last TextButton inside the dialog.
       await tester.tap(find.text('Eliminar'));
       await tester.pumpAndSettle();
 
