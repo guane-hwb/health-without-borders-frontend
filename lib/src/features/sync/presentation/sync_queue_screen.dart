@@ -25,13 +25,15 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final e = await AppScope.of(context).localDatabase.getUnsyncedRecords();
+    final scope = AppScope.of(context);
+    final e = await scope.localDatabase.getUnsyncedRecords();
 
     if (mounted) {
       setState(() {
         _entries = e;
         _loading = false;
       });
+      await scope.syncEngine.refreshPendingCount();
     }
   }
 
