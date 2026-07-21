@@ -932,13 +932,13 @@ class AppStrings {
     'searchSubtitle': 'Identificación estricta · Ley 1581/2012',
     'searchPrivacyNotice':
         'Use esta búsqueda solo cuando el paciente no tiene su dispositivo NFC. Todos los campos son obligatorios.',
-    'documentTypeLabel': 'TIPO DOC.',
-    'documentNumberLabel': 'NÚMERO DE DOCUMENTO',
-    'firstNameLabel': 'PRIMER NOMBRE',
-    'lastNameLabel': 'APELLIDO',
+    'documentTypeLabel': 'Tipo doc.',
+    'documentNumberLabel': 'Número de documento',
+    'firstNameLabel': 'Primer nombre',
+    'lastNameLabel': 'Apellido',
     'firstOrSecondLastName': 'Primer o segundo apellido',
-    'dobLabel': 'FECHA DE NACIMIENTO',
-    'guardianNameOptionalLabel': 'NOMBRE DEL GUARDIÁN (si es menor)',
+    'dobLabel': 'Fecha de nacimiento',
+    'guardianNameOptionalLabel': 'Nombre del guardián (si es menor)',
     'guardianHelper': 'Verificación adicional · coincidencia parcial permitida',
     'minThreeChars': 'Mínimo 3 caracteres',
     'searchPatientButton': 'Buscar paciente',
@@ -949,8 +949,8 @@ class AppStrings {
 
     // Vital signs sheet
     'editMeasurements': 'Editar mediciones',
-    'weightKg': 'PESO (KG)',
-    'heightCm': 'ALTURA (CM)',
+    'weightKg': 'Peso (KG)',
+    'heightCm': 'Altura (CM)',
     'previous': 'Anterior',
     'bloodTypeReadOnly': 'Tipo de sangre',
 
@@ -1504,13 +1504,13 @@ class AppStrings {
     'searchSubtitle': 'Strict identification · Law 1581/2012',
     'searchPrivacyNotice':
         'Use this search only when the patient does not have their device. All fields are required.',
-    'documentTypeLabel': 'DOC. TYPE',
-    'documentNumberLabel': 'DOCUMENT NUMBER',
-    'firstNameLabel': 'FIRST NAME',
-    'lastNameLabel': 'LAST NAME',
+    'documentTypeLabel': 'Doc. type',
+    'documentNumberLabel': 'Document number',
+    'firstNameLabel': 'First name',
+    'lastNameLabel': 'Last name',
     'firstOrSecondLastName': 'First or second last name',
-    'dobLabel': 'DATE OF BIRTH',
-    'guardianNameOptionalLabel': "GUARDIAN'S NAME (if minor)",
+    'dobLabel': 'Date of birth',
+    'guardianNameOptionalLabel': "Guardian's name (if minor)",
     'guardianHelper': 'Extra verification · partial match allowed',
     'minThreeChars': '3 characters minimum',
     'searchPatientButton': 'Search patient',
@@ -1521,8 +1521,8 @@ class AppStrings {
 
     // Vital signs sheet
     'editMeasurements': 'Edit measurements',
-    'weightKg': 'WEIGHT (KG)',
-    'heightCm': 'HEIGHT (CM)',
+    'weightKg': 'Weight (KG)',
+    'heightCm': 'Height (CM)',
     'previous': 'Previous',
     'bloodTypeReadOnly': 'Blood type',
 
