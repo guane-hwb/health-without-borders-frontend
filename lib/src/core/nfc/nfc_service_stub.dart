@@ -45,4 +45,3 @@ class NfcService {
     NfcSessionManager.instance.cancelPending();
   }
 }
-

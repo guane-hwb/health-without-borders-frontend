@@ -162,8 +162,7 @@ class NfcDisabledException extends NfcSessionException {
 /// `startSession` silently replaced the first one's callback and its future
 /// never completed.
 class NfcBusyException extends NfcSessionException {
-  NfcBusyException()
-    : super('Another NFC operation is already in progress.');
+  NfcBusyException() : super('Another NFC operation is already in progress.');
 }
 
 /// No chip arrived before the timeout elapsed.

@@ -104,4 +104,3 @@ class NfcService {
 // NfcNotAvailableException now lives in nfc_session_types.dart and is
 // re-exported above, so that the whole app catches one class rather than the
 // three same-named-but-unrelated ones it used to declare.
-
