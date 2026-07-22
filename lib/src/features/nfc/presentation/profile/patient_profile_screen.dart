@@ -60,8 +60,6 @@ class PatientProfileScreen extends StatefulWidget {
 
 class _PatientProfileScreenState extends State<PatientProfileScreen>
     with SingleTickerProviderStateMixin {
-  static const int _kGuardianCardCapacityBytes = 4000;
-
   late TabController _tabController;
   late PatientFullRecord _draft;
   late PatientFullRecord _original;
@@ -139,7 +137,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (_draft.toJson().toString() == _original.toJson().toString()) return;
     final triageChanged =
         jsonEncode(NfcTriagePayload.buildPatientPayload(record: _original)) !=
-            jsonEncode(NfcTriagePayload.buildPatientPayload(record: _draft));
+        jsonEncode(NfcTriagePayload.buildPatientPayload(record: _draft));
     await db.markChipsDirty(
       _draft.patientId,
       patient: triageChanged,
@@ -217,30 +215,39 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
     if (status.guardianChipDirty &&
         (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty) {
+      GuardianPayloadFit? guardianFit;
       final ok = await showNfcGuidedWrite(
         context,
         title: isEs ? 'Tarjeta del guardián' : 'Guardian card',
         instruction: isEs
             ? 'Acerque la tarjeta del guardián al teléfono'
             : 'Bring the guardian card to the phone',
-        write: () {
-          final fit = NfcGuardianPayload.buildWithinCapacity(
-            record: record,
-            capacityBytes: _kGuardianCardCapacityBytes,
-            estimateSize: codec.estimateSize,
-          );
-          return NfcPayloadService(codec: codec).writeGuardianPayload(
-            fit.payload,
-            expectedUid: record.guardianInfo.deviceUid,
-          );
+        write: () async {
+          final result = await NfcPayloadService(codec: codec)
+              .writeGuardianRecord(
+                buildFit: (int budget) =>
+                    NfcGuardianPayload.buildWithinCapacity(
+                      record: record,
+                      capacityBytes: budget,
+                      estimateSize: codec.estimateSize,
+                    ),
+                expectedUid: record.guardianInfo.deviceUid,
+              );
+          guardianFit = result.fit;
         },
       );
       if (!mounted) return;
       if (ok) {
+        // Capture the messenger before the await gap so showing the partial
+        // notice afterwards does not touch context across an async boundary.
+        final messenger = ScaffoldMessenger.of(context);
         await scope.localDatabase.clearChipsDirty(
           record.patientId,
           guardian: true,
         );
+        if (guardianFit?.isPartial ?? false) {
+          _showPartialCardNotice(messenger, guardianFit!, isEs);
+        }
       }
     }
 
@@ -248,6 +255,43 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     await _loadChipStatus(scope.localDatabase);
     if (!mounted) return;
     setState(() => _isUpdatingChips = false);
+  }
+
+  /// Tells the clinician the guardian card holds a partial record: the chip was
+  /// too small for the full history, so the most recent entries were written
+  /// and the rest left off. The full record still syncs to the server.
+  ///
+  /// Takes the messenger rather than reading it from context, so the caller
+  /// captures it before any await gap.
+  void _showPartialCardNotice(
+    ScaffoldMessengerState messenger,
+    GuardianPayloadFit fit,
+    bool isEs,
+  ) {
+    final parts = <String>[];
+    if (fit.droppedConsultations > 0) {
+      parts.add(
+        isEs
+            ? '${fit.droppedConsultations} consulta(s)'
+            : '${fit.droppedConsultations} consultation(s)',
+      );
+    }
+    if (fit.droppedVaccines > 0) {
+      parts.add(
+        isEs
+            ? '${fit.droppedVaccines} vacuna(s)'
+            : '${fit.droppedVaccines} vaccine(s)',
+      );
+    }
+    final dropped = parts.join(isEs ? ' y ' : ' and ');
+    final message = isEs
+        ? 'La tarjeta es pequeña: se guardaron las entradas más recientes. '
+              'Quedaron fuera $dropped (siguen en el servidor).'
+        : 'The card is small: the most recent entries were saved. '
+              'Left off: $dropped (still on the server).';
+    messenger.showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 6)),
+    );
   }
 
   Future<void> _saveAndPendingSync() async {
@@ -820,14 +864,12 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                       ProfileTabConsultations(
                         draft: _draft,
                         canAdd:
-                            !widget.readOnly &&
-                            _currentRole.canAddConsultation,
+                            !widget.readOnly && _currentRole.canAddConsultation,
                         onAdd: _navigateAddConsultation,
                       ),
                       ProfileTabVaccines(
                         draft: _draft,
-                        canEdit:
-                            !widget.readOnly && _currentRole.canAddVaccine,
+                        canEdit: !widget.readOnly && _currentRole.canAddVaccine,
                         onAdd: _navigateAddVaccine,
                       ),
                     ],
@@ -1947,7 +1989,6 @@ class _BgSection extends StatelessWidget {
     );
   }
 }
-
 
 /// Banner shown when the profile was reconstructed from an NFC chip because
 /// the backend was unreachable. The data may be partial (triage-only) or

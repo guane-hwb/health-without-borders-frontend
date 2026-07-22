@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:nfc_manager/ndef_record.dart';
 
+import 'nfc_guardian_payload.dart';
 import 'nfc_payload_codec.dart';
 import 'nfc_session_manager.dart';
 import 'nfc_triage_payload.dart';
@@ -20,6 +21,11 @@ export 'nfc_session_manager.dart'
         NfcSessionException,
         NfcTagAlreadyPresentException,
         NfcTimeoutException;
+
+/// Given the usable payload budget (chip NDEF capacity minus record overhead),
+/// returns the trimmed guardian payload that fits. In practice this is
+/// [NfcGuardianPayload.buildWithinCapacity] with its record and estimator bound.
+typedef GuardianFitBuilder = GuardianPayloadFit Function(int payloadBudget);
 
 /// MIME type used for HWB NFC payloads.
 const String kHwbNdefMimeType = 'application/vnd.hwb.triage';
@@ -70,6 +76,85 @@ class NfcPayloadService {
       guardianPayload,
       mimeType: kHwbGuardianMimeType,
       expectedUid: expectedUid,
+      timeout: timeout,
+      cancel: cancel,
+    );
+  }
+
+  /// Writes a guardian record, fitting it to the chip's *actual* capacity.
+  ///
+  /// The old flow fit the payload against a hardcoded 4000-byte constant sized
+  /// for a DESFire that was never bought, so on a real NTAG the payload was
+  /// built too large and only failed at write() time. Here the fit is computed
+  /// inside the tap, once [buildFit] is handed the chip's real NDEF capacity —
+  /// minus the MIME record overhead, since that comes out of the same budget.
+  ///
+  /// [buildFit] is [NfcGuardianPayload.buildWithinCapacity] with the record and
+  /// estimator already bound; it receives the usable payload budget and returns
+  /// the trimmed fit. The resulting [GuardianPayloadFit] rides back on
+  /// [NfcWriteResult.fit] so the UI can report any history that was dropped.
+  Future<NfcWriteResult> writeGuardianRecord({
+    required GuardianFitBuilder buildFit,
+    String? expectedUid,
+    Duration timeout = NfcSessionManager.defaultTimeout,
+    NfcCancelToken? cancel,
+  }) {
+    return _tagSource.withTag<NfcWriteResult>(
+      (HwbTag tag) async {
+        final uid = tag.uid;
+        if (uid.isEmpty) {
+          throw NfcWriteException('Could not read chip UID');
+        }
+        if (expectedUid != null &&
+            normalizeNfcUid(uid) != normalizeNfcUid(expectedUid)) {
+          throw NfcUidMismatchException(expected: expectedUid, actual: uid);
+        }
+
+        final ndef = tag.ndef;
+        if (ndef == null) {
+          throw NfcWriteException(
+            'Chip is not NDEF-formatted. Use an NTAG (patient) or an '
+            'NDEF-formatted DESFire (guardian).',
+          );
+        }
+        if (!ndef.isWritable) {
+          throw NfcWriteException('Chip is read-only or locked');
+        }
+
+        // The MIME record overhead (header + the 28-char type string) comes out
+        // of maxSize, so the payload budget is maxSize minus that overhead.
+        // Measure it exactly with an empty payload rather than guessing.
+        final overhead = NdefMessage(
+          records: [buildMimeRecord(kHwbGuardianMimeType, Uint8List(0))],
+        ).byteLength;
+        final payloadBudget = ndef.maxSize - overhead;
+
+        final fit = buildFit(payloadBudget);
+        final encrypted = await codec.encode(fit.payload);
+        final message = NdefMessage(
+          records: [buildMimeRecord(kHwbGuardianMimeType, encrypted)],
+        );
+
+        final needed = message.byteLength;
+        if (needed > ndef.maxSize) {
+          // Even the demographic base does not fit — nothing to trim further.
+          throw NfcPayloadTooLargeException(
+            messageBytes: needed,
+            payloadBytes: encrypted.length,
+            chipCapacity: ndef.maxSize,
+          );
+        }
+
+        await ndef.write(message);
+
+        return NfcWriteResult(
+          uid: uid,
+          bytesWritten: encrypted.length,
+          messageBytes: needed,
+          chipCapacity: ndef.maxSize,
+          fit: fit,
+        );
+      },
       timeout: timeout,
       cancel: cancel,
     );
@@ -258,6 +343,7 @@ class NfcWriteResult {
     required this.bytesWritten,
     required this.messageBytes,
     required this.chipCapacity,
+    this.fit,
   });
 
   final String uid;
@@ -270,6 +356,10 @@ class NfcWriteResult {
   final int messageBytes;
 
   final int chipCapacity;
+
+  /// For guardian writes: how the record was fitted to the chip, including any
+  /// history that was trimmed. Null for triage writes.
+  final GuardianPayloadFit? fit;
 
   double get utilizationPercent => (messageBytes / chipCapacity) * 100;
 }

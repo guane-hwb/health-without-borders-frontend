@@ -23,11 +23,6 @@ import 'steps/step6_success.dart';
 import '../../../../core/i18n/app_strings.dart';
 import '../../../home/presentation/home_screen.dart';
 
-/// Conservative usable NDEF capacity (bytes) for the guardian DESFire
-/// EV3 4K. The real limit is enforced by the chip at write time; this
-/// only pre-trims so we rarely hit that hard limit.
-const int _kGuardianCardCapacityBytes = 4000;
-
 class RegisterNfcScreen extends StatefulWidget {
   const RegisterNfcScreen({super.key});
   @override
@@ -216,13 +211,12 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
             ? 'Acerque la tarjeta del guardián al teléfono'
             : 'Bring the guardian card to the phone',
         write: () {
-          final fit = NfcGuardianPayload.buildWithinCapacity(
-            record: record,
-            capacityBytes: _kGuardianCardCapacityBytes,
-            estimateSize: codec.estimateSize,
-          );
-          return NfcPayloadService(codec: codec).writeGuardianPayload(
-            fit.payload,
+          return NfcPayloadService(codec: codec).writeGuardianRecord(
+            buildFit: (int budget) => NfcGuardianPayload.buildWithinCapacity(
+              record: record,
+              capacityBytes: budget,
+              estimateSize: codec.estimateSize,
+            ),
             expectedUid: record.guardianInfo.deviceUid,
           );
         },

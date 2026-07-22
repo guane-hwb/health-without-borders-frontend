@@ -3,6 +3,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_alias.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_payload.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_triage_payload.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
@@ -38,8 +39,10 @@ PatientFullRecord _record({
     patientId: 'patient-uuid-1',
     deviceUid: 'PATIENT:UID',
     patientInfo: PatientInfo(
-      identification:
-          PatientIdentification(documentType: 'CC', documentNumber: '123'),
+      identification: PatientIdentification(
+        documentType: 'CC',
+        documentNumber: '123',
+      ),
       firstLastName: 'Pérez',
       firstName: 'Ana',
       dob: '2010-05-04',
@@ -47,7 +50,8 @@ PatientFullRecord _record({
       address: Address(city: 'Cúcuta', state: 'NSA'),
       bloodType: 'O+',
     ),
-    guardianInfo: guardian ??
+    guardianInfo:
+        guardian ??
         GuardianInfo(
           name: 'María Pérez',
           relationship: 'Madre',
@@ -108,8 +112,9 @@ void main() {
 
       final vaccines = payload['vaccinationRecord'] as List<dynamic>;
       expect(vaccines.length, 2);
-      final dates =
-          vaccines.map((dynamic e) => (e as Map)['date'] as String).toList();
+      final dates = vaccines
+          .map((dynamic e) => (e as Map)['date'] as String)
+          .toList();
       expect(dates, <String>['2026-06-01', '2025-05-05']);
     });
 
@@ -154,6 +159,80 @@ void main() {
       expect(consent.containsKey('signatureBase64'), isFalse);
       expect(consent['accepted'], isTrue);
       expect(consent['email'], 'm@example.com');
+    });
+  });
+
+  group('aliased write path round-trip', () {
+    // The real guardian-write path: buildWithinCapacity produces the aliased
+    // payload that gets written, and reconstructFromGuardian must rebuild the
+    // record from exactly that. A break here is offline data corruption.
+    test(
+      'buildWithinCapacity payload reconstructs to an equivalent record',
+      () {
+        final record = _record(
+          history: <MedicalHistoryItem>[
+            _consultation('2026-01-10T09:00:00'),
+            _consultation('2026-03-15T09:00:00'),
+          ],
+          vaccines: <VaccinationRecordItem>[_vaccine('2026-06-01')],
+          allergies: <AllergyInfo>[
+            AllergyInfo(
+              category: '01',
+              allergen: 'Penicilina',
+              reaction: 'Rash',
+            ),
+          ],
+        );
+
+        final fit = NfcGuardianPayload.buildWithinCapacity(
+          record: record,
+          capacityBytes: 1000000,
+          estimateSize: (Map<String, dynamic> m) => 0, // ample: no trimming
+        );
+        // fit.payload is aliased (has the schema marker).
+        expect(fit.payload[kAliasSchemaKey], kAliasSchemaVersion);
+
+        final rebuilt = NfcGuardianPayload.reconstructFromGuardian(fit.payload);
+
+        expect(rebuilt.patientId, 'patient-uuid-1');
+        expect(rebuilt.deviceUid, 'PATIENT:UID');
+        expect(rebuilt.patientInfo.fullName, 'Ana Pérez');
+        expect(rebuilt.patientInfo.bloodType, 'O+');
+        expect(rebuilt.guardianInfo.deviceUid, 'GUARDIAN:UID');
+        expect(rebuilt.allergies.first.allergen, 'Penicilina');
+        expect(rebuilt.medicalHistory.length, 2);
+        expect(rebuilt.vaccinationRecord.length, 1);
+      },
+    );
+
+    test('dropped-history counts are reported on the fit', () {
+      final record = _record(
+        history: <MedicalHistoryItem>[
+          _consultation('2026-01-10T09:00:00'),
+          _consultation('2026-02-10T09:00:00'),
+          _consultation('2026-03-10T09:00:00'),
+        ],
+        vaccines: <VaccinationRecordItem>[_vaccine('2026-01-01')],
+      );
+
+      // Force keeping only 1 consultation via a tiny estimate that exceeds the
+      // budget until n+m is small.
+      var call = 0;
+      final fit = NfcGuardianPayload.buildWithinCapacity(
+        record: record,
+        capacityBytes: 100,
+        // First estimates are "too big", shrinking as entries drop.
+        estimateSize: (Map<String, dynamic> m) => 200 - (call++ * 40),
+      );
+
+      expect(fit.isPartial, isTrue);
+      expect(
+        fit.droppedConsultations + fit.droppedVaccines,
+        fit.totalConsultations +
+            fit.totalVaccines -
+            fit.includedConsultations -
+            fit.includedVaccines,
+      );
     });
   });
 
@@ -204,7 +283,11 @@ void main() {
         guardian2DeviceUid: null,
         chronicConditions: 'Asma; Diabetes',
         allergies: <TriageAllergy>[
-          TriageAllergy(category: '01', allergen: 'Penicilina', reaction: 'Rash'),
+          TriageAllergy(
+            category: '01',
+            allergen: 'Penicilina',
+            reaction: 'Rash',
+          ),
         ],
         vidaCode: null,
       );
@@ -274,8 +357,11 @@ void main() {
         ],
       );
 
-      // Size with all 3 + 3; choose a capacity below it to force trimming.
-      final full = NfcGuardianPayload.buildGuardianPayload(record: record);
+      // buildWithinCapacity measures the aliased payload (what actually gets
+      // written), so the budget reference must be the aliased size too.
+      final full = aliasGuardianPayload(
+        NfcGuardianPayload.buildGuardianPayload(record: record),
+      );
       final fullSize = jsonSize(full);
       final budget = fullSize - 1;
 
@@ -287,18 +373,16 @@ void main() {
 
       expect(fit.fits, isTrue);
       expect(fit.estimatedBytes, lessThanOrEqualTo(budget));
-      expect(
-        fit.includedConsultations + fit.includedVaccines,
-        lessThan(6),
-      );
+      expect(fit.includedConsultations + fit.includedVaccines, lessThan(6));
     });
   });
 
   group('reconstruct dispatcher', () {
     test('prefers the guardian record when both sources are present', () {
       final record = _record();
-      final guardianPayload =
-          NfcGuardianPayload.buildGuardianPayload(record: record);
+      final guardianPayload = NfcGuardianPayload.buildGuardianPayload(
+        record: record,
+      );
 
       const triage = TriageSummary(
         firstName: 'Otro',

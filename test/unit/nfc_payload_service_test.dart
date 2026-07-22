@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:nfc_manager/ndef_record.dart';
 
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_payload.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_session_manager.dart';
@@ -408,6 +409,120 @@ void main() {
       expect(result.chipCapacity, 888);
       expect(result.bytesWritten, 3);
       expect(result.utilizationPercent, lessThan(10));
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // writeGuardianRecord — capacidad dinámica (fit calculado dentro del tap)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('writeGuardianRecord', () {
+    setUp(() {
+      when(
+        () => codec.encode(any()),
+      ).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
+    });
+
+    /// A fit builder that records the budget it was handed and returns a payload
+    /// of [kept] consultations out of [total].
+    GuardianFitBuilder recordingBuilder({
+      required List<int> budgetSink,
+      int kept = 1,
+      int total = 3,
+    }) {
+      return (int budget) {
+        budgetSink.add(budget);
+        return GuardianPayloadFit(
+          payload: const {'a': 1},
+          includedConsultations: kept,
+          includedVaccines: 0,
+          totalConsultations: total,
+          totalVaccines: 0,
+          estimatedBytes: 3,
+          fits: true,
+        );
+      };
+    }
+
+    test('hands buildFit the chip capacity minus record overhead', () async {
+      final budgets = <int>[];
+      final ndef = _FakeNdef(maxSize: 888); // NTAG216
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      await service.writeGuardianRecord(
+        buildFit: recordingBuilder(budgetSink: budgets),
+      );
+
+      // Overhead is the byteLength of an empty guardian MIME record. The budget
+      // must be strictly below the raw chip capacity.
+      expect(budgets, hasLength(1));
+      expect(budgets.single, lessThan(888));
+      expect(budgets.single, greaterThan(888 - 60)); // overhead is small
+    });
+
+    test('carries the fit back on the result', () async {
+      final ndef = _FakeNdef(maxSize: 888);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      final result = await service.writeGuardianRecord(
+        buildFit: recordingBuilder(budgetSink: <int>[], kept: 1, total: 3),
+      );
+
+      expect(result.fit, isNotNull);
+      expect(result.fit!.droppedConsultations, 2);
+      expect(result.fit!.isPartial, isTrue);
+    });
+
+    test('writes one guardian MIME record', () async {
+      final ndef = _FakeNdef(maxSize: 888);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      await service.writeGuardianRecord(
+        buildFit: recordingBuilder(budgetSink: <int>[]),
+      );
+
+      expect(ndef.written!.records, hasLength(1));
+      expect(
+        String.fromCharCodes(ndef.written!.records.single.type),
+        kHwbGuardianMimeType,
+      );
+    });
+
+    test('rejects a chip whose UID does not match', () async {
+      final ndef = _FakeNdef(maxSize: 888);
+      final service = _service(codec, HwbTag(uid: '11:22', ndef: ndef));
+
+      await expectLater(
+        service.writeGuardianRecord(
+          buildFit: recordingBuilder(budgetSink: <int>[]),
+          expectedUid: kExpectedUid,
+        ),
+        throwsA(isA<NfcUidMismatchException>()),
+      );
+      expect(ndef.written, isNull);
+    });
+
+    test('throws when even the trimmed base does not fit', () async {
+      // Encoded payload larger than the tiny chip; nothing left to trim.
+      when(() => codec.encode(any())).thenAnswer((_) async => Uint8List(600));
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      await expectLater(
+        service.writeGuardianRecord(
+          buildFit: (int budget) => const GuardianPayloadFit(
+            payload: {'a': 1},
+            includedConsultations: 0,
+            includedVaccines: 0,
+            totalConsultations: 0,
+            totalVaccines: 0,
+            estimatedBytes: 600,
+            fits: false,
+          ),
+        ),
+        throwsA(isA<NfcPayloadTooLargeException>()),
+      );
+      expect(ndef.written, isNull);
     });
   });
 
