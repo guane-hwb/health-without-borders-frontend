@@ -296,6 +296,78 @@ void main() {
   });
 
   // ══════════════════════════════════════════════════════════════════════════
+  // Contrato de excepciones — la regresión que dejó "No chip detected" sin
+  // atrapar. Las 8 pantallas hacen `on NfcSessionException catch (e)`; toda
+  // falla recuperable de la radio DEBE ser un NfcSessionException para que ese
+  // catch la muestre. La única excepción es NfcNotAvailableException, que cada
+  // pantalla atrapa aparte a propósito.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('jerarquía de excepciones', () {
+    test('NfcTimeoutException es un NfcSessionException', () {
+      expect(
+        NfcTimeoutException(const Duration(seconds: 20)),
+        isA<NfcSessionException>(),
+      );
+    });
+
+    test('NfcTagAlreadyPresentException es un NfcSessionException', () {
+      expect(NfcTagAlreadyPresentException(), isA<NfcSessionException>());
+    });
+
+    test('NfcCancelledException es un NfcSessionException', () {
+      expect(NfcCancelledException(), isA<NfcSessionException>());
+    });
+
+    test('NfcInterruptedException es un NfcSessionException', () {
+      expect(NfcInterruptedException(), isA<NfcSessionException>());
+    });
+
+    test('NfcBusyException es un NfcSessionException', () {
+      expect(NfcBusyException(), isA<NfcSessionException>());
+    });
+
+    test('NfcDisabledException es un NfcSessionException', () {
+      expect(NfcDisabledException(), isA<NfcSessionException>());
+    });
+
+    test('NfcNotAvailableException NO es un NfcSessionException', () {
+      // Se atrapa por separado en cada pantalla; si heredara, el catch genérico
+      // se la tragaría y no se mostraría el estado "sin hardware NFC".
+      expect(NfcNotAvailableException(), isNot(isA<NfcSessionException>()));
+    });
+
+    test('cada subtipo expone un message legible para la UI', () {
+      final exceptions = <NfcSessionException>[
+        NfcTimeoutException(const Duration(seconds: 20)),
+        NfcTagAlreadyPresentException(),
+        NfcCancelledException(),
+        NfcInterruptedException(),
+        NfcBusyException(),
+        NfcDisabledException(),
+      ];
+      for (final e in exceptions) {
+        expect(e.message, isNotEmpty);
+        expect(e.toString(), e.message);
+      }
+    });
+
+    test('un catch de NfcSessionException atrapa un timeout', () async {
+      NfcService.tagSource = _FakeTagSource.throws(
+        NfcTimeoutException(const Duration(seconds: 20)),
+      );
+      // Esto es lo que hacen las pantallas; antes se escapaba como no atrapada.
+      Object? caught;
+      try {
+        await NfcService.readDeviceUid();
+      } on NfcSessionException catch (e) {
+        caught = e;
+      }
+      expect(caught, isA<NfcTimeoutException>());
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
   // NfcCancelToken
   // ══════════════════════════════════════════════════════════════════════════
 

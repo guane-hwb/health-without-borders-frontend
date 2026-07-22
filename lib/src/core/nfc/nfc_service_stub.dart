@@ -10,6 +10,7 @@ export 'nfc_session_manager.dart'
         NfcDisabledException,
         NfcInterruptedException,
         NfcNotAvailableException,
+        NfcSessionException,
         NfcTagAlreadyPresentException,
         NfcTimeoutException;
 
@@ -45,9 +46,3 @@ class NfcService {
   }
 }
 
-class NfcSessionException implements Exception {
-  NfcSessionException(this.message);
-  final String message;
-  @override
-  String toString() => message;
-}

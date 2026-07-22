@@ -117,17 +117,43 @@ String normalizeNfcUid(String uid) =>
     uid.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toUpperCase();
 
 // ── Exceptions ──────────────────────────────────────────────────────────────
+//
+// Everything the radio can throw except [NfcNotAvailableException] extends
+// [NfcSessionException], which carries a display-ready [message]. This is the
+// error contract the eight scan screens are written against: they already do
+// `on NfcSessionException catch (e) => showError(e.message)`. Making the
+// specific failures subtypes means every one of them is caught and shown
+// without touching a single call site — and any NFC exception added later is
+// covered by construction. Get this wrong and a subtype escapes the catch and
+// reaches the UI as an unhandled exception, which is exactly what happened when
+// these were all bare `implements Exception`: a timeout surfaced as nothing at
+// all, the button just sat there.
+//
+// [NfcNotAvailableException] is deliberately NOT a subtype: every screen
+// catches it separately to render a distinct "no NFC hardware" state, so it
+// must not be swallowed by the generic handler.
+
+/// Base type for every recoverable NFC failure. Carries a message the UI can
+/// show as-is.
+class NfcSessionException implements Exception {
+  NfcSessionException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
 
 /// The device has no NFC hardware.
+///
+/// Intentionally not an [NfcSessionException]: callers catch it separately.
 class NfcNotAvailableException implements Exception {
   @override
   String toString() => 'NFC is not available on this device.';
 }
 
 /// NFC is switched off in system settings.
-class NfcDisabledException implements Exception {
-  @override
-  String toString() => 'NFC is turned off in system settings.';
+class NfcDisabledException extends NfcSessionException {
+  NfcDisabledException()
+    : super('NFC is turned off. Enable it in system settings.');
 }
 
 /// Another NFC operation is already waiting for a chip.
@@ -135,29 +161,26 @@ class NfcDisabledException implements Exception {
 /// The radio has exactly one consumer at a time. Before this existed, a second
 /// `startSession` silently replaced the first one's callback and its future
 /// never completed.
-class NfcBusyException implements Exception {
-  @override
-  String toString() => 'Another NFC operation is already in progress.';
+class NfcBusyException extends NfcSessionException {
+  NfcBusyException()
+    : super('Another NFC operation is already in progress.');
 }
 
 /// No chip arrived before the timeout elapsed.
-class NfcTimeoutException implements Exception {
-  NfcTimeoutException(this.timeout);
+class NfcTimeoutException extends NfcSessionException {
+  NfcTimeoutException(this.timeout)
+    : super('No device detected. Hold it against the reader and try again.');
   final Duration timeout;
-  @override
-  String toString() => 'No chip detected after ${timeout.inSeconds}s.';
 }
 
 /// The caller aborted the operation.
-class NfcCancelledException implements Exception {
-  @override
-  String toString() => 'NFC operation cancelled.';
+class NfcCancelledException extends NfcSessionException {
+  NfcCancelledException() : super('NFC operation cancelled.');
 }
 
 /// The app left the foreground, so the radio was handed back to the OS.
-class NfcInterruptedException implements Exception {
-  @override
-  String toString() => 'NFC operation interrupted.';
+class NfcInterruptedException extends NfcSessionException {
+  NfcInterruptedException() : super('NFC operation interrupted.');
 }
 
 /// A chip is already parked on the antenna.
@@ -165,8 +188,7 @@ class NfcInterruptedException implements Exception {
 /// Android does not re-poll a chip that was already in the field when reader
 /// mode came up, so waiting would hang until the timeout. Surfacing this lets
 /// the UI say "lift it and tap again" instead of spinning.
-class NfcTagAlreadyPresentException implements Exception {
-  @override
-  String toString() =>
-      'A chip is already on the antenna. Lift it and tap again.';
+class NfcTagAlreadyPresentException extends NfcSessionException {
+  NfcTagAlreadyPresentException()
+    : super('Lift the device away and tap it again.');
 }

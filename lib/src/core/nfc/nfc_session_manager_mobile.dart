@@ -108,6 +108,18 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
     await attach();
     await _requireRadio();
 
+    // Make sure the radio is actually polling before we sit and wait for a tag.
+    // attach() only enables reader mode once, and the OS turns it back off on
+    // its own — when the screen sleeps, on backgrounding, on a hot restart —
+    // logging "Disabling reader mode because app died or moved to background".
+    // Crucially it does NOT tell us, so _readerModeOn can read true while the
+    // radio is actually off. Force a clean re-enable here rather than trusting
+    // the flag: without this, withTag registers a consumer and waits forever on
+    // a dead radio, which is exactly the "no device detected" that no amount of
+    // holding the chip could fix.
+    await _forceReaderMode();
+    if (!_readerModeOn) throw NfcNotAvailableException();
+
     if (_consumer != null) throw NfcBusyException();
 
     // Android will not re-poll a chip that was already in the field, so if one
@@ -122,10 +134,9 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
 
     final completer = Completer<T>();
     late final _Consumer consumer;
-    Timer? timer;
 
     void release() {
-      timer?.cancel();
+      consumer.cancelTimer();
       if (identical(_consumer, consumer)) {
         _consumer = null;
         _publishIdleState();
@@ -139,9 +150,12 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
     }
 
     consumer = _Consumer(
+      timeout: timeout,
+      onTimeout: () => fail(NfcTimeoutException(timeout)),
       onTag: (NfcTag raw) async {
         if (consumer.busy || completer.isCompleted) return;
         consumer.busy = true;
+        consumer.cancelTimer();
         _lastIdleTagAt = null;
         _setState(NfcRadioState.working);
         try {
@@ -158,13 +172,13 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
       fail: fail,
     );
 
-    timer = Timer(timeout, () => fail(NfcTimeoutException(timeout)));
     unawaited(
       cancel?.whenCancelled.then((_) => fail(NfcCancelledException())) ??
           Future<void>.value(),
     );
 
     _consumer = consumer;
+    consumer.startTimer();
     _setState(NfcRadioState.waiting);
 
     return completer.future;
@@ -186,7 +200,10 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
+        // Screen woke or app came back to front. Re-take the radio and resume
+        // the countdown from where it froze.
         unawaited(_enableReaderMode());
+        _consumer?.startTimer();
       case AppLifecycleState.inactive:
         // Transient: notification shade, a system dialog, the app switcher
         // preview. The activity is still resumed as far as the NFC framework
@@ -194,7 +211,16 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
         break;
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
+        // The screen slept or the app was backgrounded. Android hands the radio
+        // back to the OS regardless, so drop reader mode — but do NOT abort the
+        // pending read. A clinician holding a wristband to a phone whose display
+        // times out is the core use case; killing the wait here is the bug that
+        // made every held read fail with "no chip detected". Freeze the timeout
+        // instead and resume on wake.
+        _consumer?.pauseTimer();
+        unawaited(_disableReaderMode());
       case AppLifecycleState.detached:
+        // The engine is being torn down; the read genuinely cannot complete.
         _failPending(NfcInterruptedException());
         unawaited(_disableReaderMode());
     }
@@ -216,25 +242,61 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
 
   Future<void> _enableReaderMode() async {
     if (!_usesReaderMode || _readerModeOn) return;
+    await _doEnableReaderMode();
+  }
+
+  /// Re-enables reader mode even if [_readerModeOn] claims it is already on.
+  ///
+  /// The OS disables our reader mode without notifying us (screen sleep,
+  /// backgrounding, hot restart), leaving the flag stale. Callers that are
+  /// about to depend on the radio actually polling — [withTag] — force through
+  /// this instead of the guarded [_enableReaderMode].
+  Future<void> _forceReaderMode() async {
+    if (!_usesReaderMode) return;
+    // disableReaderMode first so the framework's internal state matches ours;
+    // enabling twice without a disable is a no-op on some devices.
+    if (_readerModeOn) {
+      _readerModeOn = false;
+      try {
+        await NfcManagerAndroid.instance.disableReaderMode();
+      } catch (_) {
+        // Already off on the OS side; that is the state we want anyway.
+      }
+    }
+    await _doEnableReaderMode();
+  }
+
+  Future<void> _doEnableReaderMode() async {
     try {
       await NfcManagerAndroid.instance.enableReaderMode(
-        // Matches what the app polled before the migration: NFC-A (NTAG 215/216
-        // wristbands), NFC-B, NFC-V. Verified on device — reader mode with this
-        // mask activates an NTAG215 in well under a second. noPlatformSounds
-        // keeps the OS chime off, since our own UI reports the tap.
+        // NFC-A (NTAG 215/216 wristbands), NFC-B, NFC-V. Verified on device:
+        // reader mode with exactly this mask activates an NTAG215 in under a
+        // second. noPlatformSounds is intentionally NOT here — on this Samsung
+        // it made enableReaderMode throw, which the catch below then swallowed,
+        // so reader mode never came up and no tag was ever seen. The OS chime
+        // on read is acceptable; a radio that never polls is not.
         flags: const {
           NfcReaderFlagAndroid.nfcA,
           NfcReaderFlagAndroid.nfcB,
           NfcReaderFlagAndroid.nfcV,
-          NfcReaderFlagAndroid.noPlatformSounds,
         },
         onTagDiscovered: _onTagDiscovered,
       );
       _readerModeOn = true;
       _publishIdleState();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      // Do NOT swallow this silently. A failure here means the radio is not
+      // polling at all, and a mute catch is exactly what hid that for days.
       _readerModeOn = false;
       _setState(NfcRadioState.off);
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'nfc_session_manager',
+          context: ErrorDescription('enabling NFC reader mode'),
+        ),
+      );
     }
   }
 
@@ -301,7 +363,12 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
 }
 
 class _Consumer {
-  _Consumer({required this.onTag, required this.fail});
+  _Consumer({
+    required this.onTag,
+    required this.fail,
+    required this.timeout,
+    required this.onTimeout,
+  }) : _remaining = timeout;
 
   final void Function(NfcTag tag) onTag;
   final void Function(Object error) fail;
@@ -309,6 +376,41 @@ class _Consumer {
   /// Set once a chip is in hand, to keep the timeout and cancel from yanking
   /// the future out from under an in-flight transceive.
   bool busy = false;
+
+  final Duration timeout;
+  final void Function() onTimeout;
+
+  Timer? _timer;
+  DateTime? _startedAt;
+  Duration _remaining;
+
+  /// Starts the timeout, or restarts it with the time that was left when it was
+  /// last paused.
+  void startTimer() {
+    if (busy) return;
+    _startedAt = DateTime.now();
+    _timer?.cancel();
+    _timer = Timer(_remaining, onTimeout);
+  }
+
+  /// Freezes the countdown. Called when the screen sleeps: a clinician holding
+  /// a wristband to a phone whose display times out has not walked away, so the
+  /// wait must survive until the screen wakes — otherwise it dies mid-read.
+  void pauseTimer() {
+    if (busy || _timer == null) return;
+    _timer!.cancel();
+    _timer = null;
+    final started = _startedAt;
+    if (started != null) {
+      _remaining -= DateTime.now().difference(started);
+      if (_remaining < Duration.zero) _remaining = Duration.zero;
+    }
+  }
+
+  void cancelTimer() {
+    _timer?.cancel();
+    _timer = null;
+  }
 }
 
 class _AndroidNdef implements HwbNdef {

@@ -17,6 +17,7 @@ export 'nfc_session_manager.dart'
         NfcDisabledException,
         NfcInterruptedException,
         NfcNotAvailableException,
+        NfcSessionException,
         NfcTagAlreadyPresentException,
         NfcTimeoutException;
 
