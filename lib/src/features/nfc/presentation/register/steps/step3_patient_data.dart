@@ -238,6 +238,7 @@ class _Step3State extends State<Step3PatientData> {
       'PER': isEs ? 'Peruana' : 'Peruvian',
       'HTI': isEs ? 'Haitiana' : 'Haitian',
       'CUB': isEs ? 'Cubana' : 'Cuban',
+      'OTHER': isEs ? 'Otra' : 'Other',
     };
 
     final eth = {
@@ -423,7 +424,7 @@ class _Step3State extends State<Step3PatientData> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: _StyledTextField(
-                          label: isEs ? 'SEGUNDO NOMBRE' : 'SECOND NAME',
+                          label: isEs ? 'Segundo nombre' : 'Second name',
                           controller: _secondName,
                           hint: optionalLabel,
                           textCapitalization: TextCapitalization.words,
@@ -447,7 +448,7 @@ class _Step3State extends State<Step3PatientData> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: _StyledTextField(
-                          label: isEs ? 'SEGUNDO APELLIDO' : 'SECOND LAST NAME',
+                          label: isEs ? 'Segundo apellido' : 'Second last name',
                           controller: _secondLast,
                           hint: optionalLabel,
                           textCapitalization: TextCapitalization.words,
@@ -475,7 +476,7 @@ class _Step3State extends State<Step3PatientData> {
                   ),
                   const SizedBox(height: 12),
                   _ChipSelector(
-                    label: isEs ? 'SEXO BIOLÓGICO' : 'BIOLOGICAL SEX',
+                    label: isEs ? 'Sexo biológico' : 'Biological sex',
                     value: d.biologicalSex,
                     options: sex,
                     required: true,
@@ -483,7 +484,7 @@ class _Step3State extends State<Step3PatientData> {
                   ),
                   const SizedBox(height: 12),
                   _StyledDropdown<String>(
-                    label: isEs ? 'IDENTIDAD DE GÉNERO' : 'GENDER IDENTITY',
+                    label: isEs ? 'Identidad de género' : 'Gender identity',
                     value: d.genderIdentity ?? '99',
                     items: gender,
                     onChanged: (v) =>
@@ -506,7 +507,7 @@ class _Step3State extends State<Step3PatientData> {
                   ),
                   const SizedBox(height: 12),
                   _StyledDropdown<String>(
-                    label: isEs ? 'ETNIA' : 'ETHNICITY',
+                    label: isEs ? 'Etnia' : 'Ethnicity',
                     value: d.ethnicity ?? '06',
                     items: eth,
                     onChanged: (v) =>
@@ -515,7 +516,7 @@ class _Step3State extends State<Step3PatientData> {
                   if (_hasEthnicity) ...[
                     const SizedBox(height: 12),
                     _StyledTextField(
-                      label: isEs ? 'COMUNIDAD ÉTNICA' : 'ETHNIC COMMUNITY',
+                      label: isEs ? 'Comunidad étnica' : 'Ethnic community',
                       controller: _ethnicComm,
                       hint: ethnicCommHint,
                       helperText: ethnicCommHelper,
@@ -523,7 +524,7 @@ class _Step3State extends State<Step3PatientData> {
                   ],
                   const SizedBox(height: 12),
                   _StyledDropdown<String>(
-                    label: isEs ? 'DISCAPACIDAD' : 'DISABILITY',
+                    label: isEs ? 'Discapacidad' : 'Disability',
                     value: d.disabilityCategory ?? '00',
                     items: dis,
                     onChanged: (v) => setState(
