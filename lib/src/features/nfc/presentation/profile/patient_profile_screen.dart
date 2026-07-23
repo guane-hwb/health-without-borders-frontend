@@ -39,6 +39,7 @@ class PatientProfileScreen extends StatefulWidget {
     this.lastSyncedAt,
     this.readOnly = false,
     this.offline = false,
+    this.emergency = false,
   });
 
   final PatientFullRecord patient;
@@ -53,6 +54,11 @@ class PatientProfileScreen extends StatefulWidget {
   /// backend was unreachable. Shows an offline banner; always combined with
   /// [readOnly] so the chip-sourced snapshot is never edited.
   final bool offline;
+
+  /// Break-glass view: a minor's data shown offline without the guardian card.
+  /// Renders a persistent warning and hides the document number, since the
+  /// clinician has not been authorised by the guardian for this access.
+  final bool emergency;
 
   @override
   State<PatientProfileScreen> createState() => _PatientProfileScreenState();
@@ -815,6 +821,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                   onSync: () => _sync(silent: false),
                 ),
                 _ProfileTabsBar(controller: _tabController, draft: _draft),
+                if (widget.emergency) const _EmergencyBanner(),
                 if (widget.offline) const _OfflineBanner(),
                 if (!widget.readOnly && (_chipStatus?.anyDirty ?? false))
                   _NfcStaleBanner(
@@ -1970,6 +1977,48 @@ class _BgSection extends StatelessWidget {
 /// Banner shown when the profile was reconstructed from an NFC chip because
 /// the backend was unreachable. The data may be partial (triage-only) or
 /// slightly behind the server, so the profile is always read-only here.
+/// Break-glass banner: a minor's record opened without the guardian card.
+///
+/// Deliberately loud and always visible — the clinician should not be able to
+/// forget they stepped around a control, and anyone looking over their shoulder
+/// should see it too.
+class _EmergencyBanner extends StatelessWidget {
+  const _EmergencyBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFDE7E7),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            size: 20,
+            color: AppColors.error,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isEs
+                  ? 'Acceso de emergencia · sin autorización del guardián · '
+                        'registrado'
+                  : 'Emergency access · without guardian authorisation · logged',
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.error,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _OfflineBanner extends StatelessWidget {
   const _OfflineBanner();
 
