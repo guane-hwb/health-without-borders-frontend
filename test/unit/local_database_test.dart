@@ -299,6 +299,38 @@ void main() {
       await localDb.clearAll();
     });
 
+    // ── Break-glass audit log ───────────────────────────────────────────────
+
+    test('logEmergencyAccess persiste una entrada sin sincronizar', () async {
+      await localDb.logEmergencyAccess(
+        patientUid: '04:AA:BB',
+        patientName: 'Ana Pérez',
+        userId: 'user-1',
+      );
+
+      final pending = await localDb.pendingEmergencyAccessLogs();
+      expect(pending, hasLength(1));
+      expect(pending.single['patient_uid'], '04:AA:BB');
+      expect(pending.single['patient_name'], 'Ana Pérez');
+      expect(pending.single['user_id'], 'user-1');
+      expect(pending.single['is_synced'], 0);
+      expect(pending.single['reason'], 'guardian_absent_offline');
+      expect(pending.single['occurred_at'], isNotEmpty);
+    });
+
+    test('acumula varias entradas', () async {
+      await localDb.logEmergencyAccess(patientUid: '04:AA');
+      await localDb.logEmergencyAccess(patientUid: '04:BB');
+      expect(await localDb.pendingEmergencyAccessLogs(), hasLength(2));
+    });
+
+    test('tolera campos opcionales ausentes', () async {
+      await localDb.logEmergencyAccess(patientUid: '04:CC');
+      final pending = await localDb.pendingEmergencyAccessLogs();
+      expect(pending.single['patient_name'], isNull);
+      expect(pending.single['user_id'], isNull);
+    });
+
     test(
       'savePatient persists a record retrievable via getAllRecords',
       () async {
