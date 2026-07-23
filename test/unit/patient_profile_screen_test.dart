@@ -1,9 +1,7 @@
-// test/unit/patient_profile_screen_test.dart:
-
+// test/unit/patient_profile_screen_test.dart
 import 'package:flutter_test/flutter_test.dart';
 
 // ── _age ────────────────────────────────────────────────────────────────────
-
 int? computeAge(String dob, DateTime now) {
   try {
     final parts = dob.split('-');
@@ -25,7 +23,6 @@ int? computeAge(String dob, DateTime now) {
 }
 
 // ── _initials ────────────────────────────────────────────────────────────────
-
 String computeInitials(String fullName) {
   final parts = fullName.trim().split(RegExp(r'\s+'));
   if (parts.isEmpty || (parts.length == 1 && parts.first.isEmpty)) return '?';
@@ -34,7 +31,6 @@ String computeInitials(String fullName) {
 }
 
 // ── _relLabel ────────────────────────────────────────────────────────────────
-
 String relLabel(String r) {
   switch (r) {
     case '01':
@@ -51,7 +47,6 @@ String relLabel(String r) {
 }
 
 // ── _medStatusLabel ──────────────────────────────────────────────────────────
-
 String medStatusLabel(String c) {
   switch (c) {
     case 'active':
@@ -68,7 +63,6 @@ String medStatusLabel(String c) {
 }
 
 // ── _hasUnsyncedChanges ──────────────────────────────────────────────────────
-
 bool hasUnsyncedChanges(
   Map<String, dynamic> draft,
   Map<String, dynamic> original,
@@ -77,7 +71,6 @@ bool hasUnsyncedChanges(
 }
 
 // ── _avatarColor hash ────────────────────────────────────────────────────────
-
 int avatarColorIndex(String initials) {
   const colorsLength = 8;
   var hash = 0;
@@ -127,127 +120,124 @@ bool resolveHasInternet(List<String> results) {
   return !results.contains('none');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TESTS
-// ─────────────────────────────────────────────────────────────────────────────
-
 void main() {
-  // ── computeAge ─────────────────────────────────────────────────────────────
-  group('computeAge', () {
-    test('edad exacta en el día del cumpleaños', () {
+  group('computeAge (10 tests)', () {
+    test('1. edad exacta en el día del cumpleaños', () {
       expect(computeAge('1990-06-15', DateTime(2025, 6, 15)), 35);
     });
 
-    test('resta 1 cuando el cumpleaños aún no ha llegado (mes anterior)', () {
-      expect(computeAge('1990-06-15', DateTime(2025, 3, 10)), 34);
-    });
+    test(
+      '2. resta 1 cuando el cumpleaños aún no ha llegado (mes anterior)',
+      () {
+        expect(computeAge('1990-06-15', DateTime(2025, 3, 10)), 34);
+      },
+    );
 
-    test('resta 1 cuando mismo mes pero día anterior al cumpleaños', () {
+    test('3. resta 1 cuando mismo mes pero día anterior al cumpleaños', () {
       expect(computeAge('1990-06-15', DateTime(2025, 6, 14)), 34);
     });
 
-    test('no resta 1 cuando el cumpleaños ya pasó', () {
+    test('4. no resta 1 cuando el cumpleaños ya pasó', () {
       expect(computeAge('1990-06-15', DateTime(2025, 6, 16)), 35);
     });
 
-    test('devuelve null para formato sin guiones', () {
+    test('5. devuelve null para formato sin guiones', () {
       expect(computeAge('19900615', DateTime(2025, 1, 1)), isNull);
     });
 
-    test('devuelve null para cadena vacía', () {
+    test('6. devuelve null para cadena vacía', () {
       expect(computeAge('', DateTime(2025, 1, 1)), isNull);
     });
 
-    test('devuelve null para partes no numéricas', () {
+    test('7. devuelve null para partes no numéricas', () {
       expect(computeAge('YYYY-MM-DD', DateTime(2025, 1, 1)), isNull);
     });
 
-    test('edad 0 para recién nacido (día anterior)', () {
+    test('8. edad 0 para recién nacido (día anterior)', () {
       expect(computeAge('2024-12-31', DateTime(2025, 1, 1)), 0);
     });
 
-    test('edad 0 para nacido el mismo día', () {
+    test('9. edad 0 para nacido el mismo día', () {
       expect(computeAge('2025-06-15', DateTime(2025, 6, 15)), 0);
     });
 
-    test('devuelve null si sólo hay dos partes separadas por guión', () {
+    test('10. devuelve null si sólo hay dos partes separadas por guión', () {
       expect(computeAge('1990-06', DateTime(2025, 1, 1)), isNull);
     });
   });
 
-  // ── computeInitials ────────────────────────────────────────────────────────
-  group('computeInitials', () {
-    test('dos palabras → dos primeras letras en mayúscula', () {
+  group('computeInitials (7 tests)', () {
+    test('11. dos palabras → dos primeras letras en mayúscula', () {
       expect(computeInitials('Juan Pérez'), 'JP');
     });
 
-    test('una sola palabra → primera letra en mayúscula', () {
+    test('12. una sola palabra → primera letra en mayúscula', () {
       expect(computeInitials('Carlos'), 'C');
     });
 
-    test('tres palabras → usa sólo las dos primeras', () {
+    test('13. tres palabras → usa sólo las dos primeras', () {
       expect(computeInitials('María Fernanda López'), 'MF');
     });
 
-    test('espacios extra al inicio y al final se recortan', () {
+    test('14. espacios extra al inicio y al final se recortan', () {
       expect(computeInitials('  Ana Torres  '), 'AT');
     });
 
-    test('nombre en minúsculas se convierte a mayúsculas', () {
+    test('15. nombre en minúsculas se convierte a mayúsculas', () {
       expect(computeInitials('luisa martínez'), 'LM');
     });
 
-    test('nombre vacío → ?', () {
+    test('16. nombre vacío → ?', () {
       expect(computeInitials(''), '?');
     });
 
-    test('sólo espacios → ?', () {
+    test('17. sólo espacios → ?', () {
       expect(computeInitials('   '), '?');
     });
   });
 
-  // ── relLabel ──────────────────────────────────────────────────────────────
-  group('relLabel', () {
-    test('01 → Padres', () => expect(relLabel('01'), 'Padres'));
-    test('02 → Hermanos', () => expect(relLabel('02'), 'Hermanos'));
-    test('03 → Tíos', () => expect(relLabel('03'), 'Tíos'));
-    test('04 → Abuelos', () => expect(relLabel('04'), 'Abuelos'));
-    test('código desconocido → mismo valor', () {
+  group('relLabel (6 tests)', () {
+    test('18. 01 → Padres', () => expect(relLabel('01'), 'Padres'));
+    test('19. 02 → Hermanos', () => expect(relLabel('02'), 'Hermanos'));
+    test('20. 03 → Tíos', () => expect(relLabel('03'), 'Tíos'));
+    test('21. 04 → Abuelos', () => expect(relLabel('04'), 'Abuelos'));
+    test('22. código desconocido → mismo valor', () {
       expect(relLabel('99'), '99');
     });
-    test('cadena vacía → cadena vacía', () {
+    test('23. cadena vacía → cadena vacía', () {
       expect(relLabel(''), '');
     });
   });
 
-  // ── medStatusLabel ────────────────────────────────────────────────────────
-  group('medStatusLabel', () {
-    test('active → Activo', () => expect(medStatusLabel('active'), 'Activo'));
+  group('medStatusLabel (6 tests)', () {
     test(
-      'completed → Completado',
+      '24. active → Activo',
+      () => expect(medStatusLabel('active'), 'Activo'),
+    );
+    test(
+      '25. completed → Completado',
       () => expect(medStatusLabel('completed'), 'Completado'),
     );
     test(
-      'stopped → Suspendido',
+      '26. stopped → Suspendido',
       () => expect(medStatusLabel('stopped'), 'Suspendido'),
     );
     test(
-      'unknown → Desconocido',
+      '27. unknown → Desconocido',
       () => expect(medStatusLabel('unknown'), 'Desconocido'),
     );
-    test('estado arbitrario → mismo valor', () {
+    test('28. estado arbitrario → mismo valor', () {
       expect(medStatusLabel('on-hold'), 'on-hold');
     });
-    test('cadena vacía → cadena vacía', () {
+    test('29. cadena vacía → cadena vacía', () {
       expect(medStatusLabel(''), '');
     });
   });
 
-  // ── hasUnsyncedChanges ────────────────────────────────────────────────────
-  group('hasUnsyncedChanges', () {
+  group('hasUnsyncedChanges (5 tests)', () {
     final base = <String, dynamic>{'id': '1', 'name': 'Juan'};
 
-    test('false cuando draft y original son idénticos', () {
+    test('30. false cuando draft y original son idénticos', () {
       expect(
         hasUnsyncedChanges(
           Map<String, dynamic>.from(base),
@@ -257,21 +247,21 @@ void main() {
       );
     });
 
-    test('true cuando un campo del draft difiere', () {
+    test('31. true cuando un campo del draft difiere', () {
       final draft = Map<String, dynamic>.from(base)..['name'] = 'Pedro';
       expect(hasUnsyncedChanges(draft, Map<String, dynamic>.from(base)), true);
     });
 
-    test('true cuando el draft tiene un campo extra', () {
+    test('32. true cuando el draft tiene un campo extra', () {
       final draft = Map<String, dynamic>.from(base)..['extra'] = 'valor';
       expect(hasUnsyncedChanges(draft, Map<String, dynamic>.from(base)), true);
     });
 
-    test('false con dos mapas vacíos', () {
+    test('33. false con dos mapas vacíos', () {
       expect(hasUnsyncedChanges({}, {}), false);
     });
 
-    test('true cuando original tiene un campo que draft no tiene', () {
+    test('34. true cuando original tiene un campo que draft no tiene', () {
       final original = Map<String, dynamic>.from(base)..['extra'] = 'valor';
       expect(
         hasUnsyncedChanges(Map<String, dynamic>.from(base), original),
@@ -280,109 +270,113 @@ void main() {
     });
   });
 
-  // ── avatarColorIndex ──────────────────────────────────────────────────────
-  group('avatarColorIndex', () {
-    test('siempre devuelve índice entre 0 y 7 (inclusive)', () {
-      const inputs = ['AB', 'ZZ', 'MF', 'JP', 'CC', 'LM', 'AT', '??', 'A', ''];
-      for (final input in inputs) {
+  group('avatarColorIndex (4 tests)', () {
+    test('35. siempre devuelve índice entre 0 y 7', () {
+      for (final input in [
+        'AB',
+        'ZZ',
+        'MF',
+        'JP',
+        'CC',
+        'LM',
+        'AT',
+        '??',
+        'A',
+        '',
+      ]) {
         final idx = avatarColorIndex(input);
-        expect(
-          idx,
-          greaterThanOrEqualTo(0),
-          reason: 'falla con input "$input"',
-        );
-        expect(idx, lessThan(8), reason: 'falla con input "$input"');
+        expect(idx, greaterThanOrEqualTo(0));
+        expect(idx, lessThan(8));
       }
     });
 
-    test('determinista: mismas iniciales → mismo índice', () {
+    test('36. determinista: mismas iniciales → mismo índice', () {
       expect(avatarColorIndex('MF'), avatarColorIndex('MF'));
     });
 
-    test('cadena vacía no lanza excepción', () {
+    test('37. cadena vacía no lanza excepción', () {
       expect(() => avatarColorIndex(''), returnsNormally);
     });
 
-    test('índices para iniciales distintas están en rango válido', () {
+    test('38. índices para iniciales distintas están en rango válido', () {
       expect(avatarColorIndex('AB'), inInclusiveRange(0, 7));
       expect(avatarColorIndex('ZZ'), inInclusiveRange(0, 7));
     });
   });
 
-  // ── sexLabel ──────────────────────────────────────────────────────────────
-  group('sexLabel', () {
-    test('M → Masculino', () => expect(sexLabel('M'), 'Masculino'));
-    test('F → Femenino', () => expect(sexLabel('F'), 'Femenino'));
-    test('valor desconocido → Indeterminado', () {
+  group('sexLabel (4 tests)', () {
+    test('39. M → Masculino', () => expect(sexLabel('M'), 'Masculino'));
+    test('40. F → Femenino', () => expect(sexLabel('F'), 'Femenino'));
+    test('41. valor desconocido → Indeterminado', () {
       expect(sexLabel('X'), 'Indeterminado');
     });
-    test('cadena vacía → Indeterminado', () {
+    test('42. cadena vacía → Indeterminado', () {
       expect(sexLabel(''), 'Indeterminado');
     });
   });
 
-  // ── docTypeLabel ──────────────────────────────────────────────────────────
-  group('docTypeLabel', () {
-    test('RC → Registro Civil', () {
-      expect(docTypeLabel('RC'), 'Registro Civil');
-    });
-    test('TI → Tarjeta de Identidad', () {
-      expect(docTypeLabel('TI'), 'Tarjeta de Identidad');
-    });
-    test('CC → Cédula de Ciudadanía', () {
-      expect(docTypeLabel('CC'), 'Cédula de Ciudadanía');
-    });
-    test('CE → Cédula de Extranjería', () {
-      expect(docTypeLabel('CE'), 'Cédula de Extranjería');
-    });
-    test('PA → Pasaporte', () => expect(docTypeLabel('PA'), 'Pasaporte'));
-    test('PE → Permiso Especial', () {
-      expect(docTypeLabel('PE'), 'Permiso Especial');
-    });
-    test('PT → Permiso Temporal', () {
-      expect(docTypeLabel('PT'), 'Permiso Temporal');
-    });
-    test('MS → Menor sin Identificación', () {
-      expect(docTypeLabel('MS'), 'Menor sin Identificación');
-    });
-    test('AS → Adulto sin Identificación', () {
-      expect(docTypeLabel('AS'), 'Adulto sin Identificación');
-    });
-    test('código desconocido → mismo valor', () {
-      expect(docTypeLabel('XX'), 'XX');
-    });
-    test('cadena vacía → cadena vacía', () {
-      expect(docTypeLabel(''), '');
-    });
+  group('docTypeLabel (11 tests)', () {
+    test(
+      '43. RC → Registro Civil',
+      () => expect(docTypeLabel('RC'), 'Registro Civil'),
+    );
+    test(
+      '44. TI → Tarjeta de Identidad',
+      () => expect(docTypeLabel('TI'), 'Tarjeta de Identidad'),
+    );
+    test(
+      '45. CC → Cédula de Ciudadanía',
+      () => expect(docTypeLabel('CC'), 'Cédula de Ciudadanía'),
+    );
+    test(
+      '46. CE → Cédula de Extranjería',
+      () => expect(docTypeLabel('CE'), 'Cédula de Extranjería'),
+    );
+    test('47. PA → Pasaporte', () => expect(docTypeLabel('PA'), 'Pasaporte'));
+    test(
+      '48. PE → Permiso Especial',
+      () => expect(docTypeLabel('PE'), 'Permiso Especial'),
+    );
+    test(
+      '49. PT → Permiso Temporal',
+      () => expect(docTypeLabel('PT'), 'Permiso Temporal'),
+    );
+    test(
+      '50. MS → Menor sin Identificación',
+      () => expect(docTypeLabel('MS'), 'Menor sin Identificación'),
+    );
+    test(
+      '51. AS → Adulto sin Identificación',
+      () => expect(docTypeLabel('AS'), 'Adulto sin Identificación'),
+    );
+    test(
+      '52. código desconocido → mismo valor',
+      () => expect(docTypeLabel('XX'), 'XX'),
+    );
+    test('53. cadena vacía → cadena vacía', () => expect(docTypeLabel(''), ''));
   });
 
-  // ── resolveHasInternet ────────────────────────────────────────────────────
-  group('resolveHasInternet (lógica de _updateConnectivityStatus)', () {
-    test('true cuando hay wifi', () {
-      expect(resolveHasInternet(['wifi']), true);
-    });
-
-    test('true cuando hay mobile', () {
-      expect(resolveHasInternet(['mobile']), true);
-    });
-
-    test('false cuando contiene none', () {
-      expect(resolveHasInternet(['none']), false);
-    });
-
-    test('false cuando hay varios resultados y uno es none', () {
-      expect(resolveHasInternet(['wifi', 'none']), false);
-    });
-
+  group('resolveHasInternet (6 tests)', () {
     test(
-      'lista vacía se interpreta como con internet (sin none explícito)',
-      () {
-        expect(resolveHasInternet([]), true);
-      },
+      '54. true cuando hay wifi',
+      () => expect(resolveHasInternet(['wifi']), true),
     );
-
-    test('múltiples tipos sin none → true', () {
-      expect(resolveHasInternet(['wifi', 'ethernet']), true);
-    });
+    test(
+      '55. true cuando hay mobile',
+      () => expect(resolveHasInternet(['mobile']), true),
+    );
+    test(
+      '56. false cuando contiene none',
+      () => expect(resolveHasInternet(['none']), false),
+    );
+    test(
+      '57. false cuando hay varios resultados y uno es none',
+      () => expect(resolveHasInternet(['wifi', 'none']), false),
+    );
+    test('58. lista vacía → true', () => expect(resolveHasInternet([]), true));
+    test(
+      '59. múltiples tipos sin none → true',
+      () => expect(resolveHasInternet(['wifi', 'ethernet']), true),
+    );
   });
 }
