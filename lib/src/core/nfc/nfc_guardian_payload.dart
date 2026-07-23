@@ -22,6 +22,7 @@
 // and which patient wristband it pairs with for 2FA.
 
 import '../../features/nfc/domain/patient_record.dart';
+import 'nfc_guardian_alias.dart';
 import 'nfc_triage_payload.dart';
 
 /// Builds and reconstructs the guardian NFC payload (bounded full record).
@@ -64,10 +65,12 @@ class NfcGuardianPayload {
       maxVaccines,
     );
 
-    map['medicalHistory'] =
-        consultations.map((MedicalHistoryItem m) => m.toJson()).toList();
-    map['vaccinationRecord'] =
-        vaccines.map((VaccinationRecordItem v) => v.toJson()).toList();
+    map['medicalHistory'] = consultations
+        .map((MedicalHistoryItem m) => m.toJson())
+        .toList();
+    map['vaccinationRecord'] = vaccines
+        .map((VaccinationRecordItem v) => v.toJson())
+        .toList();
 
     _stripConsentSignature(map['guardianInfo']);
     _stripConsentSignature(map['guardian2Info']);
@@ -96,15 +99,22 @@ class NfcGuardianPayload {
 
     // Never ask for more than the record actually holds, so the trim loop does
     // not waste iterations on empty slots.
-    if (n > record.medicalHistory.length) n = record.medicalHistory.length;
-    if (m > record.vaccinationRecord.length) m = record.vaccinationRecord.length;
+    if (n > record.medicalHistory.length) {
+      n = record.medicalHistory.length;
+    }
+    if (m > record.vaccinationRecord.length) {
+      m = record.vaccinationRecord.length;
+    }
 
+    // The payload is built with the full, readable shape, but what actually
+    // gets written (and must fit) is the key-aliased version. Measure that, so
+    // the trim loop reflects the real on-chip size and does not over-trim.
     var payload = buildGuardianPayload(
       record: record,
       maxConsultations: n,
       maxVaccines: m,
     );
-    var size = estimateSize(payload);
+    var size = estimateSize(aliasGuardianPayload(payload));
 
     while (size > capacityBytes && (n > 0 || m > 0)) {
       // Drop from whichever history is currently larger; alternate on ties so
@@ -121,13 +131,18 @@ class NfcGuardianPayload {
         maxConsultations: n,
         maxVaccines: m,
       );
-      size = estimateSize(payload);
+      size = estimateSize(aliasGuardianPayload(payload));
     }
 
     return GuardianPayloadFit(
-      payload: payload,
+      // Carry the aliased payload: this is what will be written, and its size is
+      // what `estimatedBytes` reflects. reconstructFromGuardian un-aliases on
+      // read, so the round trip stays correct.
+      payload: aliasGuardianPayload(payload),
       includedConsultations: n,
       includedVaccines: m,
+      totalConsultations: record.medicalHistory.length,
+      totalVaccines: record.vaccinationRecord.length,
       estimatedBytes: size,
       fits: size <= capacityBytes,
     );
@@ -144,7 +159,9 @@ class NfcGuardianPayload {
   static PatientFullRecord reconstructFromGuardian(
     Map<String, dynamic> decoded,
   ) {
-    return PatientFullRecord.fromJson(decoded);
+    // Expand short keys back to the full shape. A card written before aliasing
+    // (no schema marker) is returned unchanged, so older chips keep working.
+    return PatientFullRecord.fromJson(unaliasGuardianPayload(decoded));
   }
 
   /// Reconstructs a partial record from the patient wristband triage only.
@@ -173,7 +190,8 @@ class NfcGuardianPayload {
         )
         .toList();
 
-    final hasGuardian2 = triage.guardian2DeviceUid != null &&
+    final hasGuardian2 =
+        triage.guardian2DeviceUid != null &&
         triage.guardian2DeviceUid!.isNotEmpty;
 
     return PatientFullRecord(
@@ -181,15 +199,17 @@ class NfcGuardianPayload {
       deviceUid: deviceUid,
       patientInfo: PatientInfo(
         identification: PatientIdentification(
-          documentType:
-              triage.documentType.isEmpty ? 'MS' : triage.documentType,
+          documentType: triage.documentType.isEmpty
+              ? 'MS'
+              : triage.documentType,
           documentNumber: triage.documentNumber,
         ),
         firstLastName: triage.lastName,
         firstName: triage.firstName,
         dob: triage.dob,
-        biologicalSex:
-            triage.biologicalSex.isEmpty ? 'I' : triage.biologicalSex,
+        biologicalSex: triage.biologicalSex.isEmpty
+            ? 'I'
+            : triage.biologicalSex,
         address: Address(city: '', state: ''),
         bloodType: triage.bloodType.isEmpty ? null : triage.bloodType,
       ),
@@ -209,8 +229,9 @@ class NfcGuardianPayload {
               deviceUid: triage.guardian2DeviceUid,
             )
           : null,
-      backgroundHistory:
-          chronic.isEmpty ? null : BackgroundHistory(chronicConditions: chronic),
+      backgroundHistory: chronic.isEmpty
+          ? null
+          : BackgroundHistory(chronicConditions: chronic),
       allergies: allergies,
     );
   }
@@ -269,6 +290,8 @@ class GuardianPayloadFit {
     required this.payload,
     required this.includedConsultations,
     required this.includedVaccines,
+    required this.totalConsultations,
+    required this.totalVaccines,
     required this.estimatedBytes,
     required this.fits,
   });
@@ -282,10 +305,26 @@ class GuardianPayloadFit {
   /// Number of vaccines kept after capacity trimming.
   final int includedVaccines;
 
+  /// Total consultations in the source record, before trimming.
+  final int totalConsultations;
+
+  /// Total vaccines in the source record, before trimming.
+  final int totalVaccines;
+
   /// Estimated encoded size in bytes (CBOR + DEFLATE + AES-GCM overhead).
   final int estimatedBytes;
 
   /// Whether the payload fits within the requested capacity. When false, even
   /// the demographic base exceeds the card and the write should be rejected.
   final bool fits;
+
+  /// Consultations that did not fit and were left off the card.
+  int get droppedConsultations => totalConsultations - includedConsultations;
+
+  /// Vaccines that did not fit and were left off the card.
+  int get droppedVaccines => totalVaccines - includedVaccines;
+
+  /// Whether any history was trimmed to make the record fit. When true the card
+  /// holds a partial record and the UI should say so.
+  bool get isPartial => droppedConsultations > 0 || droppedVaccines > 0;
 }
