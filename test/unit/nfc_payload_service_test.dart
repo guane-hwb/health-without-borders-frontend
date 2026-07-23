@@ -488,6 +488,48 @@ void main() {
       );
     });
 
+    test('falla si el chip no tiene identificador legible', () async {
+      final service = _service(
+        codec,
+        HwbTag(uid: '', ndef: _FakeNdef(maxSize: 888)),
+      );
+      await expectLater(
+        service.writeGuardianRecord(
+          buildFit: recordingBuilder(budgetSink: <int>[]),
+        ),
+        throwsA(isA<NfcWriteException>()),
+      );
+    });
+
+    test('falla si el chip no está formateado como NDEF', () async {
+      // Una DESFire virgen se ve así: Ndef.from(tag) devuelve null.
+      final service = _service(codec, const HwbTag(uid: kExpectedUid));
+      await expectLater(
+        service.writeGuardianRecord(
+          buildFit: recordingBuilder(budgetSink: <int>[]),
+        ),
+        throwsA(
+          isA<NfcWriteException>().having(
+            (e) => e.message,
+            'message',
+            contains('NDEF'),
+          ),
+        ),
+      );
+    });
+
+    test('falla si el chip es de solo lectura', () async {
+      final ndef = _FakeNdef(maxSize: 888, isWritable: false);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+      await expectLater(
+        service.writeGuardianRecord(
+          buildFit: recordingBuilder(budgetSink: <int>[]),
+        ),
+        throwsA(isA<NfcWriteException>()),
+      );
+      expect(ndef.written, isNull);
+    });
+
     test('rejects a chip whose UID does not match', () async {
       final ndef = _FakeNdef(maxSize: 888);
       final service = _service(codec, HwbTag(uid: '11:22', ndef: ndef));

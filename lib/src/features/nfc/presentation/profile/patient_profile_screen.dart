@@ -225,12 +225,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         write: () async {
           final result = await NfcPayloadService(codec: codec)
               .writeGuardianRecord(
-                buildFit: (int budget) =>
-                    NfcGuardianPayload.buildWithinCapacity(
-                      record: record,
-                      capacityBytes: budget,
-                      estimateSize: codec.estimateSize,
-                    ),
+                buildFit: guardianFitBuilder(record: record, codec: codec),
                 expectedUid: record.guardianInfo.deviceUid,
               );
           guardianFit = result.fit;
@@ -268,29 +263,11 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     GuardianPayloadFit fit,
     bool isEs,
   ) {
-    final parts = <String>[];
-    if (fit.droppedConsultations > 0) {
-      parts.add(
-        isEs
-            ? '${fit.droppedConsultations} consulta(s)'
-            : '${fit.droppedConsultations} consultation(s)',
-      );
-    }
-    if (fit.droppedVaccines > 0) {
-      parts.add(
-        isEs
-            ? '${fit.droppedVaccines} vacuna(s)'
-            : '${fit.droppedVaccines} vaccine(s)',
-      );
-    }
-    final dropped = parts.join(isEs ? ' y ' : ' and ');
-    final message = isEs
-        ? 'La tarjeta es pequeña: se guardaron las entradas más recientes. '
-              'Quedaron fuera $dropped (siguen en el servidor).'
-        : 'The card is small: the most recent entries were saved. '
-              'Left off: $dropped (still on the server).';
     messenger.showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 6)),
+      SnackBar(
+        content: Text(partialCardNoticeMessage(fit, isEs)),
+        duration: const Duration(seconds: 6),
+      ),
     );
   }
 
@@ -2075,4 +2052,35 @@ class _NfcStaleBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Builds the message shown when the guardian card was too small for the whole
+/// record and the oldest history was left off.
+///
+/// Kept as a pure top-level function rather than inlined in the State: the text
+/// has real branching (which histories were dropped, how they are joined, two
+/// languages) and that logic deserves direct tests instead of being reachable
+/// only by driving the entire profile screen.
+String partialCardNoticeMessage(GuardianPayloadFit fit, bool isEs) {
+  final parts = <String>[];
+  if (fit.droppedConsultations > 0) {
+    parts.add(
+      isEs
+          ? '${fit.droppedConsultations} consulta(s)'
+          : '${fit.droppedConsultations} consultation(s)',
+    );
+  }
+  if (fit.droppedVaccines > 0) {
+    parts.add(
+      isEs
+          ? '${fit.droppedVaccines} vacuna(s)'
+          : '${fit.droppedVaccines} vaccine(s)',
+    );
+  }
+  final dropped = parts.join(isEs ? ' y ' : ' and ');
+  return isEs
+      ? 'La tarjeta es pequeña: se guardaron las entradas más recientes. '
+            'Quedaron fuera $dropped (siguen en el servidor).'
+      : 'The card is small: the most recent entries were saved. '
+            'Left off: $dropped (still on the server).';
 }

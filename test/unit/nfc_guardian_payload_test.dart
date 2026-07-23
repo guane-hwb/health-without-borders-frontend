@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_alias.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_payload.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_triage_payload.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 
@@ -409,6 +411,49 @@ void main() {
 
     test('throws when neither source is provided', () {
       expect(NfcGuardianPayload.reconstruct, throwsArgumentError);
+    });
+  });
+
+  group('guardianFitBuilder', () {
+    // El adaptador que ambas pantallas usan para atar record+codec al
+    // presupuesto real del chip. Antes era una closure duplicada en dos
+    // pantallas, alcanzable solo manejando la UI completa.
+    final codec = NfcPayloadCodec(hexKey: 'a' * 64);
+
+    test('con presupuesto amplio no recorta nada', () {
+      final record = _record(
+        history: <MedicalHistoryItem>[_consultation('2026-01-10T09:00:00')],
+      );
+      final fit = guardianFitBuilder(record: record, codec: codec)(100000);
+
+      expect(fit.fits, isTrue);
+      expect(fit.isPartial, isFalse);
+      expect(fit.includedConsultations, 1);
+    });
+
+    test('con presupuesto diminuto recorta el historial', () {
+      final record = _record(
+        history: <MedicalHistoryItem>[
+          _consultation('2026-01-10T09:00:00'),
+          _consultation('2026-02-10T09:00:00'),
+        ],
+      );
+      final fit = guardianFitBuilder(record: record, codec: codec)(1);
+
+      expect(fit.includedConsultations, 0);
+      expect(fit.droppedConsultations, 2);
+      expect(fit.isPartial, isTrue);
+    });
+
+    test('el presupuesto recibido es el que se aplica', () {
+      final record = _record(
+        history: <MedicalHistoryItem>[_consultation('2026-01-10T09:00:00')],
+      );
+      final builder = guardianFitBuilder(record: record, codec: codec);
+      expect(
+        builder(1).includedConsultations,
+        lessThanOrEqualTo(builder(100000).includedConsultations),
+      );
     });
   });
 }

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:nfc_manager/ndef_record.dart';
 
+import '../../features/nfc/domain/patient_record.dart';
 import 'nfc_guardian_payload.dart';
 import 'nfc_payload_codec.dart';
 import 'nfc_session_manager.dart';
@@ -26,6 +27,23 @@ export 'nfc_session_manager.dart'
 /// returns the trimmed guardian payload that fits. In practice this is
 /// [NfcGuardianPayload.buildWithinCapacity] with its record and estimator bound.
 typedef GuardianFitBuilder = GuardianPayloadFit Function(int payloadBudget);
+
+/// Binds a record and codec into a [GuardianFitBuilder] for
+/// [NfcPayloadService.writeGuardianRecord].
+///
+/// Both the register wizard and the profile "update chips" flow need exactly
+/// this; keeping it here means neither screen carries a copy, and the wiring is
+/// unit-testable instead of only reachable by driving a full screen.
+GuardianFitBuilder guardianFitBuilder({
+  required PatientFullRecord record,
+  required NfcPayloadCodec codec,
+}) {
+  return (int budget) => NfcGuardianPayload.buildWithinCapacity(
+    record: record,
+    capacityBytes: budget,
+    estimateSize: codec.estimateSize,
+  );
+}
 
 /// MIME type used for HWB NFC payloads.
 const String kHwbNdefMimeType = 'application/vnd.hwb.triage';

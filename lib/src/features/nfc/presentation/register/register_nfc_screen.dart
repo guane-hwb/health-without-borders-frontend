@@ -11,7 +11,6 @@ import '../../domain/patient_record.dart';
 import '../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../core/nfc/nfc_payload_service.dart';
-import '../../../../core/nfc/nfc_guardian_payload.dart';
 import '../nfc_guided_write.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
@@ -212,11 +211,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
             : 'Bring the guardian card to the phone',
         write: () {
           return NfcPayloadService(codec: codec).writeGuardianRecord(
-            buildFit: (int budget) => NfcGuardianPayload.buildWithinCapacity(
-              record: record,
-              capacityBytes: budget,
-              estimateSize: codec.estimateSize,
-            ),
+            buildFit: guardianFitBuilder(record: record, codec: codec),
             expectedUid: record.guardianInfo.deviceUid,
           );
         },
