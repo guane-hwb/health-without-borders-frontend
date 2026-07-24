@@ -58,6 +58,12 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
   _Consumer? _consumer;
   DateTime? _lastIdleTagAt;
 
+  /// Aborts the in-flight Core NFC session, if any. Set while an iOS session is
+  /// open; null otherwise. The Android path uses [_consumer] instead, which the
+  /// iOS path never populates — without this, cancelPending() would silently do
+  /// nothing on iOS and leave the system sheet stranded on screen.
+  Future<void> Function()? _iosCancelHook;
+
   bool get _usesReaderMode => defaultTargetPlatform == TargetPlatform.android;
 
   /// iOS has no persistent reader mode: Core NFC only polls inside a
@@ -241,6 +247,7 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
       if (settled) return;
       settled = true;
       timer?.cancel();
+      _iosCancelHook = null;
       _setState(NfcRadioState.idle);
       try {
         await NfcManagerIos.instance.tagSessionInvalidate(
@@ -280,12 +287,14 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
         if (settled) return;
         settled = true;
         timer?.cancel();
+        _iosCancelHook = null;
         _setState(NfcRadioState.idle);
         if (completer.isCompleted) return;
         completer.completeError(_mapIosError(error));
       },
     );
 
+    _iosCancelHook = () => finish(error: NfcCancelledException());
     _setState(NfcRadioState.waiting);
 
     // iOS enforces its own ~60s limit, but ours is shorter and keeps the
@@ -343,7 +352,14 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
   /// making the next screen fail with [NfcBusyException].
   ///
   /// A no-op once a chip is in hand: we do not abort a write half-way through.
-  void cancelPending() => _failPending(NfcCancelledException());
+  void cancelPending() {
+    final iosCancel = _iosCancelHook;
+    if (iosCancel != null) {
+      unawaited(iosCancel());
+      return;
+    }
+    _failPending(NfcCancelledException());
+  }
 
   // ── Radio lifecycle ──────────────────────────────────────────────────────
 
