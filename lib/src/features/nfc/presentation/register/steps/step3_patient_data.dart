@@ -87,7 +87,7 @@ class _Step3State extends State<Step3PatientData> {
 
   bool get _hasEthnicity {
     final v = widget.draft.ethnicity;
-    return v != null && v != '06';
+    return v != null && v != '6' && v != '99';
   }
 
   @override
@@ -150,6 +150,9 @@ class _Step3State extends State<Step3PatientData> {
     if (widget.draft.dob == null) missing.add(s.dobLabel);
     if (_city.text.trim().isEmpty) missing.add(s.municipality);
     if (_stateCtrl.text.trim().isEmpty) missing.add(s.department);
+    if ((widget.draft.bloodType ?? '').trim().isEmpty) {
+      missing.add(s.bloodType);
+    }
 
     final String cleanDoc = _docNum.text.trim();
     if (cleanDoc.isNotEmpty) {
@@ -189,10 +192,6 @@ class _Step3State extends State<Step3PatientData> {
 
     d.weight = double.tryParse(_weight.text.trim().replaceAll(',', '.'));
     d.height = double.tryParse(_height.text.trim().replaceAll(',', '.'));
-
-    d.bloodType = (d.bloodType == null || d.bloodType!.trim().isEmpty)
-        ? 'O+'
-        : d.bloodType;
 
     widget.onContinue();
   }
@@ -242,22 +241,22 @@ class _Step3State extends State<Step3PatientData> {
     };
 
     final eth = {
-      '06': isEs ? 'Ninguno' : 'None',
-      '01': isEs ? 'Indígena' : 'Indigenous',
-      '02': isEs ? 'ROM/Gitano' : 'Romani',
-      '03': isEs ? 'Raizal' : 'Raizal',
-      '04': isEs ? 'Palenquero' : 'Palenquero',
-      '05': isEs ? 'Afrocolombiano' : 'Afro-Colombian',
+      '6': isEs ? 'Ninguno' : 'None',
+      '1': isEs ? 'Indígena' : 'Indigenous',
+      '2': isEs ? 'ROM/Gitano' : 'Romani',
+      '3': isEs ? 'Raizal' : 'Raizal',
+      '4': isEs ? 'Palenquero' : 'Palenquero',
+      '5': isEs ? 'Afrocolombiano' : 'Afro-Colombian',
     };
 
     final dis = {
       '00': isEs ? 'Ninguna' : 'None',
       '01': isEs ? 'Física' : 'Physical',
-      '02': isEs ? 'Intelectual' : 'Intellectual',
+      '02': isEs ? 'Visual' : 'Visual',
       '03': isEs ? 'Auditiva' : 'Hearing',
-      '04': isEs ? 'Visual' : 'Visual',
-      '05': isEs ? 'Sordoceguera' : 'Deaf-blindness',
-      '06': isEs ? 'Psicosocial' : 'Psychosocial',
+      '04': isEs ? 'Intelectual' : 'Intellectual',
+      '05': isEs ? 'Psicosocial' : 'Psychosocial',
+      '06': isEs ? 'Sordoceguera' : 'Deaf-blindness',
       '07': isEs ? 'Múltiple' : 'Multiple',
     };
 
@@ -508,10 +507,10 @@ class _Step3State extends State<Step3PatientData> {
                   const SizedBox(height: 12),
                   _StyledDropdown<String>(
                     label: isEs ? 'Etnia' : 'Ethnicity',
-                    value: d.ethnicity ?? '06',
+                    value: d.ethnicity ?? '6',
                     items: eth,
                     onChanged: (v) =>
-                        setState(() => d.ethnicity = v == '06' ? null : v),
+                        setState(() => d.ethnicity = v == '6' ? null : v),
                   ),
                   if (_hasEthnicity) ...[
                     const SizedBox(height: 12),
@@ -541,13 +540,14 @@ class _Step3State extends State<Step3PatientData> {
                 children: [
                   _SectionHeader(
                     icon: Icons.bloodtype_outlined,
-                    title: s.bloodType,
+                    title: '',
                     subtitle: s.bloodTypeReadOnly,
                   ),
                   _ChipSelector(
-                    label: '',
-                    value: d.bloodType ?? 'O+',
+                    label: s.bloodType,
+                    value: d.bloodType,
                     options: blood,
+                    required: true,
                     onChanged: (v) => setState(() => d.bloodType = v),
                   ),
                 ],
@@ -921,7 +921,7 @@ class _ChipSelector extends StatelessWidget {
   });
 
   final String label;
-  final String value;
+  final String? value;
   final Map<String, String> options;
   final ValueChanged<String> onChanged;
   final bool required;
