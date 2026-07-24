@@ -529,7 +529,7 @@ void main() {
     testWidgets('pops with vaccine result instead of saving locally', (
       tester,
     ) async {
-      VaccinationRecordItem? popped;
+      List<VaccinationRecordItem>? popped;
       final scope = _defaultScope();
 
       await tester.pumpWidget(
@@ -551,7 +551,7 @@ void main() {
                 builder: (ctx) => TextButton(
                   onPressed: () async {
                     final result = await Navigator.of(ctx)
-                        .push<VaccinationRecordItem>(
+                        .push<List<VaccinationRecordItem>>(
                           MaterialPageRoute(
                             builder: (_) => AppScope(
                               authRepository: scope.authRepository,
@@ -560,7 +560,9 @@ void main() {
                               localDatabase: scope.localDatabase,
                               syncEngine: scope.syncEngine,
                               statsRepository: StatsRepository(
-                                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                                apiClient: ApiClient(
+                                  baseUrl: 'http://localhost',
+                                ),
                                 authRepository: scope.authRepository,
                               ),
                               child: AppLocale(
@@ -600,8 +602,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(popped, isNotNull);
-      expect(popped!.vaccineName, 'Varicela');
-      expect(popped!.vaccineCode, '21');
+      expect(popped!.isNotEmpty, isTrue);
+      expect(popped!.first.vaccineName, 'Varicela');
+      expect(popped!.first.vaccineCode, '21');
     });
   });
 

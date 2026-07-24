@@ -385,7 +385,7 @@ void main() {
         tester.widget<Step6Success>(find.byType(Step6Success)).onAddVaccine();
         await pumpFrames(tester);
 
-        Navigator.of(tester.element(find.byType(AddVaccineScreen))).pop(
+        Navigator.of(tester.element(find.byType(AddVaccineScreen))).pop([
           VaccinationRecordItem(
             date: '2025-01-01',
             vaccineName: 'BCG',
@@ -394,7 +394,7 @@ void main() {
             administratedBy: 'Dr. Ana',
             administratedAt: 'Clinic 1',
           ),
-        );
+        ]);
         await tester.pump();
         await tester.pump();
 

@@ -116,13 +116,14 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
   Future<void> _addVaccine() async {
     if (_savedRecord == null) return;
-    final result = await Navigator.of(context).push<VaccinationRecordItem>(
-      MaterialPageRoute(
-        builder: (_) =>
-            AddVaccineScreen(patient: _savedRecord!, returnToProfile: true),
-      ),
-    );
-    if (result != null) {
+    final result = await Navigator.of(context)
+        .push<List<VaccinationRecordItem>>(
+          MaterialPageRoute(
+            builder: (_) =>
+                AddVaccineScreen(patient: _savedRecord!, returnToProfile: true),
+          ),
+        );
+    if (result != null && result.isNotEmpty) {
       final updated = PatientFullRecord(
         patientId: _savedRecord!.patientId,
         deviceUid: _savedRecord!.deviceUid,
@@ -132,15 +133,22 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         backgroundHistory: _savedRecord!.backgroundHistory,
         allergies: _savedRecord!.allergies,
         medicalHistory: _savedRecord!.medicalHistory,
-        vaccinationRecord: [..._savedRecord!.vaccinationRecord, result],
+        vaccinationRecord: [..._savedRecord!.vaccinationRecord, ...result],
       );
       await _persistLocally(updated);
       if (!mounted) return;
       setState(() => _lastVaccineTime = _formatTimeNow(context));
       final s = AppStrings.of(context);
+      final isEs = s.welcome == 'Bienvenido';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(s.vaccineSaved),
+          content: Text(
+            result.length == 1
+                ? s.vaccineSaved
+                : (isEs
+                      ? '${result.length} vacunas guardadas exitosamente ✓'
+                      : '${result.length} vaccines saved successfully ✓'),
+          ),
           backgroundColor: AppColors.success,
         ),
       );

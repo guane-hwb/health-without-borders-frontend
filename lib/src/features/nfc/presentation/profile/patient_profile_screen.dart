@@ -474,7 +474,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     _saveAndPendingSync();
   }
 
-  void _addVaccine(VaccinationRecordItem vaccine) {
+  void _addVaccines(List<VaccinationRecordItem> vaccines) {
     setState(() {
       _draft = PatientFullRecord(
         patientId: _draft.patientId,
@@ -485,7 +485,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         backgroundHistory: _draft.backgroundHistory,
         allergies: _draft.allergies,
         medicalHistory: _draft.medicalHistory,
-        vaccinationRecord: [..._draft.vaccinationRecord, vaccine],
+        vaccinationRecord: [..._draft.vaccinationRecord, ...vaccines],
       );
     });
     _saveAndPendingSync();
@@ -601,14 +601,15 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   Future<void> _navigateAddVaccine() async {
     if (widget.readOnly) return;
-    final result = await Navigator.of(context).push<VaccinationRecordItem>(
-      MaterialPageRoute(
-        builder: (_) =>
-            AddVaccineScreen(patient: _draft, returnToProfile: true),
-      ),
-    );
-    if (result != null) {
-      _addVaccine(result);
+    final result = await Navigator.of(context)
+        .push<List<VaccinationRecordItem>>(
+          MaterialPageRoute(
+            builder: (_) =>
+                AddVaccineScreen(patient: _draft, returnToProfile: true),
+          ),
+        );
+    if (result != null && result.isNotEmpty) {
+      _addVaccines(result);
     }
   }
 
