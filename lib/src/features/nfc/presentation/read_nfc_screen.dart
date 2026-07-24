@@ -93,7 +93,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       uid = chip.uid;
     } else {
       try {
-        uid = await NfcService.readDeviceUid(alertMessage: _nfcAlert(guardian: false));
+        uid = await NfcService.readDeviceUid(
+          alertMessage: _nfcAlert(guardian: false),
+        );
       } on NfcNotAvailableException {
         if (mounted) {
           setState(() {
@@ -348,7 +350,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       _errorMessage = null;
     });
     try {
-      final uid = await NfcService.readDeviceUid(alertMessage: _nfcAlert(guardian: true));
+      final uid = await NfcService.readDeviceUid(
+        alertMessage: _nfcAlert(guardian: true),
+      );
       _guardianUidCtrl.text = uid;
       await _submitGuardian(uid);
     } on NfcNotAvailableException {
