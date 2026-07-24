@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:nfc_manager/ndef_record.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/nfc_manager_android.dart';
+import 'package:nfc_manager/nfc_manager_ios.dart';
 
 import 'nfc_session_types.dart';
 
@@ -59,6 +60,12 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
 
   bool get _usesReaderMode => defaultTargetPlatform == TargetPlatform.android;
 
+  /// iOS has no persistent reader mode: Core NFC only polls inside a
+  /// user-initiated session that the system draws its own sheet for. Every iOS
+  /// path branches away before touching the Android code above, so that the
+  /// working Android behaviour is bit-for-bit unchanged.
+  bool get _usesIosSession => defaultTargetPlatform == TargetPlatform.iOS;
+
   /// Starts owning the radio. Call once, from the app root, after the first
   /// frame. Safe to call repeatedly.
   Future<void> attach() async {
@@ -66,6 +73,12 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
     _attached = true;
 
     WidgetsBinding.instance.addObserver(this);
+
+    if (_usesIosSession) {
+      // Nothing to hold: sessions are created per operation in _withTagIos.
+      _setState(NfcRadioState.idle);
+      return;
+    }
 
     if (_usesReaderMode) {
       _adapterSubscription = NfcManagerAndroid.instance.onStateChanged.listen(
@@ -104,8 +117,20 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
     Future<T> Function(HwbTag tag) action, {
     Duration timeout = defaultTimeout,
     NfcCancelToken? cancel,
+    String? alertMessage,
   }) async {
     await attach();
+
+    // iOS branches here, before any Android reader-mode logic runs.
+    if (_usesIosSession) {
+      return _withTagIos<T>(
+        action,
+        timeout: timeout,
+        cancel: cancel,
+        alertMessage: alertMessage,
+      );
+    }
+
     await _requireRadio();
 
     // Make sure the radio is actually polling before we sit and wait for a tag.
@@ -182,6 +207,132 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
     _setState(NfcRadioState.waiting);
 
     return completer.future;
+  }
+
+  // ── iOS ───────────────────────────────────────────────────────────────────
+
+  /// Core NFC equivalent of [withTag].
+  ///
+  /// iOS has no persistent polling: a session is opened per operation, the
+  /// system draws its own modal sheet over the app for its duration, and it
+  /// closes when we invalidate it. That means several Android concerns simply
+  /// do not exist here — there is no OS tag viewer to suppress, and no chip can
+  /// be "already parked" because polling only starts when the sheet opens.
+  ///
+  /// [alertMessage] is the text inside that system sheet. On iOS it is the only
+  /// way to tell the clinician which chip is being asked for, since our own UI
+  /// is covered while the sheet is up.
+  Future<T> _withTagIos<T>(
+    Future<T> Function(HwbTag tag) action, {
+    required Duration timeout,
+    NfcCancelToken? cancel,
+    String? alertMessage,
+  }) async {
+    if (_consumer != null) throw NfcBusyException();
+
+    final available = await NfcManagerIos.instance.tagSessionReadingAvailable();
+    if (!available) throw NfcNotAvailableException();
+
+    final completer = Completer<T>();
+    var settled = false;
+    Timer? timer;
+
+    Future<void> finish({Object? error, T? value, String? sheetError}) async {
+      if (settled) return;
+      settled = true;
+      timer?.cancel();
+      _setState(NfcRadioState.idle);
+      try {
+        await NfcManagerIos.instance.tagSessionInvalidate(
+          errorMessage: sheetError,
+        );
+      } catch (_) {
+        // The session may already be gone; nothing useful to do.
+      }
+      if (completer.isCompleted) return;
+      if (error != null) {
+        completer.completeError(error);
+      } else {
+        completer.complete(value as T);
+      }
+    }
+
+    await NfcManagerIos.instance.tagSessionBegin(
+      pollingOptions: const <NfcPollingOption>{
+        NfcPollingOption.iso14443,
+        NfcPollingOption.iso15693,
+      },
+      alertMessage: alertMessage,
+      // We invalidate ourselves once the action has finished, so the sheet stays
+      // up (and the tag stays connected) for the whole read or write.
+      invalidateAfterFirstRead: false,
+      didDetectTag: (NfcTag tag) async {
+        if (settled) return;
+        _setState(NfcRadioState.working);
+        try {
+          final value = await action(_adaptIos(tag));
+          await finish(value: value);
+        } catch (error) {
+          await finish(error: error, sheetError: error.toString());
+        }
+      },
+      didInvalidateWithError: (NfcReaderSessionErrorIos error) {
+        if (settled) return;
+        settled = true;
+        timer?.cancel();
+        _setState(NfcRadioState.idle);
+        if (completer.isCompleted) return;
+        completer.completeError(_mapIosError(error));
+      },
+    );
+
+    _setState(NfcRadioState.waiting);
+
+    // iOS enforces its own ~60s limit, but ours is shorter and keeps the
+    // behaviour aligned with Android.
+    timer = Timer(timeout, () {
+      unawaited(finish(error: NfcTimeoutException(timeout)));
+    });
+    unawaited(
+      cancel?.whenCancelled.then(
+            (_) => finish(error: NfcCancelledException()),
+          ) ??
+          Future<void>.value(),
+    );
+
+    return completer.future;
+  }
+
+  /// Translates a Core NFC invalidation into the same exceptions the rest of
+  /// the app already handles, so no call site needs to know the platform.
+  static Object _mapIosError(NfcReaderSessionErrorIos error) {
+    switch (error.code) {
+      case NfcReaderErrorCodeIos.readerSessionInvalidationErrorUserCanceled:
+        return NfcCancelledException();
+      case NfcReaderErrorCodeIos.readerSessionInvalidationErrorSessionTimeout:
+        return NfcTimeoutException(defaultTimeout);
+      case NfcReaderErrorCodeIos.readerSessionInvalidationErrorSystemIsBusy:
+        return NfcBusyException();
+      case NfcReaderErrorCodeIos
+          .readerSessionInvalidationErrorSessionTerminatedUnexpectedly:
+        return NfcInterruptedException();
+      // ignore: no_default_cases
+      default:
+        return NfcSessionException(error.message);
+    }
+  }
+
+  /// iOS counterpart of [_adapt].
+  ///
+  /// NTAG 215/216 wristbands surface as MiFare on iOS, which is where the
+  /// identifier lives; DESFire cards do too. NDEF is exposed separately.
+  HwbTag _adaptIos(NfcTag tag) {
+    final mifare = MiFareIos.from(tag);
+    final ndef = NdefIos.from(tag);
+    return HwbTag(
+      uid: mifare == null ? '' : formatNfcUid(mifare.identifier),
+      ndef: ndef == null ? null : _IosNdef(ndef),
+    );
   }
 
   /// Aborts whatever is waiting for a chip, if anything.
@@ -411,6 +562,29 @@ class _Consumer {
     _timer?.cancel();
     _timer = null;
   }
+}
+
+/// iOS NDEF surface.
+///
+/// Core NFC calls the budget `capacity` and reports writability through a
+/// status enum rather than a bool, so both are mapped onto the shared contract
+/// the rest of the app already uses.
+class _IosNdef implements HwbNdef {
+  _IosNdef(this._ndef);
+
+  final NdefIos _ndef;
+
+  @override
+  bool get isWritable => _ndef.status == NdefStatusIos.readWrite;
+
+  @override
+  int get maxSize => _ndef.capacity;
+
+  @override
+  NdefMessage? get cachedMessage => _ndef.cachedNdefMessage;
+
+  @override
+  Future<void> write(NdefMessage message) => _ndef.writeNdef(message);
 }
 
 class _AndroidNdef implements HwbNdef {

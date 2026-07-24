@@ -73,6 +73,7 @@ class NfcService {
   static Future<String> readDeviceUid({
     Duration timeout = NfcSessionManager.defaultTimeout,
     NfcCancelToken? cancel,
+    String? alertMessage,
   }) async {
     if (overrideReadDeviceUid != null) {
       return overrideReadDeviceUid!();
@@ -86,6 +87,7 @@ class NfcService {
       },
       timeout: timeout,
       cancel: cancel,
+      alertMessage: alertMessage,
     );
   }
 
