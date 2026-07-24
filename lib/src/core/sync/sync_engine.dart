@@ -1,3 +1,5 @@
+// lib/src/core/sync/sync_engine.dart
+
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -121,8 +123,9 @@ class SyncEngine {
       );
 
       if (response.status == 'success') {
-        // Mark synced and scrub clinical data per security policy
-        await _localDb.markSynced(entry.patientId);
+        // Mark synced and scrub clinical data per security policy, ONLY if the
+        // local record was not modified while this POST was in-flight.
+        await _localDb.markSynced(entry.patientId, createdAt: entry.createdAt);
         onRecordSynced?.call(entry.patientId, true, null);
       } else {
         await _localDb.markSyncError(

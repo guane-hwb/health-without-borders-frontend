@@ -1,3 +1,5 @@
+// lib/src/core/storage/local_database.dart
+
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -162,15 +164,29 @@ class LocalDatabase {
 
   // ── Sync lifecycle ────────────────────────────────────────────────────────
 
-  Future<void> markSynced(String patientId) async {
-    // After successful cloud sync, delete the local record entirely.
-    // The authoritative copy now lives in the backend.
+  Future<void> markSynced(String patientId, {String? createdAt}) async {
+    // After successful cloud sync, delete the local record IF it has not been
+    // modified since the sync request started.
     if (_isWeb) {
+      if (createdAt != null) {
+        final current = _webStore[patientId];
+        if (current != null && current['created_at'] != createdAt) {
+          return;
+        }
+      }
       _webStore.remove(patientId);
       return;
     }
     final db = await _database;
-    await db!.delete(_table, where: 'patient_id = ?', whereArgs: [patientId]);
+    if (createdAt != null) {
+      await db!.delete(
+        _table,
+        where: 'patient_id = ? AND created_at = ?',
+        whereArgs: [patientId, createdAt],
+      );
+    } else {
+      await db!.delete(_table, where: 'patient_id = ?', whereArgs: [patientId]);
+    }
   }
 
   Future<void> markSyncError(
@@ -372,16 +388,16 @@ class NfcChipStatus {
   });
 
   factory NfcChipStatus.clean(String patientId) => NfcChipStatus(
-        patientId: patientId,
-        patientChipDirty: false,
-        guardianChipDirty: false,
-      );
+    patientId: patientId,
+    patientChipDirty: false,
+    guardianChipDirty: false,
+  );
 
   factory NfcChipStatus.fromRow(Map<String, dynamic> row) => NfcChipStatus(
-        patientId: row['patient_id'] as String,
-        patientChipDirty: (row['patient_chip_dirty'] as int? ?? 0) == 1,
-        guardianChipDirty: (row['guardian_chip_dirty'] as int? ?? 0) == 1,
-      );
+    patientId: row['patient_id'] as String,
+    patientChipDirty: (row['patient_chip_dirty'] as int? ?? 0) == 1,
+    guardianChipDirty: (row['guardian_chip_dirty'] as int? ?? 0) == 1,
+  );
 
   final String patientId;
   final bool patientChipDirty;
@@ -404,8 +420,8 @@ class NfcChipStatus {
       );
 
   Map<String, dynamic> toRow() => <String, dynamic>{
-        'patient_id': patientId,
-        'patient_chip_dirty': patientChipDirty ? 1 : 0,
-        'guardian_chip_dirty': guardianChipDirty ? 1 : 0,
-      };
+    'patient_id': patientId,
+    'patient_chip_dirty': patientChipDirty ? 1 : 0,
+    'guardian_chip_dirty': guardianChipDirty ? 1 : 0,
+  };
 }
