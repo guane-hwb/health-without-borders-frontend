@@ -291,10 +291,29 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     }
   }
 
-  void _updateVitalSigns({double? weight, double? height}) {
+  void _updateVitalSigns({double? weight, double? height, String? bloodType}) {
     setState(() {
+      final info = _draft.patientInfo;
       _draft = _replacePatientInfo(
-        _draft.patientInfo.copyWith(weight: weight, height: height),
+        PatientInfo(
+          identification: info.identification,
+          firstLastName: info.firstLastName,
+          secondLastName: info.secondLastName,
+          firstName: info.firstName,
+          secondName: info.secondName,
+          dob: info.dob,
+          nationalityCode: info.nationalityCode,
+          nationalityName: info.nationalityName,
+          biologicalSex: info.biologicalSex,
+          genderIdentity: info.genderIdentity,
+          ethnicity: info.ethnicity,
+          ethnicCommunity: info.ethnicCommunity,
+          disabilityCategory: info.disabilityCategory,
+          address: info.address,
+          bloodType: bloodType ?? info.bloodType,
+          weight: weight ?? info.weight,
+          height: height ?? info.height,
+        ),
       );
     });
     _saveAndPendingSync();
