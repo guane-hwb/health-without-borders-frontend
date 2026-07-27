@@ -5,6 +5,9 @@
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- Network permission for the production build (Release) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:label="Health Without Borders"
         android:name="${applicationName}"

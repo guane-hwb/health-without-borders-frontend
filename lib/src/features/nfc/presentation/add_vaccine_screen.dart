@@ -151,7 +151,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
         .toList();
 
     if (widget.returnToProfile) {
-      if (mounted) Navigator.of(context).pop(newVaccines.first);
+      if (mounted) Navigator.of(context).pop(newVaccines);
       return;
     }
 
