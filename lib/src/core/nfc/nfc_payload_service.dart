@@ -69,6 +69,7 @@ class NfcPayloadService {
     String? expectedUid,
     Duration timeout = NfcSessionManager.defaultTimeout,
     NfcCancelToken? cancel,
+    String? alertMessage,
   }) {
     return _writePayload(
       triagePayload,
@@ -76,6 +77,7 @@ class NfcPayloadService {
       expectedUid: expectedUid,
       timeout: timeout,
       cancel: cancel,
+      alertMessage: alertMessage,
     );
   }
 
@@ -89,6 +91,7 @@ class NfcPayloadService {
     String? expectedUid,
     Duration timeout = NfcSessionManager.defaultTimeout,
     NfcCancelToken? cancel,
+    String? alertMessage,
   }) {
     return _writePayload(
       guardianPayload,
@@ -96,6 +99,7 @@ class NfcPayloadService {
       expectedUid: expectedUid,
       timeout: timeout,
       cancel: cancel,
+      alertMessage: alertMessage,
     );
   }
 
@@ -116,6 +120,7 @@ class NfcPayloadService {
     String? expectedUid,
     Duration timeout = NfcSessionManager.defaultTimeout,
     NfcCancelToken? cancel,
+    String? alertMessage,
   }) {
     return _tagSource.withTag<NfcWriteResult>(
       (HwbTag tag) async {
@@ -175,6 +180,7 @@ class NfcPayloadService {
       },
       timeout: timeout,
       cancel: cancel,
+      alertMessage: alertMessage,
     );
   }
 
@@ -190,6 +196,7 @@ class NfcPayloadService {
     String? expectedUid,
     Duration timeout = NfcSessionManager.defaultTimeout,
     NfcCancelToken? cancel,
+    String? alertMessage,
   }) async {
     // Encode and frame before asking for the tap: CBOR + DEFLATE + AES-GCM off
     // the critical path keeps the chip in the field for as little as possible.
@@ -248,6 +255,7 @@ class NfcPayloadService {
       },
       timeout: timeout,
       cancel: cancel,
+      alertMessage: alertMessage,
     );
   }
 
@@ -255,6 +263,7 @@ class NfcPayloadService {
   Future<NfcReadResult> readTriagePayload({
     Duration timeout = NfcSessionManager.defaultTimeout,
     NfcCancelToken? cancel,
+    String? alertMessage,
   }) {
     return _tagSource.withTag<NfcReadResult>(
       (HwbTag tag) async {
@@ -278,6 +287,7 @@ class NfcPayloadService {
       },
       timeout: timeout,
       cancel: cancel,
+      alertMessage: alertMessage,
     );
   }
 
@@ -290,6 +300,7 @@ class NfcPayloadService {
   Future<HwbChipReadResult> readHwbChip({
     Duration timeout = NfcSessionManager.defaultTimeout,
     NfcCancelToken? cancel,
+    String? alertMessage,
   }) {
     return _tagSource.withTag<HwbChipReadResult>(
       (HwbTag tag) async {
@@ -322,6 +333,7 @@ class NfcPayloadService {
       },
       timeout: timeout,
       cancel: cancel,
+      alertMessage: alertMessage,
     );
   }
 

@@ -61,6 +61,7 @@ class _FakeTagSource implements NfcTagSource {
     Future<T> Function(HwbTag tag) action, {
     Duration timeout = const Duration(seconds: 20),
     NfcCancelToken? cancel,
+    String? alertMessage,
   }) async {
     if (_error != null) throw _error!;
     return action(_tag!);

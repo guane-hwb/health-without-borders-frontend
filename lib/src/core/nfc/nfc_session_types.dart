@@ -59,6 +59,10 @@ abstract class NfcTagSource {
     Future<T> Function(HwbTag tag) action, {
     Duration timeout,
     NfcCancelToken? cancel,
+
+    /// Text shown inside the iOS system scanning sheet. Ignored on Android,
+    /// where the app draws its own scanning UI.
+    String? alertMessage,
   });
 }
 
