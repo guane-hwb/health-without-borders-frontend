@@ -32,6 +32,7 @@ class NfcSessionManager implements NfcTagSource {
     Future<T> Function(HwbTag tag) action, {
     Duration timeout = defaultTimeout,
     NfcCancelToken? cancel,
+    String? alertMessage,
   }) async {
     throw NfcNotAvailableException();
   }

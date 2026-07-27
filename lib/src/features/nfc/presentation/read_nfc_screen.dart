@@ -74,7 +74,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       if (key != null && key.isNotEmpty) {
         chip = await payload.NfcPayloadService(
           codec: NfcPayloadCodec(hexKey: key),
-        ).readHwbChip();
+        ).readHwbChip(alertMessage: _nfcAlert(guardian: false));
       }
     } on payload.NfcNotAvailableException {
       if (mounted) {
@@ -93,7 +93,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       uid = chip.uid;
     } else {
       try {
-        uid = await NfcService.readDeviceUid();
+        uid = await NfcService.readDeviceUid(
+          alertMessage: _nfcAlert(guardian: false),
+        );
       } on NfcNotAvailableException {
         if (mounted) {
           setState(() {
@@ -214,6 +216,21 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     }
   }
 
+  /// Text for the iOS system scanning sheet. Ignored on Android, where the app
+  /// draws its own scanning UI — but on iOS that sheet covers the screen, so it
+  /// is the only place the clinician can be told which chip to present.
+  String _nfcAlert({required bool guardian}) {
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    if (guardian) {
+      return isEs
+          ? 'Acerque la tarjeta del guardián'
+          : 'Hold the guardian card near the phone';
+    }
+    return isEs
+        ? 'Acerque la manilla del paciente'
+        : 'Hold the patient wristband near the phone';
+  }
+
   // ── Offline guardian gate ─────────────────────────────────────────────────
 
   /// Offline: scan the guardian card and verify it belongs to this patient.
@@ -241,7 +258,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       }
       final chip = await payload.NfcPayloadService(
         codec: NfcPayloadCodec(hexKey: key),
-      ).readHwbChip();
+      ).readHwbChip(alertMessage: _nfcAlert(guardian: true));
       if (!mounted) return;
 
       final expected = <String>[
@@ -333,7 +350,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       _errorMessage = null;
     });
     try {
-      final uid = await NfcService.readDeviceUid();
+      final uid = await NfcService.readDeviceUid(
+        alertMessage: _nfcAlert(guardian: true),
+      );
       _guardianUidCtrl.text = uid;
       await _submitGuardian(uid);
     } on NfcNotAvailableException {
