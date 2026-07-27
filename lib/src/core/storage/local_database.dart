@@ -14,13 +14,15 @@ class LocalDatabase {
   static final LocalDatabase instance = LocalDatabase._();
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 3;
+  static const int _dbVersion = 4;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
+  static const String _emergencyLogTable = 'emergency_access_log';
 
   Database? _db;
 
   final Map<String, Map<String, dynamic>> _webStore = {};
+  final List<Map<String, Object?>> _webEmergencyLog = <Map<String, Object?>>[];
   final Map<String, Map<String, dynamic>> _webChipStatus = {};
 
   static Future<void> init() async {}
@@ -55,10 +57,14 @@ class LocalDatabase {
         ''');
         await db.execute('CREATE INDEX idx_synced ON $_table (is_synced)');
         await _createChipStatusTable(db);
+        await _createEmergencyLogTable(db);
       },
       onUpgrade: (Database db, int oldVersion, int newVersion) async {
         if (oldVersion < 2) {
           await _createChipStatusTable(db);
+        }
+        if (oldVersion < 4) {
+          await _createEmergencyLogTable(db);
         }
         if (oldVersion < 3) {
           await db.execute(
@@ -78,6 +84,71 @@ class LocalDatabase {
         updated_at          TEXT NOT NULL
       )
     ''');
+  }
+
+  /// Break-glass access log.
+  ///
+  /// Records every time a clinician viewed a minor's data offline without the
+  /// guardian card present. Kept in its own table with an `is_synced` flag,
+  /// matching the outbound queue pattern, so it can be shipped to the server
+  /// once an audit endpoint exists. Until then it is local-only — which is a
+  /// known limitation, since the log lives on the device of the person it
+  /// audits.
+  static Future<void> _createEmergencyLogTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_emergencyLogTable (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        patient_uid   TEXT NOT NULL,
+        patient_name  TEXT,
+        user_id       TEXT,
+        reason        TEXT NOT NULL,
+        occurred_at   TEXT NOT NULL,
+        is_synced     INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+  }
+
+  /// Appends a break-glass access entry. Never throws: an audit write must not
+  /// be able to block a clinician from seeing a patient in an emergency.
+  Future<void> logEmergencyAccess({
+    required String patientUid,
+    String? patientName,
+    String? userId,
+    String reason = 'guardian_absent_offline',
+  }) async {
+    final row = <String, Object?>{
+      'patient_uid': patientUid,
+      'patient_name': patientName,
+      'user_id': userId,
+      'reason': reason,
+      'occurred_at': DateTime.now().toIso8601String(),
+      'is_synced': 0,
+    };
+    try {
+      final db = await _database;
+      if (db == null) {
+        _webEmergencyLog.add(row);
+        return;
+      }
+      await db.insert(_emergencyLogTable, row);
+    } catch (_) {
+      // Swallow: losing an audit row is bad, blocking emergency care is worse.
+    }
+  }
+
+  /// Break-glass entries not yet shipped to the server.
+  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs() async {
+    try {
+      final db = await _database;
+      if (db == null) {
+        return _webEmergencyLog
+            .where((Map<String, Object?> r) => r['is_synced'] == 0)
+            .toList();
+      }
+      return db.query(_emergencyLogTable, where: 'is_synced = 0');
+    } catch (_) {
+      return <Map<String, Object?>>[];
+    }
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
@@ -282,12 +353,14 @@ class LocalDatabase {
   Future<void> clearAll() async {
     if (_isWeb) {
       _webStore.clear();
+      _webEmergencyLog.clear();
       _webChipStatus.clear();
       return;
     }
     final db = await _database;
     await db!.delete(_table);
     await db.delete(_chipStatusTable);
+    await db.delete(_emergencyLogTable);
   }
 }
 
