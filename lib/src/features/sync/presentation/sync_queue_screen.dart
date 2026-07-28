@@ -1,4 +1,7 @@
+// lib/src/features/sync/presentation/sync_queue_screen.dart
+
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
@@ -38,24 +41,100 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
   }
 
   Future<void> _syncAll() async {
+    final s = AppStrings.of(context);
+    final isEs = s.save == 'Guardar';
+    final messenger = ScaffoldMessenger.of(context);
+    final syncEngine = AppScope.of(context).syncEngine;
+
+    final netResult = await Connectivity().checkConnectivity();
+    if (netResult.contains(ConnectivityResult.none)) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              isEs
+                  ? 'Sin conexión a Internet. Conéctese a una red para sincronizar.'
+                  : 'No internet connection. Connect to a network to sync.',
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() => _syncing = true);
-    await AppScope.of(context).syncEngine.syncAll();
-    await _load();
-    if (mounted) {
-      setState(() => _syncing = false);
+    try {
+      await syncEngine.syncAll();
+      await _load();
+      if (mounted) {
+        final remaining = _entries.length;
+        if (remaining == 0) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(s.syncedSuccessfully),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        } else {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                isEs
+                    ? 'Quedan $remaining registros pendientes por sincronizar.'
+                    : '$remaining records remain pending.',
+              ),
+              backgroundColor: Colors.orange.shade800,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              isEs
+                  ? 'Fallo al sincronizar. Intente de nuevo más tarde.'
+                  : 'Sync failed. Please try again later.',
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _syncing = false);
+      }
     }
   }
 
   Future<void> _syncOne(String id) async {
-    final ok = await AppScope.of(context).syncEngine.syncOne(id);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            ok
-                ? AppStrings.of(context).syncedSuccessfully
-                : AppStrings.of(context).syncFailedRetry,
+    final s = AppStrings.of(context);
+    final isEs = s.save == 'Guardar';
+    final messenger = ScaffoldMessenger.of(context);
+    final syncEngine = AppScope.of(context).syncEngine;
+
+    final netResult = await Connectivity().checkConnectivity();
+    if (netResult.contains(ConnectivityResult.none)) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              isEs ? 'Sin conexión a Internet.' : 'No internet connection.',
+            ),
+            backgroundColor: AppColors.error,
           ),
+        );
+      }
+      return;
+    }
+
+    final ok = await syncEngine.syncOne(id);
+    if (mounted) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(ok ? s.syncedSuccessfully : s.syncFailedRetry),
           backgroundColor: ok ? AppColors.success : AppColors.error,
         ),
       );
@@ -96,6 +175,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
         ],
       ),
     );
+
     if (ok == true && mounted) {
       await db.deleteRecord(e.patientId);
       _load();
@@ -306,9 +386,7 @@ class _SyncCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isConflict = entry.syncErrorCode == 409;
-
     final hasErr = entry.syncError?.isNotEmpty == true && isConflict;
-
     final isEs = s.save == 'Guardar';
 
     final String? errorMessage = !hasErr
