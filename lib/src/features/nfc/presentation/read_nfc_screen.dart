@@ -293,7 +293,12 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         patientDeviceUid: _patientDeviceUid ?? '',
       );
       if (!mounted) return;
-      await _openProfile(record, readOnly: true, offline: true);
+      // The guardian card carries the full record with a real patientId, so it
+      // is safe to edit offline: changes are saved locally, flagged as pending
+      // and synced when connectivity returns. The backend merges clinical lists
+      // by UUID, so the bounded card can never truncate the server history.
+      // (The triage-only and emergency paths stay read-only — see those calls.)
+      await _openProfile(record, offline: true);
     } on NfcNotAvailableException {
       if (!mounted) return;
       setState(() {
