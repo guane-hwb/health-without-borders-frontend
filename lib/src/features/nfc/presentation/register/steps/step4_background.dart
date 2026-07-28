@@ -34,9 +34,8 @@ class _Step4State extends State<Step4Background> {
 
   void _save() {
     final d = widget.draft;
-    d.personalHistory = _personal.text.trim().isEmpty
-        ? null
-        : _personal.text.trim();
+    final text = _personal.text.trim();
+    d.personalHistory = text.isEmpty ? null : text;
     widget.onContinue();
   }
 
@@ -92,7 +91,6 @@ class _Step4State extends State<Step4Background> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             children: [
-              // Chronic conditions (list-based)
               Row(
                 children: [
                   Expanded(
@@ -152,7 +150,6 @@ class _Step4State extends State<Step4Background> {
                 onChanged: (_) {},
               ),
               const SizedBox(height: 22),
-              // Medications
               Row(
                 children: [
                   Expanded(
@@ -194,7 +191,6 @@ class _Step4State extends State<Step4Background> {
                   }),
                 ),
               const SizedBox(height: 22),
-              // Family history
               Row(
                 children: [
                   Expanded(
@@ -233,7 +229,6 @@ class _Step4State extends State<Step4Background> {
                   }),
                 ),
               const SizedBox(height: 22),
-              // Allergies
               Row(
                 children: [
                   Expanded(
@@ -357,8 +352,6 @@ class _Step4State extends State<Step4Background> {
   }
 }
 
-// ── Helpers de internacionalización dinámica basados en el context ───────────
-
 String _relLabel(BuildContext context, String c) {
   final s = AppStrings.of(context);
   return {
@@ -481,8 +474,6 @@ class _ItemCard extends StatelessWidget {
   );
 }
 
-// ── Sheets ───────────────────────────────────────────────────────────────────
-
 class _AddChronicConditionSheet extends StatefulWidget {
   const _AddChronicConditionSheet();
   @override
@@ -561,12 +552,14 @@ class _AddMedState extends State<_AddMedicationSheet> {
       title: s.addMedicationTitle,
       canConfirm: ok,
       onConfirm: () {
+        final dText = _dosage.text.trim();
+        final nText = _notes.text.trim();
         Navigator.of(context).pop(
           MedicationStatementItem(
             medicationName: _name.text.trim(),
             status: _status,
-            dosage: _dosage.text.trim().isEmpty ? null : _dosage.text.trim(),
-            notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+            dosage: dText.isEmpty ? null : dText,
+            notes: nText.isEmpty ? null : nText,
           ),
         );
       },
@@ -705,13 +698,12 @@ class _AddAlState extends State<_AddAllergySheet> {
       title: s.addAllergyBtn,
       canConfirm: ok,
       onConfirm: () {
+        final rText = _reaction.text.trim();
         Navigator.of(context).pop(
           AllergyInfo(
             category: _cat,
             allergen: _allergen.text.trim(),
-            reaction: _reaction.text.trim().isEmpty
-                ? null
-                : _reaction.text.trim(),
+            reaction: rText.isEmpty ? null : rText,
           ),
         );
       },
