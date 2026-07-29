@@ -189,9 +189,9 @@ class _Step2State extends State<Step2Guardian> {
     if (strokes.isEmpty) return null;
     const w = 400.0, h = 200.0;
     final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, w, h));
+    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, w, h));
     canvas.drawRect(
-      Rect.fromLTWH(0, 0, w, h),
+      const Rect.fromLTWH(0, 0, w, h),
       Paint()..color = const Color(0xFFFFFFFF),
     );
     final paint = Paint()
@@ -356,35 +356,6 @@ class _Step2State extends State<Step2Guardian> {
       d.guardian2Phone = null;
       d.guardian2DeviceUid = null;
       d.guardian2DocType = null;
-      d.guardian2DocNumber = null;
-      d.guardian2Relationship = null;
-      d.guardian2AuthAccepted = null;
-      d.guardian2Email = null;
-      d.guardian2SignatureBase64 = null;
-    }
-
-    if (_hasGuardian2) {
-      d.guardian2Name = _name2.text.trim().isEmpty ? null : _name2.text.trim();
-      d.guardian2Phone = _phone2.text.trim().isEmpty
-          ? null
-          : _phone2.text.trim();
-      d.guardian2DeviceUid = _uid2.text.trim().isEmpty
-          ? null
-          : _uid2.text.trim();
-      d.guardian2DocType = _selectedDocType2;
-      d.guardian2DocNumber = _docNumber2.text.trim().isEmpty
-          ? null
-          : _docNumber2.text.trim();
-      d.guardian2Relationship = _guardian2Relationship;
-      d.guardian2AuthAccepted = _auth2Accepted;
-      d.guardian2Email = _email2.text.trim().isEmpty
-          ? null
-          : _email2.text.trim();
-      d.guardian2SignatureBase64 = sig2Base64;
-    } else {
-      d.guardian2Name = null;
-      d.guardian2Phone = null;
-      d.guardian2DeviceUid = null;
       d.guardian2DocNumber = null;
       d.guardian2Relationship = null;
       d.guardian2AuthAccepted = null;
@@ -620,7 +591,6 @@ class _Step2State extends State<Step2Guardian> {
                 ),
               ),
 
-              // ── Section guardian 2 ────────────────────────────────────────
               if (_hasGuardian2) ...[
                 const SizedBox(height: 16),
                 _Guardian2Section(
@@ -691,9 +661,6 @@ class _Step2State extends State<Step2Guardian> {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  Document Type Selector (styled dropdown)
-// ═════════════════════════════════════════════════════════════════════════════
 class _DocTypeSelector extends StatelessWidget {
   const _DocTypeSelector({
     required this.label,
@@ -786,9 +753,6 @@ class _DocTypeSelector extends StatelessWidget {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  Authorization and Privacy Section
-// ═════════════════════════════════════════════════════════════════════════════
 class _AuthSection extends StatelessWidget {
   const _AuthSection({
     required this.accepted,
@@ -948,9 +912,6 @@ class _AuthSection extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-//  Authorization checkbox with link to policy
-// ─────────────────────────────────────────────
 class _AuthCheckbox extends StatelessWidget {
   const _AuthCheckbox({
     required this.accepted,
@@ -1032,9 +993,6 @@ class _AuthCheckbox extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-//  Biometric signature pad
-// ─────────────────────────────────────────────
 class _SignaturePad extends StatelessWidget {
   const _SignaturePad({
     required this.strokes,
@@ -1155,9 +1113,6 @@ class _SignaturePainter extends CustomPainter {
   bool shouldRepaint(_SignaturePainter old) => old.strokes != strokes;
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  Privacy policy modal
-// ═════════════════════════════════════════════════════════════════════════════
 class _PrivacyPolicyDialog extends StatelessWidget {
   const _PrivacyPolicyDialog();
 
@@ -1800,9 +1755,6 @@ class _NfcField extends StatelessWidget {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  Section guardian 2
-// ═════════════════════════════════════════════════════════════════════════════
 class _Guardian2Section extends StatelessWidget {
   const _Guardian2Section({
     required this.nameCtrl,

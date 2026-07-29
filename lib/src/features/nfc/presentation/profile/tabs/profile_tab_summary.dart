@@ -108,7 +108,6 @@ class ProfileTabSummary extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 60),
       children: [
-        // ══ ALLERGIES (clickable only if canEdit is true) ══════════════════════════════════
         _ClickableSection(
           icon: Icons.warning_amber_rounded,
           iconColor: AppColors.error,
@@ -118,12 +117,23 @@ class ProfileTabSummary extends StatelessWidget {
           onTap: canEdit ? onOpenAllergies : null,
           showArrow: canEdit,
           child: draft.allergies.isEmpty
-              ? Text(
-                  s.noAllergiesRegistered,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
+              ? Row(
+                  children: [
+                    const Icon(
+                      Icons.check_circle_outline,
+                      size: 16,
+                      color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      s.noAllergiesRegistered,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 )
               : Column(
                   children: draft.allergies
@@ -163,7 +173,6 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 14),
 
-        // ══ BACKGROUND (clickable only if canEdit is true) ═════════════════════════
         _ClickableSection(
           icon: Icons.history_edu_outlined,
           title: s.backgroundSheetTitle.toUpperCase(),
@@ -201,7 +210,6 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 18),
 
-        // ══ MEASUREMENTS ══════════════════════════════════════════
         ProfileSectionHeader(
           icon: Icons.monitor_heart_outlined,
           title: s.editMeasurements.toUpperCase(),
@@ -248,7 +256,6 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 18),
 
-        // ══ IDENTITY (read-only) ═══════════════════════════════
         ProfileSectionHeader(
           icon: Icons.person_outline,
           title: s.identification.toUpperCase(),
@@ -299,7 +306,6 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 18),
 
-        // ══ RESIDENCE (editable) ═══════════════════════════════
         ProfileSectionHeader(
           icon: Icons.location_on_outlined,
           title: s.address.toUpperCase(),
@@ -348,7 +354,6 @@ class ProfileTabSummary extends StatelessWidget {
 
         const SizedBox(height: 18),
 
-        // ══ GUARDIANS (editable) ═══════════════════════════════
         if (draft.guardianInfo.name.isNotEmpty ||
             (draft.guardian2Info != null &&
                 draft.guardian2Info!.name.isNotEmpty)) ...[
@@ -617,7 +622,7 @@ class _ClickableSection extends StatelessWidget {
                 if (hasChanges) ...[const SizedBox(width: 6), _OrangeDot()],
                 const Spacer(),
                 if (showArrow)
-                  Icon(
+                  const Icon(
                     Icons.arrow_forward_ios,
                     size: 14,
                     color: AppColors.disabled,

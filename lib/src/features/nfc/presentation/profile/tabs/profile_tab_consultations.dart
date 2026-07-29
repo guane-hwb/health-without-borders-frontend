@@ -57,12 +57,23 @@ class ProfileTabConsultations extends StatelessWidget {
                   ),
                 ),
                 child: ProfileCard(
-                  child: Text(
-                    s.noConsultationsRegistered,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.medical_services_outlined,
+                        size: 18,
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        s.noConsultationsRegistered,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               )
@@ -294,7 +305,6 @@ class _ConsultationCard extends StatelessWidget {
                   ],
                 ),
               ],
-              // Tap hint
               const SizedBox(height: 4),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -357,10 +367,6 @@ class _DiagChip extends StatelessWidget {
     );
   }
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Full detail screen for a single consultation (read-only)
-// ═════════════════════════════════════════════════════════════════════════════
 
 class _ConsultationDetailScreen extends StatelessWidget {
   const _ConsultationDetailScreen({required this.item});
