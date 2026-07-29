@@ -1,3 +1,5 @@
+// lib/src/core/storage/local_database.dart
+
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -7,38 +9,28 @@ import 'package:sqflite/sqflite.dart';
 import '../../features/nfc/domain/patient_record.dart';
 
 /// Local SQLite database for offline-first patient storage.
-///
-/// On mobile (iOS/Android): uses native sqflite.
-/// On Flutter Web: sqflite is not supported. We use an in-memory fallback
-/// so the app runs in Chrome for testing without crashing.
-/// For production web persistence you would add sqflite_common_ffi_web.
 class LocalDatabase {
   LocalDatabase._();
   static final LocalDatabase instance = LocalDatabase._();
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 3;
+  static const int _dbVersion = 4;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
+  static const String _emergencyLogTable = 'emergency_access_log';
 
   Database? _db;
 
-  // In-memory fallback for web (rows keyed by patient_id)
   final Map<String, Map<String, dynamic>> _webStore = {};
-
-  // In-memory fallback for chip-dirty status on web (keyed by patient_id)
+  final List<Map<String, Object?>> _webEmergencyLog = <Map<String, Object?>>[];
   final Map<String, Map<String, dynamic>> _webChipStatus = {};
 
-  /// Call once in main() before runApp().
-  static Future<void> init() async {
-    // Nothing to do — database is lazily opened on first use.
-    // If you later add sqflite_common_ffi_web you can activate it here.
-  }
+  static Future<void> init() async {}
 
   bool get _isWeb => kIsWeb;
 
   Future<Database?> get _database async {
-    if (_isWeb) return null; // web uses _webStore
+    if (_isWeb) return null;
     if (_db != null) return _db;
     _db = await _initDb();
     return _db;
@@ -65,14 +57,16 @@ class LocalDatabase {
         ''');
         await db.execute('CREATE INDEX idx_synced ON $_table (is_synced)');
         await _createChipStatusTable(db);
+        await _createEmergencyLogTable(db);
       },
       onUpgrade: (Database db, int oldVersion, int newVersion) async {
         if (oldVersion < 2) {
           await _createChipStatusTable(db);
         }
+        if (oldVersion < 4) {
+          await _createEmergencyLogTable(db);
+        }
         if (oldVersion < 3) {
-          // Persist the HTTP status of the last sync failure so the queue UI
-          // can tell a permanent conflict (409) apart from a retryable error.
           await db.execute(
             'ALTER TABLE $_table ADD COLUMN sync_error_code INTEGER',
           );
@@ -81,9 +75,6 @@ class LocalDatabase {
     );
   }
 
-  /// NFC backup staleness, tracked separately from the outbound sync queue so
-  /// it survives `markSynced` (which deletes the queue row). Persists which
-  /// chips are out of date for a patient until they are re-written.
   static Future<void> _createChipStatusTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS $_chipStatusTable (
@@ -93,6 +84,71 @@ class LocalDatabase {
         updated_at          TEXT NOT NULL
       )
     ''');
+  }
+
+  /// Break-glass access log.
+  ///
+  /// Records every time a clinician viewed a minor's data offline without the
+  /// guardian card present. Kept in its own table with an `is_synced` flag,
+  /// matching the outbound queue pattern, so it can be shipped to the server
+  /// once an audit endpoint exists. Until then it is local-only — which is a
+  /// known limitation, since the log lives on the device of the person it
+  /// audits.
+  static Future<void> _createEmergencyLogTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_emergencyLogTable (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        patient_uid   TEXT NOT NULL,
+        patient_name  TEXT,
+        user_id       TEXT,
+        reason        TEXT NOT NULL,
+        occurred_at   TEXT NOT NULL,
+        is_synced     INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+  }
+
+  /// Appends a break-glass access entry. Never throws: an audit write must not
+  /// be able to block a clinician from seeing a patient in an emergency.
+  Future<void> logEmergencyAccess({
+    required String patientUid,
+    String? patientName,
+    String? userId,
+    String reason = 'guardian_absent_offline',
+  }) async {
+    final row = <String, Object?>{
+      'patient_uid': patientUid,
+      'patient_name': patientName,
+      'user_id': userId,
+      'reason': reason,
+      'occurred_at': DateTime.now().toIso8601String(),
+      'is_synced': 0,
+    };
+    try {
+      final db = await _database;
+      if (db == null) {
+        _webEmergencyLog.add(row);
+        return;
+      }
+      await db.insert(_emergencyLogTable, row);
+    } catch (_) {
+      // Swallow: losing an audit row is bad, blocking emergency care is worse.
+    }
+  }
+
+  /// Break-glass entries not yet shipped to the server.
+  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs() async {
+    try {
+      final db = await _database;
+      if (db == null) {
+        return _webEmergencyLog
+            .where((Map<String, Object?> r) => r['is_synced'] == 0)
+            .toList();
+      }
+      return db.query(_emergencyLogTable, where: 'is_synced = 0');
+    } catch (_) {
+      return <Map<String, Object?>>[];
+    }
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
@@ -162,15 +218,27 @@ class LocalDatabase {
 
   // ── Sync lifecycle ────────────────────────────────────────────────────────
 
-  Future<void> markSynced(String patientId) async {
-    // After successful cloud sync, delete the local record entirely.
-    // The authoritative copy now lives in the backend.
+  Future<void> markSynced(String patientId, {String? createdAt}) async {
     if (_isWeb) {
+      if (createdAt != null) {
+        final current = _webStore[patientId];
+        if (current != null && current['created_at'] != createdAt) {
+          return;
+        }
+      }
       _webStore.remove(patientId);
       return;
     }
     final db = await _database;
-    await db!.delete(_table, where: 'patient_id = ?', whereArgs: [patientId]);
+    if (createdAt != null) {
+      await db!.delete(
+        _table,
+        where: 'patient_id = ? AND created_at = ?',
+        whereArgs: [patientId, createdAt],
+      );
+    } else {
+      await db!.delete(_table, where: 'patient_id = ?', whereArgs: [patientId]);
+    }
   }
 
   Future<void> markSyncError(
@@ -208,7 +276,6 @@ class LocalDatabase {
 
   // ── NFC chip status (backup staleness) ────────────────────────────────────
 
-  /// Returns the chip-dirty status for a patient, or null if nothing is stale.
   Future<NfcChipStatus?> getChipStatus(String patientId) async {
     if (patientId.isEmpty) return null;
     if (_isWeb) {
@@ -226,8 +293,6 @@ class LocalDatabase {
     return NfcChipStatus.fromRow(rows.first);
   }
 
-  /// Marks one or both chips as stale for a patient. Flags are OR-ed with any
-  /// existing state, so repeated edits never clear a pending chip.
   Future<void> markChipsDirty(
     String patientId, {
     bool patient = false,
@@ -241,8 +306,6 @@ class LocalDatabase {
     );
   }
 
-  /// Clears the dirty flag for one or both chips after a successful re-write.
-  /// Deletes the row once nothing is stale.
   Future<void> clearChipsDirty(
     String patientId, {
     bool patient = false,
@@ -290,12 +353,14 @@ class LocalDatabase {
   Future<void> clearAll() async {
     if (_isWeb) {
       _webStore.clear();
+      _webEmergencyLog.clear();
       _webChipStatus.clear();
       return;
     }
     final db = await _database;
     await db!.delete(_table);
     await db.delete(_chipStatusTable);
+    await db.delete(_emergencyLogTable);
   }
 }
 
@@ -358,12 +423,6 @@ class LocalPatientEntry {
 
 // ── NFC chip status data class ──────────────────────────────────────────────
 
-/// Tracks which NFC chips are out of date relative to the patient's record.
-///
-/// The guardian card holds the full record, so any change makes it stale; the
-/// patient wristband holds only triage, so it goes stale only when a
-/// triage-relevant field changes (demographics, blood type, chronic
-/// conditions, allergies, guardian UIDs).
 class NfcChipStatus {
   const NfcChipStatus({
     required this.patientId,
@@ -372,16 +431,16 @@ class NfcChipStatus {
   });
 
   factory NfcChipStatus.clean(String patientId) => NfcChipStatus(
-        patientId: patientId,
-        patientChipDirty: false,
-        guardianChipDirty: false,
-      );
+    patientId: patientId,
+    patientChipDirty: false,
+    guardianChipDirty: false,
+  );
 
   factory NfcChipStatus.fromRow(Map<String, dynamic> row) => NfcChipStatus(
-        patientId: row['patient_id'] as String,
-        patientChipDirty: (row['patient_chip_dirty'] as int? ?? 0) == 1,
-        guardianChipDirty: (row['guardian_chip_dirty'] as int? ?? 0) == 1,
-      );
+    patientId: row['patient_id'] as String,
+    patientChipDirty: (row['patient_chip_dirty'] as int? ?? 0) == 1,
+    guardianChipDirty: (row['guardian_chip_dirty'] as int? ?? 0) == 1,
+  );
 
   final String patientId;
   final bool patientChipDirty;
@@ -404,8 +463,8 @@ class NfcChipStatus {
       );
 
   Map<String, dynamic> toRow() => <String, dynamic>{
-        'patient_id': patientId,
-        'patient_chip_dirty': patientChipDirty ? 1 : 0,
-        'guardian_chip_dirty': guardianChipDirty ? 1 : 0,
-      };
+    'patient_id': patientId,
+    'patient_chip_dirty': patientChipDirty ? 1 : 0,
+    'guardian_chip_dirty': guardianChipDirty ? 1 : 0,
+  };
 }

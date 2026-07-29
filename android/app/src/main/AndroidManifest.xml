@@ -5,6 +5,9 @@
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- Network permission for the production build (Release) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:label="Health Without Borders"
         android:name="${applicationName}"
@@ -27,19 +30,16 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
-            <!-- NFC intent filters — allows the app to handle NFC tags -->
-            <intent-filter>
-                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.nfc.action.TECH_DISCOVERED" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.nfc.action.TAG_DISCOVERED" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
+            <!--
+              No NFC intent filters on purpose. HWB reads chips only through
+              reader mode, which it holds for as long as the app is in the
+              foreground; the OS dispatch system is therefore never involved
+              while the app is in use. Registering here would only let a stray
+              tap launch HWB with no scan in progress, on an app that holds
+              clinical data behind a login. NDEF_DISCOVERED and TECH_DISCOVERED
+              never matched anyway: the first had no <data> element and the
+              second had no @xml/nfc_tech_filter resource.
+            -->
         </activity>
         <meta-data
             android:name="flutterEmbedding"

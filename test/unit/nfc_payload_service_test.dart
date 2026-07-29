@@ -1,302 +1,268 @@
-// test/unit/nfc/nfc_payload_service_test.dart
+// test/unit/nfc_payload_service_test.dart
 
-import 'package:flutter/services.dart';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/ndef_record.dart';
 
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_payload.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
-import 'package:health_without_borders_frontend/src/core/nfc/nfc_triage_payload.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_session_manager.dart';
 
-// ── Mocks ────────────────────────────────────────────────────────────────────
+// ── Fakes ───────────────────────────────────────────────────────────────────
+//
+// The plugin is absent from this file on purpose. v4 seals NfcTag, so the old
+// MockNfcTag/MockNdef approach cannot compile; HwbTag/HwbNdef are the seam now,
+// which also means these tests describe HWB's rules rather than the plugin's
+// tag-data wire format.
 
 class MockNfcPayloadCodec extends Mock implements NfcPayloadCodec {}
 
-class MockNfcTag extends Mock implements NfcTag {}
-
-class MockNdef extends Mock implements Ndef {}
-
-class MockTriageSummary extends Mock implements TriageSummary {}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-MockNfcTag _tagWithoutUid() {
-  final tag = MockNfcTag();
-  when(() => tag.handle).thenReturn('test_tag_handle');
-  when(() => tag.data).thenReturn(<String, dynamic>{});
-  return tag;
-}
-
-MockNfcTag _tagWithNonListIdentifier() {
-  final tag = MockNfcTag();
-  when(() => tag.handle).thenReturn('test_tag_handle');
-  when(() => tag.data).thenReturn({
-    'nfca': {'identifier': 'not-a-list'},
+class _FakeNdef implements HwbNdef {
+  _FakeNdef({
+    required this.maxSize,
+    this.isWritable = true,
+    this.cachedMessage,
+    this.writeError,
   });
-  return tag;
+
+  @override
+  final int maxSize;
+
+  @override
+  final bool isWritable;
+
+  @override
+  final NdefMessage? cachedMessage;
+
+  final Object? writeError;
+
+  /// What write() was handed, or null if it was never called.
+  NdefMessage? written;
+
+  @override
+  Future<void> write(NdefMessage message) async {
+    if (writeError != null) throw writeError!;
+    written = message;
+  }
 }
+
+class _FakeTagSource implements NfcTagSource {
+  _FakeTagSource.tag(this._tag);
+  _FakeTagSource.throws(this._error);
+
+  HwbTag? _tag;
+  Object? _error;
+
+  @override
+  Future<T> withTag<T>(
+    Future<T> Function(HwbTag tag) action, {
+    Duration timeout = const Duration(seconds: 20),
+    NfcCancelToken? cancel,
+    String? alertMessage,
+  }) async {
+    if (_error != null) throw _error!;
+    return action(_tag!);
+  }
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 const String kExpectedUid = 'AB:CD:EF';
 
-// ── Test doubles for NfcManager ──────────────────────────────────────────────
+/// An NTAG215's NDEF budget, as Android reports it.
+const int kNtag215MaxSize = 492;
 
-class _FakeNfcManager extends Mock implements NfcManager {
-  bool isAvailableResult = true;
-  bool stopSessionCalled = false;
+NdefMessage _messageOf(String mime, Uint8List payload) =>
+    NdefMessage(records: [NfcPayloadService.buildMimeRecord(mime, payload)]);
 
-  Future<void> Function(NfcTag tag)? onDiscoveredCapture;
-  Future<void> Function(dynamic error)? onErrorCapture;
+/// A chip carrying one MIME record of [mime] with [payload].
+HwbTag _chipWith(String mime, Uint8List payload, {String uid = kExpectedUid}) =>
+    HwbTag(
+      uid: uid,
+      ndef: _FakeNdef(
+        maxSize: kNtag215MaxSize,
+        cachedMessage: _messageOf(mime, payload),
+      ),
+    );
 
-  @override
-  Future<bool> isAvailable() async => isAvailableResult;
+/// A blank but NDEF-formatted chip — what a factory-fresh NTAG215 looks like.
+HwbTag _blankChip({String uid = kExpectedUid, int maxSize = kNtag215MaxSize}) =>
+    HwbTag(
+      uid: uid,
+      ndef: _FakeNdef(
+        maxSize: maxSize,
+        cachedMessage: const NdefMessage(records: []),
+      ),
+    );
 
-  @override
-  Future<void> startSession({
-    String? alertMessage,
-    bool? invalidateAfterFirstRead,
-    required Future<void> Function(NfcTag tag) onDiscovered,
-    Future<void> Function(NfcError error)? onError,
-    Set<NfcPollingOption>? pollingOptions,
-  }) async {
-    onDiscoveredCapture = onDiscovered;
-    if (onError != null) {
-      onErrorCapture = (dynamic err) async {
-        onError(
-          NfcError(
-            type: NfcErrorType.unknown,
-            message: err.toString(),
-            details: null,
-          ),
-        );
-      };
-    }
-  }
-
-  @override
-  Future<void> stopSession({String? alertMessage, String? errorMessage}) async {
-    stopSessionCalled = true;
-  }
-}
+NfcPayloadService _service(MockNfcPayloadCodec codec, HwbTag tag) =>
+    NfcPayloadService(codec: codec, tagSource: _FakeTagSource.tag(tag));
 
 void main() {
-  setUpAll(() {
-    final binding = TestWidgetsFlutterBinding.ensureInitialized();
-    registerFallbackValue(MockNfcTag());
-
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/nfc_manager'),
-      (MethodCall methodCall) async {
-        return null;
-      },
-    );
-  });
+  TestWidgetsFlutterBinding.ensureInitialized();
 
   late MockNfcPayloadCodec codec;
-  late _FakeNfcManager fakeManager;
-  late NfcPayloadService service;
 
-  const tPayload = <String, dynamic>{
-    'name': 'Juan Pérez',
-    'bloodType': 'O+',
-    'allergies': ['penicillin'],
-  };
-
-  final tEncrypted = Uint8List.fromList([1, 2, 3, 4, 5]);
+  setUpAll(() {
+    registerFallbackValue(<String, dynamic>{});
+    registerFallbackValue(Uint8List(0));
+  });
 
   setUp(() {
     codec = MockNfcPayloadCodec();
-    fakeManager = _FakeNfcManager();
-    service = NfcPayloadService(codec: codec, nfcManager: fakeManager);
   });
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // NfcWriteResult
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
+  // Capacidad — el bug que dejó la tarjeta del guardián en blanco
+  // ══════════════════════════════════════════════════════════════════════════
 
-  group('NfcWriteResult', () {
-    test('utilizationPercent calculates correctly', () {
-      const result = NfcWriteResult(
-        uid: 'AA:BB:CC',
-        bytesWritten: 50,
-        chipCapacity: 200,
+  group('capacidad', () {
+    test('el overhead del registro MIME es real y medible', () {
+      // 3 (header + type len + payload len) + 26 (application/vnd.hwb.triage)
+      // + 3 (registro largo, payload > 255). El chequeo viejo lo ignoraba.
+      final message = _messageOf(kHwbNdefMimeType, Uint8List(300));
+      expect(message.byteLength, 300 + 32);
+    });
+
+    test(
+      'rechaza un payload que el chequeo viejo habría dejado pasar',
+      () async {
+        // 470 bytes contra un NTAG215 de 492: el chequeo anterior comparaba
+        // payload contra maxSize (470 <= 492 → pasa) y reventaba dentro de
+        // write(). El mensaje NDEF real ocupa 502.
+        final payload = Uint8List(470);
+        when(() => codec.encode(any())).thenAnswer((_) async => payload);
+        final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+        final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+        await expectLater(
+          service.writeTriagePayload({'a': 1}),
+          throwsA(
+            isA<NfcPayloadTooLargeException>()
+                .having((e) => e.payloadBytes, 'payloadBytes', 470)
+                .having((e) => e.messageBytes, 'messageBytes', 502)
+                .having((e) => e.chipCapacity, 'chipCapacity', kNtag215MaxSize)
+                .having((e) => e.overflowBytes, 'overflowBytes', 10),
+          ),
+        );
+        expect(ndef.written, isNull, reason: 'no debe intentar escribir');
+      },
+    );
+
+    test('acepta un payload que llena el chip exactamente', () async {
+      final payload = Uint8List(kNtag215MaxSize - 32);
+      when(() => codec.encode(any())).thenAnswer((_) async => payload);
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      final result = await service.writeTriagePayload({'a': 1});
+      expect(result.messageBytes, kNtag215MaxSize);
+      expect(result.utilizationPercent, 100.0);
+      expect(ndef.written, isNotNull);
+    });
+
+    test('rechaza un solo byte de más', () async {
+      final payload = Uint8List(kNtag215MaxSize - 32 + 1);
+      when(() => codec.encode(any())).thenAnswer((_) async => payload);
+      final service = _service(
+        codec,
+        HwbTag(
+          uid: kExpectedUid,
+          ndef: _FakeNdef(maxSize: kNtag215MaxSize),
+        ),
       );
-      expect(result.utilizationPercent, equals(25.0));
-    });
-
-    test('utilizationPercent is 100 when chip is full', () {
-      const result = NfcWriteResult(
-        uid: 'AA:BB:CC',
-        bytesWritten: 180,
-        chipCapacity: 180,
-      );
-      expect(result.utilizationPercent, equals(100.0));
-    });
-  });
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // NfcReadResult
-  // ════════════════════════════════════════════════════════════════════════════
-
-  group('NfcReadResult', () {
-    test('stores uid and null triage', () {
-      const result = NfcReadResult(uid: 'AA:BB:CC', triage: null);
-      expect(result.uid, equals('AA:BB:CC'));
-      expect(result.triage, isNull);
-    });
-
-    test('stores uid and non-null triage', () {
-      final triage = MockTriageSummary();
-      final result = NfcReadResult(uid: 'AA:BB:CC', triage: triage);
-      expect(result.triage, same(triage));
-    });
-  });
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // HwbChipReadResult
-  // ════════════════════════════════════════════════════════════════════════════
-
-  group('HwbChipReadResult', () {
-    test('stores uid and kind with null optional fields by default', () {
-      const result = HwbChipReadResult(uid: 'AA:BB:CC', kind: HwbChipKind.none);
-      expect(result.uid, equals('AA:BB:CC'));
-      expect(result.kind, equals(HwbChipKind.none));
-      expect(result.triage, isNull);
-      expect(result.guardianRecord, isNull);
-    });
-
-    test('stores triage when provided', () {
-      final triage = MockTriageSummary();
-      final result = HwbChipReadResult(
-        uid: 'AA:BB:CC',
-        kind: HwbChipKind.triage,
-        triage: triage,
-      );
-      expect(result.kind, equals(HwbChipKind.triage));
-      expect(result.triage, same(triage));
-      expect(result.guardianRecord, isNull);
-    });
-
-    test('stores guardianRecord when provided', () {
-      final guardianRecord = <String, dynamic>{'name': 'Ana Pérez'};
-      final result = HwbChipReadResult(
-        uid: 'AA:BB:CC',
-        kind: HwbChipKind.guardian,
-        guardianRecord: guardianRecord,
-      );
-      expect(result.kind, equals(HwbChipKind.guardian));
-      expect(result.guardianRecord, same(guardianRecord));
-      expect(result.triage, isNull);
-    });
-  });
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // Exception classes
-  // ════════════════════════════════════════════════════════════════════════════
-
-  group('NfcNotAvailableException', () {
-    test('toString returns descriptive message', () {
-      expect(
-        NfcNotAvailableException().toString(),
-        equals('NFC is not available on this device.'),
-      );
-    });
-  });
-
-  group('NfcWriteException', () {
-    test('toString returns provided message', () {
-      const msg = 'Write failed: something went wrong';
-      expect(NfcWriteException(msg).toString(), equals(msg));
-    });
-  });
-
-  group('NfcReadException', () {
-    test('toString returns provided message', () {
-      const msg = 'Read failed: something went wrong';
-      expect(NfcReadException(msg).toString(), equals(msg));
-    });
-  });
-
-  group('NfcUidMismatchException', () {
-    test('stores expected and actual UIDs', () {
-      final exception = NfcUidMismatchException(
-        expected: 'AA:BB:CC',
-        actual: 'DD:EE:FF',
-      );
-      expect(exception.expected, equals('AA:BB:CC'));
-      expect(exception.actual, equals('DD:EE:FF'));
-    });
-
-    test('toString describes the mismatch', () {
-      final exception = NfcUidMismatchException(
-        expected: 'AA:BB:CC',
-        actual: 'DD:EE:FF',
-      );
-      expect(
-        exception.toString(),
-        equals(
-          'Scanned chip UID (DD:EE:FF) does not match expected UID (AA:BB:CC).',
+      await expectLater(
+        service.writeTriagePayload({'a': 1}),
+        throwsA(
+          isA<NfcPayloadTooLargeException>().having(
+            (e) => e.overflowBytes,
+            'overflowBytes',
+            1,
+          ),
         ),
       );
     });
+
+    test('el payload del guardián paga más overhead que el de triage', () {
+      // 'application/vnd.hwb.guardian' es dos caracteres más largo.
+      final triage = _messageOf(kHwbNdefMimeType, Uint8List(300)).byteLength;
+      final guardian = _messageOf(
+        kHwbGuardianMimeType,
+        Uint8List(300),
+      ).byteLength;
+      expect(guardian, triage + 2);
+    });
+
+    test('NfcPayloadTooLargeException desglosa los tres números', () {
+      final e = NfcPayloadTooLargeException(
+        messageBytes: 819,
+        payloadBytes: 787,
+        chipCapacity: 492,
+      );
+      expect(e.overflowBytes, 327);
+      expect(e.toString(), contains('819'));
+      expect(e.toString(), contains('492'));
+      expect(e.toString(), contains('327'));
+    });
   });
 
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
   // writeTriagePayload
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
   group('writeTriagePayload', () {
-    test('throws NfcNotAvailableException when NFC is unavailable', () async {
-      fakeManager.isAvailableResult = false;
+    setUp(() {
+      when(
+        () => codec.encode(any()),
+      ).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
+    });
 
-      expect(
-        () => service.writeTriagePayload(tPayload),
-        throwsA(isA<NfcNotAvailableException>()),
+    test('escribe un único registro MIME de tipo triage', () async {
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      final result = await service.writeTriagePayload({'fn': 'Martha'});
+
+      expect(result.uid, kExpectedUid);
+      expect(result.bytesWritten, 3);
+      expect(ndef.written!.records, hasLength(1));
+      final record = ndef.written!.records.single;
+      expect(record.typeNameFormat, TypeNameFormat.media);
+      expect(String.fromCharCodes(record.type), kHwbNdefMimeType);
+      expect(record.payload, orderedEquals([1, 2, 3]));
+      expect(record.identifier, isEmpty);
+    });
+
+    test('cifra antes de pedir el tap, no durante', () async {
+      // Si encode() ocurriera dentro de withTag, el chip tendría que quedarse
+      // en el campo mientras corre CBOR + DEFLATE + AES-GCM.
+      final service = _service(codec, _blankChip());
+      await service.writeTriagePayload({'fn': 'Martha'});
+      verify(() => codec.encode({'fn': 'Martha'})).called(1);
+    });
+
+    test('falla si el chip no tiene identificador legible', () async {
+      final service = _service(
+        codec,
+        HwbTag(
+          uid: '',
+          ndef: _FakeNdef(maxSize: kNtag215MaxSize),
+        ),
+      );
+      await expectLater(
+        service.writeTriagePayload({'a': 1}),
+        throwsA(isA<NfcWriteException>()),
       );
     });
 
-    test('completes with error when UID cannot be extracted', () async {
-      when(() => codec.encode(tPayload)).thenAnswer((_) async => tEncrypted);
-
-      final tag = _tagWithoutUid();
-      final future = service.writeTriagePayload(tPayload);
-
-      await Future.delayed(Duration.zero);
-
-      expect(future, throwsA(isA<NfcWriteException>()));
-      await fakeManager.onDiscoveredCapture!(tag);
-      expect(fakeManager.stopSessionCalled, isTrue);
-    });
-
-    test('completes with error when identifier is not a list', () async {
-      when(() => codec.encode(tPayload)).thenAnswer((_) async => tEncrypted);
-
-      final tag = _tagWithNonListIdentifier();
-      final future = service.writeTriagePayload(tPayload);
-
-      await Future.delayed(Duration.zero);
-
-      expect(future, throwsA(isA<NfcWriteException>()));
-      await fakeManager.onDiscoveredCapture!(tag);
-    });
-
-    test('completes with error when chip does not support NDEF', () async {
-      when(() => codec.encode(tPayload)).thenAnswer((_) async => tEncrypted);
-
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-      });
-
-      final future = service.writeTriagePayload(tPayload);
-
-      await Future.delayed(Duration.zero);
-
-      expect(
-        future,
+    test('falla si el chip no está formateado como NDEF', () async {
+      // Una DESFire virgen se ve así: Ndef.from(tag) devuelve null.
+      final service = _service(codec, const HwbTag(uid: kExpectedUid));
+      await expectLater(
+        service.writeTriagePayload({'a': 1}),
         throwsA(
           isA<NfcWriteException>().having(
             (e) => e.message,
@@ -305,1132 +271,542 @@ void main() {
           ),
         ),
       );
-      await fakeManager.onDiscoveredCapture!(tag);
     });
 
-    test('completes with error when chip is read-only', () async {
-      when(() => codec.encode(tPayload)).thenAnswer((_) async => tEncrypted);
+    test('falla si el chip es de solo lectura', () async {
+      final service = _service(
+        codec,
+        HwbTag(
+          uid: kExpectedUid,
+          ndef: _FakeNdef(maxSize: kNtag215MaxSize, isWritable: false),
+        ),
+      );
+      await expectLater(
+        service.writeTriagePayload({'a': 1}),
+        throwsA(isA<NfcWriteException>()),
+      );
+    });
 
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': {'isWritable': false, 'maxSize': 540, 'cachedMessage': null},
-      });
-
-      final future = service.writeTriagePayload(tPayload);
-
-      await Future.delayed(Duration.zero);
-
-      expect(
-        future,
-        throwsA(
-          isA<NfcWriteException>().having(
-            (e) => e.message,
-            'message',
-            contains('read-only'),
+    test('propaga el error del chip si write() falla', () async {
+      final service = _service(
+        codec,
+        HwbTag(
+          uid: kExpectedUid,
+          ndef: _FakeNdef(
+            maxSize: kNtag215MaxSize,
+            writeError: StateError('tag lost'),
           ),
         ),
       );
-      await fakeManager.onDiscoveredCapture!(tag);
+      await expectLater(
+        service.writeTriagePayload({'a': 1}),
+        throwsA(isA<StateError>()),
+      );
     });
 
-    test('completes with error when payload exceeds chip capacity', () async {
-      final largePayload = Uint8List(1000);
-      when(() => codec.encode(tPayload)).thenAnswer((_) async => largePayload);
-
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': {'isWritable': true, 'maxSize': 144, 'cachedMessage': null},
-      });
-
-      final future = service.writeTriagePayload(tPayload);
-
-      await Future.delayed(Duration.zero);
-
-      expect(
-        future,
-        throwsA(
-          isA<NfcWriteException>().having(
-            (e) => e.message,
-            'message',
-            contains('too large'),
-          ),
+    test('propaga NfcTimeoutException de la radio', () async {
+      final service = NfcPayloadService(
+        codec: codec,
+        tagSource: _FakeTagSource.throws(
+          NfcTimeoutException(const Duration(seconds: 20)),
         ),
       );
-      await fakeManager.onDiscoveredCapture!(tag);
-    });
-
-    test('returns NfcWriteResult on successful write', () async {
-      when(() => codec.encode(tPayload)).thenAnswer((_) async => tEncrypted);
-
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': {'isWritable': true, 'maxSize': 540, 'cachedMessage': null},
-      });
-
-      final future = service.writeTriagePayload(tPayload);
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
-      expect(result.uid, equals(kExpectedUid));
-      expect(result.bytesWritten, equals(tEncrypted.length));
-      expect(result.chipCapacity, equals(540));
-    });
-
-    for (final techKey in ['nfca', 'nfcb', 'nfcv', 'nfcf', 'iso7816']) {
-      test('extracts UID from tech key "$techKey"', () async {
-        when(() => codec.encode(tPayload)).thenAnswer((_) async => tEncrypted);
-
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenReturn({
-          techKey: {
-            'identifier': [0xAB, 0xCD, 0xEF],
-          },
-          'ndef': <String, dynamic>{
-            'isWritable': true,
-            'maxSize': 540,
-            'cachedMessage': null,
-          },
-        });
-
-        final future = service.writeTriagePayload(tPayload);
-
-        await Future.delayed(Duration.zero);
-        await fakeManager.onDiscoveredCapture!(tag);
-
-        final result = await future;
-        expect(result.uid, equals(kExpectedUid));
-      });
-    }
-
-    test('completes with NfcWriteException on NFC session error', () async {
-      when(() => codec.encode(tPayload)).thenAnswer((_) async => tEncrypted);
-
-      final future = service.writeTriagePayload(tPayload);
-
-      await Future.delayed(Duration.zero);
-
-      expect(
-        future,
-        throwsA(
-          isA<NfcWriteException>().having(
-            (e) => e.message,
-            'message',
-            contains('NFC error'),
-          ),
-        ),
+      await expectLater(
+        service.writeTriagePayload({'a': 1}),
+        throwsA(isA<NfcTimeoutException>()),
       );
-      await fakeManager.onErrorCapture!('hardware error');
-      expect(fakeManager.stopSessionCalled, isTrue);
     });
 
-    test(
-      'wraps unexpected exceptions thrown inside onDiscovered as NfcWriteException',
-      () async {
-        when(() => codec.encode(tPayload)).thenAnswer((_) async => tEncrypted);
-
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenThrow(Exception('boom'));
-
-        final future = service.writeTriagePayload(tPayload);
-
-        await Future.delayed(Duration.zero);
-
-        expect(
-          future,
-          throwsA(
-            isA<NfcWriteException>().having(
-              (e) => e.message,
-              'message',
-              startsWith('Write failed:'),
-            ),
-          ),
-        );
-        await fakeManager.onDiscoveredCapture!(tag);
-      },
-    );
-
-    test(
-      'ignores second onDiscovered call after completer is already completed',
-      () async {
-        when(() => codec.encode(tPayload)).thenAnswer((_) async => tEncrypted);
-
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenReturn({
-          'nfca': {
-            'identifier': [0xAB, 0xCD, 0xEF],
-          },
-          'ndef': <String, dynamic>{
-            'isWritable': true,
-            'maxSize': 540,
-            'cachedMessage': null,
-          },
-        });
-
-        final future = service.writeTriagePayload(tPayload);
-
-        await Future.delayed(Duration.zero);
-        await fakeManager.onDiscoveredCapture!(tag);
-        final result = await future;
-        expect(result.uid, equals(kExpectedUid));
-
-        expect(() => fakeManager.onDiscoveredCapture!(tag), returnsNormally);
-      },
-    );
-
-    test('completes with NfcUidMismatchException when scanned UID does not '
-        'match expectedUid', () async {
-      when(() => codec.encode(tPayload)).thenAnswer((_) async => tEncrypted);
-
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-      });
-
-      final future = service.writeTriagePayload(
-        tPayload,
-        expectedUid: '11:22:33',
+    test('propaga NfcCancelledException de la radio', () async {
+      final service = NfcPayloadService(
+        codec: codec,
+        tagSource: _FakeTagSource.throws(NfcCancelledException()),
       );
+      await expectLater(
+        service.writeTriagePayload({'a': 1}),
+        throwsA(isA<NfcCancelledException>()),
+      );
+    });
+  });
 
-      await Future.delayed(Duration.zero);
+  // ══════════════════════════════════════════════════════════════════════════
+  // expectedUid — no sellar los datos de alguien en el chip equivocado
+  // ══════════════════════════════════════════════════════════════════════════
 
-      expect(
-        future,
+  group('expectedUid', () {
+    setUp(() {
+      when(
+        () => codec.encode(any()),
+      ).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
+    });
+
+    test('rechaza el tap cuando el UID no corresponde', () async {
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      final service = _service(codec, HwbTag(uid: '11:22:33', ndef: ndef));
+
+      await expectLater(
+        service.writeTriagePayload({'a': 1}, expectedUid: kExpectedUid),
         throwsA(
           isA<NfcUidMismatchException>()
-              .having((e) => e.expected, 'expected', '11:22:33')
-              .having((e) => e.actual, 'actual', kExpectedUid),
+              .having((e) => e.expected, 'expected', kExpectedUid)
+              .having((e) => e.actual, 'actual', '11:22:33'),
         ),
       );
-      await fakeManager.onDiscoveredCapture!(tag);
-      expect(fakeManager.stopSessionCalled, isTrue);
+      expect(ndef.written, isNull, reason: 'no debe escribir el chip ajeno');
     });
 
-    test('succeeds when expectedUid matches the scanned UID despite formatting '
-        'differences (case and separators)', () async {
-      when(() => codec.encode(tPayload)).thenAnswer((_) async => tEncrypted);
+    test('acepta el mismo UID con formato distinto', () async {
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      final service = _service(codec, HwbTag(uid: 'ab:cd:ef', ndef: ndef));
+      await service.writeTriagePayload({'a': 1}, expectedUid: 'AB-CD-EF');
+      expect(ndef.written, isNotNull);
+    });
 
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': {'isWritable': true, 'maxSize': 540, 'cachedMessage': null},
-      });
+    test('sin expectedUid escribe cualquier chip', () async {
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      final service = _service(codec, HwbTag(uid: '99:99', ndef: ndef));
+      await service.writeTriagePayload({'a': 1});
+      expect(ndef.written, isNotNull);
+    });
 
-      // Lowercase, no colons -- must normalize to match 'AB:CD:EF'.
-      final future = service.writeTriagePayload(
-        tPayload,
-        expectedUid: 'abcdef',
+    test('también aplica a la tarjeta del guardián', () async {
+      final service = _service(
+        codec,
+        HwbTag(
+          uid: '11:22',
+          ndef: _FakeNdef(maxSize: kNtag215MaxSize),
+        ),
       );
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
-      expect(result.uid, equals(kExpectedUid));
+      await expectLater(
+        service.writeGuardianPayload({'a': 1}, expectedUid: kExpectedUid),
+        throwsA(isA<NfcUidMismatchException>()),
+      );
     });
   });
 
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
   // writeGuardianPayload
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
   group('writeGuardianPayload', () {
-    const tGuardianPayload = <String, dynamic>{
-      'name': 'Ana Pérez',
-      'record': 'full',
-      'contacts': ['Juan Pérez'],
-    };
+    setUp(() {
+      when(
+        () => codec.encode(any()),
+      ).thenAnswer((_) async => Uint8List.fromList([9, 8, 7]));
+    });
 
-    test('throws NfcNotAvailableException when NFC is unavailable', () async {
-      fakeManager.isAvailableResult = false;
+    test('usa el MIME del guardián, no el de triage', () async {
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+      await service.writeGuardianPayload({'patientInfo': {}});
+      final record = ndef.written!.records.single;
+      expect(String.fromCharCodes(record.type), kHwbGuardianMimeType);
+    });
 
+    test('reporta capacidad y utilización del chip', () async {
+      final ndef = _FakeNdef(maxSize: 888); // NTAG216
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+      final result = await service.writeGuardianPayload({'a': 1});
+      expect(result.chipCapacity, 888);
+      expect(result.bytesWritten, 3);
+      expect(result.utilizationPercent, lessThan(10));
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // writeGuardianRecord — capacidad dinámica (fit calculado dentro del tap)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('writeGuardianRecord', () {
+    setUp(() {
+      when(
+        () => codec.encode(any()),
+      ).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
+    });
+
+    /// A fit builder that records the budget it was handed and returns a payload
+    /// of [kept] consultations out of [total].
+    GuardianFitBuilder recordingBuilder({
+      required List<int> budgetSink,
+      int kept = 1,
+      int total = 3,
+    }) {
+      return (int budget) {
+        budgetSink.add(budget);
+        return GuardianPayloadFit(
+          payload: const {'a': 1},
+          includedConsultations: kept,
+          includedVaccines: 0,
+          totalConsultations: total,
+          totalVaccines: 0,
+          estimatedBytes: 3,
+          fits: true,
+        );
+      };
+    }
+
+    test('hands buildFit the chip capacity minus record overhead', () async {
+      final budgets = <int>[];
+      final ndef = _FakeNdef(maxSize: 888); // NTAG216
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      await service.writeGuardianRecord(
+        buildFit: recordingBuilder(budgetSink: budgets),
+      );
+
+      // Overhead is the byteLength of an empty guardian MIME record. The budget
+      // must be strictly below the raw chip capacity.
+      expect(budgets, hasLength(1));
+      expect(budgets.single, lessThan(888));
+      expect(budgets.single, greaterThan(888 - 60)); // overhead is small
+    });
+
+    test('carries the fit back on the result', () async {
+      final ndef = _FakeNdef(maxSize: 888);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      final result = await service.writeGuardianRecord(
+        buildFit: recordingBuilder(budgetSink: <int>[], kept: 1, total: 3),
+      );
+
+      expect(result.fit, isNotNull);
+      expect(result.fit!.droppedConsultations, 2);
+      expect(result.fit!.isPartial, isTrue);
+    });
+
+    test('writes one guardian MIME record', () async {
+      final ndef = _FakeNdef(maxSize: 888);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      await service.writeGuardianRecord(
+        buildFit: recordingBuilder(budgetSink: <int>[]),
+      );
+
+      expect(ndef.written!.records, hasLength(1));
       expect(
-        () => service.writeGuardianPayload(tGuardianPayload),
-        throwsA(isA<NfcNotAvailableException>()),
+        String.fromCharCodes(ndef.written!.records.single.type),
+        kHwbGuardianMimeType,
       );
     });
 
-    test('returns NfcWriteResult on successful write', () async {
-      final guardianEncrypted = Uint8List.fromList([9, 9, 9, 9]);
-      when(
-        () => codec.encode(tGuardianPayload),
-      ).thenAnswer((_) async => guardianEncrypted);
-
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': {'isWritable': true, 'maxSize': 4096, 'cachedMessage': null},
-      });
-
-      final future = service.writeGuardianPayload(tGuardianPayload);
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
-      expect(result.uid, equals(kExpectedUid));
-      expect(result.bytesWritten, equals(guardianEncrypted.length));
-      expect(result.chipCapacity, equals(4096));
-      verify(() => codec.encode(tGuardianPayload)).called(1);
-    });
-
-    test('completes with NfcUidMismatchException when expectedUid does not '
-        'match the guardian card UID', () async {
-      when(
-        () => codec.encode(tGuardianPayload),
-      ).thenAnswer((_) async => tEncrypted);
-
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-      });
-
-      final future = service.writeGuardianPayload(
-        tGuardianPayload,
-        expectedUid: '99:88:77',
+    test('falla si el chip no tiene identificador legible', () async {
+      final service = _service(
+        codec,
+        HwbTag(uid: '', ndef: _FakeNdef(maxSize: 888)),
       );
-
-      await Future.delayed(Duration.zero);
-
-      expect(future, throwsA(isA<NfcUidMismatchException>()));
-      await fakeManager.onDiscoveredCapture!(tag);
+      await expectLater(
+        service.writeGuardianRecord(
+          buildFit: recordingBuilder(budgetSink: <int>[]),
+        ),
+        throwsA(isA<NfcWriteException>()),
+      );
     });
 
-    test('completes with error when payload exceeds chip capacity', () async {
-      final largePayload = Uint8List(5000);
-      when(
-        () => codec.encode(tGuardianPayload),
-      ).thenAnswer((_) async => largePayload);
-
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': {'isWritable': true, 'maxSize': 4096, 'cachedMessage': null},
-      });
-
-      final future = service.writeGuardianPayload(tGuardianPayload);
-
-      await Future.delayed(Duration.zero);
-
-      expect(
-        future,
+    test('falla si el chip no está formateado como NDEF', () async {
+      // Una DESFire virgen se ve así: Ndef.from(tag) devuelve null.
+      final service = _service(codec, const HwbTag(uid: kExpectedUid));
+      await expectLater(
+        service.writeGuardianRecord(
+          buildFit: recordingBuilder(budgetSink: <int>[]),
+        ),
         throwsA(
           isA<NfcWriteException>().having(
             (e) => e.message,
             'message',
-            contains('too large'),
+            contains('NDEF'),
           ),
         ),
       );
-      await fakeManager.onDiscoveredCapture!(tag);
+    });
+
+    test('falla si el chip es de solo lectura', () async {
+      final ndef = _FakeNdef(maxSize: 888, isWritable: false);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+      await expectLater(
+        service.writeGuardianRecord(
+          buildFit: recordingBuilder(budgetSink: <int>[]),
+        ),
+        throwsA(isA<NfcWriteException>()),
+      );
+      expect(ndef.written, isNull);
+    });
+
+    test('rejects a chip whose UID does not match', () async {
+      final ndef = _FakeNdef(maxSize: 888);
+      final service = _service(codec, HwbTag(uid: '11:22', ndef: ndef));
+
+      await expectLater(
+        service.writeGuardianRecord(
+          buildFit: recordingBuilder(budgetSink: <int>[]),
+          expectedUid: kExpectedUid,
+        ),
+        throwsA(isA<NfcUidMismatchException>()),
+      );
+      expect(ndef.written, isNull);
+    });
+
+    test('throws when even the trimmed base does not fit', () async {
+      // Encoded payload larger than the tiny chip; nothing left to trim.
+      when(() => codec.encode(any())).thenAnswer((_) async => Uint8List(600));
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      await expectLater(
+        service.writeGuardianRecord(
+          buildFit: (int budget) => const GuardianPayloadFit(
+            payload: {'a': 1},
+            includedConsultations: 0,
+            includedVaccines: 0,
+            totalConsultations: 0,
+            totalVaccines: 0,
+            estimatedBytes: 600,
+            fits: false,
+          ),
+        ),
+        throwsA(isA<NfcPayloadTooLargeException>()),
+      );
+      expect(ndef.written, isNull);
     });
   });
 
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
   // readTriagePayload
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
 
   group('readTriagePayload', () {
-    test('throws NfcNotAvailableException when NFC is unavailable', () async {
-      fakeManager.isAvailableResult = false;
+    test('devuelve el triage decodificado', () async {
+      final payload = Uint8List.fromList([1, 2, 3]);
+      when(
+        () => codec.decode(any()),
+      ).thenAnswer((_) async => <String, dynamic>{'fn': 'Martha'});
 
-      expect(
-        () => service.readTriagePayload(),
-        throwsA(isA<NfcNotAvailableException>()),
-      );
+      final service = _service(codec, _chipWith(kHwbNdefMimeType, payload));
+      final result = await service.readTriagePayload();
+
+      expect(result.uid, kExpectedUid);
+      expect(result.triage, isNotNull);
+      verify(() => codec.decode(payload)).called(1);
     });
 
-    test(
-      'completes with NfcReadException when UID cannot be extracted',
-      () async {
-        final tag = _tagWithoutUid();
-        final future = service.readTriagePayload();
+    test('triage null cuando el chip está en blanco', () async {
+      final service = _service(codec, _blankChip());
+      final result = await service.readTriagePayload();
+      expect(result.uid, kExpectedUid);
+      expect(result.triage, isNull);
+      verifyNever(() => codec.decode(any()));
+    });
 
-        await Future.delayed(Duration.zero);
+    test('triage null cuando el chip no soporta NDEF', () async {
+      final service = _service(codec, const HwbTag(uid: kExpectedUid));
+      final result = await service.readTriagePayload();
+      expect(result.triage, isNull);
+    });
 
-        expect(future, throwsA(isA<NfcReadException>()));
-        await fakeManager.onDiscoveredCapture!(tag);
-      },
-    );
+    test('triage null cuando el registro es de otro MIME', () async {
+      final service = _service(
+        codec,
+        _chipWith(kHwbGuardianMimeType, Uint8List.fromList([1])),
+      );
+      final result = await service.readTriagePayload();
+      expect(result.triage, isNull);
+      verifyNever(() => codec.decode(any()));
+    });
 
-    test(
-      'returns NfcReadResult with null triage when chip has no NDEF support',
-      () async {
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenReturn({
-          'nfca': {
-            'identifier': [0xAB, 0xCD, 0xEF],
-          },
-        });
+    test('triage null cuando el codec no puede descifrar', () async {
+      when(() => codec.decode(any())).thenAnswer((_) async => null);
+      final service = _service(
+        codec,
+        _chipWith(kHwbNdefMimeType, Uint8List.fromList([1])),
+      );
+      final result = await service.readTriagePayload();
+      expect(result.triage, isNull);
+    });
 
-        final future = service.readTriagePayload();
-
-        await Future.delayed(Duration.zero);
-        await fakeManager.onDiscoveredCapture!(tag);
-
-        final result = await future;
-        expect(result.uid, equals(kExpectedUid));
-        expect(result.triage, isNull);
-      },
-    );
-
-    test(
-      'returns NfcReadResult with null triage when cachedMessage is null',
-      () async {
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenReturn({
-          'nfca': {
-            'identifier': [0xAB, 0xCD, 0xEF],
-          },
-          'ndef': <String, dynamic>{
-            'isWritable': true,
-            'maxSize': 540,
-            'cachedMessage': null,
-          },
-        });
-
-        final future = service.readTriagePayload();
-
-        await Future.delayed(Duration.zero);
-        await fakeManager.onDiscoveredCapture!(tag);
-
-        final result = await future;
-        expect(result.uid, equals(kExpectedUid));
-        expect(result.triage, isNull);
-      },
-    );
-
-    test(
-      'returns NfcReadResult with null triage when records list is empty',
-      () async {
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenReturn({
-          'nfca': {
-            'identifier': [0xAB, 0xCD, 0xEF],
-          },
-          'ndef': <String, dynamic>{
-            'isWritable': true,
-            'maxSize': 540,
-            'cachedMessage': {'records': <dynamic>[]},
-          },
-        });
-
-        final future = service.readTriagePayload();
-
-        await Future.delayed(Duration.zero);
-        await fakeManager.onDiscoveredCapture!(tag);
-
-        final result = await future;
-        expect(result.triage, isNull);
-      },
-    );
-
-    test('returns null triage when no record matches HWB MIME type', () async {
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': <String, dynamic>{
-          'isWritable': true,
-          'maxSize': 540,
-          'cachedMessage': {
-            'records': [
-              {
-                'typeNameFormat': 2,
-                'type': Uint8List.fromList(
-                  'application/vnd.OTHER.type'.codeUnits,
+    test('ignora registros cuyo typeNameFormat no es media', () async {
+      final service = _service(
+        codec,
+        HwbTag(
+          uid: kExpectedUid,
+          ndef: _FakeNdef(
+            maxSize: kNtag215MaxSize,
+            cachedMessage: NdefMessage(
+              records: [
+                NdefRecord(
+                  typeNameFormat: TypeNameFormat.wellKnown,
+                  type: Uint8List.fromList('T'.codeUnits),
+                  identifier: Uint8List(0),
+                  payload: Uint8List.fromList([1, 2, 3]),
                 ),
-                'identifier': Uint8List(0),
-                'payload': Uint8List.fromList([9, 8, 7]),
-              },
-            ],
-          },
-        },
-      });
-
-      final future = service.readTriagePayload();
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
-      expect(result.triage, isNull);
-    });
-
-    test('returns null triage when codec.decode returns null', () async {
-      final hwbPayload = Uint8List.fromList([10, 20, 30]);
-      when(() => codec.decode(hwbPayload)).thenAnswer((_) async => null);
-
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': <String, dynamic>{
-          'isWritable': true,
-          'maxSize': 540,
-          'cachedMessage': {
-            'records': [
-              {
-                'typeNameFormat': 2,
-                'type': Uint8List.fromList(kHwbNdefMimeType.codeUnits),
-                'identifier': Uint8List(0),
-                'payload': hwbPayload,
-              },
-            ],
-          },
-        },
-      });
-
-      final future = service.readTriagePayload();
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
-      expect(result.uid, equals(kExpectedUid));
-      expect(result.triage, isNull);
-    });
-
-    test(
-      'returns NfcReadResult with triage when chip has valid HWB payload',
-      () async {
-        final hwbPayload = Uint8List.fromList([10, 20, 30]);
-        final decoded = <String, dynamic>{'fn': 'Juan', 'ln': 'Pérez'};
-
-        when(() => codec.decode(hwbPayload)).thenAnswer((_) async => decoded);
-
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenReturn({
-          'nfca': {
-            'identifier': [0xAB, 0xCD, 0xEF],
-          },
-          'ndef': <String, dynamic>{
-            'isWritable': true,
-            'maxSize': 540,
-            'cachedMessage': {
-              'records': [
-                {
-                  'typeNameFormat': 2,
-                  'type': Uint8List.fromList(kHwbNdefMimeType.codeUnits),
-                  'identifier': Uint8List(0),
-                  'payload': hwbPayload,
-                },
               ],
-            },
-          },
-        });
-
-        final future = service.readTriagePayload();
-
-        await Future.delayed(Duration.zero);
-        await fakeManager.onDiscoveredCapture!(tag);
-
-        final result = await future;
-        expect(result.uid, equals(kExpectedUid));
-        expect(result.triage, isNotNull);
-      },
-    );
-
-    test('completes with NfcReadException on NFC session error', () async {
-      final future = service.readTriagePayload();
-
-      await Future.delayed(Duration.zero);
-
-      expect(
-        future,
-        throwsA(
-          isA<NfcReadException>().having(
-            (e) => e.message,
-            'message',
-            contains('NFC error'),
-          ),
-        ),
-      );
-      await fakeManager.onErrorCapture!('hardware error');
-      expect(fakeManager.stopSessionCalled, isTrue);
-    });
-
-    test(
-      'wraps unexpected exceptions thrown inside onDiscovered as NfcReadException',
-      () async {
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenThrow(Exception('unexpected'));
-
-        final future = service.readTriagePayload();
-
-        await Future.delayed(Duration.zero);
-
-        expect(
-          future,
-          throwsA(
-            isA<NfcReadException>().having(
-              (e) => e.message,
-              'message',
-              startsWith('Read failed:'),
             ),
           ),
-        );
-        await fakeManager.onDiscoveredCapture!(tag);
-      },
-    );
-
-    test(
-      'ignores second onDiscovered call after completer is already completed',
-      () async {
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenReturn({
-          'nfca': {
-            'identifier': [0xAB, 0xCD, 0xEF],
-          },
-          'ndef': <String, dynamic>{
-            'isWritable': true,
-            'maxSize': 540,
-            'cachedMessage': null,
-          },
-        });
-
-        final future = service.readTriagePayload();
-
-        await Future.delayed(Duration.zero);
-        await fakeManager.onDiscoveredCapture!(tag);
-        final result = await future;
-        expect(result.uid, equals(kExpectedUid));
-
-        expect(() => fakeManager.onDiscoveredCapture!(tag), returnsNormally);
-      },
-    );
-
-    test('skips records whose typeNameFormat is not media', () async {
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': <String, dynamic>{
-          'isWritable': true,
-          'maxSize': 540,
-          'cachedMessage': {
-            'records': [
-              {
-                'typeNameFormat': 1,
-                'type': Uint8List.fromList(kHwbNdefMimeType.codeUnits),
-                'identifier': Uint8List(0),
-                'payload': Uint8List.fromList([1, 2, 3]),
-              },
-            ],
-          },
-        },
-      });
-
-      final future = service.readTriagePayload();
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
+        ),
+      );
+      final result = await service.readTriagePayload();
       expect(result.triage, isNull);
+      verifyNever(() => codec.decode(any()));
+    });
+
+    test('falla si el chip no tiene identificador legible', () async {
+      final service = _service(codec, _blankChip(uid: ''));
+      await expectLater(
+        service.readTriagePayload(),
+        throwsA(isA<NfcReadException>()),
+      );
     });
   });
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // readHwbChip
-  // ════════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
+  // readHwbChip — un solo tap, cualquiera de los dos chips
+  // ══════════════════════════════════════════════════════════════════════════
 
   group('readHwbChip', () {
-    test('throws NfcNotAvailableException when NFC is unavailable', () async {
-      fakeManager.isAvailableResult = false;
+    test('none cuando el chip está en blanco de fábrica', () async {
+      // Exactamente lo que reporta un NTAG215 virgen: formateado, mensaje de
+      // 0 bytes. Es el estado en que quedó la tarjeta del guardián al fallar
+      // siempre la escritura por capacidad.
+      final service = _service(codec, _blankChip());
+      final result = await service.readHwbChip();
+      expect(result.kind, HwbChipKind.none);
+      expect(result.uid, kExpectedUid);
+      expect(result.triage, isNull);
+      expect(result.guardianRecord, isNull);
+    });
 
-      expect(
-        () => service.readHwbChip(),
-        throwsA(isA<NfcNotAvailableException>()),
+    test('none cuando el chip no está formateado como NDEF', () async {
+      final service = _service(codec, const HwbTag(uid: kExpectedUid));
+      final result = await service.readHwbChip();
+      expect(result.kind, HwbChipKind.none);
+      expect(result.uid, kExpectedUid);
+    });
+
+    test('guardian cuando el chip trae el registro del guardián', () async {
+      final payload = Uint8List.fromList([5, 5]);
+      when(
+        () => codec.decode(any()),
+      ).thenAnswer((_) async => <String, dynamic>{'patientId': 'x'});
+      final service = _service(codec, _chipWith(kHwbGuardianMimeType, payload));
+
+      final result = await service.readHwbChip();
+
+      expect(result.kind, HwbChipKind.guardian);
+      expect(result.guardianRecord, {'patientId': 'x'});
+      expect(result.triage, isNull);
+    });
+
+    test('triage cuando el chip solo trae el registro de triage', () async {
+      when(
+        () => codec.decode(any()),
+      ).thenAnswer((_) async => <String, dynamic>{'fn': 'Martha'});
+      final service = _service(
+        codec,
+        _chipWith(kHwbNdefMimeType, Uint8List.fromList([1])),
       );
-    });
 
-    test(
-      'returns HwbChipKind.none with empty uid when UID cannot be extracted',
-      () async {
-        final tag = _tagWithoutUid();
-        final future = service.readHwbChip();
+      final result = await service.readHwbChip();
 
-        await Future.delayed(Duration.zero);
-        await fakeManager.onDiscoveredCapture!(tag);
-
-        final result = await future;
-        expect(result.uid, equals(''));
-        expect(result.kind, equals(HwbChipKind.none));
-      },
-    );
-
-    test('returns HwbChipKind.none when chip has no NDEF support', () async {
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-      });
-
-      final future = service.readHwbChip();
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
-      expect(result.uid, equals(kExpectedUid));
-      expect(result.kind, equals(HwbChipKind.none));
-    });
-
-    test('returns HwbChipKind.none when cachedMessage is null', () async {
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': <String, dynamic>{
-          'isWritable': true,
-          'maxSize': 540,
-          'cachedMessage': null,
-        },
-      });
-
-      final future = service.readHwbChip();
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
-      expect(result.kind, equals(HwbChipKind.none));
-    });
-
-    test('returns HwbChipKind.none when records list is empty', () async {
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': <String, dynamic>{
-          'isWritable': true,
-          'maxSize': 540,
-          'cachedMessage': {'records': <dynamic>[]},
-        },
-      });
-
-      final future = service.readHwbChip();
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
-      expect(result.kind, equals(HwbChipKind.none));
-    });
-
-    test('returns HwbChipKind.guardian with decoded record when guardian MIME '
-        'is present', () async {
-      final guardianBytes = Uint8List.fromList([1, 2, 3]);
-      final decoded = <String, dynamic>{'name': 'Ana Pérez', 'record': 'full'};
-      when(() => codec.decode(guardianBytes)).thenAnswer((_) async => decoded);
-
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': <String, dynamic>{
-          'isWritable': true,
-          'maxSize': 4096,
-          'cachedMessage': {
-            'records': [
-              {
-                'typeNameFormat': 2,
-                'type': Uint8List.fromList(kHwbGuardianMimeType.codeUnits),
-                'identifier': Uint8List(0),
-                'payload': guardianBytes,
-              },
-            ],
-          },
-        },
-      });
-
-      final future = service.readHwbChip();
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
-      expect(result.uid, equals(kExpectedUid));
-      expect(result.kind, equals(HwbChipKind.guardian));
-      expect(result.guardianRecord, equals(decoded));
-    });
-
-    test(
-      'returns HwbChipKind.none when guardian payload decode returns null',
-      () async {
-        final guardianBytes = Uint8List.fromList([1, 2, 3]);
-        when(() => codec.decode(guardianBytes)).thenAnswer((_) async => null);
-
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenReturn({
-          'nfca': {
-            'identifier': [0xAB, 0xCD, 0xEF],
-          },
-          'ndef': <String, dynamic>{
-            'isWritable': true,
-            'maxSize': 4096,
-            'cachedMessage': {
-              'records': [
-                {
-                  'typeNameFormat': 2,
-                  'type': Uint8List.fromList(kHwbGuardianMimeType.codeUnits),
-                  'identifier': Uint8List(0),
-                  'payload': guardianBytes,
-                },
-              ],
-            },
-          },
-        });
-
-        final future = service.readHwbChip();
-
-        await Future.delayed(Duration.zero);
-        await fakeManager.onDiscoveredCapture!(tag);
-
-        final result = await future;
-        expect(result.kind, equals(HwbChipKind.none));
-        expect(result.guardianRecord, isNull);
-      },
-    );
-
-    test('prefers the guardian record over the triage record when both are '
-        'present on the chip', () async {
-      final guardianBytes = Uint8List.fromList([1, 2, 3]);
-      final triageBytes = Uint8List.fromList([4, 5, 6]);
-      final decoded = <String, dynamic>{'name': 'Ana Pérez'};
-      when(() => codec.decode(guardianBytes)).thenAnswer((_) async => decoded);
-
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': <String, dynamic>{
-          'isWritable': true,
-          'maxSize': 4096,
-          'cachedMessage': {
-            'records': [
-              {
-                'typeNameFormat': 2,
-                'type': Uint8List.fromList(kHwbNdefMimeType.codeUnits),
-                'identifier': Uint8List(0),
-                'payload': triageBytes,
-              },
-              {
-                'typeNameFormat': 2,
-                'type': Uint8List.fromList(kHwbGuardianMimeType.codeUnits),
-                'identifier': Uint8List(0),
-                'payload': guardianBytes,
-              },
-            ],
-          },
-        },
-      });
-
-      final future = service.readHwbChip();
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
-      expect(result.kind, equals(HwbChipKind.guardian));
-      expect(result.guardianRecord, equals(decoded));
-      verifyNever(() => codec.decode(triageBytes));
-    });
-
-    test('returns HwbChipKind.triage with decoded triage when only the triage '
-        'MIME record is present', () async {
-      final triageBytes = Uint8List.fromList([4, 5, 6]);
-      final decoded = <String, dynamic>{'fn': 'Juan', 'ln': 'Pérez'};
-      when(() => codec.decode(triageBytes)).thenAnswer((_) async => decoded);
-
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': <String, dynamic>{
-          'isWritable': true,
-          'maxSize': 540,
-          'cachedMessage': {
-            'records': [
-              {
-                'typeNameFormat': 2,
-                'type': Uint8List.fromList(kHwbNdefMimeType.codeUnits),
-                'identifier': Uint8List(0),
-                'payload': triageBytes,
-              },
-            ],
-          },
-        },
-      });
-
-      final future = service.readHwbChip();
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
-      expect(result.uid, equals(kExpectedUid));
-      expect(result.kind, equals(HwbChipKind.triage));
+      expect(result.kind, HwbChipKind.triage);
       expect(result.triage, isNotNull);
+      expect(result.guardianRecord, isNull);
     });
 
-    test(
-      'returns HwbChipKind.none when triage payload decode returns null',
-      () async {
-        final triageBytes = Uint8List.fromList([4, 5, 6]);
-        when(() => codec.decode(triageBytes)).thenAnswer((_) async => null);
-
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenReturn({
-          'nfca': {
-            'identifier': [0xAB, 0xCD, 0xEF],
-          },
-          'ndef': <String, dynamic>{
-            'isWritable': true,
-            'maxSize': 540,
-            'cachedMessage': {
-              'records': [
-                {
-                  'typeNameFormat': 2,
-                  'type': Uint8List.fromList(kHwbNdefMimeType.codeUnits),
-                  'identifier': Uint8List(0),
-                  'payload': triageBytes,
-                },
+    test('prefiere el registro del guardián si el chip trae los dos', () async {
+      // El del guardián es un superconjunto del de triage.
+      final guardianPayload = Uint8List.fromList([9]);
+      when(
+        () => codec.decode(any()),
+      ).thenAnswer((_) async => <String, dynamic>{'patientId': 'x'});
+      final service = _service(
+        codec,
+        HwbTag(
+          uid: kExpectedUid,
+          ndef: _FakeNdef(
+            maxSize: kNtag215MaxSize,
+            cachedMessage: NdefMessage(
+              records: [
+                NfcPayloadService.buildMimeRecord(
+                  kHwbNdefMimeType,
+                  Uint8List.fromList([1]),
+                ),
+                NfcPayloadService.buildMimeRecord(
+                  kHwbGuardianMimeType,
+                  guardianPayload,
+                ),
               ],
-            },
-          },
-        });
-
-        final future = service.readHwbChip();
-
-        await Future.delayed(Duration.zero);
-        await fakeManager.onDiscoveredCapture!(tag);
-
-        final result = await future;
-        expect(result.kind, equals(HwbChipKind.none));
-        expect(result.triage, isNull);
-      },
-    );
-
-    test(
-      'returns HwbChipKind.none when no record matches an HWB MIME type',
-      () async {
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenReturn({
-          'nfca': {
-            'identifier': [0xAB, 0xCD, 0xEF],
-          },
-          'ndef': <String, dynamic>{
-            'isWritable': true,
-            'maxSize': 540,
-            'cachedMessage': {
-              'records': [
-                {
-                  'typeNameFormat': 2,
-                  'type': Uint8List.fromList(
-                    'application/vnd.OTHER.type'.codeUnits,
-                  ),
-                  'identifier': Uint8List(0),
-                  'payload': Uint8List.fromList([9, 8, 7]),
-                },
-              ],
-            },
-          },
-        });
-
-        final future = service.readHwbChip();
-
-        await Future.delayed(Duration.zero);
-        await fakeManager.onDiscoveredCapture!(tag);
-
-        final result = await future;
-        expect(result.kind, equals(HwbChipKind.none));
-      },
-    );
-
-    test('skips records whose typeNameFormat is not media', () async {
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-        'ndef': <String, dynamic>{
-          'isWritable': true,
-          'maxSize': 540,
-          'cachedMessage': {
-            'records': [
-              {
-                'typeNameFormat': 1,
-                'type': Uint8List.fromList(kHwbGuardianMimeType.codeUnits),
-                'identifier': Uint8List(0),
-                'payload': Uint8List.fromList([1, 2, 3]),
-              },
-            ],
-          },
-        },
-      });
-
-      final future = service.readHwbChip();
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-
-      final result = await future;
-      expect(result.kind, equals(HwbChipKind.none));
-    });
-
-    test('completes with NfcReadException on NFC session error', () async {
-      final future = service.readHwbChip();
-
-      await Future.delayed(Duration.zero);
-
-      expect(
-        future,
-        throwsA(
-          isA<NfcReadException>().having(
-            (e) => e.message,
-            'message',
-            contains('NFC error'),
+            ),
           ),
         ),
       );
-      await fakeManager.onErrorCapture!('hardware error');
-      expect(fakeManager.stopSessionCalled, isTrue);
+
+      final result = await service.readHwbChip();
+
+      expect(result.kind, HwbChipKind.guardian);
+      verify(() => codec.decode(guardianPayload)).called(1);
     });
 
-    test('wraps unexpected exceptions thrown inside onDiscovered as '
-        'NfcReadException', () async {
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenThrow(Exception('unexpected'));
-
-      final future = service.readHwbChip();
-
-      await Future.delayed(Duration.zero);
-
-      expect(
-        future,
-        throwsA(
-          isA<NfcReadException>().having(
-            (e) => e.message,
-            'message',
-            startsWith('Read failed:'),
-          ),
-        ),
+    test('none cuando el guardián no se puede descifrar', () async {
+      when(() => codec.decode(any())).thenAnswer((_) async => null);
+      final service = _service(
+        codec,
+        _chipWith(kHwbGuardianMimeType, Uint8List.fromList([1])),
       );
-      await fakeManager.onDiscoveredCapture!(tag);
+      final result = await service.readHwbChip();
+      expect(result.kind, HwbChipKind.none);
+      expect(result.guardianRecord, isNull);
     });
 
-    test('calls stopSession after a successful read', () async {
-      final tag = MockNfcTag();
-      when(() => tag.handle).thenReturn('test_tag_handle');
-      when(() => tag.data).thenReturn({
-        'nfca': {
-          'identifier': [0xAB, 0xCD, 0xEF],
-        },
-      });
-
-      final future = service.readHwbChip();
-
-      await Future.delayed(Duration.zero);
-      await fakeManager.onDiscoveredCapture!(tag);
-      await future;
-
-      expect(fakeManager.stopSessionCalled, isTrue);
-    });
-
-    test(
-      'ignores second onDiscovered call after completer is already completed',
-      () async {
-        final tag = MockNfcTag();
-        when(() => tag.handle).thenReturn('test_tag_handle');
-        when(() => tag.data).thenReturn({
-          'nfca': {
-            'identifier': [0xAB, 0xCD, 0xEF],
-          },
-        });
-
-        final future = service.readHwbChip();
-
-        await Future.delayed(Duration.zero);
-        await fakeManager.onDiscoveredCapture!(tag);
-        final result = await future;
-        expect(result.uid, equals(kExpectedUid));
-
-        expect(() => fakeManager.onDiscoveredCapture!(tag), returnsNormally);
-      },
-    );
-  });
-
-  group('kHwbNdefMimeType', () {
-    test('has the expected value', () {
-      expect(kHwbNdefMimeType, equals('application/vnd.hwb.triage'));
+    test('conserva el UID aunque el chip no sea de HWB', () async {
+      final service = _service(codec, _blankChip(uid: '04:03:46:71'));
+      final result = await service.readHwbChip();
+      expect(result.uid, '04:03:46:71');
+      expect(result.kind, HwbChipKind.none);
     });
   });
 
-  group('kHwbGuardianMimeType', () {
-    test('has the expected value', () {
-      expect(kHwbGuardianMimeType, equals('application/vnd.hwb.guardian'));
+  // ══════════════════════════════════════════════════════════════════════════
+  // Objetos de valor y excepciones
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('NfcWriteResult', () {
+    test('utilizationPercent se calcula sobre el mensaje, no el payload', () {
+      const result = NfcWriteResult(
+        uid: 'AA',
+        bytesWritten: 50,
+        messageBytes: 100,
+        chipCapacity: 200,
+      );
+      expect(result.utilizationPercent, 50.0);
+    });
+  });
+
+  group('HwbChipReadResult', () {
+    test('los campos opcionales son null por defecto', () {
+      const result = HwbChipReadResult(uid: 'AA', kind: HwbChipKind.none);
+      expect(result.triage, isNull);
+      expect(result.guardianRecord, isNull);
+    });
+  });
+
+  group('excepciones', () {
+    test('NfcWriteException devuelve su mensaje', () {
+      expect(NfcWriteException('boom').toString(), 'boom');
+    });
+
+    test('NfcReadException devuelve su mensaje', () {
+      expect(NfcReadException('boom').toString(), 'boom');
+    });
+
+    test('NfcUidMismatchException describe ambos UIDs', () {
+      final e = NfcUidMismatchException(expected: 'AA:BB', actual: 'CC:DD');
+      expect(e.toString(), contains('AA:BB'));
+      expect(e.toString(), contains('CC:DD'));
+    });
+
+    test('NfcNotAvailableException es una sola clase en toda la app', () {
+      // Antes estaba declarada por separado en nfc_service_mobile.dart y en
+      // nfc_payload_service.dart: dos clases distintas con el mismo nombre que
+      // ningún archivo podía importar a la vez.
+      expect(NfcNotAvailableException().toString(), isNotEmpty);
     });
   });
 }

@@ -1,4 +1,4 @@
-// test/unit/nfc/sync_engine_test.dart
+// test/unit/sync_engine_test.dart
 
 import 'dart:async';
 
@@ -39,9 +39,16 @@ void main() {
 
   // Helpers ------------------------------------------------------------
 
-  MockLocalPatientEntry buildEntry(String id, {PatientFullRecord? record}) {
+  MockLocalPatientEntry buildEntry(
+    String id, {
+    PatientFullRecord? record,
+    String? createdAt,
+  }) {
     final entry = MockLocalPatientEntry();
     when(() => entry.patientId).thenReturn(id);
+    when(
+      () => entry.createdAt,
+    ).thenReturn(createdAt ?? '2026-07-24T10:00:00.000Z');
     when(() => entry.toPatientRecord()).thenReturn(record);
     return entry;
   }
@@ -66,7 +73,9 @@ void main() {
 
     when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
     when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
-    when(() => localDb.markSynced(any())).thenAnswer((_) async {});
+    when(
+      () => localDb.markSynced(any(), createdAt: any(named: 'createdAt')),
+    ).thenAnswer((_) async {});
     when(() => localDb.markSyncError(any(), any())).thenAnswer((_) async {});
     when(
       () => localDb.markSyncError(
@@ -140,8 +149,12 @@ void main() {
       await engine.syncAll();
 
       verify(() => patientRepo.syncPatient(any())).called(2);
-      verify(() => localDb.markSynced('A')).called(1);
-      verify(() => localDb.markSynced('B')).called(1);
+      verify(
+        () => localDb.markSynced('A', createdAt: any(named: 'createdAt')),
+      ).called(1);
+      verify(
+        () => localDb.markSynced('B', createdAt: any(named: 'createdAt')),
+      ).called(1);
       expect(engine.pendingCount.value, 0);
     });
 
@@ -183,7 +196,9 @@ void main() {
         await engine.syncAll();
 
         verifyNever(() => patientRepo.syncPatient(any()));
-        verifyNever(() => localDb.markSynced(any()));
+        verifyNever(
+          () => localDb.markSynced(any(), createdAt: any(named: 'createdAt')),
+        );
         verifyNever(() => localDb.markSyncError(any(), any()));
       },
     );
@@ -208,7 +223,9 @@ void main() {
 
         await engine.syncAll();
 
-        verify(() => localDb.markSynced('A')).called(1);
+        verify(
+          () => localDb.markSynced('A', createdAt: any(named: 'createdAt')),
+        ).called(1);
         expect(syncedId, 'A');
         expect(syncedOk, true);
       },
@@ -267,27 +284,32 @@ void main() {
       ).called(1);
     });
 
-    test('ApiException 409 marca conflicto de manilla y no reintenta', () async {
-      final entry = buildEntry('A', record: MockPatientFullRecord());
-      when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => [entry]);
-      final exception = buildApiException(
-        409,
-        'A patient is already registered with this device tag.',
-      );
-      when(() => patientRepo.syncPatient(any())).thenThrow(exception);
-
-      await engine.syncAll();
-
-      // The 409 status is persisted so the queue UI can render a dedicated
-      // conflict state and skip the (futile) sync action.
-      verify(
-        () => localDb.markSyncError(
-          'A',
+    test(
+      'ApiException 409 marca conflicto de manilla y no reintenta',
+      () async {
+        final entry = buildEntry('A', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(),
+        ).thenAnswer((_) async => [entry]);
+        final exception = buildApiException(
+          409,
           'A patient is already registered with this device tag.',
-          statusCode: 409,
-        ),
-      ).called(1);
-    });
+        );
+        when(() => patientRepo.syncPatient(any())).thenThrow(exception);
+
+        await engine.syncAll();
+
+        // The 409 status is persisted so the queue UI can render a dedicated
+        // conflict state and skip the (futile) sync action.
+        verify(
+          () => localDb.markSyncError(
+            'A',
+            'A patient is already registered with this device tag.',
+            statusCode: 409,
+          ),
+        ).called(1);
+      },
+    );
 
     test('ApiException 422 marca error y no reintenta', () async {
       final entry = buildEntry('A', record: MockPatientFullRecord());
@@ -337,7 +359,8 @@ void main() {
         await engine.syncAll();
 
         verify(
-          () => localDb.markSyncError('A', 'error de servidor', statusCode: 500),
+          () =>
+              localDb.markSyncError('A', 'error de servidor', statusCode: 500),
         ).called(1);
       },
     );
@@ -394,7 +417,9 @@ void main() {
         final result = await engine.syncOne('A');
 
         expect(result, true);
-        verify(() => localDb.markSynced('A')).called(1);
+        verify(
+          () => localDb.markSynced('A', createdAt: any(named: 'createdAt')),
+        ).called(1);
       },
     );
 

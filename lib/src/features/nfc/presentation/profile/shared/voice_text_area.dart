@@ -1,4 +1,4 @@
-// lib/src/features/nfc/presentation/register/shared/voice_text_area.dart
+// lib/src/features/nfc/presentation/porfile/shared/voice_text_area.dart
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../../../../design/tokens/app_colors.dart';
@@ -12,6 +12,7 @@ class VoiceTextArea extends StatefulWidget {
     required this.hint,
     this.maxLines = 3,
     required this.onChanged,
+    this.speech,
   });
 
   final String label;
@@ -19,6 +20,7 @@ class VoiceTextArea extends StatefulWidget {
   final String hint;
   final int maxLines;
   final ValueChanged<String> onChanged;
+  final stt.SpeechToText? speech;
 
   @override
   State<VoiceTextArea> createState() => _VoiceTextAreaState();
@@ -26,7 +28,7 @@ class VoiceTextArea extends StatefulWidget {
 
 class _VoiceTextAreaState extends State<VoiceTextArea>
     with SingleTickerProviderStateMixin {
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  late final stt.SpeechToText _speech;
   bool _isListening = false;
   bool _speechAvailable = false;
   String _baseText = '';
@@ -37,6 +39,7 @@ class _VoiceTextAreaState extends State<VoiceTextArea>
   @override
   void initState() {
     super.initState();
+    _speech = widget.speech ?? stt.SpeechToText();
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),

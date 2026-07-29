@@ -106,6 +106,42 @@ class _FakeSyncEngine extends SyncEngine {
       );
 }
 
+class _TestLocaleWrapper extends StatefulWidget {
+  const _TestLocaleWrapper({
+    required this.initialLocale,
+    required this.childBuilder,
+  });
+
+  final String initialLocale;
+  final Widget Function(BuildContext) childBuilder;
+
+  @override
+  State<_TestLocaleWrapper> createState() => _TestLocaleWrapperState();
+}
+
+class _TestLocaleWrapperState extends State<_TestLocaleWrapper> {
+  late String _locale;
+
+  @override
+  void initState() {
+    super.initState();
+    _locale = widget.initialLocale;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppLocale(
+      locale: _locale,
+      setLocale: (newLocale) {
+        setState(() {
+          _locale = newLocale;
+        });
+      },
+      child: Builder(builder: widget.childBuilder),
+    );
+  }
+}
+
 // ============================================================================
 // FIXTURES
 // ============================================================================
@@ -172,7 +208,6 @@ Future<void> _pump(WidgetTester tester, Widget screen) async {
   await tester.pumpAndSettle();
 }
 
-
 /// Scrolls the screen's ListView until [finder] is on screen, then asserts it.
 ///
 /// A ListView is lazy: widening the test surface is not enough, because the
@@ -198,10 +233,9 @@ Widget _buildScreen({
   bool scopeToOwnOrganization = false,
   String locale = 'es',
 }) {
-  return AppLocale(
-    locale: locale,
-    setLocale: (_) {},
-    child: AppScope(
+  return _TestLocaleWrapper(
+    initialLocale: locale,
+    childBuilder: (context) => AppScope(
       authRepository: _FakeAuthRepository(),
       userRepository: userRepo,
       patientRepository: _FakePatientRepository(),
@@ -252,11 +286,18 @@ void main() {
       );
       await _pump(
         tester,
-        _buildScreen(userRepo: userRepo, statsRepo: FakeStatsRepository(_stats())),
+        _buildScreen(
+          userRepo: userRepo,
+          statsRepo: FakeStatsRepository(_stats()),
+        ),
       );
 
       expect(userRepo.callCount, 1);
       expect(find.text('Todas'), findsOneWidget);
+
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+
       expect(find.text('Org A'), findsOneWidget);
       expect(find.text('Org B'), findsOneWidget);
     });
@@ -273,6 +314,10 @@ void main() {
         ),
       );
 
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+
+      // Pulsar la opción 'Org B' dentro del menú desplegado
       await tester.tap(find.text('Org B'));
       await tester.pumpAndSettle();
 
@@ -280,7 +325,9 @@ void main() {
       expect(statsRepo.requestedOrgIds, [null, 'o2']);
     });
 
-    testWidgets('re-tapping the selected chip does not refetch', (tester) async {
+    testWidgets('re-tapping the selected chip does not refetch', (
+      tester,
+    ) async {
       final statsRepo = FakeStatsRepository(_stats());
       await _pump(
         tester,
@@ -290,7 +337,10 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Todas'));
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Todas').last);
       await tester.pumpAndSettle();
 
       expect(statsRepo.callCount, 1);
@@ -431,9 +481,7 @@ void main() {
         tester,
         _buildScreen(
           userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
-          statsRepo: FakeStatsRepository(
-            ApiException('boom', statusCode: 500),
-          ),
+          statsRepo: FakeStatsRepository(ApiException('boom', statusCode: 500)),
         ),
       );
 
@@ -461,21 +509,25 @@ void main() {
   });
 
   group('empty state', () {
-    testWidgets('an organization with no data shows a message, not zeroed bars', (
-      tester,
-    ) async {
-      await _pump(
-        tester,
-        _buildScreen(
-          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
-          statsRepo: FakeStatsRepository(_emptyStats()),
-          scopeToOwnOrganization: true,
-        ),
-      );
+    testWidgets(
+      'an organization with no data shows a message, not zeroed bars',
+      (tester) async {
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+            statsRepo: FakeStatsRepository(_emptyStats()),
+            scopeToOwnOrganization: true,
+          ),
+        );
 
-      expect(find.text('Aún no hay datos para este período.'), findsOneWidget);
-      expect(find.byType(LinearProgressIndicator), findsNothing);
-    });
+        expect(
+          find.text('Aún no hay datos para este período.'),
+          findsOneWidget,
+        );
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+      },
+    );
   });
 
   group('truncated buckets', () {
@@ -532,6 +584,26 @@ void main() {
       );
 
       expect(find.text('All'), findsOneWidget);
+      expect(find.text('— no prior data'), findsOneWidget);
+    });
+
+    testWidgets('switching language from ES to EN updates UI labels', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_stats(patientsDelta: null)),
+          locale: 'es',
+        ),
+      );
+
+      expect(find.text('— sin referencia previa'), findsOneWidget);
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+
       expect(find.text('— no prior data'), findsOneWidget);
     });
   });

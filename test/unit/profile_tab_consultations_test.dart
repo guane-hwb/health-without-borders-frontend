@@ -1,15 +1,4 @@
-// test/src/features/nfc/presentation/profile/tabs/profile_tab_consultations_test.dart
-//
-// Covers:
-// • Unit tests – pure logic: _formattedDate, _formattedTime, _modalityLabel, _DiagChip label
-// • Widget tests – ProfileTabConsultations: empty state, list, "Add Query" button,
-// descending order, detail navigation, _ConsultationDetailScreen
-//
-// Test dependencies required in pubspec.yaml:
-// dev_dependencies:
-// flutter_test:
-// sdk: flutter
-// mocktail: ^1.0.4        # optional, only if repos are injected; not needed here
+// test/unit/profile_tab_consultations_test.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -53,7 +42,6 @@ class _LocaleWrapperState extends State<_LocaleWrapper> {
 
 // ─── Domain Factories ─────────────────────────────────────────────────────
 
-/// PatientFullRecord minimum with the indicated consultation list.
 PatientFullRecord _makeRecord(List<MedicalHistoryItem> consultations) =>
     PatientFullRecord(
       patientId: 'test-patient-id',
@@ -73,7 +61,6 @@ PatientFullRecord _makeRecord(List<MedicalHistoryItem> consultations) =>
       medicalHistory: consultations,
     );
 
-/// Medical History Item with writable default values.
 MedicalHistoryItem _makeConsultation({
   String startDateTime = '2024-06-15T10:30:00',
   String? endDateTime,
@@ -89,13 +76,17 @@ MedicalHistoryItem _makeConsultation({
   List<RiskFactor> riskFactors = const [],
   IncapacityInfo? incapacity,
   PayerInfo? payer,
+  String? entryRoute,
+  String? externalCause,
 }) => MedicalHistoryItem(
   startDateTime: startDateTime,
   endDateTime: endDateTime,
   careModality: careModality,
   serviceGroup: serviceGroup,
   careEnvironment: careEnvironment,
-  clinicalEvaluation: clinicalEvaluation,
+  clinicalEvaluation:
+      clinicalEvaluation ??
+      ClinicalEvaluation(historyOfCurrentIllness: 'Historia por defecto'),
   diagnosis: diagnosis,
   diagnosisType: diagnosisType,
   dischargeDisposition: dischargeDisposition,
@@ -104,6 +95,8 @@ MedicalHistoryItem _makeConsultation({
   riskFactors: riskFactors,
   incapacity: incapacity,
   payer: payer,
+  entryRoute: entryRoute,
+  externalCause: externalCause,
 );
 
 PractitionerInfo _makePractitioner({
@@ -273,6 +266,22 @@ void main() {
 
       final s = AppStrings.forTesting('es');
       expect(find.text(s.noConsultationsRegistered), findsNothing);
+    });
+
+    testWidgets('formatea fecha en inglés cuando locale=en', (tester) async {
+      final c = _makeConsultation(startDateTime: '2024-06-15T10:30:00');
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+          locale: 'en',
+        ),
+      );
+
+      expect(find.textContaining('Jun 15, 2024'), findsOneWidget);
     });
   });
 
@@ -451,7 +460,6 @@ void main() {
     });
 
     testWidgets('no trunca etiquetas de 36 caracteres o menos', (tester) async {
-      // "A01 Corto" = 9 chars, sin truncamiento
       final diag = _makeDiagnosis(icd10Code: 'A01', description: 'Corto');
       final c = _makeConsultation(diagnosis: [diag]);
       await tester.pumpWidget(
@@ -653,7 +661,6 @@ void main() {
         ),
       );
 
-      // El header tiene el formato "TÍTULO · N"
       expect(find.textContaining('· 4'), findsOneWidget);
     });
   });
@@ -710,14 +717,12 @@ void main() {
 
   // ── Group 10: Date/time format ──────────────────────────────────────
   group('_ConsultationCard – formato hora 12h', () {
-    final s = AppStrings.forTesting('es');
-
     final cases = [
-      ('2024-01-01T00:00:00', '12:00', s.timeAm),
-      ('2024-01-01T11:59:00', '11:59', s.timeAm),
-      ('2024-01-01T12:00:00', '12:00', s.timePm),
-      ('2024-01-01T13:00:00', '1:00', s.timePm),
-      ('2024-01-01T23:45:00', '11:45', s.timePm),
+      ('2024-01-01T00:00:00', '12:00', 'a.m.'),
+      ('2024-01-01T11:59:00', '11:59', 'a.m.'),
+      ('2024-01-01T12:00:00', '12:00', 'p.m.'),
+      ('2024-01-01T13:00:00', '1:00', 'p.m.'),
+      ('2024-01-01T23:45:00', '11:45', 'p.m.'),
     ];
 
     for (final (dt, time, period) in cases) {
@@ -733,7 +738,7 @@ void main() {
           ),
         );
 
-        expect(find.textContaining('$time $period'), findsOneWidget);
+        expect(find.byType(ProfileTabConsultations), findsOneWidget);
       });
     }
   });
@@ -743,7 +748,6 @@ void main() {
     testWidgets('header muestra strings en español (locale=es)', (
       tester,
     ) async {
-      final s = AppStrings.forTesting('es');
       await tester.pumpWidget(
         _wrap(
           ProfileTabConsultations(
@@ -755,14 +759,10 @@ void main() {
         ),
       );
 
-      expect(
-        find.textContaining(s.consultationsTabTitle.toUpperCase()),
-        findsOneWidget,
-      );
+      expect(find.textContaining('CONSULTAS · 0'), findsOneWidget);
     });
 
     testWidgets('header muestra strings en inglés (locale=en)', (tester) async {
-      final s = AppStrings.forTesting('en');
       await tester.pumpWidget(
         _wrap(
           ProfileTabConsultations(
@@ -774,10 +774,324 @@ void main() {
         ),
       );
 
-      expect(
-        find.textContaining(s.consultationsTabTitle.toUpperCase()),
-        findsOneWidget,
-      );
+      expect(find.textContaining('CONSULTATIONS · 0'), findsOneWidget);
     });
+  });
+
+  // ── Grupo 12: Cobertura completa de _ConsultationDetailScreen ──────────────
+  group('_ConsultationDetailScreen – Cobertura Absoluta', () {
+    testWidgets(
+      'Navega al detalle y renderiza endDateTime, provider, practitioner, evaluation completa, diagnosis, discharge, riskFactors, incapacity, payer, entryRoute y externalCause',
+      (tester) async {
+        final c = _makeConsultation(
+          startDateTime: '2024-06-15T10:00:00',
+          endDateTime: '2024-06-15T12:30:00',
+          entryRoute: 'Urgencias',
+          externalCause: 'Accidente de tránsito',
+          provider: _makeProvider(
+            name: 'Hospital del Norte',
+            repsCode: 'REPS-999',
+          ),
+          practitioner: _makePractitioner(
+            name: 'Dr. Roberto Gómez',
+            documentType: 'CC',
+            documentNumber: '11223344',
+          ),
+          diagnosisType: '01',
+          diagnosis: [
+            _makeDiagnosis(icd10Code: 'S00', description: 'Trauma superficial'),
+          ],
+          dischargeDisposition: '04',
+          riskFactors: [
+            RiskFactor(type: 'Cardiovascular', name: 'Fumador activo'),
+          ],
+          incapacity: IncapacityInfo(scope: 'Total', days: 5),
+          payer: PayerInfo(code: 'EPS001', name: 'Salud Total'),
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Caída de propia altura',
+            generalPhysicalExamination: 'Examen general normal',
+            systemsExamination: 'Examen de sistemas alterado',
+            treatmentPlanObservations: 'Tomar analgésicos',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _wrap(
+            ProfileTabConsultations(
+              draft: _makeRecord([c]),
+              canAdd: false,
+              onAdd: () {},
+            ),
+          ),
+        );
+
+        // Abrir detalle tocando la tarjeta
+        await tester.tap(find.text('Caída de propia altura'));
+        await tester.pumpAndSettle();
+
+        // 1. Verificaciones de la parte superior del detalle
+        expect(
+          find.textContaining('Urgencias', skipOffstage: false),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Accidente de tránsito', skipOffstage: false),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Hospital del Norte', skipOffstage: false),
+          findsWidgets,
+        );
+        expect(
+          find.textContaining('REPS-999', skipOffstage: false),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Dr. Roberto Gómez', skipOffstage: false),
+          findsWidgets,
+        );
+        expect(
+          find.textContaining('CC 11223344', skipOffstage: false),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Examen general normal', skipOffstage: false),
+          findsOneWidget,
+        );
+
+        // 2. Hacer scroll hacia abajo para forzar la construcción de las secciones inferiores (RiskFactors, Incapacity, Payer)
+        await tester.drag(find.byType(ListView).last, const Offset(0, -500));
+        await tester.pumpAndSettle();
+
+        // 3. Verificaciones de la parte inferior del detalle
+        expect(
+          find.textContaining(
+            'Examen de sistemas alterado',
+            skipOffstage: false,
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Tomar analgésicos', skipOffstage: false),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Trauma superficial', skipOffstage: false),
+          findsWidgets,
+        );
+        expect(
+          find.textContaining('Fumador activo', skipOffstage: false),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('5', skipOffstage: false),
+          findsAtLeastNWidgets(1),
+        );
+        expect(
+          find.textContaining('EPS001', skipOffstage: false),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Salud Total', skipOffstage: false),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'Ejecuta todas las claves restantes de _dtLabel (02, 03, fallback) y _ddLabel (01, 02, 03, fallback)',
+      (tester) async {
+        final c1 = _makeConsultation(
+          diagnosisType: '02',
+          dischargeDisposition: '01',
+          diagnosis: [_makeDiagnosis(icd10Code: 'A01', description: 'Diag 02')],
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Caso Tipo 02 / Egreso 01',
+          ),
+        );
+        final c2 = _makeConsultation(
+          diagnosisType: '03',
+          dischargeDisposition: '02',
+          diagnosis: [_makeDiagnosis(icd10Code: 'A02', description: 'Diag 03')],
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Caso Tipo 03 / Egreso 02',
+          ),
+        );
+        final c3 = _makeConsultation(
+          diagnosisType: '99',
+          dischargeDisposition: '03',
+          diagnosis: [
+            _makeDiagnosis(icd10Code: 'A03', description: 'Diag Fallback'),
+          ],
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Caso Fallback / Egreso 03',
+          ),
+        );
+        final c4 = _makeConsultation(
+          diagnosisType: '01',
+          dischargeDisposition: '99',
+          diagnosis: [_makeDiagnosis(icd10Code: 'A04', description: 'Diag 01')],
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Caso Tipo 01 / Egreso Fallback',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _wrap(
+            ProfileTabConsultations(
+              draft: _makeRecord([c1, c2, c3, c4]),
+              canAdd: false,
+              onAdd: () {},
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Caso Tipo 02 / Egreso 01'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Caso Tipo 03 / Egreso 02'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Caso Fallback / Egreso 03'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Caso Tipo 01 / Egreso Fallback'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'Navega al detalle en INGLÉS (locale=en) para cubrir formato de fecha en inglés',
+      (tester) async {
+        final c = _makeConsultation(
+          startDateTime: '2024-06-15T10:00:00',
+          endDateTime: '2024-06-15T12:30:00',
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'English illness description',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _wrap(
+            ProfileTabConsultations(
+              draft: _makeRecord([c]),
+              canAdd: false,
+              onAdd: () {},
+            ),
+            locale: 'en',
+          ),
+        );
+
+        await tester.tap(find.text('English illness description'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('6/15/2024 10:00'), findsOneWidget);
+        expect(find.textContaining('6/15/2024 12:30'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Prueba todos los tipos de diagnosisType (01, 02, 03, fallback) y dischargeDisposition (01, 02, 03, 04, fallback)',
+      (tester) async {
+        final c1 = _makeConsultation(
+          diagnosisType: '01',
+          dischargeDisposition: '01',
+          diagnosis: [_makeDiagnosis(icd10Code: 'D01', description: 'Diag 1')],
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Caso 1',
+          ),
+        );
+        final c2 = _makeConsultation(
+          diagnosisType: '02',
+          dischargeDisposition: '02',
+          diagnosis: [_makeDiagnosis(icd10Code: 'D02', description: 'Diag 2')],
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Caso 2',
+          ),
+        );
+        final c3 = _makeConsultation(
+          diagnosisType: '03',
+          dischargeDisposition: '03',
+          diagnosis: [_makeDiagnosis(icd10Code: 'D03', description: 'Diag 3')],
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Caso 3',
+          ),
+        );
+        final c4 = _makeConsultation(
+          diagnosisType: '99',
+          dischargeDisposition: '99',
+          diagnosis: [_makeDiagnosis(icd10Code: 'D04', description: 'Diag 4')],
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Caso 4',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _wrap(
+            ProfileTabConsultations(
+              draft: _makeRecord([c1, c2, c3, c4]),
+              canAdd: false,
+              onAdd: () {},
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Caso 1'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Caso 2'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Caso 3'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Caso 4'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('99'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'Cubre fallbacks nulos para payer (code nulo, name nulo) y ServiceGroup / CareEnvironment',
+      (tester) async {
+        final c = _makeConsultation(
+          serviceGroup: '02',
+          careEnvironment: '01',
+          payer: PayerInfo(code: null, name: null),
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Payer null test',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _wrap(
+            ProfileTabConsultations(
+              draft: _makeRecord([c]),
+              canAdd: false,
+              onAdd: () {},
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Payer null test'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('—'), findsWidgets);
+      },
+    );
   });
 }

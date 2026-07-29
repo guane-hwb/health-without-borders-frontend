@@ -1,4 +1,7 @@
+// lib/src/features/sync/presentation/sync_queue_screen.dart
+
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
@@ -6,7 +9,6 @@ import '../../../core/storage/local_database.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../nfc/presentation/profile/patient_profile_screen.dart';
-import '../../nfc/presentation/shared_read_nfc_header.dart';
 
 class SyncQueueScreen extends StatefulWidget {
   const SyncQueueScreen({super.key});
@@ -26,35 +28,113 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final e = await AppScope.of(context).localDatabase.getUnsyncedRecords();
+    final scope = AppScope.of(context);
+    final e = await scope.localDatabase.getUnsyncedRecords();
 
     if (mounted) {
       setState(() {
         _entries = e;
         _loading = false;
       });
+      await scope.syncEngine.refreshPendingCount();
     }
   }
 
   Future<void> _syncAll() async {
+    final s = AppStrings.of(context);
+    final isEs = s.save == 'Guardar';
+    final messenger = ScaffoldMessenger.of(context);
+    final syncEngine = AppScope.of(context).syncEngine;
+
+    final netResult = await Connectivity().checkConnectivity();
+    if (netResult.contains(ConnectivityResult.none)) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              isEs
+                  ? 'Sin conexión a Internet. Conéctese a una red para sincronizar.'
+                  : 'No internet connection. Connect to a network to sync.',
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() => _syncing = true);
-    await AppScope.of(context).syncEngine.syncAll();
-    await _load();
-    if (mounted) {
-      setState(() => _syncing = false);
+    try {
+      await syncEngine.syncAll();
+      await _load();
+      if (mounted) {
+        final remaining = _entries.length;
+        if (remaining == 0) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(s.syncedSuccessfully),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        } else {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                isEs
+                    ? 'Quedan $remaining registros pendientes por sincronizar.'
+                    : '$remaining records remain pending.',
+              ),
+              backgroundColor: Colors.orange.shade800,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              isEs
+                  ? 'Fallo al sincronizar. Intente de nuevo más tarde.'
+                  : 'Sync failed. Please try again later.',
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _syncing = false);
+      }
     }
   }
 
   Future<void> _syncOne(String id) async {
-    final ok = await AppScope.of(context).syncEngine.syncOne(id);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            ok
-                ? AppStrings.of(context).syncedSuccessfully
-                : AppStrings.of(context).syncFailedRetry,
+    final s = AppStrings.of(context);
+    final isEs = s.save == 'Guardar';
+    final messenger = ScaffoldMessenger.of(context);
+    final syncEngine = AppScope.of(context).syncEngine;
+
+    final netResult = await Connectivity().checkConnectivity();
+    if (netResult.contains(ConnectivityResult.none)) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              isEs ? 'Sin conexión a Internet.' : 'No internet connection.',
+            ),
+            backgroundColor: AppColors.error,
           ),
+        );
+      }
+      return;
+    }
+
+    final ok = await syncEngine.syncOne(id);
+    if (mounted) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(ok ? s.syncedSuccessfully : s.syncFailedRetry),
           backgroundColor: ok ? AppColors.success : AppColors.error,
         ),
       );
@@ -95,6 +175,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
         ],
       ),
     );
+
     if (ok == true && mounted) {
       await db.deleteRecord(e.patientId);
       _load();
@@ -111,9 +192,36 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
           children: [
             Column(
               children: [
-                SharedReadNfcHeader(
-                  title: s.syncTitle,
-                  onBack: () => Navigator.of(context).pop(),
+                Container(
+                  color: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: AppColors.white,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          s.syncTitle,
+                          style: const TextStyle(
+                            color: AppColors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      _LocaleSwitcher(),
+                    ],
+                  ),
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
@@ -222,6 +330,47 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
   }
 }
 
+class _LocaleSwitcher extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final locale = AppLocale.of(context).locale;
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: ['es', 'en'].map((lang) {
+          final selected = locale == lang;
+          return GestureDetector(
+            onTap: () => AppLocale.of(context).setLocale(lang),
+            child: Container(
+              margin: const EdgeInsets.only(left: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.95)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                lang.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? AppColors.primary : AppColors.white,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
 class _SyncCard extends StatelessWidget {
   const _SyncCard({
     required this.entry,
@@ -236,26 +385,26 @@ class _SyncCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasErr = entry.syncError?.isNotEmpty == true;
     final isConflict = entry.syncErrorCode == 409;
-    // Locale probe — mirrors the in-file bilingual idiom used elsewhere so we
-    // don't have to touch app_strings.dart for a couple of conflict strings.
+    final hasErr = entry.syncError?.isNotEmpty == true && isConflict;
     final isEs = s.save == 'Guardar';
+
     final String? errorMessage = !hasErr
         ? null
-        : isConflict
-        ? (isEs
+        : (isEs
               ? 'Esta manilla ya está registrada para otro paciente. '
                     'Registra al paciente con una manilla nueva.'
               : 'This bracelet is already registered to another patient. '
-                    'Register the patient with a new bracelet.')
-        : entry.syncError;
+                    'Register the patient with a new bracelet.');
+
     final String badgeLabel = hasErr
-        ? (isConflict ? (isEs ? 'Duplicado' : 'Duplicate') : s.error)
+        ? (isEs ? 'Duplicado' : 'Duplicate')
         : s.pending;
+
     final date = entry.createdAt.contains('T')
         ? entry.createdAt.split('T').first
         : entry.createdAt;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -336,13 +485,7 @@ class _SyncCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    isConflict
-                        ? Icons.nfc
-                        : Icons.error_outline,
-                    size: 15,
-                    color: AppColors.error,
-                  ),
+                  const Icon(Icons.nfc, size: 15, color: AppColors.error),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -362,9 +505,6 @@ class _SyncCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
             child: Row(
               children: [
-                // A 409 conflict can never sync as-is (duplicate device_uid), so
-                // hide the sync action and steer the user to review/delete +
-                // re-register with a new bracelet.
                 if (!isConflict) ...[
                   _btn(
                     Icons.cloud_upload,

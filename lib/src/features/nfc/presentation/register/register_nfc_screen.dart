@@ -11,7 +11,6 @@ import '../../domain/patient_record.dart';
 import '../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../core/nfc/nfc_payload_service.dart';
-import '../../../../core/nfc/nfc_guardian_payload.dart';
 import '../nfc_guided_write.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
@@ -22,11 +21,6 @@ import 'steps/step5_review.dart';
 import 'steps/step6_success.dart';
 import '../../../../core/i18n/app_strings.dart';
 import '../../../home/presentation/home_screen.dart';
-
-/// Conservative usable NDEF capacity (bytes) for the guardian DESFire
-/// EV3 4K. The real limit is enforced by the chip at write time; this
-/// only pre-trims so we rarely hit that hard limit.
-const int _kGuardianCardCapacityBytes = 4000;
 
 class RegisterNfcScreen extends StatefulWidget {
   const RegisterNfcScreen({super.key});
@@ -122,13 +116,14 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
   Future<void> _addVaccine() async {
     if (_savedRecord == null) return;
-    final result = await Navigator.of(context).push<VaccinationRecordItem>(
-      MaterialPageRoute(
-        builder: (_) =>
-            AddVaccineScreen(patient: _savedRecord!, returnToProfile: true),
-      ),
-    );
-    if (result != null) {
+    final result = await Navigator.of(context)
+        .push<List<VaccinationRecordItem>>(
+          MaterialPageRoute(
+            builder: (_) =>
+                AddVaccineScreen(patient: _savedRecord!, returnToProfile: true),
+          ),
+        );
+    if (result != null && result.isNotEmpty) {
       final updated = PatientFullRecord(
         patientId: _savedRecord!.patientId,
         deviceUid: _savedRecord!.deviceUid,
@@ -138,15 +133,22 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         backgroundHistory: _savedRecord!.backgroundHistory,
         allergies: _savedRecord!.allergies,
         medicalHistory: _savedRecord!.medicalHistory,
-        vaccinationRecord: [..._savedRecord!.vaccinationRecord, result],
+        vaccinationRecord: [..._savedRecord!.vaccinationRecord, ...result],
       );
       await _persistLocally(updated);
       if (!mounted) return;
       setState(() => _lastVaccineTime = _formatTimeNow(context));
       final s = AppStrings.of(context);
+      final isEs = s.welcome == 'Bienvenido';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(s.vaccineSaved),
+          content: Text(
+            result.length == 1
+                ? s.vaccineSaved
+                : (isEs
+                      ? '${result.length} vacunas guardadas exitosamente ✓'
+                      : '${result.length} vaccines saved successfully ✓'),
+          ),
           backgroundColor: AppColors.success,
         ),
       );
@@ -207,8 +209,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     }
 
     // Guardian card (bounded full record), if the patient has one.
-    final hasGuardian =
-        (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
+    final hasGuardian = (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
     if (hasGuardian) {
       final guardianOk = await showNfcGuidedWrite(
         context,
@@ -217,13 +218,8 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
             ? 'Acerque la tarjeta del guardián al teléfono'
             : 'Bring the guardian card to the phone',
         write: () {
-          final fit = NfcGuardianPayload.buildWithinCapacity(
-            record: record,
-            capacityBytes: _kGuardianCardCapacityBytes,
-            estimateSize: codec.estimateSize,
-          );
-          return NfcPayloadService(codec: codec).writeGuardianPayload(
-            fit.payload,
+          return NfcPayloadService(codec: codec).writeGuardianRecord(
+            buildFit: guardianFitBuilder(record: record, codec: codec),
             expectedUid: record.guardianInfo.deviceUid,
           );
         },
@@ -399,7 +395,7 @@ class _WizardHeader extends StatelessWidget {
               ),
             ),
           ),
-          if (stepText != null)
+          if (stepText != null) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
@@ -415,9 +411,52 @@ class _WizardHeader extends StatelessWidget {
                 ),
               ),
             ),
-          if (stepText == null && onBack == null) const SizedBox(width: 40),
+            const SizedBox(width: 8),
+          ],
+          _LocaleSwitcher(),
           const SizedBox(width: 4),
         ],
+      ),
+    );
+  }
+}
+
+class _LocaleSwitcher extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final locale = AppLocale.of(context).locale;
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: ['es', 'en'].map((lang) {
+          final selected = locale == lang;
+          return GestureDetector(
+            onTap: () => AppLocale.of(context).setLocale(lang),
+            child: Container(
+              margin: const EdgeInsets.only(left: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.95)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                lang.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? AppColors.primary : AppColors.white,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -582,4 +621,3 @@ class RegisterDraft {
     );
   }
 }
-

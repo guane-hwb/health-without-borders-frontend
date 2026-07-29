@@ -8,7 +8,6 @@ import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/country_display.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
-import '../../nfc/presentation/shared_read_nfc_header.dart';
 import '../data/stats_repository.dart';
 import '../domain/brigade_stats.dart';
 import '../domain/stats_date_range.dart';
@@ -168,11 +167,38 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
           children: [
             Column(
               children: [
-                SharedReadNfcHeader(
-                  title: widget.scopeToOwnOrganization
-                      ? s.statsScreenTitleOrg
-                      : s.statsScreenTitle,
-                  onBack: () => Navigator.of(context).pop(),
+                Container(
+                  color: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: AppColors.white,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          widget.scopeToOwnOrganization
+                              ? s.statsScreenTitleOrg
+                              : s.statsScreenTitle,
+                          style: const TextStyle(
+                            color: AppColors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      _LocaleSwitcher(), // Switch del idioma importado de Home[cite: 2]
+                    ],
+                  ),
                 ),
                 Expanded(child: _buildBody()),
               ],
@@ -210,11 +236,11 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
         children: [
           if (_showFilter) ...[
-            _OrgFilterBar(
+            _OrgFilterDropdown(
               orgs: _orgs,
               selected: _selectedOrgId,
               onChanged: (id) {
-                if (id == _selectedOrgId) return;
+                if (id == null || id == _selectedOrgId) return;
                 setState(() => _selectedOrgId = id);
                 _load();
               },
@@ -353,49 +379,100 @@ class _EmptyView extends StatelessWidget {
   );
 }
 
-class _OrgFilterBar extends StatelessWidget {
-  const _OrgFilterBar({
+class _OrgFilterDropdown extends StatelessWidget {
+  const _OrgFilterDropdown({
     required this.orgs,
     required this.selected,
     required this.onChanged,
   });
+
   final List<_OrgFilter> orgs;
   final String selected;
-  final ValueChanged<String> onChanged;
+  final ValueChanged<String?> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 34,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: orgs.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          final org = orgs[i];
-          final sel = org.id == selected;
-          return GestureDetector(
-            onTap: () => onChanged(org.id),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: sel ? AppColors.primary : AppColors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: sel ? AppColors.primary : AppColors.divider,
-                ),
-              ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.divider),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x10000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: selected,
+          isExpanded: true,
+          icon: const Icon(
+            Icons.keyboard_arrow_down,
+            color: AppColors.textSecondary,
+          ),
+          dropdownColor: AppColors.white,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+          onChanged: onChanged,
+          items: orgs.map<DropdownMenuItem<String>>((_OrgFilter org) {
+            return DropdownMenuItem<String>(
+              value: org.id,
               child: Text(
                 org.name,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class _LocaleSwitcher extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final locale = AppLocale.of(context).locale;
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: ['es', 'en'].map((lang) {
+          //[cite: 2]
+          final selected = locale == lang;
+          return GestureDetector(
+            onTap: () => AppLocale.of(context).setLocale(lang),
+            child: Container(
+              margin: const EdgeInsets.only(left: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.95)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                lang.toUpperCase(),
                 style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: sel ? AppColors.white : AppColors.textPrimary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? AppColors.primary : AppColors.white,
                 ),
               ),
             ),
           );
-        },
+        }).toList(),
       ),
     );
   }

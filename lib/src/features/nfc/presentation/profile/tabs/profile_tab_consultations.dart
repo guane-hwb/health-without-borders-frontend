@@ -122,6 +122,7 @@ class _ConsultationCard extends StatelessWidget {
 
   String _formattedDate(BuildContext context) {
     final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
     try {
       final dt = DateTime.parse(item.startDateTime);
       final d = [
@@ -147,7 +148,12 @@ class _ConsultationCard extends StatelessWidget {
         s.monNov,
         s.monDic,
       ];
-      return '${d[dt.weekday - 1]}, ${dt.day} ${m[dt.month - 1]} ${dt.year}';
+
+      if (isEs) {
+        return '${d[dt.weekday - 1]}, ${dt.day} de ${m[dt.month - 1]} de ${dt.year}';
+      } else {
+        return '${d[dt.weekday - 1]}, ${m[dt.month - 1]} ${dt.day}, ${dt.year}';
+      }
     } catch (_) {
       return item.startDateTime;
     }
@@ -383,9 +389,9 @@ class _ConsultationDetailScreen extends StatelessWidget {
           _Section(
             title: s.careContextSection,
             rows: [
-              _kv(s.startDateLabel, _fmtDt(item.startDateTime)),
+              _kv(s.startDateLabel, _fmtDt(item.startDateTime, context)),
               if (item.endDateTime != null)
-                _kv(s.endDateLabel, _fmtDt(item.endDateTime!)),
+                _kv(s.endDateLabel, _fmtDt(item.endDateTime!, context)),
               _kv(s.zone, _modLabel(context, item.careModality)),
               _kv(s.serviceGroupLabel, _sgLabel(context, item.serviceGroup)),
               _kv(s.environmentLabel, _ceLabel(context, item.careEnvironment)),
@@ -484,10 +490,17 @@ class _ConsultationDetailScreen extends StatelessWidget {
   }
 
   static MapEntry<String, String> _kv(String k, String v) => MapEntry(k, v);
-  static String _fmtDt(String dt) {
+  static String _fmtDt(String dt, BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
     try {
       final d = DateTime.parse(dt);
-      return '${d.day}/${d.month}/${d.year} ${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+      final timeStr = '${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+      if (isEs) {
+        return '${d.day}/${d.month}/${d.year} $timeStr';
+      } else {
+        return '${d.month}/${d.day}/${d.year} $timeStr';
+      }
     } catch (_) {
       return dt;
     }

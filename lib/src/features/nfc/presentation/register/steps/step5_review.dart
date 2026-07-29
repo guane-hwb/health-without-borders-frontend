@@ -35,6 +35,44 @@ class _Step5State extends State<Step5Review> {
     }
   }
 
+  String _formatDob(DateTime? dob, bool isEs) {
+    if (dob == null) return '—';
+
+    if (isEs) {
+      const mEs = [
+        'enero',
+        'febrero',
+        'marzo',
+        'abril',
+        'mayo',
+        'junio',
+        'julio',
+        'agosto',
+        'septiembre',
+        'octubre',
+        'noviembre',
+        'diciembre',
+      ];
+      return '${dob.day} de ${mEs[dob.month - 1]} de ${dob.year}';
+    } else {
+      const mEn = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
+      return '${mEn[dob.month - 1]} ${dob.day}, ${dob.year}';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = widget.draft;
@@ -129,9 +167,7 @@ class _Step5State extends State<Step5Review> {
                   ),
                   _kv(
                     isEs ? 'F. nacimiento' : 'D.O.B.',
-                    d.dob == null
-                        ? '—'
-                        : '${d.dob!.year}-${d.dob!.month.toString().padLeft(2, '0')}-${d.dob!.day.toString().padLeft(2, '0')}',
+                    _formatDob(d.dob, isEs),
                   ),
                   _kv(isEs ? 'Sexo' : 'Sex', sexLabel),
                   _kv(s.nationality, d.nationalityName ?? d.nationalityCode),
@@ -299,9 +335,7 @@ class _Step5State extends State<Step5Review> {
                             color: AppColors.white,
                           ),
                     label: Text(
-                      _saving
-                          ? s.saving
-                          : (isEs ? 'Confirmar' : 'Confirm'),
+                      _saving ? s.saving : (isEs ? 'Confirmar' : 'Confirm'),
                       style: const TextStyle(
                         color: AppColors.white,
                         fontSize: 15,

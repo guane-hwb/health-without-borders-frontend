@@ -1,9 +1,7 @@
 // test/widget/step2_guardian_widget_test.dart
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step2_guardian.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/register_nfc_screen.dart'
@@ -11,134 +9,16 @@ import 'package:health_without_borders_frontend/src/features/nfc/presentation/re
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_service.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 
-class MockNfcService extends Mock implements NfcService {}
-
-class _FakeAppStrings extends Fake implements AppStrings {
-  @override
-  String get welcome => 'Bienvenido';
-  @override
-  String get guardianNfcUnavailable => 'NFC no disponible';
-  @override
-  String get guardianNfcError => 'Error de NFC';
-  @override
-  String get guardianFullName => 'Nombre completo';
-  @override
-  String get guardianFullNameHint => 'Ej. Juan Pérez';
-  @override
-  String get guardianPhoneLabel => 'Teléfono';
-  @override
-  String get guardianPhoneHint => 'Ej. 3001234567';
-  @override
-  String get guardianNfcDevice => 'Dispositivo NFC';
-  @override
-  String get guardianNfcUidHint => 'UID del dispositivo';
-  @override
-  String get documentTypeLabel => 'Tipo de documento';
-  @override
-  String get documentNumberLabel => 'Número de documento';
-  @override
-  String get confirmChanges => 'Confirmar cambios';
-  @override
-  String get email => 'Correo electrónico';
-  @override
-  String get emailHint => 'ejemplo@correo.com';
-  @override
-  String get docTypeCC => 'Cédula de Ciudadanía';
-  @override
-  String get docTypeCE => 'Cédula de Extranjería';
-  @override
-  String get relParents => 'Padre/Madre';
-  @override
-  String get relSiblings => 'Hermano/a';
-  @override
-  String get relUncles => 'Tío/a';
-  @override
-  String get relGrandparents => 'Abuelo/a';
-  @override
-  String get editGuardianTitle => 'Editar guardián';
-  @override
-  String get back => 'Atrás';
-  @override
-  String get continueBtn => 'Continuar';
-  @override
-  String get ok => 'Aceptar';
-  @override
-  String get guardianRequiredSub =>
-      'Se requiere la autorización de un tutor legal para continuar.';
-  @override
-  String get guardianHelper =>
-      'Ingrese los datos del acompañante o tutor si es necesario.';
-  @override
-  String get guardianRelationship => 'Parentesco';
-}
-
-class _FakeAppStringsDelegate extends LocalizationsDelegate<AppStrings> {
-  const _FakeAppStringsDelegate();
-
-  @override
-  bool isSupported(Locale locale) => true;
-
-  @override
-  Future<AppStrings> load(Locale locale) async => _FakeAppStrings();
-
-  @override
-  bool shouldReload(_) => false;
-}
-
-class _FakeMaterialLocalizationsDelegate
-    extends LocalizationsDelegate<MaterialLocalizations> {
-  const _FakeMaterialLocalizationsDelegate();
-  @override
-  bool isSupported(Locale locale) => true;
-  @override
-  Future<MaterialLocalizations> load(Locale locale) async =>
-      DefaultMaterialLocalizations();
-  @override
-  bool shouldReload(_) => false;
-}
-
-class _FakeWidgetsLocalizationsDelegate
-    extends LocalizationsDelegate<WidgetsLocalizations> {
-  const _FakeWidgetsLocalizationsDelegate();
-  @override
-  bool isSupported(Locale locale) => true;
-  @override
-  Future<WidgetsLocalizations> load(Locale locale) async =>
-      DefaultWidgetsLocalizations();
-  @override
-  bool shouldReload(_) => false;
-}
-
-class _FakeCupertinoLocalizationsDelegate
-    extends LocalizationsDelegate<CupertinoLocalizations> {
-  const _FakeCupertinoLocalizationsDelegate();
-  @override
-  bool isSupported(Locale locale) => true;
-  @override
-  Future<CupertinoLocalizations> load(Locale locale) async =>
-      DefaultCupertinoLocalizations();
-  @override
-  bool shouldReload(_) => false;
-}
-
 Widget buildSubject({
   RegisterDraft? draft,
   bool requiredForMinor = false,
   VoidCallback? onBack,
   VoidCallback? onContinue,
+  String locale = 'es',
 }) {
-  return AppLocale(
-    locale: 'es',
-    setLocale: (_) {},
+  return _LocaleWrapper(
+    locale: locale,
     child: MaterialApp(
-      localizationsDelegates: const [
-        _FakeAppStringsDelegate(),
-        _FakeMaterialLocalizationsDelegate(),
-        _FakeWidgetsLocalizationsDelegate(),
-        _FakeCupertinoLocalizationsDelegate(),
-      ],
-      supportedLocales: const [Locale('es')],
-      locale: const Locale('es'),
       home: Scaffold(
         body: Step2Guardian(
           draft: draft ?? RegisterDraft(),
@@ -151,21 +31,51 @@ Widget buildSubject({
   );
 }
 
+class _LocaleWrapper extends StatefulWidget {
+  const _LocaleWrapper({required this.locale, required this.child});
+  final String locale;
+  final Widget child;
+
+  @override
+  State<_LocaleWrapper> createState() => _LocaleWrapperState();
+}
+
+class _LocaleWrapperState extends State<_LocaleWrapper> {
+  late String _locale;
+
+  @override
+  void initState() {
+    super.initState();
+    _locale = widget.locale;
+  }
+
+  @override
+  Widget build(BuildContext context) => AppLocale(
+    locale: _locale,
+    setLocale: (l) => setState(() => _locale = l),
+    child: widget.child,
+  );
+}
+
 void main() {
   void resizeViewport(WidgetTester tester) {
-    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.physicalSize = const Size(1080, 3200);
     tester.view.devicePixelRatio = 1.0;
   }
 
-  group('Step2Guardian – render inicial', () {
-    testWidgets('Muestra el widget sin lanzar excepciones', (tester) async {
+  setUp(() {
+    NfcService.overrideReadDeviceUid = null;
+  });
+
+  group('Step2Guardian – render inicial (Tests 1 a 5)', () {
+    testWidgets('1. Muestra el widget sin lanzar excepciones', (tester) async {
       resizeViewport(tester);
       await tester.pumpWidget(buildSubject());
       await tester.pumpAndSettle();
       expect(find.byType(Step2Guardian), findsOneWidget);
     });
 
-    testWidgets('Muestra el banner de aviso informativo (adulto)', (
+    testWidgets('2. Muestra el banner de aviso informativo (adulto)', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -174,14 +84,14 @@ void main() {
       expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
     });
 
-    testWidgets('Muestra el banner de advertencia (menor)', (tester) async {
+    testWidgets('3. Muestra el banner de advertencia (menor)', (tester) async {
       resizeViewport(tester);
       await tester.pumpWidget(buildSubject(requiredForMinor: true));
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
     });
 
-    testWidgets('Botón Atrás y Continuar están presentes', (tester) async {
+    testWidgets('4. Botón Atrás y Continuar están presentes', (tester) async {
       resizeViewport(tester);
       await tester.pumpWidget(buildSubject());
       await tester.pumpAndSettle();
@@ -189,7 +99,7 @@ void main() {
       expect(find.byIcon(Icons.arrow_forward), findsOneWidget);
     });
 
-    testWidgets('Botón "Agregar" guardián 2 es visible al inicio', (
+    testWidgets('5. Botón "Agregar" guardián 2 es visible al inicio', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -199,8 +109,8 @@ void main() {
     });
   });
 
-  group('Step2Guardian – carga desde draft', () {
-    testWidgets('Campos guardián 1 se pre-llenan correctamente', (
+  group('Step2Guardian – carga desde draft (Tests 6 a 7)', () {
+    testWidgets('6. Campos guardián 1 se pre-llenan correctamente', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -219,7 +129,7 @@ void main() {
       expect(find.text('ana@example.com'), findsOneWidget);
     });
 
-    testWidgets('Muestra guardián 2 si guardian2Name tiene contenido', (
+    testWidgets('7. Muestra guardián 2 si guardian2Name tiene contenido', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -232,8 +142,8 @@ void main() {
     });
   });
 
-  group('_NoticeBanner', () {
-    testWidgets('Color de fondo amarillo cuando requiredForMinor=true', (
+  group('_NoticeBanner (Tests 8 a 9)', () {
+    testWidgets('8. Color de fondo amarillo cuando requiredForMinor=true', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -251,7 +161,7 @@ void main() {
       expect(decoration?.color, const Color(0xFFFFF3CD));
     });
 
-    testWidgets('Color de fondo azul cuando requiredForMinor=false', (
+    testWidgets('9. Color de fondo azul cuando requiredForMinor=false', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -270,8 +180,8 @@ void main() {
     });
   });
 
-  group('Guardián 2 – agregar y eliminar', () {
-    testWidgets('Al tocar "Agregar" aparece la sección de guardián 2', (
+  group('Guardián 2 – agregar y eliminar (Tests 10 a 11)', () {
+    testWidgets('10. Al tocar "Agregar" aparece la sección de guardián 2', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -285,7 +195,7 @@ void main() {
       expect(find.byIcon(Icons.delete_outline), findsOneWidget);
     });
 
-    testWidgets('Al tocar eliminar, desaparece la sección de guardián 2', (
+    testWidgets('11. Al tocar eliminar, desaparece la sección de guardián 2', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -302,8 +212,9 @@ void main() {
       expect(find.text('Agregar'), findsOneWidget);
     });
   });
-  group('_SignaturePad', () {
-    testWidgets('Muestra placeholder "Firmar aquí" cuando no hay firma', (
+
+  group('_SignaturePad (Tests 12 a 13)', () {
+    testWidgets('12. Muestra placeholder "Firmar aquí" cuando no hay firma', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -312,7 +223,7 @@ void main() {
       expect(find.text('Firmar aquí'), findsWidgets);
     });
 
-    testWidgets('Botón limpiar firma está deshabilitado sin trazos', (
+    testWidgets('13. Botón limpiar firma está deshabilitado sin trazos', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -331,15 +242,15 @@ void main() {
     });
   });
 
-  group('_NfcField', () {
-    testWidgets('Icono NFC visible en el botón de escaneo', (tester) async {
+  group('_NfcField (Tests 14 a 15)', () {
+    testWidgets('14. Icono NFC visible en el botón de escaneo', (tester) async {
       resizeViewport(tester);
       await tester.pumpWidget(buildSubject());
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.nfc), findsWidgets);
     });
 
-    testWidgets('Muestra ícono check_circle cuando el campo tiene valor', (
+    testWidgets('15. Muestra ícono check_circle cuando el campo tiene valor', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -350,8 +261,8 @@ void main() {
     });
   });
 
-  group('_PrivacyPolicyDialog', () {
-    testWidgets('El diálogo se abre al tocar el link de privacidad', (
+  group('_PrivacyPolicyDialog (Tests 16 a 17)', () {
+    testWidgets('16. El diálogo se abre al tocar el link de privacidad', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -366,7 +277,7 @@ void main() {
       expect(find.byType(Dialog), findsOneWidget);
     });
 
-    testWidgets('El diálogo se cierra con el ícono de cerrar (X)', (
+    testWidgets('17. El diálogo se cierra con el ícono de cerrar (X)', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -385,9 +296,9 @@ void main() {
     });
   });
 
-  group('_ErrorBanner – validación _save()', () {
+  group('_ErrorBanner – validación _save() (Tests 18 a 19)', () {
     testWidgets(
-      'Aparece banner de error cuando falta nombre (requiredForMinor)',
+      '18. Aparece banner de error cuando falta nombre (requiredForMinor)',
       (tester) async {
         resizeViewport(tester);
         await tester.pumpWidget(buildSubject(requiredForMinor: true));
@@ -402,38 +313,39 @@ void main() {
       },
     );
 
-    testWidgets('El banner de error no aparece si el formulario es válido', (
-      tester,
-    ) async {
-      resizeViewport(tester);
-      bool continueCalled = false;
-      final draft = RegisterDraft()
-        ..guardianName = 'Ana'
-        ..guardianPhone = '3007253964'
-        ..guardianDeviceUid = 'UID'
-        ..guardianDocNumber = '1234567891';
+    testWidgets(
+      '19. El banner de error no aparece si el formulario es válido',
+      (tester) async {
+        resizeViewport(tester);
+        bool continueCalled = false;
+        final draft = RegisterDraft()
+          ..guardianName = 'Ana'
+          ..guardianPhone = '3007253964'
+          ..guardianDeviceUid = 'UID'
+          ..guardianDocNumber = '1234567891';
 
-      await tester.pumpWidget(
-        buildSubject(
-          draft: draft,
-          requiredForMinor: false,
-          onContinue: () => continueCalled = true,
-        ),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          buildSubject(
+            draft: draft,
+            requiredForMinor: false,
+            onContinue: () => continueCalled = true,
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      final continueBtn = find.byIcon(Icons.arrow_forward);
-      await tester.ensureVisible(continueBtn);
-      await tester.tap(continueBtn);
-      await tester.pumpAndSettle();
+        final continueBtn = find.byIcon(Icons.arrow_forward);
+        await tester.ensureVisible(continueBtn);
+        await tester.tap(continueBtn);
+        await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.error_outline), findsNothing);
-      expect(continueCalled, isTrue);
-    });
+        expect(find.byIcon(Icons.error_outline), findsNothing);
+        expect(continueCalled, isTrue);
+      },
+    );
   });
 
-  group('_NavButtons', () {
-    testWidgets('El botón Atrás llama onBack', (tester) async {
+  group('_NavButtons (Tests 20 a 21)', () {
+    testWidgets('20. El botón Atrás llama onBack', (tester) async {
       resizeViewport(tester);
       bool backCalled = false;
       await tester.pumpWidget(buildSubject(onBack: () => backCalled = true));
@@ -448,7 +360,7 @@ void main() {
     });
 
     testWidgets(
-      'El botón Continuar (formulario válido adulto) llama onContinue',
+      '21. El botón Continuar (formulario válido adulto) llama onContinue',
       (tester) async {
         resizeViewport(tester);
         bool continueCalled = false;
@@ -470,8 +382,8 @@ void main() {
     );
   });
 
-  group('_AuthCheckbox', () {
-    testWidgets('Checkbox de autorización está desmarcado por defecto', (
+  group('_AuthCheckbox (Tests 22 a 23)', () {
+    testWidgets('22. Checkbox de autorización está desmarcado por defecto', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -482,7 +394,7 @@ void main() {
       expect(checkboxes.first.value, isFalse);
     });
 
-    testWidgets('Checkbox se marca al tocar', (tester) async {
+    testWidgets('23. Checkbox se marca al tocar', (tester) async {
       resizeViewport(tester);
       await tester.pumpWidget(buildSubject());
       await tester.pumpAndSettle();
@@ -497,13 +409,362 @@ void main() {
     });
   });
 
-  group('_RelChipSelector', () {
-    testWidgets('Muestra chips de relación', (tester) async {
+  group('_AppStrings e i18n Nativo (Test 24)', () {
+    testWidgets('24. Muestra etiquetas correctas del parentesco', (
+      tester,
+    ) async {
       resizeViewport(tester);
       await tester.pumpWidget(buildSubject());
       await tester.pumpAndSettle();
 
-      expect(find.text('Parentesco'), findsOneWidget);
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.guardianRelationship), findsOneWidget);
     });
+  });
+
+  group('NFC y Cobertura Extendida de Guardián 1 y Guardián 2 (100% Cobertura)', () {
+    testWidgets('25. Escaneo NFC Exitoso para Guardián 1', (tester) async {
+      resizeViewport(tester);
+      NfcService.overrideReadDeviceUid = () async => 'NFC-GUARD-001';
+
+      await tester.pumpWidget(buildSubject());
+      await tester.pumpAndSettle();
+
+      final scanBtn = find
+          .descendant(
+            of: find.byType(ElevatedButton),
+            matching: find.byIcon(Icons.nfc),
+          )
+          .first;
+
+      await tester.ensureVisible(scanBtn);
+      await tester.tap(scanBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('NFC-GUARD-001'), findsWidgets);
+    });
+
+    testWidgets(
+      '26. Escaneo NFC lanza NfcNotAvailableException en Guardián 1',
+      (tester) async {
+        resizeViewport(tester);
+        NfcService.overrideReadDeviceUid = () async =>
+            throw NfcNotAvailableException();
+
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        final scanBtn = find
+            .descendant(
+              of: find.byType(ElevatedButton),
+              matching: find.byIcon(Icons.nfc),
+            )
+            .first;
+
+        await tester.ensureVisible(scanBtn);
+        await tester.tap(scanBtn);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+
+        expect(find.byType(SnackBar), findsOneWidget);
+      },
+    );
+
+    testWidgets('27. Escaneo NFC lanza excepción genérica en Guardián 1', (
+      tester,
+    ) async {
+      resizeViewport(tester);
+      NfcService.overrideReadDeviceUid = () async =>
+          throw Exception('NFC Fail');
+
+      await tester.pumpWidget(buildSubject());
+      await tester.pumpAndSettle();
+
+      final scanBtn = find
+          .descendant(
+            of: find.byType(ElevatedButton),
+            matching: find.byIcon(Icons.nfc),
+          )
+          .first;
+
+      await tester.ensureVisible(scanBtn);
+      await tester.tap(scanBtn);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(SnackBar), findsOneWidget);
+    });
+
+    testWidgets(
+      '28. Escaneo NFC Exitoso, Error No Disponible y Genérico en Guardián 2',
+      (tester) async {
+        resizeViewport(tester);
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Agregar'));
+        await tester.pumpAndSettle();
+
+        // 1. Escaneo exitoso G2
+        NfcService.overrideReadDeviceUid = () async => 'NFC-GUARD-002';
+        final scanBtnG2 = find
+            .descendant(
+              of: find.byType(ElevatedButton),
+              matching: find.byIcon(Icons.nfc),
+            )
+            .last;
+
+        await tester.ensureVisible(scanBtnG2);
+        await tester.tap(scanBtnG2);
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('NFC-GUARD-002'), findsWidgets);
+
+        // 2. Error NfcNotAvailableException G2
+        NfcService.overrideReadDeviceUid = () async =>
+            throw NfcNotAvailableException();
+        await tester.tap(scanBtnG2);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.byType(SnackBar), findsAtLeastNWidgets(1));
+
+        // 3. Error Genérico G2
+        NfcService.overrideReadDeviceUid = () async =>
+            throw Exception('NFC2 Fail');
+        await tester.tap(scanBtnG2);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.byType(SnackBar), findsAtLeastNWidgets(1));
+      },
+    );
+
+    testWidgets(
+      '29. Dibujado de firma biométrica en Canvas, generación de Base64 y borrado',
+      (tester) async {
+        resizeViewport(tester);
+        bool continueCalled = false;
+        final draft = RegisterDraft()
+          ..guardianName = 'Ana García'
+          ..guardianPhone = '3001234567'
+          ..guardianDocNumber = '12345678'
+          ..guardianDeviceUid = 'UID-001';
+
+        await tester.pumpWidget(
+          buildSubject(
+            draft: draft,
+            requiredForMinor: false,
+            onContinue: () => continueCalled = true,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Realizar el trazo de la firma sobre el lienzo CustomPaint
+        final padFinder = find.byType(CustomPaint).first;
+        await tester.ensureVisible(padFinder);
+
+        final center = tester.getCenter(padFinder);
+        final gesture = await tester.startGesture(center);
+        await gesture.moveBy(const Offset(20, 20));
+        await gesture.moveBy(const Offset(40, 40));
+        await gesture.up();
+        await tester.pumpAndSettle();
+
+        // 2. Marcar el Checkbox de autorización
+        final checkbox = find.byType(Checkbox).first;
+        await tester.ensureVisible(checkbox);
+        await tester.tap(checkbox);
+        await tester.pumpAndSettle();
+
+        // 3. Presionar "Continuar" para ejecutar _save() y ejercitar _signatureToBase64
+        final continueBtn = find.byIcon(Icons.arrow_forward);
+        await tester.ensureVisible(continueBtn);
+        await tester.tap(continueBtn);
+        await tester.pumpAndSettle();
+
+        // 4. Confirmar que la firma y los datos pasaron las validaciones de _save()
+        expect(continueCalled, isTrue);
+        expect(find.byIcon(Icons.error_outline), findsNothing);
+
+        // 5. Probar la función de limpiar firma
+        final clearBtn = find.text('Limpiar firma').first;
+        await tester.ensureVisible(clearBtn);
+        await tester.tap(clearBtn);
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      '30. Guardián 2 completo: firma biométrica, dropdowns, selección de chip y asignación a RegisterDraft',
+      (tester) async {
+        resizeViewport(tester);
+        final draft = RegisterDraft();
+        await tester.pumpWidget(buildSubject(draft: draft));
+        await tester.pumpAndSettle();
+
+        // Habilitar G2
+        await tester.tap(find.text('Agregar'));
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+
+        final name2Input = find
+            .widgetWithText(TextField, s.guardianFullNameHint)
+            .last;
+        await tester.ensureVisible(name2Input);
+        await tester.enterText(name2Input, 'Carlos López');
+
+        final phone2Input = find
+            .widgetWithText(TextField, s.guardianPhoneHint)
+            .last;
+        await tester.ensureVisible(phone2Input);
+        await tester.enterText(phone2Input, '3109876543');
+
+        final doc2Input = find.widgetWithText(TextField, 'Ej. 1234567890').last;
+        await tester.ensureVisible(doc2Input);
+        await tester.enterText(doc2Input, '9876543210');
+
+        final email2Input = find.widgetWithText(TextField, s.emailHint).last;
+        await tester.ensureVisible(email2Input);
+        await tester.enterText(email2Input, 'carlos@example.com');
+
+        // Seleccionar chip de parentesco "Hermanos" en Guardián 2
+        final chipHermanos = find.text(s.relSiblings).last;
+        await tester.ensureVisible(chipHermanos);
+        await tester.tap(chipHermanos);
+        await tester.pumpAndSettle();
+
+        // Dibujar firma G2
+        final customPaintG2 = find.byType(CustomPaint).last;
+        await tester.ensureVisible(customPaintG2);
+        final centerG2 = tester.getCenter(customPaintG2);
+        final gestureG2 = await tester.startGesture(centerG2);
+        await tester.pump(const Duration(milliseconds: 50));
+        await gestureG2.moveBy(const Offset(30, 30));
+        await tester.pump(const Duration(milliseconds: 50));
+        await gestureG2.moveBy(const Offset(60, 60));
+        await tester.pump(const Duration(milliseconds: 50));
+        await gestureG2.up();
+        await tester.pumpAndSettle();
+
+        // Marcar checkbox G2
+        final checkboxG2 = find.byType(Checkbox).last;
+        await tester.ensureVisible(checkboxG2);
+        await tester.tap(checkboxG2);
+        await tester.pumpAndSettle();
+
+        // Guardar
+        final continueBtn = find.byIcon(Icons.arrow_forward);
+        await tester.ensureVisible(continueBtn);
+        await tester.tap(continueBtn);
+        await tester.pumpAndSettle();
+
+        expect(draft.guardian2Name, equals('Carlos López'));
+        expect(draft.guardian2Phone, equals('3109876543'));
+        expect(draft.guardian2DocNumber, equals('9876543210'));
+        expect(draft.guardian2Relationship, equals('02'));
+
+        // Limpiar firma G2
+        final clearBtn2 = find.text('Limpiar firma').last;
+        await tester.ensureVisible(clearBtn2);
+        await tester.tap(clearBtn2);
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('31. Cambio de Dropdown de tipo de documento', (tester) async {
+      resizeViewport(tester);
+      await tester.pumpWidget(buildSubject());
+      await tester.pumpAndSettle();
+
+      final dropdown = find.byType(DropdownButton<String>).first;
+      await tester.ensureVisible(dropdown);
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      final ceItem = find.text(s.docTypeCE).last;
+      await tester.tap(ceItem);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      '32. Renderizado del Modal de Políticas de Privacidad en Inglés',
+      (tester) async {
+        resizeViewport(tester);
+        await tester.pumpWidget(buildSubject(locale: 'en'));
+        await tester.pumpAndSettle();
+
+        final privacyLink = find.text('privacy policy');
+        await tester.ensureVisible(privacyLink.first);
+        await tester.tap(privacyLink.first, warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Privacy Policy'), findsWidgets);
+      },
+    );
+
+    testWidgets('33. Interacción con el texto del Checkbox de Autorización', (
+      tester,
+    ) async {
+      resizeViewport(tester);
+      await tester.pumpWidget(buildSubject());
+      await tester.pumpAndSettle();
+
+      final checkbox = find.byType(Checkbox).first;
+      await tester.ensureVisible(checkbox);
+      await tester.tap(checkbox);
+      await tester.pumpAndSettle();
+
+      final checkboxWidget = tester.widget<Checkbox>(checkbox);
+      expect(checkboxWidget.value, isTrue);
+    });
+
+    testWidgets(
+      '34. Cambio manual en input de texto NFC de Guardián 1 y Guardián 2 activa onChanged()',
+      (tester) async {
+        resizeViewport(tester);
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        // Guardián 1 NFC onChanged
+        final uidFieldG1 = tester
+            .widgetList<TextField>(find.byType(TextField))
+            .elementAt(2);
+        await tester.enterText(find.byWidget(uidFieldG1), 'MANUAL-UID-01');
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('MANUAL-UID-01'), findsWidgets);
+
+        // Habilitar Guardián 2 y cambiar NFC manualmente
+        await tester.tap(find.text('Agregar'));
+        await tester.pumpAndSettle();
+
+        final uidFieldG2 = tester
+            .widgetList<TextField>(find.byType(TextField))
+            .elementAt(8);
+        await tester.enterText(find.byWidget(uidFieldG2), 'MANUAL-UID-02');
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('MANUAL-UID-02'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      '35. Cambio de parentesco mediante Chips en Guardián 1 dispara la función de actualización',
+      (tester) async {
+        resizeViewport(tester);
+        final draft = RegisterDraft();
+        await tester.pumpWidget(buildSubject(draft: draft));
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        final chipTios = find.text(s.relUncles).first;
+        await tester.ensureVisible(chipTios);
+        await tester.tap(chipTios);
+        await tester.pumpAndSettle();
+
+        expect(draft.guardianRelationship, equals('03'));
+      },
+    );
   });
 }

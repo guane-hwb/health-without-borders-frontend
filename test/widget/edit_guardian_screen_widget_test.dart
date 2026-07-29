@@ -77,6 +77,19 @@ class FakeAuthRepository implements AuthRepository {
 }
 
 class FakeLocalDatabase implements LocalDatabase {
+
+  @override
+  Future<void> logEmergencyAccess({
+    required String patientUid,
+    String? patientName,
+    String? userId,
+    String reason = 'guardian_absent_offline',
+  }) async {}
+
+  @override
+  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs() async =>
+      <Map<String, Object?>>[];
+
   @override
   Future<void> clearAll() async {}
 
@@ -100,7 +113,7 @@ class FakeLocalDatabase implements LocalDatabase {
   }) async {}
 
   @override
-  Future<void> markSynced(String patientId) async {}
+  Future<void> markSynced(String patientId, {String? createdAt}) async {}
 
   @override
   Future<void> savePatient(PatientFullRecord record) async {}

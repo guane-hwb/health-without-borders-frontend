@@ -1,4 +1,4 @@
-// test/widget/features/home/home_screen_widget_test.dart
+// test/widget/home_screen_widget_test.dart
 //
 // Widget testing for HomeScreen.
 // It covers what the Flutter widget tree DOES require:
@@ -91,6 +91,19 @@ class FakeLocalDatabase implements LocalDatabase {
 
   int pendingCount;
 
+
+  @override
+  Future<void> logEmergencyAccess({
+    required String patientUid,
+    String? patientName,
+    String? userId,
+    String reason = 'guardian_absent_offline',
+  }) async {}
+
+  @override
+  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs() async =>
+      <Map<String, Object?>>[];
+
   @override
   Future<void> clearAll() async {}
 
@@ -116,7 +129,7 @@ class FakeLocalDatabase implements LocalDatabase {
   }) async {}
 
   @override
-  Future<void> markSynced(String patientId) async {}
+  Future<void> markSynced(String patientId, {String? createdAt}) async {}
 
   @override
   Future<void> savePatient(PatientFullRecord record) async {}

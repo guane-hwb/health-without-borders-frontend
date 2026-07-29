@@ -137,11 +137,42 @@ class _FakeRepo implements UserRepository {
   }
 }
 
+class _TestLocaleWrapper extends StatefulWidget {
+  const _TestLocaleWrapper({required this.initialLocale, required this.child});
+  final String initialLocale;
+  final Widget child;
+
+  @override
+  State<_TestLocaleWrapper> createState() => _TestLocaleWrapperState();
+}
+
+class _TestLocaleWrapperState extends State<_TestLocaleWrapper> {
+  late String _locale;
+
+  @override
+  void initState() {
+    super.initState();
+    _locale = widget.initialLocale;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppLocale(
+      locale: _locale,
+      setLocale: (newLocale) {
+        setState(() {
+          _locale = newLocale;
+        });
+      },
+      child: widget.child,
+    );
+  }
+}
+
 // ── Helper ─────────────────────────────────────────────────────────
 
-Widget _build(_FakeRepo repo, {String locale = 'es'}) => AppLocale(
-  locale: locale,
-  setLocale: (_) {},
+Widget _build(_FakeRepo repo, {String locale = 'es'}) => _TestLocaleWrapper(
+  initialLocale: locale,
   child: AppScope(
     authRepository: _StubAuth(),
     userRepository: repo,
@@ -401,7 +432,7 @@ void main() {
       await t.pumpWidget(_build(repo));
       await t.pumpAndSettle();
 
-      final backBtn = find.byIcon(Icons.arrow_back);
+      final backBtn = find.byIcon(Icons.arrow_back_rounded);
       expect(backBtn, findsOneWidget);
       await t.tap(backBtn);
       await t.pumpAndSettle();
@@ -519,6 +550,8 @@ void main() {
       await t.pumpAndSettle();
 
       await t.ensureVisible(submitBtn);
+      await t.pumpAndSettle();
+
       await t.tap(submitBtn);
       await t.pumpAndSettle();
 
@@ -684,5 +717,29 @@ void main() {
 
       expect(find.text('1'), findsNothing);
     });
+  });
+
+  group('Cambio de idioma (Localization)', () {
+    testWidgets(
+      'Alternar el idioma de ES a EN actualiza los componentes de la UI',
+      (t) async {
+        configureMobileScreenSize(t);
+        final repo = _FakeRepo(listOrgs: () async => []);
+
+        await t.pumpWidget(_build(repo, locale: 'es'));
+        await t.pumpAndSettle();
+
+        final sEs = AppStrings.forTesting('es');
+        final sEn = AppStrings.forTesting('en');
+
+        expect(find.text('No hay organizaciones registradas.'), findsOneWidget);
+
+        await t.tap(find.text('EN'));
+        await t.pumpAndSettle();
+
+        expect(find.text(sEn.orgsNoOrganizations), findsOneWidget);
+        expect(find.text(sEs.orgsNoOrganizations), findsNothing);
+      },
+    );
   });
 }

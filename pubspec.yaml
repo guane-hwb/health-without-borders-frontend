@@ -27,7 +27,7 @@ dependencies:
   flutter_secure_storage: ^10.0.0
 
   # ── NFC ──
-  nfc_manager: ^3.5.0
+  nfc_manager: ^4.1.1
   cbor: ^6.2.0
 
   # ── Local Database (offline-first) ──

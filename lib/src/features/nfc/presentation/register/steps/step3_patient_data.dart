@@ -10,6 +10,10 @@ const _kEnabledBorder = OutlineInputBorder(
   borderRadius: BorderRadius.all(Radius.circular(10)),
   borderSide: BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
 );
+const _kErrorBorder = OutlineInputBorder(
+  borderRadius: BorderRadius.all(Radius.circular(10)),
+  borderSide: BorderSide(color: AppColors.error, width: 1.5),
+);
 const _kFocusedBorder = OutlineInputBorder(
   borderRadius: BorderRadius.all(Radius.circular(10)),
   borderSide: BorderSide(color: AppColors.primary, width: 2),
@@ -84,14 +88,22 @@ class _Step3State extends State<Step3PatientData> {
   );
   bool _scanningUid = false;
   String? _err;
+  bool _isDocInvalid = false;
 
   bool get _hasEthnicity {
     final v = widget.draft.ethnicity;
-    return v != null && v != '06';
+    return v != null && v != '6' && v != '99';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _docNum.addListener(_validateDocInRealTime);
   }
 
   @override
   void dispose() {
+    _docNum.removeListener(_validateDocInRealTime);
     _docNum.dispose();
     _firstName.dispose();
     _secondName.dispose();
@@ -105,6 +117,19 @@ class _Step3State extends State<Step3PatientData> {
     _height.dispose();
     _patientUid.dispose();
     super.dispose();
+  }
+
+  void _validateDocInRealTime() {
+    final text = _docNum.text.trim();
+    if (text.isEmpty) {
+      if (_isDocInvalid) setState(() => _isDocInvalid = false);
+      return;
+    }
+    final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
+    final invalid = !docRegex.hasMatch(text);
+    if (invalid != _isDocInvalid) {
+      setState(() => _isDocInvalid = invalid);
+    }
   }
 
   Future<void> _scanPatientNfc() async {
@@ -155,6 +180,7 @@ class _Step3State extends State<Step3PatientData> {
     if (cleanDoc.isNotEmpty) {
       final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
       if (!docRegex.hasMatch(cleanDoc)) {
+        setState(() => _isDocInvalid = true);
         missing.add(
           isEs
               ? 'Número de documento inválido (Mínimo 5 caracteres alfanuméricos sin símbolos)'
@@ -170,7 +196,9 @@ class _Step3State extends State<Step3PatientData> {
     }
 
     final d = widget.draft;
-    d.deviceUid = _patientUid.text.trim();
+    d.deviceUid = _patientUid.text.trim().isEmpty
+        ? null
+        : _patientUid.text.trim();
     d.documentNumber = _docNum.text.trim();
     d.firstName = _firstName.text.trim();
     d.secondName = _secondName.text.trim().isEmpty
@@ -186,13 +214,10 @@ class _Step3State extends State<Step3PatientData> {
     d.ethnicCommunity = _ethnicComm.text.trim().isEmpty
         ? null
         : _ethnicComm.text.trim();
+    d.bloodType = (d.bloodType ?? '').trim().isEmpty ? null : d.bloodType;
 
     d.weight = double.tryParse(_weight.text.trim().replaceAll(',', '.'));
     d.height = double.tryParse(_height.text.trim().replaceAll(',', '.'));
-
-    d.bloodType = (d.bloodType == null || d.bloodType!.trim().isEmpty)
-        ? 'O+'
-        : d.bloodType;
 
     widget.onContinue();
   }
@@ -203,7 +228,6 @@ class _Step3State extends State<Step3PatientData> {
     final s = AppStrings.of(context);
     final isEs = s.welcome == 'Bienvenido';
 
-    // ── Local maps resolved dynamically with AppStrings keys ─────────────────
     final docTypes = {
       'RC': s.docTypeRC,
       'TI': s.docTypeTI,
@@ -238,31 +262,31 @@ class _Step3State extends State<Step3PatientData> {
       'PER': isEs ? 'Peruana' : 'Peruvian',
       'HTI': isEs ? 'Haitiana' : 'Haitian',
       'CUB': isEs ? 'Cubana' : 'Cuban',
+      'OTHER': isEs ? 'Otra' : 'Other',
     };
 
     final eth = {
-      '06': isEs ? 'Ninguno' : 'None',
-      '01': isEs ? 'Indígena' : 'Indigenous',
-      '02': isEs ? 'ROM/Gitano' : 'Romani',
-      '03': isEs ? 'Raizal' : 'Raizal',
-      '04': isEs ? 'Palenquero' : 'Palenquero',
-      '05': isEs ? 'Afrocolombiano' : 'Afro-Colombian',
+      '6': isEs ? 'Ninguno' : 'None',
+      '1': isEs ? 'Indígena' : 'Indigenous',
+      '2': isEs ? 'ROM/Gitano' : 'Romani',
+      '3': isEs ? 'Raizal' : 'Raizal',
+      '4': isEs ? 'Palenquero' : 'Palenquero',
+      '5': isEs ? 'Afrocolombiano' : 'Afro-Colombian',
     };
 
     final dis = {
       '00': isEs ? 'Ninguna' : 'None',
       '01': isEs ? 'Física' : 'Physical',
-      '02': isEs ? 'Intelectual' : 'Intellectual',
+      '02': isEs ? 'Visual' : 'Visual',
       '03': isEs ? 'Auditiva' : 'Hearing',
-      '04': isEs ? 'Visual' : 'Visual',
-      '05': isEs ? 'Sordoceguera' : 'Deaf-blindness',
-      '06': isEs ? 'Psicosocial' : 'Psychosocial',
+      '04': isEs ? 'Intelectual' : 'Intellectual',
+      '05': isEs ? 'Psicosocial' : 'Psychosocial',
+      '06': isEs ? 'Sordoceguera' : 'Deaf-blindness',
       '07': isEs ? 'Múltiple' : 'Multiple',
     };
 
     final zones = {'01': s.zoneUrban, '02': s.zoneRural};
 
-    // Constant options map references
     const blood = {
       'O+': 'O+',
       'O-': 'O-',
@@ -354,7 +378,6 @@ class _Step3State extends State<Step3PatientData> {
 
               const SizedBox(height: 18),
 
-              // ── Patient NFC device ─────────────────────────────────────────
               _SectionCard(
                 children: [
                   _SectionHeader(icon: Icons.nfc, title: s.patientNfcDevice),
@@ -363,7 +386,10 @@ class _Step3State extends State<Step3PatientData> {
                     scanning: _scanningUid,
                     onScan: _scanPatientNfc,
                     onChanged: () => setState(
-                      () => widget.draft.deviceUid = _patientUid.text.trim(),
+                      () => widget.draft.deviceUid =
+                          _patientUid.text.trim().isEmpty
+                          ? null
+                          : _patientUid.text.trim(),
                     ),
                     hintText: s.manualPatientUidHint,
                     prefixIcon: Icons.watch_outlined,
@@ -373,7 +399,6 @@ class _Step3State extends State<Step3PatientData> {
 
               const SizedBox(height: 14),
 
-              // ── Identification ─────────────────────────────────────────────
               _SectionCard(
                 children: [
                   _SectionHeader(
@@ -402,7 +427,13 @@ class _Step3State extends State<Step3PatientData> {
                           controller: _docNum,
                           hint: 'Ej. 1098765432',
                           required: true,
-                          keyboardType: TextInputType.number,
+                          isError: _isDocInvalid,
+                          helperText: _isDocInvalid
+                              ? (isEs
+                                    ? 'Mínimo 5 caracteres alfanuméricos'
+                                    : 'Min 5 alphanumeric chars')
+                              : null,
+                          keyboardType: TextInputType.text,
                         ),
                       ),
                     ],
@@ -423,7 +454,7 @@ class _Step3State extends State<Step3PatientData> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: _StyledTextField(
-                          label: isEs ? 'SEGUNDO NOMBRE' : 'SECOND NAME',
+                          label: isEs ? 'Segundo nombre' : 'Second name',
                           controller: _secondName,
                           hint: optionalLabel,
                           textCapitalization: TextCapitalization.words,
@@ -447,7 +478,7 @@ class _Step3State extends State<Step3PatientData> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: _StyledTextField(
-                          label: isEs ? 'SEGUNDO APELLIDO' : 'SECOND LAST NAME',
+                          label: isEs ? 'Segundo apellido' : 'Second last name',
                           controller: _secondLast,
                           hint: optionalLabel,
                           textCapitalization: TextCapitalization.words,
@@ -460,7 +491,6 @@ class _Step3State extends State<Step3PatientData> {
 
               const SizedBox(height: 14),
 
-              // ── Demographic Data ─────────────────────────────────────────
               _SectionCard(
                 children: [
                   _SectionHeader(
@@ -475,7 +505,7 @@ class _Step3State extends State<Step3PatientData> {
                   ),
                   const SizedBox(height: 12),
                   _ChipSelector(
-                    label: isEs ? 'SEXO BIOLÓGICO' : 'BIOLOGICAL SEX',
+                    label: isEs ? 'Sexo biológico' : 'Biological sex',
                     value: d.biologicalSex,
                     options: sex,
                     required: true,
@@ -483,7 +513,7 @@ class _Step3State extends State<Step3PatientData> {
                   ),
                   const SizedBox(height: 12),
                   _StyledDropdown<String>(
-                    label: isEs ? 'IDENTIDAD DE GÉNERO' : 'GENDER IDENTITY',
+                    label: isEs ? 'Identidad de género' : 'Gender identity',
                     value: d.genderIdentity ?? '99',
                     items: gender,
                     onChanged: (v) =>
@@ -506,16 +536,16 @@ class _Step3State extends State<Step3PatientData> {
                   ),
                   const SizedBox(height: 12),
                   _StyledDropdown<String>(
-                    label: isEs ? 'ETNIA' : 'ETHNICITY',
-                    value: d.ethnicity ?? '06',
+                    label: isEs ? 'Etnia' : 'Ethnicity',
+                    value: d.ethnicity ?? '6',
                     items: eth,
                     onChanged: (v) =>
-                        setState(() => d.ethnicity = v == '06' ? null : v),
+                        setState(() => d.ethnicity = v == '6' ? null : v),
                   ),
                   if (_hasEthnicity) ...[
                     const SizedBox(height: 12),
                     _StyledTextField(
-                      label: isEs ? 'COMUNIDAD ÉTNICA' : 'ETHNIC COMMUNITY',
+                      label: isEs ? 'Comunidad étnica' : 'Ethnic community',
                       controller: _ethnicComm,
                       hint: ethnicCommHint,
                       helperText: ethnicCommHelper,
@@ -523,7 +553,7 @@ class _Step3State extends State<Step3PatientData> {
                   ],
                   const SizedBox(height: 12),
                   _StyledDropdown<String>(
-                    label: isEs ? 'DISCAPACIDAD' : 'DISABILITY',
+                    label: isEs ? 'Discapacidad' : 'Disability',
                     value: d.disabilityCategory ?? '00',
                     items: dis,
                     onChanged: (v) => setState(
@@ -535,26 +565,24 @@ class _Step3State extends State<Step3PatientData> {
 
               const SizedBox(height: 14),
 
-              // ── Blood type ─────────────────────────────────────────────
+              // ── Tipo de sangre (Opcional) ──────────────────────────────────
               _SectionCard(
                 children: [
-                  _SectionHeader(
-                    icon: Icons.bloodtype_outlined,
-                    title: s.bloodType,
-                    subtitle: s.bloodTypeReadOnly,
-                  ),
                   _ChipSelector(
-                    label: '',
-                    value: d.bloodType ?? 'O+',
+                    label: s.bloodType,
+                    value: d.bloodType,
                     options: blood,
-                    onChanged: (v) => setState(() => d.bloodType = v),
+                    required: false,
+                    allowDeselect: true,
+                    onChanged: (v) => setState(() {
+                      d.bloodType = (d.bloodType == v) ? null : v;
+                    }),
                   ),
                 ],
               ),
 
               const SizedBox(height: 14),
 
-              // ── Measurements (weight / height) ─────────────────────────
               _SectionCard(
                 children: [
                   _SectionHeader(
@@ -592,7 +620,6 @@ class _Step3State extends State<Step3PatientData> {
 
               const SizedBox(height: 14),
 
-              // ── Residence ─────────────────────────────────────────────────
               _SectionCard(
                 children: [
                   _SectionHeader(icon: Icons.home_outlined, title: s.address),
@@ -673,14 +700,9 @@ class _SectionCard extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.icon,
-    required this.title,
-    this.subtitle,
-  });
+  const _SectionHeader({required this.icon, required this.title});
   final IconData icon;
   final String title;
-  final String? subtitle;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -701,22 +723,16 @@ class _SectionHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              if (subtitle != null)
+              if (title.isNotEmpty)
                 Text(
-                  subtitle!,
+                  title,
                   style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
                   ),
                 ),
+              //
             ],
           ),
         ),
@@ -731,6 +747,7 @@ class _StyledTextField extends StatelessWidget {
     required this.controller,
     required this.hint,
     this.required = false,
+    this.isError = false,
     this.keyboardType = TextInputType.text,
     this.textCapitalization = TextCapitalization.none,
     this.helperText,
@@ -740,6 +757,7 @@ class _StyledTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final bool required;
+  final bool isError;
   final TextInputType keyboardType;
   final TextCapitalization textCapitalization;
   final String? helperText;
@@ -766,16 +784,16 @@ class _StyledTextField extends StatelessWidget {
           filled: true,
           fillColor: AppColors.white,
           helperText: helperText,
-          helperStyle: const TextStyle(
+          helperStyle: TextStyle(
             fontSize: 11,
-            color: AppColors.textSecondary,
+            color: isError ? AppColors.error : AppColors.textSecondary,
           ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 14,
             vertical: 14,
           ),
-          enabledBorder: _kEnabledBorder,
-          focusedBorder: _kFocusedBorder,
+          enabledBorder: isError ? _kErrorBorder : _kEnabledBorder,
+          focusedBorder: isError ? _kErrorBorder : _kFocusedBorder,
         ),
       ),
     ],
@@ -917,13 +935,15 @@ class _ChipSelector extends StatelessWidget {
     required this.options,
     required this.onChanged,
     this.required = false,
+    this.allowDeselect = false,
   });
 
   final String label;
-  final String value;
+  final String? value;
   final Map<String, String> options;
   final ValueChanged<String> onChanged;
   final bool required;
+  final bool allowDeselect;
 
   @override
   Widget build(BuildContext context) => Column(

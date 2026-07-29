@@ -1,20 +1,23 @@
+// test/widget/sync_queue_screen_widget_test.dart
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/sync/presentation/sync_queue_screen.dart';
 import 'package:health_without_borders_frontend/src/shared/widgets/screen_bottom_handle.dart';
-import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
-import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
 class MockLocalDatabase extends Mock implements LocalDatabase {}
 
@@ -100,12 +103,35 @@ class _LocaleWrapperState extends State<_LocaleWrapper> {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late MockLocalDatabase db;
   late MockSyncEngine syncEngine;
 
   setUp(() {
     db = MockLocalDatabase();
     syncEngine = MockSyncEngine();
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+          (MethodCall methodCall) async {
+            if (methodCall.method == 'check') {
+              return <String>['wifi'];
+            }
+            return null;
+          },
+        );
+
+    when(() => syncEngine.refreshPendingCount()).thenAnswer((_) async {});
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+          null,
+        );
   });
 
   group('SyncQueueScreen – estado vacío', () {
@@ -140,7 +166,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Matches the exact value of AppStrings.allSynced in Spanish.
       expect(find.text('Todo sincronizado'), findsOneWidget);
     });
 
@@ -175,7 +200,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // ElevatedButton with cloud_upload only appears when entries are present.
       expect(
         find.ancestor(
           of: find.byIcon(Icons.cloud_upload),
@@ -190,8 +214,6 @@ void main() {
     testWidgets('muestra CircularProgressIndicator mientras carga', (
       tester,
     ) async {
-      // Using a Completer that never completes avoids active timers at the end of the test,
-      // unlike Future.delayed with a long duration.
       final completer = Completer<List<LocalPatientEntry>>();
       when(() => db.getUnsyncedRecords()).thenAnswer((_) => completer.future);
 
@@ -206,7 +228,6 @@ void main() {
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-      // Complete before the widget tree is disposed to prevent leaks.
       completer.complete([]);
       await tester.pumpAndSettle();
     });
@@ -230,7 +251,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // maskedName: "Ana A." and "Bruno B."
       expect(find.text('Ana A.'), findsOneWidget);
       expect(find.text('Bruno B.'), findsOneWidget);
     });
@@ -295,7 +315,6 @@ void main() {
       await tester.tap(find.text('Sincronizar todo'));
       await tester.pumpAndSettle();
 
-      // At least 2 calls: 1 during initState + 1 after syncAll.
       verify(() => db.getUnsyncedRecords()).called(greaterThanOrEqualTo(2));
     });
   });
@@ -387,7 +406,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The Padding holding the error message is only rendered when hasErr is true.
       expect(find.text('Error'), findsNothing);
     });
 
@@ -438,9 +456,7 @@ void main() {
 
     testWidgets('un conflicto 409 oculta el botón Sync ahora', (tester) async {
       when(() => db.getUnsyncedRecords()).thenAnswer(
-        (_) async => [
-          makeEntry(syncError: 'conflict', syncErrorCode: 409),
-        ],
+        (_) async => [makeEntry(syncError: 'conflict', syncErrorCode: 409)],
       );
 
       await tester.pumpWidget(
@@ -452,33 +468,32 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Retrying a duplicate device_uid can never succeed, so the action is gone.
       expect(find.text('Sync ahora'), findsNothing);
-      // Review stays available so the user can inspect and re-register.
       expect(find.text('Revisar'), findsOneWidget);
     });
 
-    testWidgets('un error no-409 muestra el mensaje y conserva Sync ahora', (
-      tester,
-    ) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer(
-        (_) async => [
-          makeEntry(syncError: 'error de servidor', syncErrorCode: 500),
-        ],
-      );
+    testWidgets(
+      'un error no-409 conserva el estado pendiente y el botón Sync ahora',
+      (tester) async {
+        when(() => db.getUnsyncedRecords()).thenAnswer(
+          (_) async => [
+            makeEntry(syncError: 'error de servidor', syncErrorCode: 500),
+          ],
+        );
 
-      await tester.pumpWidget(
-        buildTestApp(
-          child: const SyncQueueScreen(),
-          db: db,
-          syncEngine: syncEngine,
-        ),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.text('error de servidor'), findsOneWidget);
-      expect(find.text('Sync ahora'), findsOneWidget);
-    });
+        expect(find.text('Pendiente'), findsOneWidget);
+        expect(find.text('Sync ahora'), findsOneWidget);
+      },
+    );
 
     testWidgets('botón Review está presente por cada card', (tester) async {
       when(
@@ -518,10 +533,17 @@ void main() {
   });
 
   group('_SyncCard – estado de error', () {
-    testWidgets('muestra badge "Error" cuando hay syncError', (tester) async {
-      when(
-        () => db.getUnsyncedRecords(),
-      ).thenAnswer((_) async => [makeEntry(syncError: 'Fallo')]);
+    testWidgets('muestra badge "Duplicado" cuando hay conflicto 409', (
+      tester,
+    ) async {
+      when(() => db.getUnsyncedRecords()).thenAnswer(
+        (_) async => [
+          makeEntry(
+            syncError: 'A patient is already registered with this device tag.',
+            syncErrorCode: 409,
+          ),
+        ],
+      );
 
       await tester.pumpWidget(
         buildTestApp(
@@ -532,13 +554,20 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Error'), findsOneWidget);
+      expect(find.text('Duplicado'), findsOneWidget);
     });
 
-    testWidgets('la card tiene borde cuando hay error', (tester) async {
-      when(
-        () => db.getUnsyncedRecords(),
-      ).thenAnswer((_) async => [makeEntry(syncError: 'Fail')]);
+    testWidgets('la card tiene borde cuando hay error de conflicto', (
+      tester,
+    ) async {
+      when(() => db.getUnsyncedRecords()).thenAnswer(
+        (_) async => [
+          makeEntry(
+            syncError: 'A patient is already registered with this device tag.',
+            syncErrorCode: 409,
+          ),
+        ],
+      );
 
       await tester.pumpWidget(
         buildTestApp(
@@ -549,7 +578,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Finds the Container of the card that applies the border.
       final containers = tester.widgetList<Container>(find.byType(Container));
       final hasBorder = containers.any((c) {
         final deco = c.decoration as BoxDecoration?;
@@ -601,7 +629,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Sync ahora'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.byType(SnackBar), findsOneWidget);
       expect(find.text('Sincronizado correctamente'), findsOneWidget);
@@ -625,7 +653,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Sync ahora'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.byType(SnackBar), findsOneWidget);
       expect(
@@ -677,7 +705,6 @@ void main() {
       await tester.tap(find.byIcon(Icons.delete_outline));
       await tester.pumpAndSettle();
 
-      // maskedName appears both in the card and the dialog, so we scope the search to the AlertDialog.
       expect(
         find.descendant(
           of: find.byType(AlertDialog),
@@ -707,7 +734,6 @@ void main() {
       await tester.tap(find.byIcon(Icons.delete_outline));
       await tester.pumpAndSettle();
 
-      // The confirm button (Eliminar) is the last TextButton inside the dialog.
       await tester.tap(find.text('Eliminar'));
       await tester.pumpAndSettle();
 
@@ -812,5 +838,40 @@ void main() {
 
       expect(find.byType(SyncQueueScreen), findsNothing);
     });
+
+    testWidgets(
+      'alternar el idioma de ES a EN actualiza los componentes textuales de forma reactiva',
+      (tester) async {
+        when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final BuildContext context = tester.element(
+          find.byType(SyncQueueScreen),
+        );
+        final sEs = AppStrings.of(context);
+
+        expect(find.text(sEs.allSynced), findsOneWidget);
+
+        await tester.tap(find.text('EN'));
+        await tester.pumpAndSettle();
+
+        final BuildContext contextEn = tester.element(
+          find.byType(SyncQueueScreen),
+        );
+        final sEn = AppStrings.of(contextEn);
+
+        expect(find.text(sEn.allSynced), findsOneWidget);
+        expect(find.text(sEs.allSynced), findsNothing);
+      },
+    );
   });
 }

@@ -20,6 +20,11 @@ List<String> validateGuardianForm({
   required String name2,
   required List<List<Offset>> signatureStrokes2,
   required bool auth2Accepted,
+  String email = '',
+  String docNumber2 = '',
+  String phone2 = '',
+  String email2 = '',
+  bool isEs = true,
   String guardianFullName = 'Nombre completo',
   String guardianPhoneLabel = 'Teléfono',
   String guardianNfcDevice = 'Dispositivo NFC',
@@ -38,11 +43,70 @@ List<String> validateGuardianForm({
     if (signatureStrokes.isEmpty) missing.add(bioSigLabel);
   }
 
+  final String cleanDoc = docNumber.trim();
+  if (cleanDoc.isNotEmpty) {
+    final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
+    if (!docRegex.hasMatch(cleanDoc)) {
+      missing.add(
+        isEs
+            ? 'Documento de guardián inválido'
+            : 'Invalid Guardian Document format',
+      );
+    }
+  }
+
+  final String cleanPhone = phone.trim();
+  if (cleanPhone.isNotEmpty) {
+    final phoneRegex = RegExp(r'^\+?[0-9]{7,15}$');
+    if (!phoneRegex.hasMatch(cleanPhone)) {
+      missing.add(isEs ? 'Teléfono inválido' : 'Invalid Phone format');
+    }
+  }
+
+  final String cleanEmail = email.trim();
+  if (cleanEmail.isNotEmpty) {
+    final emailRegex = RegExp(
+      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    );
+    if (!emailRegex.hasMatch(cleanEmail)) {
+      missing.add(
+        isEs ? 'Correo electrónico inválido' : 'Invalid Email format',
+      );
+    }
+  }
+
   if (signatureStrokes.isNotEmpty) {
     if (!authAccepted) missing.add(confirmChanges);
   }
 
   if (hasGuardian2 && name2.trim().isNotEmpty) {
+    final String cleanDoc2 = docNumber2.trim();
+    final String cleanPhone2 = phone2.trim();
+    final String cleanEmail2 = email2.trim();
+
+    if (cleanDoc2.isNotEmpty &&
+        !RegExp(r'^[a-zA-Z0-9-]{5,20}$').hasMatch(cleanDoc2)) {
+      missing.add(
+        isEs
+            ? 'Documento de Guardián 2 inválido'
+            : 'Invalid Guardian 2 Document',
+      );
+    }
+    if (cleanPhone2.isNotEmpty &&
+        !RegExp(r'^\+?[0-9]{7,15}$').hasMatch(cleanPhone2)) {
+      missing.add(
+        isEs ? 'Teléfono de Guardián 2 inválido' : 'Invalid Guardian 2 Phone',
+      );
+    }
+    if (cleanEmail2.isNotEmpty &&
+        !RegExp(
+          r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+        ).hasMatch(cleanEmail2)) {
+      missing.add(
+        isEs ? 'Correo de Guardián 2 inválido' : 'Invalid Guardian 2 Email',
+      );
+    }
+
     if (signatureStrokes2.isNotEmpty) {
       if (!auth2Accepted) missing.add(auth2Label);
     }
@@ -62,7 +126,7 @@ String? signatureNullWhenEmpty(List<List<Offset>> strokes) {
 
 void main() {
   group('RegisterDraft – inicialización de Step2Guardian', () {
-    test('Carga valores del guardián 1 correctamente', () {
+    test('1. Carga valores del guardián 1 correctamente', () {
       final draft = RegisterDraft()
         ..guardianName = 'Ana García'
         ..guardianPhone = '3001234567'
@@ -81,7 +145,7 @@ void main() {
       expect(draft.guardianAuthAccepted, isTrue);
     });
 
-    test('Valores de guardián 1 son null por defecto', () {
+    test('2. Valores de guardián 1 son null por defecto', () {
       final draft = RegisterDraft();
       expect(draft.guardianName, isNull);
       expect(draft.guardianPhone, isNull);
@@ -91,21 +155,21 @@ void main() {
       expect(draft.guardianAuthAccepted, isNull);
     });
 
-    test('_hasGuardian2 es false cuando guardian2Name es null', () {
+    test('3. _hasGuardian2 es false cuando guardian2Name es null', () {
       final draft = RegisterDraft()..guardian2Name = null;
       final hasGuardian2 =
           draft.guardian2Name != null && draft.guardian2Name!.isNotEmpty;
       expect(hasGuardian2, isFalse);
     });
 
-    test('_hasGuardian2 es false cuando guardian2Name está vacío', () {
+    test('4. _hasGuardian2 es false cuando guardian2Name está vacío', () {
       final draft = RegisterDraft()..guardian2Name = '';
       final hasGuardian2 =
           draft.guardian2Name != null && draft.guardian2Name!.isNotEmpty;
       expect(hasGuardian2, isFalse);
     });
 
-    test('_hasGuardian2 es true cuando guardian2Name tiene contenido', () {
+    test('5. _hasGuardian2 es true cuando guardian2Name tiene contenido', () {
       final draft = RegisterDraft()..guardian2Name = 'Carlos';
       final hasGuardian2 =
           draft.guardian2Name != null && draft.guardian2Name!.isNotEmpty;
@@ -114,7 +178,7 @@ void main() {
   });
 
   group('Validación _save() – requiredForMinor: true', () {
-    test('Todos los campos vacíos → 5 errores', () {
+    test('6. Todos los campos vacíos → 5 errores', () {
       final missing = validateGuardianForm(
         requiredForMinor: true,
         name: '',
@@ -136,7 +200,7 @@ void main() {
       expect(missing, contains('Firma biométrica'));
     });
 
-    test('Nombre con solo espacios → sigue faltando', () {
+    test('7. Nombre con solo espacios → sigue faltando', () {
       final missing = validateGuardianForm(
         requiredForMinor: true,
         name: '   ',
@@ -155,7 +219,7 @@ void main() {
       expect(missing, contains('Nombre completo'));
     });
 
-    test('Formulario completo y válido → sin errores', () {
+    test('8. Formulario completo y válido → sin errores', () {
       final missing = validateGuardianForm(
         requiredForMinor: true,
         name: 'Ana García',
@@ -175,7 +239,7 @@ void main() {
     });
 
     test(
-      'Firma presente pero autorización no aceptada → error confirmChanges',
+      '9. Firma presente pero autorización no aceptada → error confirmChanges',
       () {
         final missing = validateGuardianForm(
           requiredForMinor: true,
@@ -186,7 +250,7 @@ void main() {
           signatureStrokes: [
             [const Offset(0, 0), const Offset(10, 10)],
           ],
-          authAccepted: false, // ← sin aceptar
+          authAccepted: false,
           hasGuardian2: false,
           name2: '',
           signatureStrokes2: [],
@@ -198,7 +262,7 @@ void main() {
   });
 
   group('Validación _save() – requiredForMinor: false', () {
-    test('Campos vacíos sin firma → sin errores (todo opcional)', () {
+    test('10. Campos vacíos sin firma → sin errores (todo opcional)', () {
       final missing = validateGuardianForm(
         requiredForMinor: false,
         name: '',
@@ -215,7 +279,7 @@ void main() {
       expect(missing, isEmpty);
     });
 
-    test('Firma dibujada sin aceptar autorización → error', () {
+    test('11. Firma dibujada sin aceptar autorización → error', () {
       final missing = validateGuardianForm(
         requiredForMinor: false,
         name: '',
@@ -234,7 +298,7 @@ void main() {
       expect(missing, contains('Confirmar cambios'));
     });
 
-    test('Firma dibujada y autorización aceptada → sin errores', () {
+    test('12. Firma dibujada y autorización aceptada → sin errores', () {
       final missing = validateGuardianForm(
         requiredForMinor: false,
         name: '',
@@ -255,7 +319,7 @@ void main() {
   });
 
   group('Validación guardián 2', () {
-    test('Guardián 2 activo, con firma y sin autorización → error', () {
+    test('13. Guardián 2 activo, con firma y sin autorización → error', () {
       final missing = validateGuardianForm(
         requiredForMinor: false,
         name: '',
@@ -274,27 +338,30 @@ void main() {
       expect(missing, contains('Autorización guardián 2'));
     });
 
-    test('Guardián 2 activo, con firma y con autorización → sin error G2', () {
-      final missing = validateGuardianForm(
-        requiredForMinor: false,
-        name: '',
-        phone: '',
-        uid: '',
-        docNumber: '',
-        signatureStrokes: [],
-        authAccepted: false,
-        hasGuardian2: true,
-        name2: 'Carlos López',
-        signatureStrokes2: [
-          [const Offset(0, 0), const Offset(5, 5)],
-        ],
-        auth2Accepted: true,
-      );
-      expect(missing, isNot(contains('Autorización guardián 2')));
-    });
+    test(
+      '14. Guardián 2 activo, con firma y con autorización → sin error G2',
+      () {
+        final missing = validateGuardianForm(
+          requiredForMinor: false,
+          name: '',
+          phone: '',
+          uid: '',
+          docNumber: '',
+          signatureStrokes: [],
+          authAccepted: false,
+          hasGuardian2: true,
+          name2: 'Carlos López',
+          signatureStrokes2: [
+            [const Offset(0, 0), const Offset(5, 5)],
+          ],
+          auth2Accepted: true,
+        );
+        expect(missing, isNot(contains('Autorización guardián 2')));
+      },
+    );
 
     test(
-      'Guardián 2 activo pero name2 vacío → no se valida autorización G2',
+      '15. Guardián 2 activo pero name2 vacío → no se valida autorización G2',
       () {
         final missing = validateGuardianForm(
           requiredForMinor: false,
@@ -315,7 +382,7 @@ void main() {
       },
     );
 
-    test('Guardián 2 sin firma → no requiere autorización G2', () {
+    test('16. Guardián 2 sin firma → no requiere autorización G2', () {
       final missing = validateGuardianForm(
         requiredForMinor: false,
         name: '',
@@ -333,13 +400,12 @@ void main() {
     });
   });
 
-  // ── Grupo 5: signatureToBase64 ───────────────────────────────────────────
   group('_signatureToBase64 – lógica de retorno null', () {
-    test('Sin trazos → retorna null', () {
+    test('17. Sin trazos → retorna null', () {
       expect(signatureNullWhenEmpty([]), isNull);
     });
 
-    test('Con trazos → retorna non-null', () {
+    test('18. Con trazos → retorna non-null', () {
       final result = signatureNullWhenEmpty([
         [const Offset(0, 0), const Offset(10, 10)],
       ]);
@@ -348,19 +414,19 @@ void main() {
   });
 
   group('_save() – escritura en RegisterDraft', () {
-    test('Guarda trim() correcto de nombre con espacios', () {
+    test('19. Guarda trim() correcto de nombre con espacios', () {
       final name = '  Ana García  ';
       final saved = name.trim().isEmpty ? null : name.trim();
       expect(saved, 'Ana García');
     });
 
-    test('Campo vacío con espacios se convierte a null', () {
+    test('20. Campo vacío con espacios se convierte a null', () {
       final name = '   ';
       final saved = name.trim().isEmpty ? null : name.trim();
       expect(saved, isNull);
     });
 
-    test('Cuando hasGuardian2 es false, campos G2 se limpian a null', () {
+    test('21. Cuando hasGuardian2 es false, campos G2 se limpian a null', () {
       final draft = RegisterDraft()
         ..guardian2Name = 'Carlos'
         ..guardian2Phone = '300'
@@ -392,14 +458,14 @@ void main() {
   });
 
   group('_SignaturePainter – shouldRepaint', () {
-    test('Misma instancia de trazos → false', () {
+    test('22. Misma instancia de trazos → false', () {
       final strokes = [
         [const Offset(0, 0), const Offset(10, 10)],
       ];
       expect(strokes != strokes, isFalse);
     });
 
-    test('Diferente instancia de trazos → true', () {
+    test('23. Diferente instancia de trazos → true', () {
       final strokes1 = [
         [const Offset(0, 0), const Offset(10, 10)],
       ];
@@ -411,7 +477,7 @@ void main() {
   });
 
   group('_clearSignature', () {
-    test('Limpia trazos y currentStroke', () {
+    test('24. Limpia trazos y currentStroke', () {
       final strokes = <List<Offset>>[
         [const Offset(0, 0), const Offset(5, 5)],
       ];
@@ -426,28 +492,146 @@ void main() {
   });
 
   group('Selectores – valores por defecto', () {
-    test('docType por defecto es CC', () {
+    test('25. docType por defecto es CC', () {
       final draft = RegisterDraft();
       final docType = draft.guardianDocType ?? 'CC';
       expect(docType, 'CC');
     });
 
-    test('guardian2DocType por defecto es CC', () {
+    test('26. guardian2DocType por defecto es CC', () {
       final draft = RegisterDraft();
       final docType = draft.guardian2DocType ?? 'CC';
       expect(docType, 'CC');
     });
 
-    test('guardian2Relationship por defecto es 01', () {
+    test('27. guardian2Relationship por defecto es 01', () {
       final draft = RegisterDraft();
       final rel = draft.guardian2Relationship ?? '01';
       expect(rel, '01');
     });
 
-    test('guardianAuthAccepted por defecto es false', () {
+    test('28. guardianAuthAccepted por defecto es false', () {
       final draft = RegisterDraft();
       final accepted = draft.guardianAuthAccepted ?? false;
       expect(accepted, isFalse);
+    });
+  });
+
+  group('Validaciones de formato extendidas (Regex branches)', () {
+    test('29. Documento con formato inválido lanza error', () {
+      final missing = validateGuardianForm(
+        requiredForMinor: false,
+        name: '',
+        phone: '',
+        uid: '',
+        docNumber: '123',
+        signatureStrokes: [],
+        authAccepted: false,
+        hasGuardian2: false,
+        name2: '',
+        signatureStrokes2: [],
+        auth2Accepted: false,
+      );
+      expect(missing, contains('Documento de guardián inválido'));
+    });
+
+    test('30. Teléfono con letras rompe la validación', () {
+      final missing = validateGuardianForm(
+        requiredForMinor: false,
+        name: '',
+        phone: '300-ABC-123',
+        uid: '',
+        docNumber: '',
+        signatureStrokes: [],
+        authAccepted: false,
+        hasGuardian2: false,
+        name2: '',
+        signatureStrokes2: [],
+        auth2Accepted: false,
+      );
+      expect(missing, contains('Teléfono inválido'));
+    });
+
+    test('31. Correo sin arroba o estructura inválida falla', () {
+      final missing = validateGuardianForm(
+        requiredForMinor: false,
+        name: '',
+        phone: '',
+        uid: '',
+        docNumber: '',
+        signatureStrokes: [],
+        authAccepted: false,
+        hasGuardian2: false,
+        name2: '',
+        signatureStrokes2: [],
+        auth2Accepted: false,
+        email: 'test_invalido.com',
+      );
+      expect(missing, contains('Correo electrónico inválido'));
+    });
+
+    test(
+      '32. Guardián 2 con formatos Regex rotos agrega múltiples errores',
+      () {
+        final missing = validateGuardianForm(
+          requiredForMinor: false,
+          name: '',
+          phone: '',
+          uid: '',
+          docNumber: '',
+          signatureStrokes: [],
+          authAccepted: false,
+          hasGuardian2: true,
+          name2: 'Carlos López',
+          signatureStrokes2: [],
+          auth2Accepted: false,
+          docNumber2: '12',
+          phone2: 'letras',
+          email2: 'no-email',
+        );
+        expect(missing, contains('Documento de Guardián 2 inválido'));
+        expect(missing, contains('Teléfono de Guardián 2 inválido'));
+        expect(missing, contains('Correo de Guardián 2 inválido'));
+      },
+    );
+
+    test('33. Formato en inglés emite mensajes traducidos en missing', () {
+      final missing = validateGuardianForm(
+        requiredForMinor: false,
+        name: '',
+        phone: 'abc',
+        uid: '',
+        docNumber: '123',
+        signatureStrokes: [],
+        authAccepted: false,
+        hasGuardian2: true,
+        name2: 'John Doe',
+        signatureStrokes2: [],
+        auth2Accepted: false,
+        docNumber2: '12',
+        phone2: 'invalid',
+        email2: 'bademail',
+        email: 'bademail',
+        isEs: false,
+      );
+      expect(missing, contains('Invalid Guardian Document format'));
+      expect(missing, contains('Invalid Phone format'));
+      expect(missing, contains('Invalid Email format'));
+      expect(missing, contains('Invalid Guardian 2 Document'));
+      expect(missing, contains('Invalid Guardian 2 Phone'));
+      expect(missing, contains('Invalid Guardian 2 Email'));
+    });
+
+    test('34. Trazo de un solo punto es ignorado por el pintor de firma', () {
+      final strokes = [
+        [const Offset(10, 10)],
+      ];
+      int pathsDrawn = 0;
+      for (final stroke in strokes) {
+        if (stroke.length < 2) continue;
+        pathsDrawn++;
+      }
+      expect(pathsDrawn, 0);
     });
   });
 }

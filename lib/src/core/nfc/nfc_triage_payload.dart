@@ -94,11 +94,13 @@ class NfcTriagePayload {
     if (algList is List) {
       for (final a in algList) {
         if (a is Map) {
-          allergies.add(TriageAllergy(
-            category: a['c']?.toString() ?? '',
-            allergen: a['a']?.toString() ?? '',
-            reaction: a['r']?.toString() ?? '',
-          ));
+          allergies.add(
+            TriageAllergy(
+              category: a['c']?.toString() ?? '',
+              allergen: a['a']?.toString() ?? '',
+              reaction: a['r']?.toString() ?? '',
+            ),
+          );
         }
       }
     }
@@ -152,6 +154,26 @@ class TriageSummary {
   final String chronicConditions;
   final List<TriageAllergy> allergies;
   final String? vidaCode;
+
+  /// Whether the patient is under 18 today, per the wristband's date of birth.
+  ///
+  /// Used offline to decide whether the guardian card is required, mirroring
+  /// the rule the backend enforces online with its 403.
+  ///
+  /// Fails closed: an empty or unparseable date returns true. If we cannot
+  /// prove the patient is an adult, we demand the guardian — the safe default
+  /// for an access-control check is the restrictive one.
+  bool get isMinor {
+    final parsed = DateTime.tryParse(dob.trim());
+    if (parsed == null) return true;
+    final now = DateTime.now();
+    var age = now.year - parsed.year;
+    final hadBirthday =
+        now.month > parsed.month ||
+        (now.month == parsed.month && now.day >= parsed.day);
+    if (!hadBirthday) age--;
+    return age < 18;
+  }
 
   String get fullName => '$firstName $lastName';
 
