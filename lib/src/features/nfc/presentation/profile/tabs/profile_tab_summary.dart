@@ -468,11 +468,12 @@ class ProfileTabSummary extends StatelessWidget {
           '05': s.allergyShortInsect,
           '06': s.allergyShortOther,
         }[c] ??
-        c;
+        (c.isNotEmpty ? c : (s.welcome == 'Bienvenido' ? 'Otra' : 'Other'));
   }
 
   String _docTypeLabel(BuildContext context, String c) {
     final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
     return {
           'RC': s.docTypeRC,
           'TI': s.docTypeTI,
@@ -483,32 +484,36 @@ class ProfileTabSummary extends StatelessWidget {
           'PT': s.docTypePT,
           'MS': s.docTypeMS,
           'AS': s.docTypeAS,
+          'SC': isEs ? 'Salvoconducto' : 'Safe-conduct',
+          'CN': isEs ? 'Cert. Nacido Vivo' : 'Live Birth Cert.',
+          'DE': isEs ? 'Doc. Extranjero' : 'Foreign ID',
         }[c] ??
-        c;
+        (c.isNotEmpty ? c : '—');
   }
 
   String _sexLabel(BuildContext context, String c) {
     final s = AppStrings.of(context);
-    return {'M': s.sexMale, 'F': s.sexFemale, 'I': s.sexIndeterminate}[c] ?? c;
+    return {'M': s.sexMale, 'F': s.sexFemale, 'I': s.sexIndeterminate}[c] ??
+        (s.welcome == 'Bienvenido' ? 'Indeterminado' : 'Indeterminate');
   }
 
   String? _genderLabel(BuildContext context, String? c) {
-    if (c == null) return null;
+    if (c == null || c.isEmpty) return null;
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
     return {
-      '01': AppStrings.of(context).sexMale,
-      '02': AppStrings.of(context).sexFemale,
-      '03': 'Transgénero',
-      '04': 'No binario',
-    }[c];
+          '01': s.sexMale,
+          '02': s.sexFemale,
+          '03': isEs ? 'Transgénero' : 'Transgender',
+          '04': isEs ? 'No binario' : 'Non-binary',
+          '99': isEs ? 'No reporta' : 'Not reported',
+        }[c] ??
+        c;
   }
 
   String _formatDob(String dob, bool isEs) {
-    if (dob.isEmpty || !dob.contains('-')) return dob;
-    final p = dob.split('-');
-    if (p.length != 3) return dob;
-
-    final mi = int.tryParse(p[1]);
-    if (mi == null || mi < 1 || mi > 12) return dob;
+    final date = tryParsePatientDate(dob);
+    if (date == null) return dob.isNotEmpty ? dob : '—';
 
     if (isEs) {
       const mEs = [
@@ -525,7 +530,7 @@ class ProfileTabSummary extends StatelessWidget {
         'noviembre',
         'diciembre',
       ];
-      return '${int.parse(p[2])} de ${mEs[mi - 1]} de ${p[0]}';
+      return '${date.day} de ${mEs[date.month - 1]} de ${date.year}';
     } else {
       const mEn = [
         'January',
@@ -541,7 +546,7 @@ class ProfileTabSummary extends StatelessWidget {
         'November',
         'December',
       ];
-      return '${mEn[mi - 1]} ${int.parse(p[2])}, ${p[0]}';
+      return '${mEn[date.month - 1]} ${date.day}, ${date.year}';
     }
   }
 }

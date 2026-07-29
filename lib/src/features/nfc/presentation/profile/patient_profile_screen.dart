@@ -291,10 +291,29 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     }
   }
 
-  void _updateVitalSigns({double? weight, double? height}) {
+  void _updateVitalSigns({double? weight, double? height, String? bloodType}) {
     setState(() {
+      final info = _draft.patientInfo;
       _draft = _replacePatientInfo(
-        _draft.patientInfo.copyWith(weight: weight, height: height),
+        PatientInfo(
+          identification: info.identification,
+          firstLastName: info.firstLastName,
+          secondLastName: info.secondLastName,
+          firstName: info.firstName,
+          secondName: info.secondName,
+          dob: info.dob,
+          nationalityCode: info.nationalityCode,
+          nationalityName: info.nationalityName,
+          biologicalSex: info.biologicalSex,
+          genderIdentity: info.genderIdentity,
+          ethnicity: info.ethnicity,
+          ethnicCommunity: info.ethnicCommunity,
+          disabilityCategory: info.disabilityCategory,
+          address: info.address,
+          bloodType: bloodType ?? info.bloodType,
+          weight: weight ?? info.weight,
+          height: height ?? info.height,
+        ),
       );
     });
     _saveAndPendingSync();
@@ -546,6 +565,23 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   Future<void> _sync({bool silent = false}) async {
     if (widget.readOnly) return;
     if (_isSyncing) return;
+
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+
+    if (!_hasInternet && !silent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isEs
+                ? 'Sin conexión a Internet. Los cambios se guardaron localmente.'
+                : 'No internet connection. Changes saved locally.',
+          ),
+          backgroundColor: Colors.orange.shade800,
+        ),
+      );
+      return;
+    }
+
     if (!silent) {
       setState(() {
         _isSyncing = true;
@@ -575,9 +611,16 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         _isSyncing = false;
       });
       if (!silent) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isEs
+                  ? 'Fallo al sincronizar con el servidor. Cambios preservados localmente.'
+                  : 'Sync failed with server. Changes preserved locally.',
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }
@@ -823,7 +866,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                 ),
                 _ProfileTabsBar(controller: _tabController, draft: _draft),
                 if (widget.emergency) const _EmergencyBanner(),
-                if (widget.offline) const _OfflineBanner(),
+                if (!_hasInternet || widget.offline)
+                  _OfflineBanner(isDynamicDisconnect: !_hasInternet),
                 if (!widget.readOnly && (_chipStatus?.anyDirty ?? false))
                   _NfcStaleBanner(
                     isUpdating: _isUpdatingChips,
@@ -933,24 +977,16 @@ class _ProfileHeader extends StatelessWidget {
   final String? lastSyncedAt;
 
   int? get _age {
-    try {
-      final parts = patient.patientInfo.dob.split('-');
-      if (parts.length != 3) return null;
-      final dob = DateTime(
-        int.parse(parts[0]),
-        int.parse(parts[1]),
-        int.parse(parts[2]),
-      );
-      final now = DateTime.now();
-      var age = now.year - dob.year;
-      if (now.month < dob.month ||
-          (now.month == dob.month && now.day < dob.day)) {
-        age--;
-      }
-      return age;
-    } catch (_) {
-      return null;
+    final dobDateTime = tryParsePatientDate(patient.patientInfo.dob);
+    if (dobDateTime == null) return null;
+
+    final now = DateTime.now();
+    var age = now.year - dobDateTime.year;
+    if (now.month < dobDateTime.month ||
+        (now.month == dobDateTime.month && now.day < dobDateTime.day)) {
+      age--;
     }
+    return age >= 0 ? age : null;
   }
 
   String _initials(String fullName) {
@@ -974,28 +1010,25 @@ class _ProfileHeader extends StatelessWidget {
 
   String _docTypeLabel(BuildContext context) {
     final s = AppStrings.of(context);
-    switch (patient.patientInfo.identification.documentType) {
-      case 'RC':
-        return s.docTypeRC;
-      case 'TI':
-        return s.docTypeTI;
-      case 'CC':
-        return s.docTypeCC;
-      case 'CE':
-        return s.docTypeCE;
-      case 'PA':
-        return s.docTypePA;
-      case 'PE':
-        return s.docTypePE;
-      case 'PT':
-        return s.docTypePT;
-      case 'MS':
-        return s.docTypeMS;
-      case 'AS':
-        return s.docTypeAS;
-      default:
-        return patient.patientInfo.identification.documentType;
-    }
+    final isEs = s.welcome == 'Bienvenido';
+    final code = patient.patientInfo.identification.documentType;
+
+    final map = {
+      'RC': s.docTypeRC,
+      'TI': s.docTypeTI,
+      'CC': s.docTypeCC,
+      'CE': s.docTypeCE,
+      'PA': s.docTypePA,
+      'PE': s.docTypePE,
+      'PT': s.docTypePT,
+      'MS': s.docTypeMS,
+      'AS': s.docTypeAS,
+      'SC': isEs ? 'Salvoconducto' : 'Safe-conduct',
+      'CN': isEs ? 'Cert. Nacido Vivo' : 'Live Birth Cert.',
+      'DE': isEs ? 'Doc. Extranjero' : 'Foreign ID',
+    };
+
+    return map[code] ?? (code.isNotEmpty ? code : '—');
   }
 
   @override
@@ -2004,8 +2037,7 @@ class _EmergencyBanner extends StatelessWidget {
           Expanded(
             child: Text(
               isEs
-                  ? 'Acceso de emergencia · sin autorización del guardián · '
-                        'registrado'
+                  ? 'Acceso de emergencia · sin autorización del guardián · registrado'
                   : 'Emergency access · without guardian authorisation · logged',
               style: const TextStyle(
                 fontSize: 13,
@@ -2021,11 +2053,21 @@ class _EmergencyBanner extends StatelessWidget {
 }
 
 class _OfflineBanner extends StatelessWidget {
-  const _OfflineBanner();
+  const _OfflineBanner({this.isDynamicDisconnect = false});
+
+  final bool isDynamicDisconnect;
 
   @override
   Widget build(BuildContext context) {
     final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final String label = isDynamicDisconnect
+        ? (isEs
+              ? 'Sin conexión a Internet · Los cambios se guardarán localmente'
+              : 'No internet connection · Changes will be saved locally')
+        : (isEs
+              ? 'Vista sin conexión · datos leídos del chip'
+              : 'Offline view · data read from the chip');
+
     return Container(
       width: double.infinity,
       color: const Color(0xFFE7F0F7),
@@ -2036,9 +2078,7 @@ class _OfflineBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              isEs
-                  ? 'Vista sin conexión · datos leídos del chip'
-                  : 'Offline view · data read from the chip',
+              label,
               style: const TextStyle(
                 fontSize: 13,
                 color: Color(0xFF1E4258),

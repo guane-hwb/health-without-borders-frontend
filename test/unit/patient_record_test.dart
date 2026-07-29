@@ -1259,6 +1259,39 @@ void main() {
       expect(r.message, '');
     });
   });
+
+  group('tryParsePatientDate – Parseo defensivo de fechas', () {
+    test('retorna DateTime válido con formato ISO YYYY-MM-DD', () {
+      final date = tryParsePatientDate('2022-05-15');
+      expect(date, equals(DateTime(2022, 5, 15)));
+    });
+
+    test('retorna DateTime válido con formato ISO completo con hora', () {
+      final date = tryParsePatientDate('2020-08-20T14:30:00.000Z');
+      expect(date, equals(DateTime.utc(2020, 8, 20, 14, 30)));
+    });
+
+    test(
+      'retorna DateTime válido con separadores slash YYYY/MM/DD o DD/MM/YYYY',
+      () {
+        final date1 = tryParsePatientDate('2019/12/31');
+        final date2 = tryParsePatientDate('31/12/2019');
+
+        expect(date1, equals(DateTime(2019, 12, 31)));
+        expect(date2, equals(DateTime(2019, 12, 31)));
+      },
+    );
+
+    test(
+      'retorna null y NO lanza FormatException ante texto corrupto o nulo',
+      () {
+        expect(tryParsePatientDate(null), isNull);
+        expect(tryParsePatientDate(''), isNull);
+        expect(tryParsePatientDate('  '), isNull);
+        expect(tryParsePatientDate('fecha-invalida-123'), isNull);
+      },
+    );
+  });
 }
 
 // =========================================================================
