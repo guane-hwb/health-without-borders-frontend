@@ -9,6 +9,7 @@ import '../../features/nfc/data/patient_repository.dart';
 import '../../features/nfc/domain/patient_record.dart';
 import '../network/api_client.dart';
 import '../storage/local_database.dart';
+import '../utils/app_logger.dart';
 
 /// Background sync engine that pushes local patient records to the backend.
 class SyncEngine {
@@ -32,8 +33,12 @@ class SyncEngine {
   Future<void> refreshPendingCount() async {
     try {
       pendingCount.value = await _localDb.getUnsyncedCount();
-    } catch (_) {
-      // Leave the previous value on a transient storage error.
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error al refrescar conteo de pendientes',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 
@@ -49,6 +54,9 @@ class SyncEngine {
     _connectivitySub = stream.listen((List<ConnectivityResult> results) {
       final hasConnection = results.any((r) => r != ConnectivityResult.none);
       if (hasConnection) {
+        AppLogger.d(
+          'Conexión detectada. Iniciando sincronización en segundo plano...',
+        );
         syncAll();
       }
     });
@@ -65,7 +73,7 @@ class SyncEngine {
 
   /// Codigos HTTP que indican un error permanente a nivel de datos o conflicto
   /// de manilla, los cuales NO deben reintentarse automaticamente en segundo plano.
-  static const Set<int> _permanentErrorCodes = {400, 409, 422};
+  static const Set<int> _permanentErrorCodes = <int>{400, 409, 422};
 
   Future<void> syncAll() async {
     await refreshPendingCount();
@@ -76,12 +84,12 @@ class SyncEngine {
       final List<LocalPatientEntry> allUnsynced = await _localDb
           .getUnsyncedRecords();
 
-      // Filtrar registros con errores permanentes conocidos para evitar
-      // el bucle de reintento infinito en segundo plano.
       final pending = allUnsynced.where((entry) {
         final code = entry.syncErrorCode;
         return code == null || !_permanentErrorCodes.contains(code);
       }).toList();
+
+      AppLogger.d('Iniciando syncAll: ${pending.length} registros pendientes.');
 
       for (final entry in pending) {
         await _syncOne(entry);
@@ -90,6 +98,8 @@ class SyncEngine {
       final remaining = await _localDb.getUnsyncedCount();
       pendingCount.value = remaining;
       onSyncStatusChanged?.call(remaining);
+    } catch (e, stack) {
+      AppLogger.e('Error crítico durante syncAll', error: e, stackTrace: stack);
     } finally {
       _isSyncing = false;
       await refreshPendingCount();
@@ -99,6 +109,7 @@ class SyncEngine {
   Future<void> _syncOne(LocalPatientEntry entry) async {
     final PatientFullRecord? record = entry.toPatientRecord();
     if (record == null) {
+      AppLogger.e('Omitiendo registro corrupto con ID: ${entry.patientId}');
       return;
     }
 
@@ -108,9 +119,13 @@ class SyncEngine {
       );
 
       if (response.status == 'success') {
+        AppLogger.d('Registro sincronizado exitosamente: ${entry.patientId}');
         await _localDb.markSynced(entry.patientId, createdAt: entry.createdAt);
         onRecordSynced?.call(entry.patientId, true, null);
       } else {
+        AppLogger.e(
+          'Fallo en sincronización para ${entry.patientId}: ${response.message}',
+        );
         await _localDb.markSyncError(
           entry.patientId,
           'Sync returned status: ${response.status}',
@@ -122,6 +137,10 @@ class SyncEngine {
       final shouldNotRetry =
           e.statusCode == 400 || e.statusCode == 409 || e.statusCode == 422;
 
+      AppLogger.e(
+        'ApiException (${e.statusCode}) sincronizando ${entry.patientId}: ${e.message}',
+      );
+
       await _localDb.markSyncError(
         entry.patientId,
         e.message,
@@ -129,13 +148,15 @@ class SyncEngine {
       );
       onRecordSynced?.call(entry.patientId, false, e.message);
 
-      if (shouldStopAll) {
+      if (shouldStopAll || shouldNotRetry) {
         return;
       }
-      if (shouldNotRetry) {
-        return;
-      }
-    } catch (e) {
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error no controlado sincronizando ${entry.patientId}',
+        error: e,
+        stackTrace: stack,
+      );
       await _localDb.markSyncError(entry.patientId, '$e');
       onRecordSynced?.call(entry.patientId, false, '$e');
     }

@@ -7,6 +7,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
+import '../utils/app_logger.dart';
 
 /// Local SQLite database for offline-first patient storage.
 class LocalDatabase {
@@ -86,14 +87,6 @@ class LocalDatabase {
     ''');
   }
 
-  /// Break-glass access log.
-  ///
-  /// Records every time a clinician viewed a minor's data offline without the
-  /// guardian card present. Kept in its own table with an `is_synced` flag,
-  /// matching the outbound queue pattern, so it can be shipped to the server
-  /// once an audit endpoint exists. Until then it is local-only — which is a
-  /// known limitation, since the log lives on the device of the person it
-  /// audits.
   static Future<void> _createEmergencyLogTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS $_emergencyLogTable (
@@ -108,8 +101,6 @@ class LocalDatabase {
     ''');
   }
 
-  /// Appends a break-glass access entry. Never throws: an audit write must not
-  /// be able to block a clinician from seeing a patient in an emergency.
   Future<void> logEmergencyAccess({
     required String patientUid,
     String? patientName,
@@ -131,12 +122,15 @@ class LocalDatabase {
         return;
       }
       await db.insert(_emergencyLogTable, row);
-    } catch (_) {
-      // Swallow: losing an audit row is bad, blocking emergency care is worse.
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error guardando registro de emergencia local',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 
-  /// Break-glass entries not yet shipped to the server.
   Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs() async {
     try {
       final db = await _database;
@@ -146,8 +140,11 @@ class LocalDatabase {
             .toList();
       }
       return db.query(_emergencyLogTable, where: 'is_synced = 0');
-    } catch (_) {
-      return <Map<String, Object?>>[];
+    } catch (e) {
+      AppLogger.e(
+        'Error obteniendo registros de emergencia no sincronizados: $e',
+      );
+      return const <Map<String, Object?>>[];
     }
   }
 
@@ -189,7 +186,7 @@ class LocalDatabase {
     final rows = await db!.query(
       _table,
       where: 'is_synced = ?',
-      whereArgs: [0],
+      whereArgs: const <int>[0],
       orderBy: 'created_at ASC',
     );
     return rows.map(LocalPatientEntry.fromRow).toList();
@@ -234,10 +231,14 @@ class LocalDatabase {
       await db!.delete(
         _table,
         where: 'patient_id = ? AND created_at = ?',
-        whereArgs: [patientId, createdAt],
+        whereArgs: <String>[patientId, createdAt],
       );
     } else {
-      await db!.delete(_table, where: 'patient_id = ?', whereArgs: [patientId]);
+      await db!.delete(
+        _table,
+        where: 'patient_id = ?',
+        whereArgs: <String>[patientId],
+      );
     }
   }
 
@@ -248,7 +249,7 @@ class LocalDatabase {
   }) async {
     if (_isWeb) {
       if (_webStore.containsKey(patientId)) {
-        _webStore[patientId] = {
+        _webStore[patientId] = <String, dynamic>{
           ..._webStore[patientId]!,
           'sync_error': error,
           'sync_error_code': statusCode,
@@ -259,9 +260,9 @@ class LocalDatabase {
     final db = await _database;
     await db!.update(
       _table,
-      {'sync_error': error, 'sync_error_code': statusCode},
+      <String, dynamic>{'sync_error': error, 'sync_error_code': statusCode},
       where: 'patient_id = ?',
-      whereArgs: [patientId],
+      whereArgs: <String>[patientId],
     );
   }
 
@@ -271,7 +272,11 @@ class LocalDatabase {
       return;
     }
     final db = await _database;
-    await db!.delete(_table, where: 'patient_id = ?', whereArgs: [patientId]);
+    await db!.delete(
+      _table,
+      where: 'patient_id = ?',
+      whereArgs: <String>[patientId],
+    );
   }
 
   // ── NFC chip status (backup staleness) ────────────────────────────────────
@@ -286,7 +291,7 @@ class LocalDatabase {
     final rows = await db!.query(
       _chipStatusTable,
       where: 'patient_id = ?',
-      whereArgs: [patientId],
+      whereArgs: <String>[patientId],
       limit: 1,
     );
     if (rows.isEmpty) return null;
@@ -346,7 +351,7 @@ class LocalDatabase {
     await db!.delete(
       _chipStatusTable,
       where: 'patient_id = ?',
-      whereArgs: [patientId],
+      whereArgs: <String>[patientId],
     );
   }
 
@@ -409,7 +414,8 @@ class LocalPatientEntry {
       return PatientFullRecord.fromJson(
         jsonDecode(recordJson) as Map<String, dynamic>,
       );
-    } catch (_) {
+    } catch (e) {
+      AppLogger.e('Error al deserializar recordJson local para $patientId: $e');
       return null;
     }
   }

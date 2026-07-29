@@ -1,3 +1,5 @@
+// lib/src/features/nfc/data/patient_repository.dart
+
 import '../../../core/network/api_client.dart';
 import '../../auth/data/auth_repository.dart';
 import '../domain/patient_record.dart';
@@ -59,18 +61,6 @@ class PatientRepository {
   // ── POST /api/v1/patients/search ────────────────────────────────────────
   /// Strict patient lookup by identity fields.
   /// Returns exactly one patient or throws 404.
-  ///
-  /// All four parameters are mandatory per the backend contract:
-  ///   - documentNumber (exact match)
-  ///   - birthDate (YYYY-MM-DD, exact match)
-  ///   - firstName (exact, case-insensitive)
-  ///   - lastName (matches first OR second last name, case-insensitive)
-  ///
-  /// Optional: guardianName adds an extra verification layer.
-  ///
-  /// The criteria travel in the request body (not the query string) so that
-  /// the document number, names and birth date never leak into access logs,
-  /// proxies or browser history.
   Future<PatientFullRecord> searchPatient({
     required String documentNumber,
     required String birthDate,
