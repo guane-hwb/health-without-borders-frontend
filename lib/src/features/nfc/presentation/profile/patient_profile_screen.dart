@@ -45,9 +45,6 @@ class PatientProfileScreen extends StatefulWidget {
   final PatientFullRecord patient;
   final String? lastSyncedAt;
 
-  /// When true the profile is shown for review only: every add/edit
-  /// affordance is hidden and all mutation entry points are inert. Used by the
-  /// sync queue to preview a pending record without risk of altering it.
   final bool readOnly;
 
   /// When true the record was reconstructed from an NFC chip because the
@@ -57,10 +54,6 @@ class PatientProfileScreen extends StatefulWidget {
   /// synced when connectivity returns. Triage-only and emergency reads pass
   /// [readOnly] as well, since those snapshots are partial.
   final bool offline;
-
-  /// Break-glass view: a minor's data shown offline without the guardian card.
-  /// Renders a persistent warning and hides the document number, since the
-  /// clinician has not been authorised by the guardian for this access.
   final bool emergency;
 
   @override
@@ -138,9 +131,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   UserRole get _currentRole =>
       AppScope.of(context).authRepository.currentUser?.role ?? UserRole.doctor;
 
-  /// Marks the NFC backup stale after an edit: the guardian card always (it
-  /// holds the full record) and the patient wristband only when a
-  /// triage-relevant field changed. No-op when nothing changed.
   Future<void> _markNfcChipsDirtyIfChanged(LocalDatabase db) async {
     if (_draft.patientId.isEmpty) return;
     if (_draft.toJson().toString() == _original.toJson().toString()) return;
@@ -160,18 +150,12 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     try {
       status = await db.getChipStatus(_draft.patientId);
     } catch (_) {
-      // The local database may be unavailable (e.g. in widget tests, or on a
-      // platform without sqflite). The stale-backup banner is a non-critical
-      // enhancement, so degrade silently instead of breaking the profile.
       status = null;
     }
     if (!mounted) return;
     setState(() => _chipStatus = status);
   }
 
-  /// Re-writes the chips that are marked stale, then clears their flags.
-  /// Writes only the affected chips, walking the user through each tap with a
-  /// guided overlay.
   Future<void> _updateNfcChips() async {
     if (_isUpdatingChips) return;
     final scope = AppScope.of(context);
@@ -311,12 +295,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     setState(() => _isUpdatingChips = false);
   }
 
-  /// Tells the clinician the guardian card holds a partial record: the chip was
-  /// too small for the full history, so the most recent entries were written
-  /// and the rest left off. The full record still syncs to the server.
-  ///
-  /// Takes the messenger rather than reading it from context, so the caller
-  /// captures it before any await gap.
   void _showPartialCardNotice(
     ScaffoldMessengerState messenger,
     GuardianPayloadFit fit,
@@ -344,10 +322,29 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     }
   }
 
-  void _updateVitalSigns({double? weight, double? height}) {
+  void _updateVitalSigns({double? weight, double? height, String? bloodType}) {
     setState(() {
+      final info = _draft.patientInfo;
       _draft = _replacePatientInfo(
-        _draft.patientInfo.copyWith(weight: weight, height: height),
+        PatientInfo(
+          identification: info.identification,
+          firstLastName: info.firstLastName,
+          secondLastName: info.secondLastName,
+          firstName: info.firstName,
+          secondName: info.secondName,
+          dob: info.dob,
+          nationalityCode: info.nationalityCode,
+          nationalityName: info.nationalityName,
+          biologicalSex: info.biologicalSex,
+          genderIdentity: info.genderIdentity,
+          ethnicity: info.ethnicity,
+          ethnicCommunity: info.ethnicCommunity,
+          disabilityCategory: info.disabilityCategory,
+          address: info.address,
+          bloodType: bloodType ?? info.bloodType,
+          weight: weight ?? info.weight,
+          height: height ?? info.height,
+        ),
       );
     });
     _saveAndPendingSync();
@@ -600,6 +597,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (widget.readOnly) return;
     if (_isSyncing) return;
 
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+
     // Offline: a manual sync cannot reach the server. Each edit already saved
     // the record locally with is_synced = 0, so it stays queued and syncs
     // automatically on reconnect. Returning here keeps the pending indicator
@@ -607,7 +606,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     // report the changes as saved to the server.
     if (!_hasInternet) {
       if (!silent) {
-        final isEs = AppStrings.of(context).welcome == 'Bienvenido';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -651,9 +649,16 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         _isSyncing = false;
       });
       if (!silent) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isEs
+                  ? 'Fallo al sincronizar con el servidor. Cambios preservados localmente.'
+                  : 'Sync failed with server. Changes preserved locally.',
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }
@@ -706,6 +711,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       builder: (_) => EditVitalSignsSheet(
         weight: _draft.patientInfo.weight,
         height: _draft.patientInfo.height,
+        bloodType: _draft.patientInfo.bloodType,
         previousWeight: _original.patientInfo.weight,
         previousHeight: _original.patientInfo.height,
         onConfirm: _updateVitalSigns,
@@ -897,7 +903,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                 ),
                 _ProfileTabsBar(controller: _tabController, draft: _draft),
                 if (widget.emergency) const _EmergencyBanner(),
-                if (widget.offline) const _OfflineBanner(),
+                if (!_hasInternet || widget.offline)
+                  _OfflineBanner(isDynamicDisconnect: !_hasInternet),
                 if (!widget.readOnly && (_chipStatus?.anyDirty ?? false))
                   _NfcStaleBanner(
                     isUpdating: _isUpdatingChips,
@@ -1274,10 +1281,6 @@ class _LangDot extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TABS BAR
-// ─────────────────────────────────────────────────────────────────────────────
-
 class _ProfileTabsBar extends StatelessWidget {
   const _ProfileTabsBar({required this.controller, required this.draft});
   final TabController controller;
@@ -1360,10 +1363,6 @@ class _TabLabelWithBadge extends StatelessWidget {
     );
   }
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Manage sheets (opened from Summary clickable sections)
-// ═════════════════════════════════════════════════════════════════════════════
 
 class _AllergiesManageSheet extends StatelessWidget {
   const _AllergiesManageSheet({
@@ -1983,14 +1982,6 @@ class _BgSection extends StatelessWidget {
   }
 }
 
-/// Banner shown when the profile was reconstructed from an NFC chip because
-/// the backend was unreachable. The data may be partial (triage-only) or
-/// slightly behind the server, so the profile is always read-only here.
-/// Break-glass banner: a minor's record opened without the guardian card.
-///
-/// Deliberately loud and always visible — the clinician should not be able to
-/// forget they stepped around a control, and anyone looking over their shoulder
-/// should see it too.
 class _EmergencyBanner extends StatelessWidget {
   const _EmergencyBanner();
 
@@ -2012,8 +2003,7 @@ class _EmergencyBanner extends StatelessWidget {
           Expanded(
             child: Text(
               isEs
-                  ? 'Acceso de emergencia · sin autorización del guardián · '
-                        'registrado'
+                  ? 'Acceso de emergencia · sin autorización del guardián · registrado'
                   : 'Emergency access · without guardian authorisation · logged',
               style: const TextStyle(
                 fontSize: 13,
@@ -2029,11 +2019,21 @@ class _EmergencyBanner extends StatelessWidget {
 }
 
 class _OfflineBanner extends StatelessWidget {
-  const _OfflineBanner();
+  const _OfflineBanner({this.isDynamicDisconnect = false});
+
+  final bool isDynamicDisconnect;
 
   @override
   Widget build(BuildContext context) {
     final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final String label = isDynamicDisconnect
+        ? (isEs
+              ? 'Sin conexión a Internet · Los cambios se guardarán localmente'
+              : 'No internet connection · Changes will be saved locally')
+        : (isEs
+              ? 'Vista sin conexión · datos leídos del chip'
+              : 'Offline view · data read from the chip');
+
     return Container(
       width: double.infinity,
       color: const Color(0xFFE7F0F7),
@@ -2044,9 +2044,7 @@ class _OfflineBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              isEs
-                  ? 'Vista sin conexión · datos leídos del chip'
-                  : 'Offline view · data read from the chip',
+              label,
               style: const TextStyle(
                 fontSize: 13,
                 color: Color(0xFF1E4258),
@@ -2060,8 +2058,6 @@ class _OfflineBanner extends StatelessWidget {
   }
 }
 
-/// Banner shown in the profile when the NFC backup is out of date, offering to
-/// re-write the affected chips.
 class _NfcStaleBanner extends StatelessWidget {
   const _NfcStaleBanner({required this.isUpdating, required this.onUpdate});
 
@@ -2112,13 +2108,6 @@ class _NfcStaleBanner extends StatelessWidget {
   }
 }
 
-/// Builds the message shown when the guardian card was too small for the whole
-/// record and the oldest history was left off.
-///
-/// Kept as a pure top-level function rather than inlined in the State: the text
-/// has real branching (which histories were dropped, how they are joined, two
-/// languages) and that logic deserves direct tests instead of being reachable
-/// only by driving the entire profile screen.
 String partialCardNoticeMessage(GuardianPayloadFit fit, bool isEs) {
   final parts = <String>[];
   if (fit.droppedConsultations > 0) {
