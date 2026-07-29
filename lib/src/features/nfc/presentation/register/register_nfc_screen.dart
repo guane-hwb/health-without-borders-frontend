@@ -208,30 +208,63 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       if (!mounted) return;
     }
 
-    // Guardian card (bounded full record), if the patient has one.
-    final hasGuardian = (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
-    if (hasGuardian) {
-      final guardianOk = await showNfcGuidedWrite(
+    // Guardian cards (bounded full record). A minor may have one or two
+    // guardians; each card is written separately and verified against its own
+    // UID. The payload is identical for every card — only the target chip
+    // differs — so the same fit builder is reused.
+    Future<void> writeGuardianCard({
+      required String expectedUid,
+      required String title,
+      required String instruction,
+    }) async {
+      final ok = await showNfcGuidedWrite(
         context,
-        title: isEs ? 'Tarjeta del guardián' : 'Guardian card',
-        instruction: isEs
-            ? 'Acerque la tarjeta del guardián al teléfono'
-            : 'Bring the guardian card to the phone',
-        write: () {
-          return NfcPayloadService(codec: codec).writeGuardianRecord(
-            buildFit: guardianFitBuilder(record: record, codec: codec),
-            expectedUid: record.guardianInfo.deviceUid,
-          );
-        },
+        title: title,
+        instruction: instruction,
+        write: () => NfcPayloadService(codec: codec).writeGuardianRecord(
+          buildFit: guardianFitBuilder(record: record, codec: codec),
+          expectedUid: expectedUid,
+        ),
       );
       if (!mounted) return;
-      if (guardianOk) {
+      if (ok) {
         await scope.localDatabase.clearChipsDirty(
           record.patientId,
           guardian: true,
         );
-        if (!mounted) return;
       }
+    }
+
+    final guardian1Uid = (record.guardianInfo.deviceUid ?? '').trim();
+    final guardian2Uid = (record.guardian2Info?.deviceUid ?? '').trim();
+    final hasTwoGuardians = guardian1Uid.isNotEmpty && guardian2Uid.isNotEmpty;
+
+    if (guardian1Uid.isNotEmpty) {
+      await writeGuardianCard(
+        expectedUid: guardian1Uid,
+        title: hasTwoGuardians
+            ? (isEs ? 'Tarjeta del guardián 1' : 'Guardian card 1')
+            : (isEs ? 'Tarjeta del guardián' : 'Guardian card'),
+        instruction: hasTwoGuardians
+            ? (isEs
+                  ? 'Acerque la tarjeta del guardián 1 al teléfono'
+                  : 'Bring guardian card 1 to the phone')
+            : (isEs
+                  ? 'Acerque la tarjeta del guardián al teléfono'
+                  : 'Bring the guardian card to the phone'),
+      );
+      if (!mounted) return;
+    }
+
+    if (guardian2Uid.isNotEmpty) {
+      await writeGuardianCard(
+        expectedUid: guardian2Uid,
+        title: isEs ? 'Tarjeta del guardián 2' : 'Guardian card 2',
+        instruction: isEs
+            ? 'Acerque la tarjeta del guardián 2 al teléfono'
+            : 'Bring guardian card 2 to the phone',
+      );
+      if (!mounted) return;
     }
 
     _completeFinalize();

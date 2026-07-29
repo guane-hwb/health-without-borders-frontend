@@ -3,20 +3,21 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/sync/presentation/sync_queue_screen.dart';
 import 'package:health_without_borders_frontend/src/shared/widgets/screen_bottom_handle.dart';
-import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
-import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
 class MockLocalDatabase extends Mock implements LocalDatabase {}
 
@@ -102,6 +103,8 @@ class _LocaleWrapperState extends State<_LocaleWrapper> {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late MockLocalDatabase db;
   late MockSyncEngine syncEngine;
 
@@ -109,7 +112,26 @@ void main() {
     db = MockLocalDatabase();
     syncEngine = MockSyncEngine();
 
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+          (MethodCall methodCall) async {
+            if (methodCall.method == 'check') {
+              return <String>['wifi'];
+            }
+            return null;
+          },
+        );
+
     when(() => syncEngine.refreshPendingCount()).thenAnswer((_) async {});
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+          null,
+        );
   });
 
   group('SyncQueueScreen – estado vacío', () {
@@ -144,7 +166,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Matches the exact value of AppStrings.allSynced in Spanish.
       expect(find.text('Todo sincronizado'), findsOneWidget);
     });
 
@@ -179,7 +200,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // ElevatedButton with cloud_upload only appears when entries are present.
       expect(
         find.ancestor(
           of: find.byIcon(Icons.cloud_upload),
@@ -609,7 +629,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Sync ahora'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.byType(SnackBar), findsOneWidget);
       expect(find.text('Sincronizado correctamente'), findsOneWidget);
@@ -633,7 +653,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Sync ahora'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.byType(SnackBar), findsOneWidget);
       expect(

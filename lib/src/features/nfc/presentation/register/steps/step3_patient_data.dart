@@ -10,6 +10,10 @@ const _kEnabledBorder = OutlineInputBorder(
   borderRadius: BorderRadius.all(Radius.circular(10)),
   borderSide: BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
 );
+const _kErrorBorder = OutlineInputBorder(
+  borderRadius: BorderRadius.all(Radius.circular(10)),
+  borderSide: BorderSide(color: AppColors.error, width: 1.5),
+);
 const _kFocusedBorder = OutlineInputBorder(
   borderRadius: BorderRadius.all(Radius.circular(10)),
   borderSide: BorderSide(color: AppColors.primary, width: 2),
@@ -84,6 +88,7 @@ class _Step3State extends State<Step3PatientData> {
   );
   bool _scanningUid = false;
   String? _err;
+  bool _isDocInvalid = false;
 
   bool get _hasEthnicity {
     final v = widget.draft.ethnicity;
@@ -91,7 +96,14 @@ class _Step3State extends State<Step3PatientData> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _docNum.addListener(_validateDocInRealTime);
+  }
+
+  @override
   void dispose() {
+    _docNum.removeListener(_validateDocInRealTime);
     _docNum.dispose();
     _firstName.dispose();
     _secondName.dispose();
@@ -105,6 +117,19 @@ class _Step3State extends State<Step3PatientData> {
     _height.dispose();
     _patientUid.dispose();
     super.dispose();
+  }
+
+  void _validateDocInRealTime() {
+    final text = _docNum.text.trim();
+    if (text.isEmpty) {
+      if (_isDocInvalid) setState(() => _isDocInvalid = false);
+      return;
+    }
+    final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
+    final invalid = !docRegex.hasMatch(text);
+    if (invalid != _isDocInvalid) {
+      setState(() => _isDocInvalid = invalid);
+    }
   }
 
   Future<void> _scanPatientNfc() async {
@@ -155,6 +180,7 @@ class _Step3State extends State<Step3PatientData> {
     if (cleanDoc.isNotEmpty) {
       final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
       if (!docRegex.hasMatch(cleanDoc)) {
+        setState(() => _isDocInvalid = true);
         missing.add(
           isEs
               ? 'Número de documento inválido (Mínimo 5 caracteres alfanuméricos sin símbolos)'
@@ -170,7 +196,9 @@ class _Step3State extends State<Step3PatientData> {
     }
 
     final d = widget.draft;
-    d.deviceUid = _patientUid.text.trim();
+    d.deviceUid = _patientUid.text.trim().isEmpty
+        ? null
+        : _patientUid.text.trim();
     d.documentNumber = _docNum.text.trim();
     d.firstName = _firstName.text.trim();
     d.secondName = _secondName.text.trim().isEmpty
@@ -186,6 +214,7 @@ class _Step3State extends State<Step3PatientData> {
     d.ethnicCommunity = _ethnicComm.text.trim().isEmpty
         ? null
         : _ethnicComm.text.trim();
+    d.bloodType = (d.bloodType ?? '').trim().isEmpty ? null : d.bloodType;
 
     d.weight = double.tryParse(_weight.text.trim().replaceAll(',', '.'));
     d.height = double.tryParse(_height.text.trim().replaceAll(',', '.'));
@@ -360,7 +389,12 @@ class _Step3State extends State<Step3PatientData> {
                     controller: _patientUid,
                     scanning: _scanningUid,
                     onScan: _scanPatientNfc,
-                    onChanged: () {},
+                    onChanged: () => setState(
+                      () => widget.draft.deviceUid =
+                          _patientUid.text.trim().isEmpty
+                          ? null
+                          : _patientUid.text.trim(),
+                    ),
                     hintText: s.manualPatientUidHint,
                     prefixIcon: Icons.watch_outlined,
                   ),
@@ -397,7 +431,13 @@ class _Step3State extends State<Step3PatientData> {
                           controller: _docNum,
                           hint: 'Ej. 1098765432',
                           required: true,
-                          keyboardType: TextInputType.number,
+                          isError: _isDocInvalid,
+                          helperText: _isDocInvalid
+                              ? (isEs
+                                    ? 'Mínimo 5 caracteres alfanuméricos'
+                                    : 'Min 5 alphanumeric chars')
+                              : null,
+                          keyboardType: TextInputType.text,
                         ),
                       ),
                     ],
@@ -531,17 +571,15 @@ class _Step3State extends State<Step3PatientData> {
 
               _SectionCard(
                 children: [
-                  _SectionHeader(
-                    icon: Icons.bloodtype_outlined,
-                    title: '',
-                    subtitle: s.bloodTypeReadOnly,
-                  ),
                   _ChipSelector(
                     label: s.bloodType,
                     value: d.bloodType,
                     options: blood,
-                    required: true,
-                    onChanged: (v) => setState(() => d.bloodType = v),
+                    required: false,
+                    allowDeselect: true,
+                    onChanged: (v) => setState(() {
+                      d.bloodType = (d.bloodType == v) ? null : v;
+                    }),
                   ),
                 ],
               ),
@@ -665,14 +703,9 @@ class _SectionCard extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.icon,
-    required this.title,
-    this.subtitle,
-  });
+  const _SectionHeader({required this.icon, required this.title});
   final IconData icon;
   final String title;
-  final String? subtitle;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -693,22 +726,16 @@ class _SectionHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              if (subtitle != null)
+              if (title.isNotEmpty)
                 Text(
-                  subtitle!,
+                  title,
                   style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
                   ),
                 ),
+              //
             ],
           ),
         ),
@@ -723,6 +750,7 @@ class _StyledTextField extends StatelessWidget {
     required this.controller,
     required this.hint,
     this.required = false,
+    this.isError = false,
     this.keyboardType = TextInputType.text,
     this.textCapitalization = TextCapitalization.none,
     this.helperText,
@@ -732,6 +760,7 @@ class _StyledTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final bool required;
+  final bool isError;
   final TextInputType keyboardType;
   final TextCapitalization textCapitalization;
   final String? helperText;
@@ -758,16 +787,16 @@ class _StyledTextField extends StatelessWidget {
           filled: true,
           fillColor: AppColors.white,
           helperText: helperText,
-          helperStyle: const TextStyle(
+          helperStyle: TextStyle(
             fontSize: 11,
-            color: AppColors.textSecondary,
+            color: isError ? AppColors.error : AppColors.textSecondary,
           ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 14,
             vertical: 14,
           ),
-          enabledBorder: _kEnabledBorder,
-          focusedBorder: _kFocusedBorder,
+          enabledBorder: isError ? _kErrorBorder : _kEnabledBorder,
+          focusedBorder: isError ? _kErrorBorder : _kFocusedBorder,
         ),
       ),
     ],
@@ -909,6 +938,7 @@ class _ChipSelector extends StatelessWidget {
     required this.options,
     required this.onChanged,
     this.required = false,
+    this.allowDeselect = false,
   });
 
   final String label;
@@ -916,6 +946,7 @@ class _ChipSelector extends StatelessWidget {
   final Map<String, String> options;
   final ValueChanged<String> onChanged;
   final bool required;
+  final bool allowDeselect;
 
   @override
   Widget build(BuildContext context) {

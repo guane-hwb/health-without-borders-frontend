@@ -45,19 +45,15 @@ class PatientProfileScreen extends StatefulWidget {
   final PatientFullRecord patient;
   final String? lastSyncedAt;
 
-  /// When true the profile is shown for review only: every add/edit
-  /// affordance is hidden and all mutation entry points are inert. Used by the
-  /// sync queue to preview a pending record without risk of altering it.
   final bool readOnly;
 
   /// When true the record was reconstructed from an NFC chip because the
-  /// backend was unreachable. Shows an offline banner; always combined with
-  /// [readOnly] so the chip-sourced snapshot is never edited.
+  /// backend was unreachable. Shows an offline banner. When the record came
+  /// from the guardian card it is a full record with a real patientId, so it
+  /// may be edited offline — edits are saved locally, flagged as pending and
+  /// synced when connectivity returns. Triage-only and emergency reads pass
+  /// [readOnly] as well, since those snapshots are partial.
   final bool offline;
-
-  /// Break-glass view: a minor's data shown offline without the guardian card.
-  /// Renders a persistent warning and hides the document number, since the
-  /// clinician has not been authorised by the guardian for this access.
   final bool emergency;
 
   @override
@@ -135,9 +131,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   UserRole get _currentRole =>
       AppScope.of(context).authRepository.currentUser?.role ?? UserRole.doctor;
 
-  /// Marks the NFC backup stale after an edit: the guardian card always (it
-  /// holds the full record) and the patient wristband only when a
-  /// triage-relevant field changed. No-op when nothing changed.
   Future<void> _markNfcChipsDirtyIfChanged(LocalDatabase db) async {
     if (_draft.patientId.isEmpty) return;
     if (_draft.toJson().toString() == _original.toJson().toString()) return;
@@ -157,18 +150,12 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     try {
       status = await db.getChipStatus(_draft.patientId);
     } catch (_) {
-      // The local database may be unavailable (e.g. in widget tests, or on a
-      // platform without sqflite). The stale-backup banner is a non-critical
-      // enhancement, so degrade silently instead of breaking the profile.
       status = null;
     }
     if (!mounted) return;
     setState(() => _chipStatus = status);
   }
 
-  /// Re-writes the chips that are marked stale, then clears their flags.
-  /// Writes only the affected chips, walking the user through each tap with a
-  /// guided overlay.
   Future<void> _updateNfcChips() async {
     if (_isUpdatingChips) return;
     final scope = AppScope.of(context);
@@ -219,36 +206,85 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     }
     if (!mounted) return;
 
-    if (status.guardianChipDirty &&
-        (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty) {
-      GuardianPayloadFit? guardianFit;
-      final ok = await showNfcGuidedWrite(
-        context,
-        title: isEs ? 'Tarjeta del guardián' : 'Guardian card',
-        instruction: isEs
-            ? 'Acerque la tarjeta del guardián al teléfono'
-            : 'Bring the guardian card to the phone',
-        write: () async {
-          final result = await NfcPayloadService(codec: codec)
-              .writeGuardianRecord(
-                buildFit: guardianFitBuilder(record: record, codec: codec),
-                expectedUid: record.guardianInfo.deviceUid,
-              );
-          guardianFit = result.fit;
-        },
-      );
-      if (!mounted) return;
-      if (ok) {
-        // Capture the messenger before the await gap so showing the partial
-        // notice afterwards does not touch context across an async boundary.
-        final messenger = ScaffoldMessenger.of(context);
+    if (status.guardianChipDirty) {
+      final guardian1Uid = (record.guardianInfo.deviceUid ?? '').trim();
+      final guardian2Uid = (record.guardian2Info?.deviceUid ?? '').trim();
+      final hasTwoGuardians =
+          guardian1Uid.isNotEmpty && guardian2Uid.isNotEmpty;
+      // Captured before the write gaps so the partial notice never touches
+      // context across an async boundary.
+      final messenger = ScaffoldMessenger.of(context);
+
+      // Writes one guardian card through the guided overlay. Returns true only
+      // when the card was actually written — the clinician can skip when that
+      // guardian is not present. Shows a partial-record notice when the card
+      // was too small for the full history.
+      Future<bool> writeGuardianCard({
+        required String expectedUid,
+        required String title,
+        required String instruction,
+      }) async {
+        GuardianPayloadFit? fit;
+        final written = await showNfcGuidedWrite(
+          context,
+          title: title,
+          instruction: instruction,
+          write: () async {
+            final result = await NfcPayloadService(codec: codec)
+                .writeGuardianRecord(
+                  buildFit: guardianFitBuilder(record: record, codec: codec),
+                  expectedUid: expectedUid,
+                );
+            fit = result.fit;
+          },
+        );
+        if (written && (fit?.isPartial ?? false)) {
+          _showPartialCardNotice(messenger, fit!, isEs);
+        }
+        return written;
+      }
+
+      var allWritten = true;
+
+      if (guardian1Uid.isNotEmpty) {
+        final ok = await writeGuardianCard(
+          expectedUid: guardian1Uid,
+          title: hasTwoGuardians
+              ? (isEs ? 'Tarjeta del guardián 1' : 'Guardian card 1')
+              : (isEs ? 'Tarjeta del guardián' : 'Guardian card'),
+          instruction: hasTwoGuardians
+              ? (isEs
+                    ? 'Acerque la tarjeta del guardián 1 al teléfono'
+                    : 'Bring guardian card 1 to the phone')
+              : (isEs
+                    ? 'Acerque la tarjeta del guardián al teléfono'
+                    : 'Bring the guardian card to the phone'),
+        );
+        if (!mounted) return;
+        allWritten = allWritten && ok;
+      }
+
+      if (guardian2Uid.isNotEmpty) {
+        final ok = await writeGuardianCard(
+          expectedUid: guardian2Uid,
+          title: isEs ? 'Tarjeta del guardián 2' : 'Guardian card 2',
+          instruction: isEs
+              ? 'Acerque la tarjeta del guardián 2 al teléfono'
+              : 'Bring guardian card 2 to the phone',
+        );
+        if (!mounted) return;
+        allWritten = allWritten && ok;
+      }
+
+      // Clear the stale flag only when every present guardian card was
+      // written. If the clinician skipped one (that guardian was not present),
+      // the "backup out of date" banner stays so they can finish it later.
+      final hadAnyGuardian = guardian1Uid.isNotEmpty || guardian2Uid.isNotEmpty;
+      if (allWritten && hadAnyGuardian) {
         await scope.localDatabase.clearChipsDirty(
           record.patientId,
           guardian: true,
         );
-        if (guardianFit?.isPartial ?? false) {
-          _showPartialCardNotice(messenger, guardianFit!, isEs);
-        }
       }
     }
 
@@ -258,12 +294,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     setState(() => _isUpdatingChips = false);
   }
 
-  /// Tells the clinician the guardian card holds a partial record: the chip was
-  /// too small for the full history, so the most recent entries were written
-  /// and the rest left off. The full record still syncs to the server.
-  ///
-  /// Takes the messenger rather than reading it from context, so the caller
-  /// captures it before any await gap.
   void _showPartialCardNotice(
     ScaffoldMessengerState messenger,
     GuardianPayloadFit fit,
@@ -573,8 +603,9 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         SnackBar(
           content: Text(
             isEs
-                ? 'Sin conexión a Internet. Los cambios se guardaron localmente.'
-                : 'No internet connection. Changes saved locally.',
+                ? 'Sin conexión. Se sincronizará automáticamente al '
+                      'reconectar.'
+                : 'Offline. It will sync automatically once reconnected.',
           ),
           backgroundColor: Colors.orange.shade800,
         ),
@@ -673,6 +704,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       builder: (_) => EditVitalSignsSheet(
         weight: _draft.patientInfo.weight,
         height: _draft.patientInfo.height,
+        bloodType: _draft.patientInfo.bloodType,
         previousWeight: _original.patientInfo.weight,
         previousHeight: _original.patientInfo.height,
         onConfirm: _updateVitalSigns,
@@ -859,10 +891,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                 _ProfileHeader(
                   patient: p,
                   hasUnsyncedChanges: !_hasInternet && _hasUnsyncedChanges,
-                  isSyncing: _isSyncing,
                   lastSyncedAt: widget.lastSyncedAt,
                   onBack: () => _confirmExit(),
-                  onSync: () => _sync(silent: false),
                 ),
                 _ProfileTabsBar(controller: _tabController, draft: _draft),
                 if (widget.emergency) const _EmergencyBanner(),
@@ -919,39 +949,14 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   Future<void> _confirmExit() async {
-    if (!_hasUnsyncedChanges || _hasInternet) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-        (route) => false,
-      );
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(AppStrings.of(context).unsyncedChangesTitle),
-        content: Text(AppStrings.of(context).exitWithoutSyncMsg),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(AppStrings.of(context).cancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              AppStrings.of(context).exit,
-              style: const TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
-      ),
+    // No confirmation needed. Every edit is persisted locally the moment it is
+    // made and, when offline, queued in "Pendientes por sincronizar" to sync
+    // automatically on reconnect. Leaving never discards data, so a warning
+    // here would only imply a risk that does not exist.
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const HomeScreen()),
+      (route) => false,
     );
-    if (confirmed == true && mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-        (route) => false,
-      );
-    }
   }
 }
 
@@ -963,17 +968,13 @@ class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({
     required this.patient,
     required this.hasUnsyncedChanges,
-    required this.isSyncing,
     required this.onBack,
-    required this.onSync,
     this.lastSyncedAt,
   });
 
   final PatientFullRecord patient;
   final bool hasUnsyncedChanges;
-  final bool isSyncing;
   final VoidCallback onBack;
-  final VoidCallback onSync;
   final String? lastSyncedAt;
 
   int? get _age {
@@ -1129,43 +1130,6 @@ class _ProfileHeader extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const Spacer(),
-                  ElevatedButton.icon(
-                    onPressed: isSyncing ? null : onSync,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF9800),
-                      disabledBackgroundColor: const Color(0xFFFFB74D),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                    ),
-                    icon: isSyncing
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.white,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.sync,
-                            size: 16,
-                            color: AppColors.white,
-                          ),
-                    label: Text(
-                      isSyncing ? s.syncingBtn : s.syncBtn,
-                      style: const TextStyle(
-                        color: AppColors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -1299,10 +1263,6 @@ class _LangDot extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TABS BAR
-// ─────────────────────────────────────────────────────────────────────────────
-
 class _ProfileTabsBar extends StatelessWidget {
   const _ProfileTabsBar({required this.controller, required this.draft});
   final TabController controller;
@@ -1385,10 +1345,6 @@ class _TabLabelWithBadge extends StatelessWidget {
     );
   }
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Manage sheets (opened from Summary clickable sections)
-// ═════════════════════════════════════════════════════════════════════════════
 
 class _AllergiesManageSheet extends StatelessWidget {
   const _AllergiesManageSheet({
@@ -2008,14 +1964,6 @@ class _BgSection extends StatelessWidget {
   }
 }
 
-/// Banner shown when the profile was reconstructed from an NFC chip because
-/// the backend was unreachable. The data may be partial (triage-only) or
-/// slightly behind the server, so the profile is always read-only here.
-/// Break-glass banner: a minor's record opened without the guardian card.
-///
-/// Deliberately loud and always visible — the clinician should not be able to
-/// forget they stepped around a control, and anyone looking over their shoulder
-/// should see it too.
 class _EmergencyBanner extends StatelessWidget {
   const _EmergencyBanner();
 
@@ -2092,8 +2040,6 @@ class _OfflineBanner extends StatelessWidget {
   }
 }
 
-/// Banner shown in the profile when the NFC backup is out of date, offering to
-/// re-write the affected chips.
 class _NfcStaleBanner extends StatelessWidget {
   const _NfcStaleBanner({required this.isUpdating, required this.onUpdate});
 
@@ -2144,13 +2090,6 @@ class _NfcStaleBanner extends StatelessWidget {
   }
 }
 
-/// Builds the message shown when the guardian card was too small for the whole
-/// record and the oldest history was left off.
-///
-/// Kept as a pure top-level function rather than inlined in the State: the text
-/// has real branching (which histories were dropped, how they are joined, two
-/// languages) and that logic deserves direct tests instead of being reachable
-/// only by driving the entire profile screen.
 String partialCardNoticeMessage(GuardianPayloadFit fit, bool isEs) {
   final parts = <String>[];
   if (fit.droppedConsultations > 0) {
