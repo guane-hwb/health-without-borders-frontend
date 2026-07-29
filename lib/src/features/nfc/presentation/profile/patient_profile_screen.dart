@@ -279,8 +279,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       // Clear the stale flag only when every present guardian card was
       // written. If the clinician skipped one (that guardian was not present),
       // the "backup out of date" banner stays so they can finish it later.
-      final hadAnyGuardian =
-          guardian1Uid.isNotEmpty || guardian2Uid.isNotEmpty;
+      final hadAnyGuardian = guardian1Uid.isNotEmpty || guardian2Uid.isNotEmpty;
       if (allWritten && hadAnyGuardian) {
         await scope.localDatabase.clearChipsDirty(
           record.patientId,
@@ -599,24 +598,18 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
     final isEs = AppStrings.of(context).welcome == 'Bienvenido';
 
-    // Offline: a manual sync cannot reach the server. Each edit already saved
-    // the record locally with is_synced = 0, so it stays queued and syncs
-    // automatically on reconnect. Returning here keeps the pending indicator
-    // visible — running the normal path would clear _original and wrongly
-    // report the changes as saved to the server.
-    if (!_hasInternet) {
-      if (!silent) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isEs
-                  ? 'Sin conexión. Se sincronizará automáticamente al '
-                        'reconectar.'
-                  : 'Offline. It will sync automatically once reconnected.',
-            ),
+    if (!_hasInternet && !silent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isEs
+                ? 'Sin conexión. Se sincronizará automáticamente al '
+                      'reconectar.'
+                : 'Offline. It will sync automatically once reconnected.',
           ),
-        );
-      }
+          backgroundColor: Colors.orange.shade800,
+        ),
+      );
       return;
     }
 
@@ -985,24 +978,16 @@ class _ProfileHeader extends StatelessWidget {
   final String? lastSyncedAt;
 
   int? get _age {
-    try {
-      final parts = patient.patientInfo.dob.split('-');
-      if (parts.length != 3) return null;
-      final dob = DateTime(
-        int.parse(parts[0]),
-        int.parse(parts[1]),
-        int.parse(parts[2]),
-      );
-      final now = DateTime.now();
-      var age = now.year - dob.year;
-      if (now.month < dob.month ||
-          (now.month == dob.month && now.day < dob.day)) {
-        age--;
-      }
-      return age;
-    } catch (_) {
-      return null;
+    final dobDateTime = tryParsePatientDate(patient.patientInfo.dob);
+    if (dobDateTime == null) return null;
+
+    final now = DateTime.now();
+    var age = now.year - dobDateTime.year;
+    if (now.month < dobDateTime.month ||
+        (now.month == dobDateTime.month && now.day < dobDateTime.day)) {
+      age--;
     }
+    return age >= 0 ? age : null;
   }
 
   String _initials(String fullName) {
@@ -1026,28 +1011,25 @@ class _ProfileHeader extends StatelessWidget {
 
   String _docTypeLabel(BuildContext context) {
     final s = AppStrings.of(context);
-    switch (patient.patientInfo.identification.documentType) {
-      case 'RC':
-        return s.docTypeRC;
-      case 'TI':
-        return s.docTypeTI;
-      case 'CC':
-        return s.docTypeCC;
-      case 'CE':
-        return s.docTypeCE;
-      case 'PA':
-        return s.docTypePA;
-      case 'PE':
-        return s.docTypePE;
-      case 'PT':
-        return s.docTypePT;
-      case 'MS':
-        return s.docTypeMS;
-      case 'AS':
-        return s.docTypeAS;
-      default:
-        return patient.patientInfo.identification.documentType;
-    }
+    final isEs = s.welcome == 'Bienvenido';
+    final code = patient.patientInfo.identification.documentType;
+
+    final map = {
+      'RC': s.docTypeRC,
+      'TI': s.docTypeTI,
+      'CC': s.docTypeCC,
+      'CE': s.docTypeCE,
+      'PA': s.docTypePA,
+      'PE': s.docTypePE,
+      'PT': s.docTypePT,
+      'MS': s.docTypeMS,
+      'AS': s.docTypeAS,
+      'SC': isEs ? 'Salvoconducto' : 'Safe-conduct',
+      'CN': isEs ? 'Cert. Nacido Vivo' : 'Live Birth Cert.',
+      'DE': isEs ? 'Doc. Extranjero' : 'Foreign ID',
+    };
+
+    return map[code] ?? (code.isNotEmpty ? code : '—');
   }
 
   @override

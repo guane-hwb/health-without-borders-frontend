@@ -7,6 +7,36 @@
 // Reference: Resolution 866/2021 & 1888/2025 (RDA elements)
 // =============================================================================
 
+DateTime? tryParsePatientDate(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return null;
+  final clean = raw.trim();
+
+  final parsed = DateTime.tryParse(clean);
+  if (parsed != null) return parsed;
+
+  try {
+    if (clean.contains('/')) {
+      final parts = clean.split('/');
+      if (parts.length == 3) {
+        if (parts[0].length == 4) {
+          return DateTime(
+            int.parse(parts[0]),
+            int.parse(parts[1]),
+            int.parse(parts[2]),
+          );
+        } else if (parts[2].length == 4) {
+          return DateTime(
+            int.parse(parts[2]),
+            int.parse(parts[1]),
+            int.parse(parts[0]),
+          );
+        }
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Address
 // ---------------------------------------------------------------------------
@@ -162,7 +192,7 @@ class PatientInfo {
     return parts.join(' ').trim();
   }
 
-  PatientInfo copyWith({double? weight, double? height}) {
+  PatientInfo copyWith({double? weight, double? height, String? bloodType}) {
     return PatientInfo(
       identification: identification,
       firstLastName: firstLastName,
@@ -178,7 +208,7 @@ class PatientInfo {
       ethnicCommunity: ethnicCommunity,
       disabilityCategory: disabilityCategory,
       address: address,
-      bloodType: bloodType,
+      bloodType: bloodType ?? this.bloodType,
       weight: weight ?? this.weight,
       height: height ?? this.height,
     );
@@ -205,9 +235,6 @@ class PatientInfo {
   };
 }
 
-// ---------------------------------------------------------------------------
-// GuardianInfo
-// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // GuardianConsent — Ley 1581/2012 (Habeas Data)
 // ---------------------------------------------------------------------------
@@ -407,26 +434,24 @@ class BackgroundHistory {
   });
 
   factory BackgroundHistory.fromJson(Map<String, dynamic> json) {
-    // Defensive: chronicConditions may be null or a String (old schema)
     final rawCC = json['chronicConditions'];
     final chronicConditions = (rawCC is List)
         ? rawCC
-            .map(
-              (dynamic e) =>
-                  ChronicConditionItem.fromJson(e as Map<String, dynamic>),
-            )
-            .toList()
+              .map(
+                (dynamic e) =>
+                    ChronicConditionItem.fromJson(e as Map<String, dynamic>),
+              )
+              .toList()
         : <ChronicConditionItem>[];
 
-    // Defensive: medications may be absent (old schema)
     final rawMeds = json['medications'];
     final medications = (rawMeds is List)
         ? rawMeds
-            .map(
-              (dynamic e) =>
-                  MedicationStatementItem.fromJson(e as Map<String, dynamic>),
-            )
-            .toList()
+              .map(
+                (dynamic e) =>
+                    MedicationStatementItem.fromJson(e as Map<String, dynamic>),
+              )
+              .toList()
         : <MedicationStatementItem>[];
 
     return BackgroundHistory(
@@ -486,8 +511,6 @@ class AllergyInfo {
     );
   }
 
-  /// "01"=Medicamento, "02"=Alimento, "03"=Sustancia ambiente,
-  /// "04"=Sustancia piel, "05"=Picadura insectos, "06"=Otra
   final String category;
   final String allergen;
   final String? reaction;
@@ -536,9 +559,6 @@ class VaccinationRecordItem {
   final String administratedBy;
   final String administratedAt;
   final String status;
-  // Stable UUID for this vaccination. Generated once on the device when the
-  // vaccine is created and preserved across syncs so the backend merge can
-  // recognise an already-stored vaccination instead of duplicating it.
   final String? vaccinationId;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -632,7 +652,6 @@ class RiskFactor {
     );
   }
 
-  /// "01"-"06"
   final String type;
   final String name;
 
@@ -660,7 +679,7 @@ class IncapacityInfo {
     );
   }
 
-  final String scope; // "01"=Nueva, "02"=Prórroga
+  final String scope;
   final int days;
   final int? maternityLeaveDays;
 
@@ -697,7 +716,7 @@ class PractitionerInfo {
     );
   }
 
-  final String documentType; // Same DocumentType enum as patient
+  final String documentType;
   final String documentNumber;
   final String name;
   final String? firstName;
@@ -736,10 +755,10 @@ class ProviderInfo {
     );
   }
 
-  final String repsCode; // Código REPS del prestador
+  final String repsCode;
   final String name;
-  final String? nitNumber; // NIT del prestador
-  final String? locationSeatCode; // Código sede
+  final String? nitNumber;
+  final String? locationSeatCode;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'repsCode': repsCode,
@@ -853,30 +872,26 @@ class MedicalHistoryItem {
   final String type;
   final String startDateTime; // ISO 8601 datetime
   final String? endDateTime;
-  // Stable UUID for this encounter. Generated once on the device when the
-  // consultation is created and preserved across syncs so the backend merge
-  // can recognise an already-stored visit instead of duplicating it.
   final String? encounterIdentifier;
-  final String careModality; // "01"-"09"
-  final String serviceGroup; // "01"-"05"
-  final String careEnvironment; // "01"-"05"
+  final String careModality;
+  final String serviceGroup;
+  final String careEnvironment;
   final String? entryRoute;
   final String? externalCause;
   final ProviderInfo? provider;
   final PractitionerInfo? practitioner;
-  final String? location; // Legacy
-  final String? physician; // Legacy
+  final String? location;
+  final String? physician;
   final ClinicalEvaluation clinicalEvaluation;
-  final List<DiagnosisItem> diagnosis; // Empty array from frontend — LLM fills
-  final String diagnosisType; // "01", "02", "03"
-  final String? dischargeDisposition; // "01"-"04"
+  final List<DiagnosisItem> diagnosis;
+  final String diagnosisType;
+  final String? dischargeDisposition;
   final List<RiskFactor> riskFactors;
   final IncapacityInfo? incapacity;
   final PayerInfo? payer;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    if (encounterIdentifier != null)
-      'encounterIdentifier': encounterIdentifier,
+    if (encounterIdentifier != null) 'encounterIdentifier': encounterIdentifier,
     'type': type,
     'startDateTime': startDateTime,
     if (endDateTime != null) 'endDateTime': endDateTime,
@@ -970,8 +985,8 @@ class PatientFullRecord {
     );
   }
 
-  final String patientId; // UUID v4 generated by frontend
-  final String deviceUid; // NFC hardware UID
+  final String patientId;
+  final String deviceUid;
   final PatientInfo patientInfo;
   final GuardianInfo guardianInfo;
   final GuardianInfo? guardian2Info;

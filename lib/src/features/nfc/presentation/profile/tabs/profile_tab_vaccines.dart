@@ -59,12 +59,23 @@ class ProfileTabVaccines extends StatelessWidget {
                   ),
                 ),
                 child: ProfileCard(
-                  child: Text(
-                    s.noVaccinesRegistered,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.vaccines_outlined,
+                        size: 18,
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        s.noVaccinesRegistered,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               )

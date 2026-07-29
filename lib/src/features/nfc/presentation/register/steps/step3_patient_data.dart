@@ -166,7 +166,7 @@ class _Step3State extends State<Step3PatientData> {
     final isEs = s.welcome == 'Bienvenido';
     final missing = <String>[];
 
-    if ((widget.draft.deviceUid ?? '').trim().isEmpty) {
+    if (_patientUid.text.trim().isEmpty) {
       missing.add(s.patientNfcDevice);
     }
     if (_docNum.text.trim().isEmpty) missing.add(s.documentNumberLabel);
@@ -228,7 +228,7 @@ class _Step3State extends State<Step3PatientData> {
     final s = AppStrings.of(context);
     final isEs = s.welcome == 'Bienvenido';
 
-    final docTypes = {
+    final docTypes = <String, String>{
       'RC': s.docTypeRC,
       'TI': s.docTypeTI,
       'CC': s.docTypeCC,
@@ -245,9 +245,13 @@ class _Step3State extends State<Step3PatientData> {
       'DE': isEs ? 'Doc. extranjero' : 'Foreign ID',
     };
 
-    final sex = {'F': s.sexFemale, 'M': s.sexMale, 'I': s.sexIndeterminate};
+    final sex = <String, String>{
+      'F': s.sexFemale,
+      'M': s.sexMale,
+      'I': s.sexIndeterminate,
+    };
 
-    final gender = {
+    final gender = <String, String>{
       '01': s.sexMale,
       '02': s.sexFemale,
       '03': isEs ? 'Transgénero' : 'Transgender',
@@ -255,7 +259,7 @@ class _Step3State extends State<Step3PatientData> {
       '99': isEs ? 'No reporta' : 'Not reported',
     };
 
-    final nat = {
+    final nat = <String, String>{
       'COL': isEs ? 'Colombiana' : 'Colombian',
       'VEN': isEs ? 'Venezolana' : 'Venezuelan',
       'ECU': isEs ? 'Ecuatoriana' : 'Ecuadorian',
@@ -265,7 +269,7 @@ class _Step3State extends State<Step3PatientData> {
       'OTHER': isEs ? 'Otra' : 'Other',
     };
 
-    final eth = {
+    final eth = <String, String>{
       '6': isEs ? 'Ninguno' : 'None',
       '1': isEs ? 'Indígena' : 'Indigenous',
       '2': isEs ? 'ROM/Gitano' : 'Romani',
@@ -274,7 +278,7 @@ class _Step3State extends State<Step3PatientData> {
       '5': isEs ? 'Afrocolombiano' : 'Afro-Colombian',
     };
 
-    final dis = {
+    final dis = <String, String>{
       '00': isEs ? 'Ninguna' : 'None',
       '01': isEs ? 'Física' : 'Physical',
       '02': isEs ? 'Visual' : 'Visual',
@@ -285,9 +289,9 @@ class _Step3State extends State<Step3PatientData> {
       '07': isEs ? 'Múltiple' : 'Multiple',
     };
 
-    final zones = {'01': s.zoneUrban, '02': s.zoneRural};
+    final zones = <String, String>{'01': s.zoneUrban, '02': s.zoneRural};
 
-    const blood = {
+    const blood = <String, String>{
       'O+': 'O+',
       'O-': 'O-',
       'A+': 'A+',
@@ -565,7 +569,6 @@ class _Step3State extends State<Step3PatientData> {
 
               const SizedBox(height: 14),
 
-              // ── Tipo de sangre (Opcional) ──────────────────────────────────
               _SectionCard(
                 children: [
                   _ChipSelector(
@@ -946,59 +949,66 @@ class _ChipSelector extends StatelessWidget {
   final bool allowDeselect;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      if (label.isNotEmpty) ...[
-        Row(
-          children: [
-            Text(label, style: _kLabelStyle),
-            if (required) const Text(' *', style: _kReqStyle),
-          ],
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (label.isNotEmpty) ...[
+          Row(
+            children: [
+              Text(label, style: _kLabelStyle),
+              if (required) const Text(' *', style: _kReqStyle),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: options.entries.map<Widget>((e) {
+            final selected = e.key == value;
+            return GestureDetector(
+              onTap: () => onChanged(e.key),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.primary : AppColors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: selected
+                        ? AppColors.primary
+                        : const Color(0xFFB0B8C4),
+                    width: selected ? 2 : 1.5,
+                  ),
+                  boxShadow: selected
+                      ? [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.25),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Text(
+                  e.value,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected ? AppColors.white : AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
         ),
-        const SizedBox(height: 8),
       ],
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: options.entries.map((e) {
-          final selected = e.key == value;
-          return GestureDetector(
-            onTap: () => onChanged(e.key),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: selected ? AppColors.primary : AppColors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: selected ? AppColors.primary : const Color(0xFFB0B8C4),
-                  width: selected ? 2 : 1.5,
-                ),
-                boxShadow: selected
-                    ? [
-                        BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.25),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Text(
-                e.value,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? AppColors.white : AppColors.textPrimary,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    ],
-  );
+    );
+  }
 }
 
 class _NavButtons extends StatelessWidget {

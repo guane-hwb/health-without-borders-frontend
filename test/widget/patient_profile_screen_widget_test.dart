@@ -174,6 +174,10 @@ Widget _wrap(
   );
 }
 
+Widget buildTestApp({required Widget child}) {
+  return _wrap(child);
+}
+
 PatientInfo _info({
   String dob = '1990-06-15',
   String sex = 'M',
@@ -956,4 +960,73 @@ void main() {
       });
     },
   );
+
+  group('PatientProfileScreen – Manejo defensivo de datos', () {
+    testWidgets('Renderiza edad y fecha sin error ante formatos ISO con hora', (
+      tester,
+    ) async {
+      final record = PatientFullRecord(
+        patientId: 'p-test-01',
+        deviceUid: 'uid-test-01',
+        patientInfo: PatientInfo(
+          identification: PatientIdentification(
+            documentType: 'CC',
+            documentNumber: '123456',
+          ),
+          firstLastName: 'Pérez',
+          firstName: 'Juan',
+          dob: '2015-08-20T14:30:00.000Z',
+          biologicalSex: 'M',
+          address: Address(city: 'Bogotá', state: 'Cundinamarca'),
+        ),
+        guardianInfo: GuardianInfo(
+          name: 'Maria Pérez',
+          relationship: '01',
+          phone: '3001234567',
+        ),
+      );
+
+      await tester.pumpWidget(
+        buildTestApp(child: PatientProfileScreen(patient: record)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+
+      expect(find.textContaining('años'), findsAtLeastNWidgets(1));
+    });
+
+    testWidgets(
+      'Muestra etiqueta o código fallback ante tipos de documento especiales o desconocidos',
+      (tester) async {
+        final record = PatientFullRecord(
+          patientId: 'p-test-02',
+          deviceUid: 'uid-test-02',
+          patientInfo: PatientInfo(
+            identification: PatientIdentification(
+              documentType: 'DE', // Documento Extranjero
+              documentNumber: '987654',
+            ),
+            firstLastName: 'Gómez',
+            firstName: 'Ana',
+            dob: '2020-01-01',
+            biologicalSex: 'F',
+            address: Address(city: 'Medellín', state: 'Antioquia'),
+          ),
+          guardianInfo: GuardianInfo(
+            name: 'Carlos Gómez',
+            relationship: '01',
+            phone: '3009876543',
+          ),
+        );
+
+        await tester.pumpWidget(
+          buildTestApp(child: PatientProfileScreen(patient: record)),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Doc. Extranjero 987654'), findsOneWidget);
+      },
+    );
+  });
 }
