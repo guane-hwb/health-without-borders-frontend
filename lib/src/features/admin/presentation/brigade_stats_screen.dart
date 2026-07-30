@@ -316,8 +316,15 @@ class _FailureView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
     IconData icon = Icons.error_outline;
-    String message = detail ?? s.statsEmpty;
+
+    // fe-mensaje-5xx-enganoso-en-admin: Mensajes claros sin promesas falsas de reintento automático
+    String message =
+        detail ??
+        (isEs
+            ? 'Ocurrió un error al cargar las estadísticas.'
+            : 'An error occurred loading stats.');
     if (failure == _Failure.forbidden) {
       icon = Icons.lock_outline;
       message = s.statsForbidden;
@@ -340,7 +347,6 @@ class _FailureView extends StatelessWidget {
               style: const TextStyle(color: AppColors.error),
             ),
             const SizedBox(height: 16),
-            // A 403 will not resolve on retry: the role is what it is.
             if (failure != _Failure.forbidden)
               ElevatedButton.icon(
                 onPressed: onRetry,

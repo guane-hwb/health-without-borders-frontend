@@ -1,16 +1,73 @@
-// test/widget/edit_patient_screen_test.dart
+// test/unit/edit_patient_screen_test.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 
+import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
+import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/edit_patient_screen.dart';
 
+class _MockAuthRepository extends Mock implements AuthRepository {}
+
+class _MockUserRepository extends Mock implements UserRepository {}
+
+class _MockPatientRepository extends Mock implements PatientRepository {}
+
+class _MockLocalDatabase extends Mock implements LocalDatabase {}
+
+class _MockSyncEngine extends Mock implements SyncEngine {}
+
+class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
+
+AppScope _buildTestScope({Widget? child}) {
+  final auth = _MockAuthRepository();
+  final user = _MockUserRepository();
+  final repo = _MockPatientRepository();
+  final db = _MockLocalDatabase();
+  final sync = _MockSyncEngine();
+
+  when(() => db.savePatient(any())).thenAnswer((_) async {});
+  when(
+    () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
+  ).thenAnswer((_) async {});
+  when(() => sync.syncAll()).thenAnswer((_) async => true);
+
+  return AppScope(
+    authRepository: auth,
+    userRepository: user,
+    patientRepository: repo,
+    localDatabase: db,
+    syncEngine: sync,
+    statsRepository: StatsRepository(
+      apiClient: ApiClient(baseUrl: 'http://localhost'),
+      authRepository: auth,
+    ),
+    child: child ?? const SizedBox.shrink(),
+  );
+}
+
 /// Minimal widget tree configuration that satisfies localization dependencies.
 Widget _wrap(Widget child, {String locale = 'es'}) {
-  return MaterialApp(
-    home: _AppLocaleProvider(locale: locale, child: child),
+  final scope = _buildTestScope();
+  return AppScope(
+    authRepository: scope.authRepository,
+    userRepository: scope.userRepository,
+    patientRepository: scope.patientRepository,
+    localDatabase: scope.localDatabase,
+    syncEngine: scope.syncEngine,
+    statsRepository: scope.statsRepository,
+    child: MaterialApp(
+      home: _AppLocaleProvider(locale: locale, child: child),
+    ),
   );
 }
 
@@ -103,23 +160,32 @@ Future<void> _pumpViaRoute(
   _PopSpy spy, {
   String locale = 'es',
 }) async {
+  final scope = _buildTestScope();
   await tester.pumpWidget(
-    MaterialApp(
-      navigatorObservers: [spy],
-      home: _AppLocaleProvider(
-        locale: locale,
-        child: Builder(
-          builder: (context) => Scaffold(
-            body: ElevatedButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => _AppLocaleProvider(
-                    locale: locale,
-                    child: EditPatientScreen(patient: record),
+    AppScope(
+      authRepository: scope.authRepository,
+      userRepository: scope.userRepository,
+      patientRepository: scope.patientRepository,
+      localDatabase: scope.localDatabase,
+      syncEngine: scope.syncEngine,
+      statsRepository: scope.statsRepository,
+      child: MaterialApp(
+        navigatorObservers: [spy],
+        home: _AppLocaleProvider(
+          locale: locale,
+          child: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => _AppLocaleProvider(
+                      locale: locale,
+                      child: EditPatientScreen(patient: record),
+                    ),
                   ),
                 ),
+                child: const Text('Abrir'),
               ),
-              child: const Text('Abrir'),
             ),
           ),
         ),
@@ -133,6 +199,10 @@ Future<void> _pumpViaRoute(
 final _s = AppStrings.forTesting('es');
 
 void main() {
+  setUpAll(() {
+    registerFallbackValue(_FakePatientFullRecord());
+  });
+
   /// Modify global binding parameters to enforce custom physical viewport dimensions.
   setUp(() {
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
@@ -261,7 +331,6 @@ void main() {
       await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
       await tester.pumpAndSettle();
 
-      /// Explicit predicate targeting the layout structured section header.
       final sectionHeaderFinder = find.byWidgetPredicate(
         (widget) =>
             widget is Text &&

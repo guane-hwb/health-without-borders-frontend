@@ -31,6 +31,7 @@ class FakePatientFullRecord extends Fake implements PatientFullRecord {}
 void main() {
   setUpAll(() {
     registerFallbackValue(FakePatientFullRecord());
+    registerFallbackValue(const Duration(days: 30));
   });
 
   late MockPatientRepository patientRepo;
@@ -81,6 +82,9 @@ void main() {
 
     when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
     when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
+    when(
+      () => localDb.purgeStalePermanentErrors(maxAge: any(named: 'maxAge')),
+    ).thenAnswer((_) async {});
     when(
       () => localDb.markSynced(
         any(),

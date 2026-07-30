@@ -153,6 +153,11 @@ class FakeLocalDatabase implements LocalDatabase {
     bool patient = false,
     bool guardian = false,
   }) async {}
+
+  @override
+  Future<void> purgeStalePermanentErrors({
+    Duration maxAge = const Duration(days: 30),
+  }) async {}
 }
 
 /// Create a [UserSession] with the specified role.

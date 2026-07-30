@@ -53,7 +53,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   final _providerNameCtrl = TextEditingController();
 
   // ── Payer (Res. 866 Elems. 15.1, 15.2) ───────────────────────────────────
-  late final TextEditingController _payerNameCtrl;
+  final TextEditingController _payerNameCtrl = TextEditingController();
 
   // ── Clinical evaluation ───────────────────────────────────────────────────
   final _historyCtrl = TextEditingController(); // historyOfCurrentIllness
@@ -78,11 +78,11 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
-    _payerNameCtrl = TextEditingController(
-      text: isEs ? 'No asegurado' : 'Uninsured',
-    );
+    if (_payerNameCtrl.text.isEmpty) {
+      final s = AppStrings.of(context);
+      final isEs = s.welcome == 'Bienvenido';
+      _payerNameCtrl.text = isEs ? 'No asegurado' : 'Uninsured';
+    }
   }
 
   void _onHistoryChanged() => setState(() {});
@@ -194,7 +194,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           )
         : null;
 
-    // Build ProviderInfo only if name is provided
     final provReps = _providerRepsCtrl.text.trim();
     final provName = _providerNameCtrl.text.trim();
     final ProviderInfo? provider = provName.isNotEmpty
@@ -204,7 +203,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           )
         : null;
 
-    // Build PayerInfo
     final payerName = _payerNameCtrl.text.trim();
     final PayerInfo? payer = payerName.isNotEmpty
         ? PayerInfo(name: payerName)
@@ -235,7 +233,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             ? _treatmentCtrl.text.trim()
             : null,
       ),
-      // Always empty — backend LLM fills this
       diagnosis: <DiagnosisItem>[],
       diagnosisType: _diagnosisType,
       dischargeDisposition: (_dischargeDisposition?.isEmpty ?? true)
@@ -428,54 +425,33 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   }
 
   void _showManualSearchDialog() {
-    final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
-    final uidCtrl = TextEditingController();
-
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEs ? 'Buscar por UID' : 'Search by UID'),
-        content: TextField(
-          controller: uidCtrl,
-          decoration: InputDecoration(hintText: s.guardianNfcUidHint),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(s.cancel),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              if (uidCtrl.text.trim().isNotEmpty) {
-                setState(() {
-                  _scanning = true;
-                  _scanError = null;
-                });
-                AppScope.of(context).patientRepository
-                    .scanDevice(uidCtrl.text.trim())
-                    .then((p) {
-                      if (mounted) {
-                        setState(() {
-                          _patient = p;
-                          _scanning = false;
-                        });
-                      }
-                    })
-                    .catchError((Object e) {
-                      if (mounted) {
-                        setState(() {
-                          _scanError = e.toString();
-                          _scanning = false;
-                        });
-                      }
-                    });
-              }
-            },
-            child: Text(s.search),
-          ),
-        ],
+      builder: (ctx) => _ManualSearchDialog(
+        onSearch: (uid) {
+          setState(() {
+            _scanning = true;
+            _scanError = null;
+          });
+          AppScope.of(context).patientRepository
+              .scanDevice(uid)
+              .then((p) {
+                if (mounted) {
+                  setState(() {
+                    _patient = p;
+                    _scanning = false;
+                  });
+                }
+              })
+              .catchError((Object e) {
+                if (mounted) {
+                  setState(() {
+                    _scanError = e.toString();
+                    _scanning = false;
+                  });
+                }
+              });
+        },
       ),
     );
   }
@@ -541,7 +517,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           _PatientBadge(patient: p),
           const SizedBox(height: 16),
 
-          // ── Encounter date/time ──────────────────────────────────────────
           _SectionCard(
             icon: Icons.schedule,
             title: s.dateTime,
@@ -565,7 +540,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           ),
           const SizedBox(height: 12),
 
-          // ── Care context ─────────────────────────────────────────────────
           _SectionCard(
             icon: Icons.local_hospital_outlined,
             title: s.careContextSection,
@@ -597,7 +571,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           ),
           const SizedBox(height: 12),
 
-          // ── Practitioner ─────────────────────────────────────────────────
           _SectionCard(
             icon: Icons.badge_outlined,
             title: s.practitioner,
@@ -631,7 +604,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           ),
           const SizedBox(height: 12),
 
-          // ── Provider ─────────────────────────────────────────────────────
           _SectionCard(
             icon: Icons.apartment_outlined,
             title: s.healthcareProvider,
@@ -647,7 +619,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           ),
           const SizedBox(height: 12),
 
-          // ── Payer ────────────────────────────────────────────────────────
           _SectionCard(
             icon: Icons.health_and_safety_outlined,
             title: s.payerSection,
@@ -663,7 +634,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           ),
           const SizedBox(height: 12),
 
-          // ── Clinical evaluation ──────────────────────────────────────────
           _SectionCard(
             icon: Icons.edit_note_outlined,
             title: s.clinicalEvaluation,
@@ -709,7 +679,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           ),
           const SizedBox(height: 12),
 
-          // ── Diagnosis type + discharge ────────────────────────────────────
           _SectionCard(
             icon: Icons.medical_information_outlined,
             title: '${s.diagnosisTitle} & ${s.dischargeSection}',
@@ -738,7 +707,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           ),
           const SizedBox(height: 28),
 
-          // ── Save button ──────────────────────────────────────────────────
           SizedBox(
             width: double.infinity,
             height: 50,
@@ -956,6 +924,61 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       ),
     ],
   );
+}
+
+class _ManualSearchDialog extends StatefulWidget {
+  const _ManualSearchDialog({required this.onSearch});
+
+  final ValueChanged<String> onSearch;
+
+  @override
+  State<_ManualSearchDialog> createState() => _ManualSearchDialogState();
+}
+
+class _ManualSearchDialogState extends State<_ManualSearchDialog> {
+  late final TextEditingController _uidCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _uidCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _uidCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
+    return AlertDialog(
+      title: Text(isEs ? 'Buscar por UID' : 'Search by UID'),
+      content: TextField(
+        controller: _uidCtrl,
+        decoration: InputDecoration(hintText: s.guardianNfcUidHint),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(s.cancel),
+        ),
+        TextButton(
+          onPressed: () {
+            final text = _uidCtrl.text.trim();
+            Navigator.of(context).pop();
+            if (text.isNotEmpty) {
+              widget.onSearch(text);
+            }
+          },
+          child: Text(s.search),
+        ),
+      ],
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

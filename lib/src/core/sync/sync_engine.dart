@@ -88,6 +88,8 @@ class SyncEngine {
     bool allSuccessful = true;
 
     try {
+      await _localDb.purgeStalePermanentErrors();
+
       final List<LocalPatientEntry> allUnsynced = await _localDb
           .getUnsyncedRecords();
 
@@ -190,11 +192,19 @@ class SyncEngine {
   // ── Manual controls ───────────────────────────────────────────────────────
 
   Future<bool> syncOne(String patientId) async {
+    if (_isSyncing) return false;
+
     final entries = await _localDb.getUnsyncedRecords();
     final match = entries.where((e) => e.patientId == patientId);
     if (match.isEmpty) return false;
 
-    await _syncOne(match.first);
+    _isSyncing = true;
+    try {
+      await _syncOne(match.first);
+    } finally {
+      _isSyncing = false;
+    }
+
     final updated = await _localDb.getUnsyncedRecords();
     await refreshPendingCount();
     return !updated.any((e) => e.patientId == patientId);

@@ -137,6 +137,9 @@ class FakeLocalDatabase implements LocalDatabase {
     bool patient = false,
     bool guardian = false,
   }) async {}
+
+  @override
+  Future<void> purgeStalePermanentErrors({Duration maxAge = const Duration(days: 7)}) async {}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
