@@ -14,7 +14,19 @@ class AuthRepository implements TokenProvider {
     FlutterSecureStorage? secureStorage,
     LocalDatabase? localDatabase,
   }) : _apiClient = apiClient,
-       _secureStorage = secureStorage ?? const FlutterSecureStorage(),
+       // fe-keychain-accesible-migra-backup & fe-keychain-sin-thisdeviceonly:
+       // Configura accesibilidad ThisDeviceOnly para evitar que credenciales y claves migren en backups.
+       _secureStorage =
+           secureStorage ??
+           const FlutterSecureStorage(
+             iOptions: IOSOptions(
+               accessibility: KeychainAccessibility.first_unlock_this_device,
+             ),
+             mOptions: MacOsOptions(
+               accessibility: KeychainAccessibility.first_unlock_this_device,
+             ),
+             aOptions: AndroidOptions(),
+           ),
        _localDb = localDatabase ?? LocalDatabase.instance;
 
   @visibleForTesting
@@ -85,7 +97,14 @@ class AuthRepository implements TokenProvider {
     }
 
     _session = await _fetchMe(accessToken);
-    await _persistSession(_session!);
+
+    // fe-persiste-sesion-fallback-doctor:
+    // Solo persiste la sesión en disco si provino de un perfil válido del backend (id no vacío),
+    // previniendo guardar sesiones fallback con roles incorrectos.
+    if (_session!.id.isNotEmpty) {
+      await _persistSession(_session!);
+    }
+
     return _session!;
   }
 

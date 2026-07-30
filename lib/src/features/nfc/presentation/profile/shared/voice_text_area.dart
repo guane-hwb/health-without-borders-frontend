@@ -1,4 +1,5 @@
-// lib/src/features/nfc/presentation/porfile/shared/voice_text_area.dart
+// lib/src/features/nfc/presentation/profile/shared/voice_text_area.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../../../../design/tokens/app_colors.dart';
@@ -50,6 +51,11 @@ class _VoiceTextAreaState extends State<VoiceTextArea>
   }
 
   Future<void> _initSpeech() async {
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      if (mounted) setState(() => _speechAvailable = false);
+      return;
+    }
+
     try {
       final available = await _speech.initialize(
         onError: (_) {
@@ -116,6 +122,7 @@ class _VoiceTextAreaState extends State<VoiceTextArea>
       listenOptions: stt.SpeechListenOptions(
         cancelOnError: true,
         partialResults: true,
+        onDevice: true,
       ),
       onResult: (result) {
         if (!mounted) return;
@@ -142,6 +149,7 @@ class _VoiceTextAreaState extends State<VoiceTextArea>
   @override
   void dispose() {
     _speech.cancel();
+    _speech.stop();
     _pulseCtrl.dispose();
     super.dispose();
   }

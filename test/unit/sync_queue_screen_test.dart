@@ -330,7 +330,7 @@ void main() {
     test(
       'completes asynchronous task lifecycle without reporting standard error anomalies',
       () async {
-        when(() => syncEngine.syncAll()).thenAnswer((_) async => {});
+        when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
 
         await expectLater(syncEngine.syncAll(), completes);
       },
@@ -339,7 +339,7 @@ void main() {
     test(
       'invokes engine routine layer exactly once per explicit programmatic call tracking',
       () async {
-        when(() => syncEngine.syncAll()).thenAnswer((_) async => {});
+        when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
 
         await syncEngine.syncAll();
 
@@ -411,7 +411,7 @@ void main() {
         when(
           () => db.getUnsyncedRecords(),
         ).thenAnswer((_) async => [makeEntry()]);
-        when(() => syncEngine.syncAll()).thenAnswer((_) async {});
+        when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
 
         final before = await db.getUnsyncedRecords();
         expect(before, hasLength(1));

@@ -134,6 +134,54 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     if (_patient == null) return;
     final s = AppStrings.of(context);
     final isEs = s.welcome == 'Bienvenido';
+
+    final now = DateTime.now();
+
+    // fe-consulta-fin-antes-de-inicio: Validaciones de coherencia temporal
+    if (_startDateTime.isAfter(now)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isEs
+                ? 'La hora de inicio no puede ser una fecha/hora futura.'
+                : 'Start time cannot be in the future.',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    if (_endDateTime != null) {
+      if (_endDateTime!.isBefore(_startDateTime)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isEs
+                  ? 'La hora de fin no puede ser anterior a la hora de inicio.'
+                  : 'End time cannot be earlier than start time.',
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      if (_endDateTime!.isAfter(now)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isEs
+                  ? 'La hora de fin no puede ser una fecha/hora futura.'
+                  : 'End time cannot be in the future.',
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _isSaving = true);
 
     final practDoc = _practitionerDocCtrl.text.trim();
@@ -211,8 +259,6 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     try {
       final scope = AppScope.of(context);
       await scope.localDatabase.savePatient(updatedRecord);
-      // Adding a consultation changes the full record (guardian card) but not
-      // the triage on the wristband.
       await scope.localDatabase.markChipsDirty(
         updatedRecord.patientId,
         guardian: true,

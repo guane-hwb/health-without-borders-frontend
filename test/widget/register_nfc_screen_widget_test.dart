@@ -117,7 +117,7 @@ void main() {
         guardian: any(named: 'guardian'),
       ),
     ).thenAnswer((_) async {});
-    when(() => sync.syncAll()).thenAnswer((_) async {});
+    when(() => sync.syncAll()).thenAnswer((_) async => true);
     when(() => sync.pendingCount).thenReturn(ValueNotifier<int>(0));
     when(() => sync.refreshPendingCount()).thenAnswer((_) async {});
   }

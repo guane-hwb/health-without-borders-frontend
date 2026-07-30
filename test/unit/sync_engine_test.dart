@@ -43,20 +43,28 @@ void main() {
     String id, {
     PatientFullRecord? record,
     String? createdAt,
+    String? recordJson,
   }) {
     final entry = MockLocalPatientEntry();
+    final jsonStr = recordJson ?? '{"patientId": "$id"}';
     when(() => entry.patientId).thenReturn(id);
     when(
       () => entry.createdAt,
     ).thenReturn(createdAt ?? '2026-07-24T10:00:00.000Z');
+    when(() => entry.recordJson).thenReturn(jsonStr);
     when(() => entry.toPatientRecord()).thenReturn(record);
     return entry;
   }
 
-  MockPatientSyncResponse buildResponse(String status, {String? message}) {
+  MockPatientSyncResponse buildResponse(
+    String status, {
+    String? message,
+    String? fhirStatus = 'success',
+  }) {
     final response = MockPatientSyncResponse();
     when(() => response.status).thenReturn(status);
     when(() => response.message).thenReturn(message ?? '');
+    when(() => response.fhirStatus).thenReturn(fhirStatus);
     return response;
   }
 
@@ -74,7 +82,11 @@ void main() {
     when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
     when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
     when(
-      () => localDb.markSynced(any(), createdAt: any(named: 'createdAt')),
+      () => localDb.markSynced(
+        any(),
+        createdAt: any(named: 'createdAt'),
+        recordJson: any(named: 'recordJson'),
+      ),
     ).thenAnswer((_) async {});
     when(() => localDb.markSyncError(any(), any())).thenAnswer((_) async {});
     when(
@@ -150,10 +162,18 @@ void main() {
 
       verify(() => patientRepo.syncPatient(any())).called(2);
       verify(
-        () => localDb.markSynced('A', createdAt: any(named: 'createdAt')),
+        () => localDb.markSynced(
+          'A',
+          createdAt: any(named: 'createdAt'),
+          recordJson: any(named: 'recordJson'),
+        ),
       ).called(1);
       verify(
-        () => localDb.markSynced('B', createdAt: any(named: 'createdAt')),
+        () => localDb.markSynced(
+          'B',
+          createdAt: any(named: 'createdAt'),
+          recordJson: any(named: 'recordJson'),
+        ),
       ).called(1);
       expect(engine.pendingCount.value, 0);
     });
@@ -197,7 +217,11 @@ void main() {
 
         verifyNever(() => patientRepo.syncPatient(any()));
         verifyNever(
-          () => localDb.markSynced(any(), createdAt: any(named: 'createdAt')),
+          () => localDb.markSynced(
+            any(),
+            createdAt: any(named: 'createdAt'),
+            recordJson: any(named: 'recordJson'),
+          ),
         );
         verifyNever(() => localDb.markSyncError(any(), any()));
       },
@@ -224,7 +248,11 @@ void main() {
         await engine.syncAll();
 
         verify(
-          () => localDb.markSynced('A', createdAt: any(named: 'createdAt')),
+          () => localDb.markSynced(
+            'A',
+            createdAt: any(named: 'createdAt'),
+            recordJson: any(named: 'recordJson'),
+          ),
         ).called(1);
         expect(syncedId, 'A');
         expect(syncedOk, true);
@@ -299,8 +327,6 @@ void main() {
 
         await engine.syncAll();
 
-        // The 409 status is persisted so the queue UI can render a dedicated
-        // conflict state and skip the (futile) sync action.
         verify(
           () => localDb.markSyncError(
             'A',
@@ -418,7 +444,11 @@ void main() {
 
         expect(result, true);
         verify(
-          () => localDb.markSynced('A', createdAt: any(named: 'createdAt')),
+          () => localDb.markSynced(
+            'A',
+            createdAt: any(named: 'createdAt'),
+            recordJson: any(named: 'recordJson'),
+          ),
         ).called(1);
       },
     );
@@ -472,7 +502,7 @@ void main() {
       clearInteractions(localDb);
 
       connectivityController.add([ConnectivityResult.wifi]);
-      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(const Duration(seconds: 4));
 
       verify(() => localDb.getUnsyncedRecords()).called(1);
     });
@@ -485,7 +515,7 @@ void main() {
         clearInteractions(localDb);
 
         connectivityController.add([ConnectivityResult.none]);
-        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(const Duration(seconds: 4));
 
         verifyNever(() => localDb.getUnsyncedRecords());
       },
@@ -501,7 +531,7 @@ void main() {
         clearInteractions(localDb);
 
         connectivityController.add([ConnectivityResult.wifi]);
-        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(const Duration(seconds: 4));
 
         verifyNever(() => localDb.getUnsyncedRecords());
       },
@@ -515,7 +545,7 @@ void main() {
 
       clearInteractions(localDb);
       connectivityController.add([ConnectivityResult.wifi]);
-      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(const Duration(seconds: 4));
 
       verify(() => localDb.getUnsyncedRecords()).called(1);
     });

@@ -128,7 +128,7 @@ AppScope _defaultScope() {
   final db = _MockLocalDatabase();
   final sync = _MockSyncEngine();
 
-  when(() => sync.syncAll()).thenAnswer((_) async {});
+  when(() => sync.syncAll()).thenAnswer((_) async => true);
 
   return AppScope(
     authRepository: auth,
@@ -454,7 +454,7 @@ void main() {
           guardian: any(named: 'guardian'),
         ),
       ).thenAnswer((_) async {});
-      when(() => scope.syncEngine.syncAll()).thenAnswer((_) async {});
+      when(() => scope.syncEngine.syncAll()).thenAnswer((_) async => true);
 
       await tester.pumpWidget(_buildApp(patient: _fakePatient(), scope: scope));
       await tester.pumpAndSettle();

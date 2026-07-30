@@ -386,19 +386,34 @@ class _SyncCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isConflict = entry.syncErrorCode == 409;
-    final hasErr = entry.syncError?.isNotEmpty == true && isConflict;
+    final hasErr =
+        entry.syncError?.isNotEmpty ==
+        true; // fe-sync-ui-oculta-todo-error-no-409
     final isEs = s.save == 'Guardar';
 
-    final String? errorMessage = !hasErr
-        ? null
-        : (isEs
-              ? 'Esta manilla ya está registrada para otro paciente. '
-                    'Registra al paciente con una manilla nueva.'
-              : 'This bracelet is already registered to another patient. '
-                    'Register the patient with a new bracelet.');
+    String? errorMessage;
+    if (hasErr) {
+      if (isConflict) {
+        errorMessage = isEs
+            ? 'Esta manilla ya está registrada para otro paciente. Registra al paciente con una manilla nueva.'
+            : 'This bracelet is already registered to another patient. Register the patient with a new bracelet.';
+      } else if (entry.syncErrorCode == 403) {
+        errorMessage = isEs
+            ? 'Acceso denegado (403): Tu rol no permite registrar historia médica completa.'
+            : 'Access denied (403): Your role cannot register full medical history.';
+      } else if (entry.syncErrorCode == 422) {
+        errorMessage = isEs
+            ? 'Error de validación (422): El registro contiene campos incompatibles con el backend.'
+            : 'Validation error (422): The record contains incompatible fields.';
+      } else {
+        errorMessage = entry.syncError;
+      }
+    }
 
     final String badgeLabel = hasErr
-        ? (isEs ? 'Duplicado' : 'Duplicate')
+        ? (isConflict
+              ? (isEs ? 'Duplicado' : 'Duplicate')
+              : (isEs ? 'Error' : 'Error'))
         : s.pending;
 
     final date = entry.createdAt.contains('T')
@@ -485,7 +500,11 @@ class _SyncCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.nfc, size: 15, color: AppColors.error),
+                  const Icon(
+                    Icons.error_outline,
+                    size: 15,
+                    color: AppColors.error,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(

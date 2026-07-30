@@ -37,14 +37,14 @@ class ApiClient {
 
   bool _isPublicRoute(String path) => _publicRoutes.contains(path);
 
+  // fe-sync-timeout20s-vs-llm-no-converge: Permite configurar timeout por peticion
   Future<http.Response> _dispatch(
     String path, {
     required Map<String, String> headers,
     required Future<http.Response> Function(Map<String, String> headers) send,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
-    final http.Response response = await send(
-      headers,
-    ).timeout(const Duration(seconds: 20));
+    final http.Response response = await send(headers).timeout(timeout);
 
     if (response.statusCode != 401 ||
         _tokenProvider == null ||
@@ -61,18 +61,20 @@ class ApiClient {
       ...headers,
       'Authorization': 'Bearer $newToken',
     };
-    return send(retryHeaders).timeout(const Duration(seconds: 20));
+    return send(retryHeaders).timeout(timeout);
   }
 
   Future<Map<String, dynamic>> postForm({
     required String path,
     required Map<String, String> form,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final Uri uri = Uri.parse('$baseUrl$path');
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
+      timeout: timeout,
       send: (Map<String, String> h) => _client.post(
         uri,
         headers: <String, String>{
@@ -90,11 +92,13 @@ class ApiClient {
     required String path,
     required Map<String, dynamic> body,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final Uri uri = Uri.parse('$baseUrl$path');
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
+      timeout: timeout,
       send: (Map<String, String> h) => _client.post(
         uri,
         headers: <String, String>{'Content-Type': 'application/json', ...h},
@@ -109,6 +113,7 @@ class ApiClient {
     required String path,
     Map<String, String>? headers,
     Map<String, String>? queryParams,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final Uri uri = Uri.parse(
       '$baseUrl$path',
@@ -116,6 +121,7 @@ class ApiClient {
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
+      timeout: timeout,
       send: (Map<String, String> h) => _client.get(uri, headers: h),
     );
 
@@ -126,6 +132,7 @@ class ApiClient {
     required String path,
     Map<String, String>? headers,
     Map<String, String>? queryParams,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final Uri uri = Uri.parse(
       '$baseUrl$path',
@@ -133,6 +140,7 @@ class ApiClient {
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
+      timeout: timeout,
       send: (Map<String, String> h) => _client.get(uri, headers: h),
     );
 
@@ -143,11 +151,13 @@ class ApiClient {
     required String path,
     required Map<String, dynamic> body,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final Uri uri = Uri.parse('$baseUrl$path');
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
+      timeout: timeout,
       send: (Map<String, String> h) => _client.patch(
         uri,
         headers: <String, String>{'Content-Type': 'application/json', ...h},
@@ -161,11 +171,13 @@ class ApiClient {
   Future<void> delete({
     required String path,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final Uri uri = Uri.parse('$baseUrl$path');
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
+      timeout: timeout,
       send: (Map<String, String> h) => _client.delete(uri, headers: h),
     );
 

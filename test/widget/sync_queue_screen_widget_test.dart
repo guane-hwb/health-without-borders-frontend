@@ -278,7 +278,7 @@ void main() {
       when(
         () => db.getUnsyncedRecords(),
       ).thenAnswer((_) async => [makeEntry()]);
-      when(() => syncEngine.syncAll()).thenAnswer((_) async {});
+      when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
 
       await tester.pumpWidget(
         buildTestApp(
@@ -301,7 +301,7 @@ void main() {
       when(
         () => db.getUnsyncedRecords(),
       ).thenAnswer((_) async => [makeEntry()]);
-      when(() => syncEngine.syncAll()).thenAnswer((_) async {});
+      when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
 
       await tester.pumpWidget(
         buildTestApp(
@@ -473,7 +473,7 @@ void main() {
     });
 
     testWidgets(
-      'un error no-409 conserva el estado pendiente y el botón Sync ahora',
+      'un error no-409 muestra la badge de Error y conserva el botón Sync ahora',
       (tester) async {
         when(() => db.getUnsyncedRecords()).thenAnswer(
           (_) async => [
@@ -490,7 +490,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Pendiente'), findsOneWidget);
+        expect(find.text('Error'), findsOneWidget);
         expect(find.text('Sync ahora'), findsOneWidget);
       },
     );
