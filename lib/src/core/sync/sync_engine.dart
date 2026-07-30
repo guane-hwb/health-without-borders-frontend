@@ -118,19 +118,33 @@ class SyncEngine {
         record,
       );
 
-      if (response.status == 'success') {
+      final bool fhirOk =
+          response.fhirStatus == null ||
+          response.fhirStatus!.isEmpty ||
+          response.fhirStatus == 'success';
+
+      if (response.status == 'success' && fhirOk) {
         AppLogger.d('Registro sincronizado exitosamente: ${entry.patientId}');
-        await _localDb.markSynced(entry.patientId, createdAt: entry.createdAt);
+
+        await _localDb.markSynced(
+          entry.patientId,
+          createdAt: entry.createdAt,
+          recordJson: entry.recordJson,
+        );
         onRecordSynced?.call(entry.patientId, true, null);
       } else {
+        final String errorMsg = !fhirOk
+            ? 'Envío FHIR fallido: ${response.fhirStatus}'
+            : 'Sync returned status: ${response.status}';
         AppLogger.e(
-          'Fallo en sincronización para ${entry.patientId}: ${response.message}',
+          'Fallo en sincronización para ${entry.patientId}: $errorMsg',
         );
-        await _localDb.markSyncError(
+        await _localDb.markSyncError(entry.patientId, errorMsg);
+        onRecordSynced?.call(
           entry.patientId,
-          'Sync returned status: ${response.status}',
+          false,
+          response.message,
         );
-        onRecordSynced?.call(entry.patientId, false, response.message);
       }
     } on ApiException catch (e) {
       final shouldStopAll = e.statusCode == 401;

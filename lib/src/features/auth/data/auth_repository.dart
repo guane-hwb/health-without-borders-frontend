@@ -5,14 +5,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/storage/local_database.dart';
 import '../domain/user_session.dart';
 
 class AuthRepository implements TokenProvider {
   AuthRepository({
     required ApiClient apiClient,
     FlutterSecureStorage? secureStorage,
+    LocalDatabase? localDatabase,
   }) : _apiClient = apiClient,
-       _secureStorage = secureStorage ?? const FlutterSecureStorage();
+       _secureStorage = secureStorage ?? const FlutterSecureStorage(),
+       _localDb = localDatabase ?? LocalDatabase.instance;
 
   @visibleForTesting
   static const String tokenKey = _tokenKey;
@@ -30,6 +33,7 @@ class AuthRepository implements TokenProvider {
 
   final ApiClient _apiClient;
   final FlutterSecureStorage _secureStorage;
+  final LocalDatabase _localDb;
 
   String? _cachedToken;
   String? _cachedRefreshToken;
@@ -220,6 +224,10 @@ class AuthRepository implements TokenProvider {
     } catch (_) {}
     try {
       await _secureStorage.delete(key: _sessionKey);
+    } catch (_) {}
+
+    try {
+      await _localDb.clearAll();
     } catch (_) {}
   }
 
