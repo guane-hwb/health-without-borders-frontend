@@ -26,6 +26,7 @@ class SyncEngine {
   final Stream<List<ConnectivityResult>>? _connectivityStream;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  Timer? _debounceTimer;
   bool _isSyncing = false;
 
   final ValueNotifier<int> pendingCount = ValueNotifier<int>(0);
@@ -54,10 +55,13 @@ class SyncEngine {
     _connectivitySub = stream.listen((List<ConnectivityResult> results) {
       final hasConnection = results.any((r) => r != ConnectivityResult.none);
       if (hasConnection) {
-        AppLogger.d(
-          'Conexión detectada. Iniciando sincronización en segundo plano...',
-        );
-        syncAll();
+        _debounceTimer?.cancel();
+        _debounceTimer = Timer(const Duration(seconds: 3), () {
+          AppLogger.d(
+            'Conexión estable detectada. Iniciando sincronización en segundo plano...',
+          );
+          syncAll();
+        });
       }
     });
 
@@ -65,6 +69,7 @@ class SyncEngine {
   }
 
   void stop() {
+    _debounceTimer?.cancel();
     _connectivitySub?.cancel();
     _connectivitySub = null;
   }
@@ -75,12 +80,16 @@ class SyncEngine {
   /// de manilla, los cuales NO deben reintentarse automaticamente en segundo plano.
   static const Set<int> _permanentErrorCodes = <int>{400, 409, 422};
 
-  Future<void> syncAll() async {
+  Future<bool> syncAll() async {
     await refreshPendingCount();
-    if (_isSyncing) return;
+    if (_isSyncing) return false;
     _isSyncing = true;
 
+    bool allSuccessful = true;
+
     try {
+      await _localDb.purgeStalePermanentErrors();
+
       final List<LocalPatientEntry> allUnsynced = await _localDb
           .getUnsyncedRecords();
 
@@ -92,25 +101,29 @@ class SyncEngine {
       AppLogger.d('Iniciando syncAll: ${pending.length} registros pendientes.');
 
       for (final entry in pending) {
-        await _syncOne(entry);
+        final success = await _syncOne(entry);
+        if (!success) allSuccessful = false;
       }
 
       final remaining = await _localDb.getUnsyncedCount();
       pendingCount.value = remaining;
       onSyncStatusChanged?.call(remaining);
+
+      return allSuccessful && remaining == 0;
     } catch (e, stack) {
       AppLogger.e('Error crítico durante syncAll', error: e, stackTrace: stack);
+      return false;
     } finally {
       _isSyncing = false;
       await refreshPendingCount();
     }
   }
 
-  Future<void> _syncOne(LocalPatientEntry entry) async {
+  Future<bool> _syncOne(LocalPatientEntry entry) async {
     final PatientFullRecord? record = entry.toPatientRecord();
     if (record == null) {
       AppLogger.e('Omitiendo registro corrupto con ID: ${entry.patientId}');
-      return;
+      return false;
     }
 
     try {
@@ -118,19 +131,31 @@ class SyncEngine {
         record,
       );
 
-      if (response.status == 'success') {
+      final bool fhirOk =
+          response.fhirStatus == null ||
+          response.fhirStatus!.isEmpty ||
+          response.fhirStatus == 'success';
+
+      if (response.status == 'success' && fhirOk) {
         AppLogger.d('Registro sincronizado exitosamente: ${entry.patientId}');
-        await _localDb.markSynced(entry.patientId, createdAt: entry.createdAt);
-        onRecordSynced?.call(entry.patientId, true, null);
-      } else {
-        AppLogger.e(
-          'Fallo en sincronización para ${entry.patientId}: ${response.message}',
-        );
-        await _localDb.markSyncError(
+
+        await _localDb.markSynced(
           entry.patientId,
-          'Sync returned status: ${response.status}',
+          createdAt: entry.createdAt,
+          recordJson: entry.recordJson,
         );
+        onRecordSynced?.call(entry.patientId, true, null);
+        return true;
+      } else {
+        final String errorMsg = !fhirOk
+            ? 'Envío FHIR fallido: ${response.fhirStatus}'
+            : 'Sync returned status: ${response.status}';
+        AppLogger.e(
+          'Fallo en sincronización para ${entry.patientId}: $errorMsg',
+        );
+        await _localDb.markSyncError(entry.patientId, errorMsg);
         onRecordSynced?.call(entry.patientId, false, response.message);
+        return false;
       }
     } on ApiException catch (e) {
       final shouldStopAll = e.statusCode == 401;
@@ -149,8 +174,9 @@ class SyncEngine {
       onRecordSynced?.call(entry.patientId, false, e.message);
 
       if (shouldStopAll || shouldNotRetry) {
-        return;
+        return false;
       }
+      return false;
     } catch (e, stack) {
       AppLogger.e(
         'Error no controlado sincronizando ${entry.patientId}',
@@ -159,17 +185,26 @@ class SyncEngine {
       );
       await _localDb.markSyncError(entry.patientId, '$e');
       onRecordSynced?.call(entry.patientId, false, '$e');
+      return false;
     }
   }
 
   // ── Manual controls ───────────────────────────────────────────────────────
 
   Future<bool> syncOne(String patientId) async {
+    if (_isSyncing) return false;
+
     final entries = await _localDb.getUnsyncedRecords();
     final match = entries.where((e) => e.patientId == patientId);
     if (match.isEmpty) return false;
 
-    await _syncOne(match.first);
+    _isSyncing = true;
+    try {
+      await _syncOne(match.first);
+    } finally {
+      _isSyncing = false;
+    }
+
     final updated = await _localDb.getUnsyncedRecords();
     await refreshPendingCount();
     return !updated.any((e) => e.patientId == patientId);

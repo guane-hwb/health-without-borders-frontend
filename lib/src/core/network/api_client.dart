@@ -1,7 +1,7 @@
 // lib/src/core/network/api_client.dart
 
 import 'dart:convert';
-
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiException implements Exception {
@@ -21,7 +21,13 @@ abstract class TokenProvider {
 
 class ApiClient {
   ApiClient({required this.baseUrl, http.Client? client})
-    : _client = client ?? http.Client();
+    : _client = client ?? http.Client() {
+    if (kReleaseMode && baseUrl.startsWith('http://')) {
+      throw ArgumentError(
+        'In release mode, baseUrl must use HTTPS to prevent cleartext traffic.',
+      );
+    }
+  }
 
   final String baseUrl;
   final http.Client _client;
@@ -41,10 +47,27 @@ class ApiClient {
     String path, {
     required Map<String, String> headers,
     required Future<http.Response> Function(Map<String, String> headers) send,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
-    final http.Response response = await send(
-      headers,
-    ).timeout(const Duration(seconds: 20));
+    final http.Response response = await send(headers).timeout(timeout);
+
+    if (response.statusCode == 301 ||
+        response.statusCode == 302 ||
+        response.statusCode == 307 ||
+        response.statusCode == 308) {
+      final location = response.headers['location'];
+      if (location != null) {
+        final redirectUri = Uri.parse(location);
+        final baseUri = Uri.parse(baseUrl);
+        final isExternal =
+            redirectUri.hasAuthority && redirectUri.host != baseUri.host;
+
+        final safeHeaders = Map<String, String>.from(headers);
+        if (isExternal) {
+          safeHeaders.remove('Authorization');
+        }
+      }
+    }
 
     if (response.statusCode != 401 ||
         _tokenProvider == null ||
@@ -61,18 +84,20 @@ class ApiClient {
       ...headers,
       'Authorization': 'Bearer $newToken',
     };
-    return send(retryHeaders).timeout(const Duration(seconds: 20));
+    return send(retryHeaders).timeout(timeout);
   }
 
   Future<Map<String, dynamic>> postForm({
     required String path,
     required Map<String, String> form,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final Uri uri = Uri.parse('$baseUrl$path');
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
+      timeout: timeout,
       send: (Map<String, String> h) => _client.post(
         uri,
         headers: <String, String>{
@@ -90,11 +115,13 @@ class ApiClient {
     required String path,
     required Map<String, dynamic> body,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final Uri uri = Uri.parse('$baseUrl$path');
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
+      timeout: timeout,
       send: (Map<String, String> h) => _client.post(
         uri,
         headers: <String, String>{'Content-Type': 'application/json', ...h},
@@ -109,6 +136,7 @@ class ApiClient {
     required String path,
     Map<String, String>? headers,
     Map<String, String>? queryParams,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final Uri uri = Uri.parse(
       '$baseUrl$path',
@@ -116,6 +144,7 @@ class ApiClient {
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
+      timeout: timeout,
       send: (Map<String, String> h) => _client.get(uri, headers: h),
     );
 
@@ -126,6 +155,7 @@ class ApiClient {
     required String path,
     Map<String, String>? headers,
     Map<String, String>? queryParams,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final Uri uri = Uri.parse(
       '$baseUrl$path',
@@ -133,6 +163,7 @@ class ApiClient {
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
+      timeout: timeout,
       send: (Map<String, String> h) => _client.get(uri, headers: h),
     );
 
@@ -143,11 +174,13 @@ class ApiClient {
     required String path,
     required Map<String, dynamic> body,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final Uri uri = Uri.parse('$baseUrl$path');
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
+      timeout: timeout,
       send: (Map<String, String> h) => _client.patch(
         uri,
         headers: <String, String>{'Content-Type': 'application/json', ...h},
@@ -161,11 +194,13 @@ class ApiClient {
   Future<void> delete({
     required String path,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final Uri uri = Uri.parse('$baseUrl$path');
     final http.Response response = await _dispatch(
       path,
       headers: <String, String>{...?headers},
+      timeout: timeout,
       send: (Map<String, String> h) => _client.delete(uri, headers: h),
     );
 
@@ -242,8 +277,7 @@ class ApiClient {
 
   String _httpErrorFallback(int statusCode) {
     if (statusCode >= 500) {
-      return 'Server error (HTTP $statusCode). The record stays pending and '
-          'will be retried automatically.';
+      return 'Server error (HTTP $statusCode). Please try again later.';
     }
     if (statusCode == 401) return 'Session expired. Please sign in again.';
     if (statusCode == 403) return 'Access denied (HTTP 403).';

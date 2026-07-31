@@ -51,15 +51,58 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     if (_step < 4) setState(() => _step++);
   }
 
-  void _stepBack() {
+  void _stepBack() async {
     if (_step > 0) {
       setState(() => _step--);
     } else {
-      _goToHomeDirectly();
+      await _goToHomeDirectly();
     }
   }
 
-  void _goToHomeDirectly() {
+  Future<bool> _confirmDiscard() async {
+    if (_savedRecord != null || _step >= 4) {
+      return true;
+    }
+
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
+    if (_draft.firstName.isEmpty && _draft.documentNumber.isEmpty) {
+      return true;
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEs ? '¿Descartar registro?' : 'Discard registration?'),
+        content: Text(
+          isEs
+              ? 'Si regresa ahora, se perderán todos los datos ingresados en el formulario.'
+              : 'If you leave now, all entered information will be lost.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              isEs ? 'Descartar' : 'Discard',
+              style: const TextStyle(color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false;
+  }
+
+  Future<void> _goToHomeDirectly() async {
+    final canLeave = await _confirmDiscard();
+    if (!canLeave || !mounted) return;
+
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const HomeScreen()),
       (route) => false,

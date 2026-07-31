@@ -92,7 +92,7 @@ AppScope _defaultScope({
   final resolvedRepo = repo ?? _MockPatientRepository();
   final resolvedDb = db ?? _MockLocalDatabase();
   final resolvedSync = sync ?? _MockSyncEngine();
-  when(() => resolvedSync.syncAll()).thenAnswer((_) async {});
+  when(() => resolvedSync.syncAll()).thenAnswer((_) async => true);
   return AppScope(
     authRepository: auth,
     userRepository: user,
@@ -111,8 +111,10 @@ AppScope _scopeWithSave() {
   final db = _MockLocalDatabase();
   final sync = _MockSyncEngine();
   when(() => db.savePatient(any())).thenAnswer((_) async {});
-  when(() => db.markChipsDirty(any(), guardian: any(named: 'guardian'))).thenAnswer((_) async {});
-  when(() => sync.syncAll()).thenAnswer((_) async {});
+  when(
+    () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
+  ).thenAnswer((_) async {});
+  when(() => sync.syncAll()).thenAnswer((_) async => true);
   return _defaultScope(db: db, sync: sync);
 }
 
@@ -634,7 +636,7 @@ void main() {
       final db = _MockLocalDatabase();
       final sync = _MockSyncEngine();
       when(() => db.savePatient(any())).thenThrow(Exception('sin espacio'));
-      when(() => sync.syncAll()).thenAnswer((_) async {});
+      when(() => sync.syncAll()).thenAnswer((_) async => true);
 
       await tester.pumpWidget(
         _buildApp(
@@ -684,7 +686,9 @@ void main() {
                               localDatabase: scope.localDatabase,
                               syncEngine: scope.syncEngine,
                               statsRepository: StatsRepository(
-                                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                                apiClient: ApiClient(
+                                  baseUrl: 'http://localhost',
+                                ),
                                 authRepository: scope.authRepository,
                               ),
                               child: AppLocale(
@@ -847,8 +851,10 @@ void main() {
         final db = _MockLocalDatabase();
         final sync = _MockSyncEngine();
         when(() => db.savePatient(any())).thenAnswer((_) async {});
-        when(() => db.markChipsDirty(any(), guardian: any(named: 'guardian'))).thenAnswer((_) async {});
-        when(() => sync.syncAll()).thenAnswer((_) async {});
+        when(
+          () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
+        ).thenAnswer((_) async {});
+        when(() => sync.syncAll()).thenAnswer((_) async => true);
 
         await tester.pumpWidget(
           _buildApp(

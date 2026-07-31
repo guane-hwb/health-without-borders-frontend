@@ -5,14 +5,29 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/storage/local_database.dart';
 import '../domain/user_session.dart';
 
 class AuthRepository implements TokenProvider {
   AuthRepository({
     required ApiClient apiClient,
     FlutterSecureStorage? secureStorage,
+    LocalDatabase? localDatabase,
   }) : _apiClient = apiClient,
-       _secureStorage = secureStorage ?? const FlutterSecureStorage();
+       // fe-keychain-accesible-migra-backup & fe-keychain-sin-thisdeviceonly:
+       // Configura accesibilidad ThisDeviceOnly para evitar que credenciales y claves migren en backups.
+       _secureStorage =
+           secureStorage ??
+           const FlutterSecureStorage(
+             iOptions: IOSOptions(
+               accessibility: KeychainAccessibility.first_unlock_this_device,
+             ),
+             mOptions: MacOsOptions(
+               accessibility: KeychainAccessibility.first_unlock_this_device,
+             ),
+             aOptions: AndroidOptions(),
+           ),
+       _localDb = localDatabase ?? LocalDatabase.instance;
 
   @visibleForTesting
   static const String tokenKey = _tokenKey;
@@ -30,6 +45,7 @@ class AuthRepository implements TokenProvider {
 
   final ApiClient _apiClient;
   final FlutterSecureStorage _secureStorage;
+  final LocalDatabase _localDb;
 
   String? _cachedToken;
   String? _cachedRefreshToken;
@@ -81,7 +97,14 @@ class AuthRepository implements TokenProvider {
     }
 
     _session = await _fetchMe(accessToken);
-    await _persistSession(_session!);
+
+    // fe-persiste-sesion-fallback-doctor:
+    // Solo persiste la sesión en disco si provino de un perfil válido del backend (id no vacío),
+    // previniendo guardar sesiones fallback con roles incorrectos.
+    if (_session!.id.isNotEmpty) {
+      await _persistSession(_session!);
+    }
+
     return _session!;
   }
 
@@ -220,6 +243,10 @@ class AuthRepository implements TokenProvider {
     } catch (_) {}
     try {
       await _secureStorage.delete(key: _sessionKey);
+    } catch (_) {}
+
+    try {
+      await _localDb.clearAll();
     } catch (_) {}
   }
 

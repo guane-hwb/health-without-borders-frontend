@@ -30,7 +30,6 @@ android {
     signingConfigs {
         create("release") {
             val storeFilePath = keystoreProperties.getProperty("storeFile")
-            // Cambiamos rootProject.file("android/app/$storeFilePath") por file(storeFilePath)
             storeFile = if (storeFilePath != null) file(storeFilePath) else null
             storePassword = keystoreProperties.getProperty("storePassword")
             keyAlias = keystoreProperties.getProperty("keyAlias")
@@ -52,7 +51,13 @@ android {
 
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            
+            val rulesFile = file("proguard-rules.pro")
+            if (rulesFile.exists()) {
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), rulesFile)
+            } else {
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            }
         }
     }
 }

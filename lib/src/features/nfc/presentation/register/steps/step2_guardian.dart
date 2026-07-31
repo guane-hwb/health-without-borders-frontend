@@ -98,6 +98,44 @@ class _Step2State extends State<Step2Guardian> {
     super.dispose();
   }
 
+  void _commitToDraft() {
+    final d = widget.draft;
+    d.guardianName = _name.text.trim().isEmpty ? null : _name.text.trim();
+    d.guardianPhone = _phone.text.trim().isEmpty ? null : _phone.text.trim();
+    d.guardianDeviceUid = _uid.text.trim().isEmpty ? null : _uid.text.trim();
+    d.guardianDocType = _selectedDocType;
+    d.guardianDocNumber = _docNumber.text.trim().isEmpty
+        ? null
+        : _docNumber.text.trim();
+    d.guardianAuthAccepted = _authAccepted;
+    d.guardianEmail = _email.text.trim().isEmpty ? null : _email.text.trim();
+    d.guardianRelationship = d.guardianRelationship ?? '01';
+
+    if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
+      d.guardian2Name = _name2.text.trim();
+      d.guardian2Phone = _phone2.text.trim().isEmpty
+          ? null
+          : _phone2.text.trim();
+      d.guardian2DeviceUid = _uid2.text.trim().isEmpty
+          ? null
+          : _uid2.text.trim();
+      d.guardian2DocType = _selectedDocType2;
+      d.guardian2DocNumber = _docNumber2.text.trim().isEmpty
+          ? null
+          : _docNumber2.text.trim();
+      d.guardian2Relationship = _guardian2Relationship;
+      d.guardian2AuthAccepted = _auth2Accepted;
+      d.guardian2Email = _email2.text.trim().isEmpty
+          ? null
+          : _email2.text.trim();
+    }
+  }
+
+  void _onBackAction() {
+    _commitToDraft();
+    widget.onBack();
+  }
+
   // ── NFC ──────────────────────────────────────
   Future<void> _scanNfc() async {
     final s = AppStrings.of(context);
@@ -655,7 +693,7 @@ class _Step2State extends State<Step2Guardian> {
             ],
           ),
         ),
-        _NavButtons(onBack: widget.onBack, onContinue: _save),
+        _NavButtons(onBack: _onBackAction, onContinue: _save),
       ],
     );
   }

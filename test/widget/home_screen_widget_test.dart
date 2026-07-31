@@ -91,7 +91,6 @@ class FakeLocalDatabase implements LocalDatabase {
 
   int pendingCount;
 
-
   @override
   Future<void> logEmergencyAccess({
     required String patientUid,
@@ -129,7 +128,11 @@ class FakeLocalDatabase implements LocalDatabase {
   }) async {}
 
   @override
-  Future<void> markSynced(String patientId, {String? createdAt}) async {}
+  Future<void> markSynced(
+    String patientId, {
+    String? createdAt,
+    String? recordJson,
+  }) async {}
 
   @override
   Future<void> savePatient(PatientFullRecord record) async {}
@@ -149,6 +152,11 @@ class FakeLocalDatabase implements LocalDatabase {
     String patientId, {
     bool patient = false,
     bool guardian = false,
+  }) async {}
+
+  @override
+  Future<void> purgeStalePermanentErrors({
+    Duration maxAge = const Duration(days: 30),
   }) async {}
 }
 

@@ -29,6 +29,7 @@ class _NullApiClient implements ApiClient {
     required String path,
     Map<String, String>? headers,
     Map<String, String>? queryParams,
+    Duration timeout = const Duration(seconds: 20),
   }) async => throw UnsupportedError('_NullApiClient.getJson');
 
   @override
@@ -36,6 +37,7 @@ class _NullApiClient implements ApiClient {
     required String path,
     Map<String, String>? headers,
     Map<String, String>? queryParams,
+    Duration timeout = const Duration(seconds: 20),
   }) async => throw UnsupportedError('_NullApiClient.getJsonList');
 
   @override
@@ -43,6 +45,7 @@ class _NullApiClient implements ApiClient {
     required String path,
     required Map<String, dynamic> body,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
   }) async => throw UnsupportedError('_NullApiClient.postJson');
 
   @override
@@ -50,6 +53,7 @@ class _NullApiClient implements ApiClient {
     required String path,
     required Map<String, String> form,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
   }) async => throw UnsupportedError('_NullApiClient.postForm');
 
   @override
@@ -57,12 +61,14 @@ class _NullApiClient implements ApiClient {
     required String path,
     required Map<String, dynamic> body,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
   }) async => throw UnsupportedError('_NullApiClient.patchJson');
 
   @override
   Future<void> delete({
     required String path,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
   }) async => throw UnsupportedError('_NullApiClient.delete');
 }
 
@@ -102,9 +108,10 @@ class _FakeSyncEngine extends SyncEngine {
   int callCount = 0;
 
   @override
-  Future<void> syncAll() async {
+  Future<bool> syncAll() async {
     callCount++;
     if (shouldThrow) throw Exception('Error de sincronización simulado');
+    return true;
   }
 }
 
