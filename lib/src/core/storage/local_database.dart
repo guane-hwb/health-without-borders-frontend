@@ -21,7 +21,7 @@ class LocalDatabase {
   static final LocalDatabase instance = LocalDatabase._();
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 4;
+  static const int _dbVersion = 5;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
@@ -235,7 +235,8 @@ class LocalDatabase {
             sync_error    TEXT,
             sync_error_code INTEGER,
             created_at    TEXT NOT NULL,
-            synced_at     TEXT
+            synced_at     TEXT,
+            revision      INTEGER NOT NULL DEFAULT 0
           )
         ''');
         await db.execute('CREATE INDEX idx_synced ON $_table (is_synced)');
@@ -250,12 +251,30 @@ class LocalDatabase {
           await _createEmergencyLogTable(db);
         }
         if (oldVersion < 3) {
-          await db.execute(
-            'ALTER TABLE $_table ADD COLUMN sync_error_code INTEGER',
+          await _addColumnIfMissing(db, _table, 'sync_error_code', 'INTEGER');
+        }
+        if (oldVersion < 5) {
+          await _addColumnIfMissing(
+            db,
+            _table,
+            'revision',
+            'INTEGER NOT NULL DEFAULT 0',
           );
         }
       },
     );
+  }
+
+  static Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    final bool exists = info.any((row) => row['name'] == column);
+    if (exists) return;
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
   }
 
   static Future<void> _createChipStatusTable(Database db) async {
@@ -339,11 +358,14 @@ class LocalDatabase {
     final encryptedJson = await _encryptPayload(rawJson);
 
     String createdAt = DateTime.now().toIso8601String();
+    int revision = 0;
 
     if (_isWeb) {
       final store = _webStore;
-      if (store.containsKey(record.patientId)) {
-        createdAt = store[record.patientId]!['created_at'] as String;
+      final previous = store[record.patientId];
+      if (previous != null) {
+        createdAt = previous['created_at'] as String;
+        revision = ((previous['revision'] as int?) ?? 0) + 1;
       }
       store[record.patientId] = <String, dynamic>{
         'patient_id': record.patientId,
@@ -355,6 +377,7 @@ class LocalDatabase {
         'sync_error_code': null,
         'created_at': createdAt,
         'synced_at': null,
+        'revision': revision,
       };
       _saveWebStore(store);
       return;
@@ -364,13 +387,15 @@ class LocalDatabase {
 
     final existing = await db!.query(
       _table,
-      columns: ['created_at'],
+      columns: ['created_at', 'revision'],
       where: 'patient_id = ?',
       whereArgs: [record.patientId],
       limit: 1,
     );
-    if (existing.isNotEmpty && existing.first['created_at'] != null) {
-      createdAt = existing.first['created_at'] as String;
+    if (existing.isNotEmpty) {
+      final prevCreatedAt = existing.first['created_at'] as String?;
+      if (prevCreatedAt != null) createdAt = prevCreatedAt;
+      revision = ((existing.first['revision'] as int?) ?? 0) + 1;
     }
 
     final row = <String, dynamic>{
@@ -383,6 +408,7 @@ class LocalDatabase {
       'sync_error_code': null,
       'created_at': createdAt,
       'synced_at': null,
+      'revision': revision,
     };
 
     await db.insert(_table, row, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -491,12 +517,15 @@ class LocalDatabase {
     String patientId, {
     String? createdAt,
     String? recordJson,
+    int? revision,
   }) async {
     if (_isWeb) {
       final store = _webStore;
       final current = store[patientId];
-      if (current != null) {
-        if (createdAt != null && current['created_at'] != createdAt) return;
+      if (current == null) return;
+      if (revision != null &&
+          ((current['revision'] as int?) ?? 0) != revision) {
+        return;
       }
       store.remove(patientId);
       _saveWebStore(store);
@@ -504,7 +533,13 @@ class LocalDatabase {
     }
     final db = await _database;
 
-    if (createdAt != null) {
+    if (revision != null) {
+      await db!.delete(
+        _table,
+        where: 'patient_id = ? AND revision = ?',
+        whereArgs: <Object>[patientId, revision],
+      );
+    } else if (createdAt != null) {
       await db!.delete(
         _table,
         where: 'patient_id = ? AND created_at = ?',
@@ -643,14 +678,12 @@ class LocalDatabase {
   Future<void> clearAll() async {
     if (_isWeb) {
       web_storage.removeWebStorageItem(_webStoreKey);
-      web_storage.removeWebStorageItem(_webLogKey);
       web_storage.removeWebStorageItem(_webChipKey);
       return;
     }
     final db = await _database;
     await db!.delete(_table);
     await db.delete(_chipStatusTable);
-    await db.delete(_emergencyLogTable);
   }
 }
 
@@ -667,6 +700,7 @@ class LocalPatientEntry {
     this.syncErrorCode,
     required this.createdAt,
     this.syncedAt,
+    this.revision = 0,
   });
 
   factory LocalPatientEntry.fromRow(Map<String, dynamic> row) {
@@ -680,6 +714,7 @@ class LocalPatientEntry {
       syncErrorCode: row['sync_error_code'] as int?,
       createdAt: row['created_at'] as String,
       syncedAt: row['synced_at'] as String?,
+      revision: (row['revision'] as int?) ?? 0,
     );
   }
 
@@ -692,6 +727,7 @@ class LocalPatientEntry {
   final int? syncErrorCode;
   final String createdAt;
   final String? syncedAt;
+  final int revision;
 
   PatientFullRecord? toPatientRecord() {
     if (recordJson.isEmpty || recordJson == '{}') return null;

@@ -88,8 +88,6 @@ class SyncEngine {
     bool allSuccessful = true;
 
     try {
-      await _localDb.purgeStalePermanentErrors();
-
       final List<LocalPatientEntry> allUnsynced = await _localDb
           .getUnsyncedRecords();
 
@@ -143,6 +141,7 @@ class SyncEngine {
           entry.patientId,
           createdAt: entry.createdAt,
           recordJson: entry.recordJson,
+          revision: entry.revision,
         );
         onRecordSynced?.call(entry.patientId, true, null);
         return true;
