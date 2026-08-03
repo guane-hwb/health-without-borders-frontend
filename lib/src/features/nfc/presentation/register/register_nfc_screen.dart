@@ -109,12 +109,28 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     );
   }
 
-  /// Locks in the form data: persists locally and moves to the hub.
-  /// No chips are written here — that happens at _finalize().
   Future<void> _confirm() async {
     final record = _draft.toRecord();
     final scope = AppScope.of(context);
-    await scope.localDatabase.savePatient(record);
+    try {
+      await scope.localDatabase.savePatient(record);
+    } catch (_) {
+      if (!mounted) return;
+      final s = AppStrings.of(context);
+      final isEs = s.welcome == 'Bienvenido';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.error,
+          content: Text(
+            isEs
+                ? 'No se pudo guardar el registro en este dispositivo. No continúes: los datos no se han conservado.'
+                : 'The record could not be saved on this device. Do not continue: the data was not kept.',
+          ),
+        ),
+      );
+      return;
+    }
+
     if (!mounted) return;
     setState(() {
       _savedRecord = record;
@@ -200,16 +216,26 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
   Future<void> _persistLocally(PatientFullRecord record) async {
     final scope = AppScope.of(context);
-    await scope.localDatabase.savePatient(record);
-    if (mounted) setState(() => _savedRecord = record);
+    try {
+      await scope.localDatabase.savePatient(record);
+      if (mounted) setState(() => _savedRecord = record);
+    } catch (_) {
+      if (!mounted) return;
+      final s = AppStrings.of(context);
+      final isEs = s.welcome == 'Bienvenido';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.error,
+          content: Text(
+            isEs
+                ? 'No se pudo actualizar el registro en este dispositivo.'
+                : 'Could not update the record on this device.',
+          ),
+        ),
+      );
+    }
   }
 
-  /// Writes the patient chip, queues the record for sync and shows the final
-  /// sealed-confirmation screen. The guardian card write is added in Patch 4.
-  // ── Finalize: write both chips with the guided overlay, then seal ──────────
-
-  /// Writes the patient wristband and (if any) the guardian card, each through
-  /// the guided NFC overlay, then shows the sealed confirmation screen.
   Future<void> _finalize() async {
     final scope = AppScope.of(context);
     final record = _savedRecord;
@@ -221,7 +247,6 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final nfcKey = await scope.authRepository.getNfcEncryptionKey();
     if (!mounted) return;
 
-    // No NFC key (e.g. not provisioned): nothing to write, just queue sync.
     if (nfcKey == null || nfcKey.isEmpty) {
       _completeFinalize();
       return;
@@ -230,7 +255,6 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final codec = NfcPayloadCodec(hexKey: nfcKey);
     final isEs = AppStrings.of(context).welcome == 'Bienvenido';
 
-    // Patient wristband (triage).
     final patientOk = await showNfcGuidedWrite(
       context,
       title: isEs ? 'Pulsera del paciente' : 'Patient wristband',
@@ -251,10 +275,6 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       if (!mounted) return;
     }
 
-    // Guardian cards (bounded full record). A minor may have one or two
-    // guardians; each card is written separately and verified against its own
-    // UID. The payload is identical for every card — only the target chip
-    // differs — so the same fit builder is reused.
     Future<void> writeGuardianCard({
       required String expectedUid,
       required String title,
@@ -313,7 +333,6 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     _completeFinalize();
   }
 
-  /// Queues sync and shows the sealed confirmation screen.
   void _completeFinalize() {
     final scope = AppScope.of(context);
     unawaited(scope.syncEngine.syncAll());
@@ -417,7 +436,6 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   }
 }
 
-// ── Header ──────────────────────────────────────────────────────────────────
 class _WizardHeader extends StatelessWidget {
   const _WizardHeader({required this.title, this.onBack, this.stepText});
   final String title;
@@ -565,7 +583,6 @@ class _ProgressBar extends StatelessWidget {
   }
 }
 
-// ── Draft ────────────────────────────────────────────────────────────────────
 class RegisterDraft {
   String? deviceUid;
   String documentType = 'TI';

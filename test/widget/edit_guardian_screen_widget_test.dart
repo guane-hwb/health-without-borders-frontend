@@ -146,6 +146,12 @@ class FakeLocalDatabase implements LocalDatabase {
   Future<void> purgeStalePermanentErrors({
     Duration maxAge = const Duration(days: 7),
   }) async {}
+
+  @override
+  Future<void> destroyEncryptionKey() async {}
+
+  @override
+  Future<void> markEmergencyLogsSynced(List<int> emergencyLogIds) async {}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-// test/unit/auth/auth_repository_test.dart
+// test/unit/auth_repository_test.dart
 
 import 'dart:convert';
 
@@ -326,28 +326,41 @@ void main() {
     test('login persiste refresh_token cuando está presente', () async {
       final jwt = _validJwt('a@b.com');
       when(
-        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
       ).thenAnswer(
         (_) async => {'access_token': jwt, 'refresh_token': 'refresh-xyz'},
       );
       when(
-        () => api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
       ).thenAnswer((_) async => _meResponse());
 
       await repo.login(email: 'a@b.com', password: 'x');
 
       verify(
-        () => storage.write(key: AuthRepository.refreshKey, value: 'refresh-xyz'),
+        () =>
+            storage.write(key: AuthRepository.refreshKey, value: 'refresh-xyz'),
       ).called(1);
     });
 
     test('refresh_token ausente NO se persiste', () async {
       final jwt = _validJwt('a@b.com');
       when(
-        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
       ).thenAnswer((_) async => {'access_token': jwt});
       when(
-        () => api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
       ).thenAnswer((_) async => _meResponse());
 
       await repo.login(email: 'a@b.com', password: 'x');
@@ -368,12 +381,18 @@ void main() {
     test('revoca tokens en el servidor y limpia la sesión', () async {
       final jwt = _validJwt('a@b.com');
       when(
-        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
       ).thenAnswer(
         (_) async => {'access_token': jwt, 'refresh_token': 'refresh-xyz'},
       );
       when(
-        () => api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
       ).thenAnswer((_) async => _meResponse());
       when(
         () => api.postJson(
@@ -404,12 +423,16 @@ void main() {
     test('limpia la sesión aunque el servidor falle (offline)', () async {
       final jwt = _validJwt('a@b.com');
       when(
-        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
-      ).thenAnswer(
-        (_) async => {'access_token': jwt, 'refresh_token': 'r'},
-      );
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
+      ).thenAnswer((_) async => {'access_token': jwt, 'refresh_token': 'r'});
       when(
-        () => api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
       ).thenAnswer((_) async => _meResponse());
       when(
         () => api.postJson(
@@ -464,6 +487,8 @@ void main() {
       ).thenAnswer((_) async => _meResponse());
 
       await repo.login(email: 'a@b.com', password: 'x');
+      clearInteractions(storage);
+
       final token = await repo.getAccessToken();
 
       expect(token, jwt);
@@ -560,31 +585,26 @@ void main() {
         () => storage.write(key: AuthRepository.tokenKey, value: 'new-access'),
       ).called(1);
       verify(
-        () => storage.write(
-          key: AuthRepository.refreshKey,
-          value: 'new-refresh',
-        ),
+        () =>
+            storage.write(key: AuthRepository.refreshKey, value: 'new-refresh'),
       ).called(1);
     });
 
-    test(
-      'sin refresh token almacenado → null sin llamar al backend',
-      () async {
-        when(
-          () => storage.read(key: AuthRepository.refreshKey),
-        ).thenAnswer((_) async => null);
+    test('sin refresh token almacenado → null sin llamar al backend', () async {
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => null);
 
-        final token = await repo.refreshAccessToken();
+      final token = await repo.refreshAccessToken();
 
-        expect(token, isNull);
-        verifyNever(
-          () => api.postJson(
-            path: any(named: 'path'),
-            body: any(named: 'body'),
-          ),
-        );
-      },
-    );
+      expect(token, isNull);
+      verifyNever(
+        () => api.postJson(
+          path: any(named: 'path'),
+          body: any(named: 'body'),
+        ),
+      );
+    });
 
     test('refresh token expirado/revocado (401) → devuelve null', () async {
       when(
@@ -604,22 +624,25 @@ void main() {
       expect(token, isNull);
     });
 
-    test('error transitorio (500) → se relanza para reintento posterior', () async {
-      when(
-        () => storage.read(key: AuthRepository.refreshKey),
-      ).thenAnswer((_) async => 'old-refresh');
-      when(
-        () => api.postJson(
-          path: '/api/v1/login/refresh',
-          body: any(named: 'body'),
-        ),
-      ).thenThrow(ApiException('Server error', statusCode: 500));
+    test(
+      'error transitorio (500) → se relanza para reintento posterior',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => 'old-refresh');
+        when(
+          () => api.postJson(
+            path: '/api/v1/login/refresh',
+            body: any(named: 'body'),
+          ),
+        ).thenThrow(ApiException('Server error', statusCode: 500));
 
-      await expectLater(
-        repo.refreshAccessToken(),
-        throwsA(isA<ApiException>().having((e) => e.statusCode, 'code', 500)),
-      );
-    });
+        await expectLater(
+          repo.refreshAccessToken(),
+          throwsA(isA<ApiException>().having((e) => e.statusCode, 'code', 500)),
+        );
+      },
+    );
 
     test('respuesta sin access_token → devuelve null', () async {
       when(
@@ -652,10 +675,7 @@ void main() {
         ).thenAnswer((_) async {
           calls++;
           await Future<void>.delayed(const Duration(milliseconds: 10));
-          return {
-            'access_token': 'new-access',
-            'refresh_token': 'new-refresh',
-          };
+          return {'access_token': 'new-access', 'refresh_token': 'new-refresh'};
         });
 
         final results = await Future.wait(<Future<String?>>[
@@ -694,9 +714,7 @@ void main() {
       expect(repo.sessionExpired.value, isTrue);
       expect(repo.currentUser, isNull);
       // clearSession ran: the persisted profile was wiped.
-      verify(
-        () => storage.delete(key: AuthRepository.sessionKey),
-      ).called(1);
+      verify(() => storage.delete(key: AuthRepository.sessionKey)).called(1);
     });
 
     test('error transitorio (500) NO invalida la sesión', () async {
@@ -774,6 +792,8 @@ void main() {
       ).thenAnswer((_) async => _meResponse(email: 'a@b.com'));
 
       await repo.login(email: 'a@b.com', password: 'x');
+      clearInteractions(storage);
+
       final user = await repo.getCurrentUser();
 
       expect(user?.email, 'a@b.com');
@@ -941,9 +961,7 @@ void main() {
 
     test('clearSession borra la sesión persistida (sessionKey)', () async {
       await repo.clearSession();
-      verify(
-        () => storage.delete(key: AuthRepository.sessionKey),
-      ).called(1);
+      verify(() => storage.delete(key: AuthRepository.sessionKey)).called(1);
     });
   });
 
