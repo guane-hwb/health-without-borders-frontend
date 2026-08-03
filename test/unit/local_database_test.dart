@@ -36,6 +36,8 @@ PatientFullRecord _buildRecord({
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   setUpAll(() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -297,6 +299,8 @@ void main() {
 
     setUp(() async {
       await localDb.clearAll();
+      final db = await rawConnection();
+      await db.delete('emergency_access_log');
     });
 
     // ── Break-glass audit log ───────────────────────────────────────────────
