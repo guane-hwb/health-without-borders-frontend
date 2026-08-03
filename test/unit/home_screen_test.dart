@@ -59,8 +59,13 @@ class FakeAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> logout() async {
+  Future<void> logout({bool wipeLocalData = false}) async {
     await clearSession();
+  }
+
+  @override
+  Future<bool> wipeLocalPhi({bool force = false}) async {
+    return true;
   }
 
   @override

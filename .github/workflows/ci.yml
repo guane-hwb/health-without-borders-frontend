@@ -1,3 +1,4 @@
+# .github/workflows/ci.yml
 name: CI
 
 on:
@@ -34,16 +35,18 @@ jobs:
         run: flutter analyze
 
       - name: Test with coverage
-        run: flutter test --coverage 
+        run: flutter test --coverage
+
+      - name: Build APK (Debug)
+        run: flutter build apk --debug
+
+      - name: Build Web
+        run: flutter build web --release
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
           fail_ci_if_error: true
-          # Temporary: Codecov's `latest` CLI artifacts currently fail GPG
-          # signature verification upstream (BAD signature), which hard-fails
-          # the step. Skip the CLI binary integrity self-check so uploads are
-          # not blocked. Uploads stay authenticated via CODECOV_TOKEN.
-          # Remove once Codecov restores a valid `latest` signature.
           skip_validation: true

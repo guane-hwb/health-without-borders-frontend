@@ -70,7 +70,10 @@ class FakeAuthRepository implements AuthRepository {
   Future<void> clearSession() async {}
 
   @override
-  Future<void> logout() async {}
+  Future<void> logout({bool wipeLocalData = false}) async {}
+
+  @override
+  Future<bool> wipeLocalPhi({bool force = false}) async => true;
 
   @override
   bool get hasToken => false;
@@ -116,6 +119,7 @@ class FakeLocalDatabase implements LocalDatabase {
     String patientId, {
     String? createdAt,
     String? recordJson,
+    int? revision,
   }) async {}
 
   @override
@@ -139,7 +143,9 @@ class FakeLocalDatabase implements LocalDatabase {
   }) async {}
 
   @override
-  Future<void> purgeStalePermanentErrors({Duration maxAge = const Duration(days: 7)}) async {}
+  Future<void> purgeStalePermanentErrors({
+    Duration maxAge = const Duration(days: 7),
+  }) async {}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

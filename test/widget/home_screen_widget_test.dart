@@ -78,9 +78,12 @@ class FakeAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> logout() async {
+  Future<void> logout({bool wipeLocalData = false}) async {
     await clearSession();
   }
+
+  @override
+  Future<bool> wipeLocalPhi({bool force = false}) async => true;
 
   @override
   bool get hasToken => currentUser != null;
@@ -132,6 +135,7 @@ class FakeLocalDatabase implements LocalDatabase {
     String patientId, {
     String? createdAt,
     String? recordJson,
+    int? revision,
   }) async {}
 
   @override

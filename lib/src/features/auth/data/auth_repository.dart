@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/local_database.dart';
+import '../../../core/utils/app_logger.dart';
 import '../domain/user_session.dart';
 
 class AuthRepository implements TokenProvider {
@@ -207,7 +208,7 @@ class AuthRepository implements TokenProvider {
     }
   }
 
-  Future<void> logout() async {
+  Future<void> logout({bool wipeLocalData = false}) async {
     try {
       final String? token =
           _cachedToken ?? await _secureStorage.read(key: _tokenKey);
@@ -225,6 +226,9 @@ class AuthRepository implements TokenProvider {
     } catch (_) {
     } finally {
       await clearSession();
+      if (wipeLocalData) {
+        await wipeLocalPhi();
+      }
     }
   }
 
@@ -244,10 +248,17 @@ class AuthRepository implements TokenProvider {
     try {
       await _secureStorage.delete(key: _sessionKey);
     } catch (_) {}
+  }
 
+  Future<bool> wipeLocalPhi({bool force = false}) async {
     try {
+      if (!force && await _localDb.getUnsyncedCount() > 0) return false;
       await _localDb.clearAll();
-    } catch (_) {}
+      return true;
+    } catch (e, stack) {
+      AppLogger.e('Error limpiando la base local', error: e, stackTrace: stack);
+      return false;
+    }
   }
 
   Future<void> _invalidateSession() async {

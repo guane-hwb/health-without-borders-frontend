@@ -11,7 +11,11 @@ String _formatDate(DateTime? value) {
       '-${value.day.toString().padLeft(2, '0')}';
 }
 
-bool _hasEthnicity(String? ethnicity) => ethnicity != null && ethnicity != '06';
+bool _hasEthnicity(String? ethnicity) =>
+    ethnicity != null &&
+    ethnicity != '06' &&
+    ethnicity != '6' &&
+    ethnicity != '0';
 
 String? _optionalField(String raw) {
   final v = raw.trim();
@@ -56,15 +60,13 @@ void main() {
   group('_hasEthnicity', () {
     test('null → false', () => expect(_hasEthnicity(null), isFalse));
     test("'06' → false", () => expect(_hasEthnicity('06'), isFalse));
-    test("'01' → true", () => expect(_hasEthnicity('01'), isTrue));
-    test("'02' → true", () => expect(_hasEthnicity('02'), isTrue));
-    test("'03' → true", () => expect(_hasEthnicity('03'), isTrue));
-    test("'04' → true", () => expect(_hasEthnicity('04'), isTrue));
-    test("'05' → true", () => expect(_hasEthnicity('05'), isTrue));
-    test(
-      "cadena vacía '' → true (no es null ni '06')",
-      () => expect(_hasEthnicity(''), isTrue),
-    );
+    test("'6' → false", () => expect(_hasEthnicity('6'), isFalse));
+    test("'0' → false", () => expect(_hasEthnicity('0'), isFalse));
+    test("'1' → true", () => expect(_hasEthnicity('1'), isTrue));
+    test("'2' → true", () => expect(_hasEthnicity('2'), isTrue));
+    test("'3' → true", () => expect(_hasEthnicity('3'), isTrue));
+    test("'4' → true", () => expect(_hasEthnicity('4'), isTrue));
+    test("'5' → true", () => expect(_hasEthnicity('5'), isTrue));
   });
 
   group('_optionalField – trim y null', () {

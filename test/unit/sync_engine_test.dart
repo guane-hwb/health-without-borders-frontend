@@ -45,6 +45,8 @@ void main() {
     PatientFullRecord? record,
     String? createdAt,
     String? recordJson,
+    int? syncErrorCode,
+    int revision = 0,
   }) {
     final entry = MockLocalPatientEntry();
     final jsonStr = recordJson ?? '{"patientId": "$id"}';
@@ -54,6 +56,8 @@ void main() {
     ).thenReturn(createdAt ?? '2026-07-24T10:00:00.000Z');
     when(() => entry.recordJson).thenReturn(jsonStr);
     when(() => entry.toPatientRecord()).thenReturn(record);
+    when(() => entry.syncErrorCode).thenReturn(syncErrorCode);
+    when(() => entry.revision).thenReturn(revision);
     return entry;
   }
 
@@ -90,6 +94,7 @@ void main() {
         any(),
         createdAt: any(named: 'createdAt'),
         recordJson: any(named: 'recordJson'),
+        revision: any(named: 'revision'),
       ),
     ).thenAnswer((_) async {});
     when(() => localDb.markSyncError(any(), any())).thenAnswer((_) async {});
@@ -165,21 +170,32 @@ void main() {
       await engine.syncAll();
 
       verify(() => patientRepo.syncPatient(any())).called(2);
-      verify(
-        () => localDb.markSynced(
-          'A',
-          createdAt: any(named: 'createdAt'),
-          recordJson: any(named: 'recordJson'),
-        ),
-      ).called(1);
-      verify(
-        () => localDb.markSynced(
-          'B',
-          createdAt: any(named: 'createdAt'),
-          recordJson: any(named: 'recordJson'),
-        ),
-      ).called(1);
       expect(engine.pendingCount.value, 0);
+    });
+
+    test('omite registros con errores permanentes (400, 409, 422)', () async {
+      final entryOk = buildEntry('OK', record: MockPatientFullRecord());
+      final entry409 = buildEntry(
+        'CONFLICT',
+        record: MockPatientFullRecord(),
+        syncErrorCode: 409,
+      );
+      final entry422 = buildEntry(
+        'INVALID',
+        record: MockPatientFullRecord(),
+        syncErrorCode: 422,
+      );
+
+      when(
+        () => localDb.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [entryOk, entry409, entry422]);
+      when(
+        () => patientRepo.syncPatient(any()),
+      ).thenAnswer((_) async => buildResponse('success'));
+
+      await engine.syncAll();
+
+      verify(() => patientRepo.syncPatient(any())).called(1);
     });
 
     test(
@@ -220,13 +236,6 @@ void main() {
         await engine.syncAll();
 
         verifyNever(() => patientRepo.syncPatient(any()));
-        verifyNever(
-          () => localDb.markSynced(
-            any(),
-            createdAt: any(named: 'createdAt'),
-            recordJson: any(named: 'recordJson'),
-          ),
-        );
         verifyNever(() => localDb.markSyncError(any(), any()));
       },
     );
@@ -251,13 +260,6 @@ void main() {
 
         await engine.syncAll();
 
-        verify(
-          () => localDb.markSynced(
-            'A',
-            createdAt: any(named: 'createdAt'),
-            recordJson: any(named: 'recordJson'),
-          ),
-        ).called(1);
         expect(syncedId, 'A');
         expect(syncedOk, true);
       },
@@ -452,6 +454,7 @@ void main() {
             'A',
             createdAt: any(named: 'createdAt'),
             recordJson: any(named: 'recordJson'),
+            revision: any(named: 'revision'),
           ),
         ).called(1);
       },
