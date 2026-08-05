@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/register_nfc_screen.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/register_draft.dart';
 
 String relLabel(AppStrings s, String c) =>
     {

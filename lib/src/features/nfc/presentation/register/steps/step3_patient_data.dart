@@ -1,8 +1,9 @@
 // lib/src/features/nfc/presentation/register/steps/step3_patient_data.dart
 import 'package:flutter/material.dart';
 import '../../../../../core/nfc/nfc_service.dart';
+import '../../../../../core/validation/identity_validators.dart';
 import '../../../../../design/tokens/app_colors.dart';
-import '../register_nfc_screen.dart';
+import '../../../domain/register_draft.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../widgets/nfc_uid_field.dart';
 
@@ -125,8 +126,7 @@ class _Step3State extends State<Step3PatientData> {
       if (_isDocInvalid) setState(() => _isDocInvalid = false);
       return;
     }
-    final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
-    final invalid = !docRegex.hasMatch(text);
+    final invalid = validateDocumentNumber(text) != null;
     if (invalid != _isDocInvalid) {
       setState(() => _isDocInvalid = invalid);
     }
@@ -176,17 +176,13 @@ class _Step3State extends State<Step3PatientData> {
     if (_city.text.trim().isEmpty) missing.add(s.municipality);
     if (_stateCtrl.text.trim().isEmpty) missing.add(s.department);
 
-    final String cleanDoc = _docNum.text.trim();
-    if (cleanDoc.isNotEmpty) {
-      final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
-      if (!docRegex.hasMatch(cleanDoc)) {
-        setState(() => _isDocInvalid = true);
-        missing.add(
-          isEs
-              ? 'Número de documento inválido (Mínimo 5 caracteres alfanuméricos sin símbolos)'
-              : 'Invalid Document format',
-        );
-      }
+    if (validateDocumentNumber(_docNum.text) != null) {
+      setState(() => _isDocInvalid = true);
+      missing.add(
+        isEs
+            ? 'Número de documento inválido (5 a 20 caracteres, sin símbolos)'
+            : 'Invalid document number (5 to 20 characters, no symbols)',
+      );
     }
 
     if (missing.isNotEmpty) {

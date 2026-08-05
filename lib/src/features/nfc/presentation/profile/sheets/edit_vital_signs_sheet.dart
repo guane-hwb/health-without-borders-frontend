@@ -1,4 +1,5 @@
 // lib/src/features/nfc/presentation/profile/sheets/edit_vital_signs_sheet.dart
+
 import 'package:flutter/material.dart';
 
 import '../../../../../core/i18n/app_strings.dart';
@@ -32,6 +33,7 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
   late final TextEditingController _weightCtrl;
   late final TextEditingController _heightCtrl;
   String? _selectedBloodType;
+  String? _errorMessage;
 
   static const _bloodTypeOptions = {
     'O+': 'O+',
@@ -63,22 +65,83 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
     super.dispose();
   }
 
+  void _handleConfirm() {
+    final s = AppStrings.of(context);
+    final isEs = s.welcome == 'Bienvenido';
+
+    final wText = _weightCtrl.text.trim().replaceAll(',', '.');
+    final hText = _heightCtrl.text.trim().replaceAll(',', '.');
+
+    double? w;
+    if (wText.isNotEmpty) {
+      w = double.tryParse(wText);
+      if (w == null || w <= 0.2 || w > 350.0) {
+        setState(() {
+          _errorMessage = isEs
+              ? 'El peso debe estar entre 0.2 kg y 350 kg'
+              : 'Weight must be between 0.2 kg and 350 kg';
+        });
+        return;
+      }
+    }
+
+    double? h;
+    if (hText.isNotEmpty) {
+      h = double.tryParse(hText);
+      if (h == null || h <= 20.0 || h > 250.0) {
+        setState(() {
+          _errorMessage = isEs
+              ? 'La altura debe estar entre 20 cm y 250 cm'
+              : 'Height must be between 20 cm and 250 cm';
+        });
+        return;
+      }
+    }
+
+    widget.onConfirm(weight: w, height: h, bloodType: _selectedBloodType);
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     return SheetScaffold(
       title: s.editMeasurements,
-      onConfirm: () {
-        final wText = _weightCtrl.text.trim().replaceAll(',', '.');
-        final hText = _heightCtrl.text.trim().replaceAll(',', '.');
-        final w = double.tryParse(wText);
-        final h = double.tryParse(hText);
-        widget.onConfirm(weight: w, height: h, bloodType: _selectedBloodType);
-        Navigator.of(context).pop();
-      },
+      onConfirm: _handleConfirm,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_errorMessage != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.error),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    color: AppColors.error,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(
+                        color: AppColors.error,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           // Weight
           _FieldLabel(label: s.weightKg),
           const SizedBox(height: 6),

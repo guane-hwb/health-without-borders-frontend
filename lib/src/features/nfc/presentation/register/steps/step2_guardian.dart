@@ -1,17 +1,16 @@
 // lib/src/features/nfc/presentation/register/steps/step2_guardian.dart
+
 import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../core/validation/identity_validators.dart';
 import '../../../../../shared/widgets/form_widgets.dart';
-import '../register_nfc_screen.dart';
-import '../../../../../core/i18n/app_strings.dart';
+import '../../../domain/register_draft.dart';
 
-// ─────────────────────────────────────────────
-//  Main widget
-// ─────────────────────────────────────────────
 class Step2Guardian extends StatefulWidget {
   const Step2Guardian({
     super.key,
@@ -20,6 +19,7 @@ class Step2Guardian extends StatefulWidget {
     required this.onBack,
     required this.onContinue,
   });
+
   final RegisterDraft draft;
   final bool requiredForMinor;
   final VoidCallback onBack;
@@ -30,22 +30,19 @@ class Step2Guardian extends StatefulWidget {
 }
 
 class _Step2State extends State<Step2Guardian> {
-  // ── Controllers guardian 1 — initialized in initState ─
   late final TextEditingController _name;
   late final TextEditingController _phone;
   late final TextEditingController _uid;
   late final TextEditingController _docNumber;
   late final TextEditingController _email;
 
-  // ── Guardian 1 State ─────────────────
   String _selectedDocType = 'CC';
   bool _authAccepted = false;
-  final List<List<Offset>> _signatureStrokes = [];
+  List<List<Offset>> _signatureStrokes = [];
   List<Offset>? _currentStroke;
   bool _scanning = false;
   String? _err;
 
-  // ── Guardian 2 ───────────────────
   bool _hasGuardian2 = false;
   late final TextEditingController _name2;
   late final TextEditingController _phone2;
@@ -55,7 +52,7 @@ class _Step2State extends State<Step2Guardian> {
   String _selectedDocType2 = 'CC';
   String _guardian2Relationship = '01';
   bool _auth2Accepted = false;
-  final List<List<Offset>> _signatureStrokes2 = [];
+  List<List<Offset>> _signatureStrokes2 = [];
   List<Offset>? _currentStroke2;
   bool _scanning2 = false;
 
@@ -71,7 +68,6 @@ class _Step2State extends State<Step2Guardian> {
     _selectedDocType = d.guardianDocType ?? 'CC';
     _authAccepted = d.guardianAuthAccepted ?? false;
 
-    // Guardian 2
     _name2 = TextEditingController(text: d.guardian2Name ?? '');
     _phone2 = TextEditingController(text: d.guardian2Phone ?? '');
     _docNumber2 = TextEditingController(text: d.guardian2DocNumber ?? '');
@@ -81,6 +77,13 @@ class _Step2State extends State<Step2Guardian> {
     _guardian2Relationship = d.guardian2Relationship ?? '01';
     _auth2Accepted = d.guardian2AuthAccepted ?? false;
     _hasGuardian2 = d.guardian2Name != null && d.guardian2Name!.isNotEmpty;
+
+    _signatureStrokes = d.guardianSignatureStrokes
+        .map((stroke) => List<Offset>.from(stroke))
+        .toList();
+    _signatureStrokes2 = d.guardian2SignatureStrokes
+        .map((stroke) => List<Offset>.from(stroke))
+        .toList();
   }
 
   @override
@@ -110,6 +113,9 @@ class _Step2State extends State<Step2Guardian> {
     d.guardianAuthAccepted = _authAccepted;
     d.guardianEmail = _email.text.trim().isEmpty ? null : _email.text.trim();
     d.guardianRelationship = d.guardianRelationship ?? '01';
+    d.guardianSignatureStrokes = _signatureStrokes
+        .map((stroke) => List<Offset>.from(stroke))
+        .toList();
 
     if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
       d.guardian2Name = _name2.text.trim();
@@ -128,6 +134,9 @@ class _Step2State extends State<Step2Guardian> {
       d.guardian2Email = _email2.text.trim().isEmpty
           ? null
           : _email2.text.trim();
+      d.guardian2SignatureStrokes = _signatureStrokes2
+          .map((stroke) => List<Offset>.from(stroke))
+          .toList();
     }
   }
 
@@ -136,7 +145,6 @@ class _Step2State extends State<Step2Guardian> {
     widget.onBack();
   }
 
-  // ── NFC ──────────────────────────────────────
   Future<void> _scanNfc() async {
     final s = AppStrings.of(context);
     setState(() => _scanning = true);
@@ -253,7 +261,9 @@ class _Step2State extends State<Step2Guardian> {
     return base64Encode(byteData.buffer.asUint8List());
   }
 
-  // ── Validation and saving ─────────────────────
+  @visibleForTesting
+  Future<void> saveForTest() => _save();
+
   Future<void> _save() async {
     final s = AppStrings.of(context);
     final missing = <String>[];
@@ -273,40 +283,24 @@ class _Step2State extends State<Step2Guardian> {
       if (_signatureStrokes.isEmpty) missing.add(bioSigLabel);
     }
 
-    final String cleanDoc = _docNumber.text.trim();
-    if (cleanDoc.isNotEmpty) {
-      final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
-      if (!docRegex.hasMatch(cleanDoc)) {
-        missing.add(
-          isEs
-              ? 'Documento de guardián inválido (Mínimo 5 caracteres sin símbolos)'
-              : 'Invalid Guardian Document format',
-        );
-      }
-    }
-
-    final String cleanPhone = _phone.text.trim();
-    if (cleanPhone.isNotEmpty) {
-      final phoneRegex = RegExp(r'^\+?[0-9]{7,15}$');
-      if (!phoneRegex.hasMatch(cleanPhone)) {
-        missing.add(
-          isEs
-              ? 'Teléfono inválido (mínimo 7 dígitos)'
-              : 'Invalid Phone format',
-        );
-      }
-    }
-
-    final String cleanEmail = _email.text.trim();
-    if (cleanEmail.isNotEmpty) {
-      final emailRegex = RegExp(
-        r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    if (validateDocumentNumber(_docNumber.text) != null) {
+      missing.add(
+        isEs
+            ? 'Documento de guardián inválido (5 a 20 caracteres, sin símbolos)'
+            : 'Invalid guardian document (5 to 20 characters, no symbols)',
       );
-      if (!emailRegex.hasMatch(cleanEmail)) {
-        missing.add(
-          isEs ? 'Correo electrónico inválido' : 'Invalid Email format',
-        );
-      }
+    }
+    if (validatePhone(_phone.text) != null) {
+      missing.add(
+        isEs
+            ? 'Teléfono inválido (mínimo 7 dígitos)'
+            : 'Invalid phone number (minimum 7 digits)',
+      );
+    }
+    if (validateEmail(_email.text) != null) {
+      missing.add(
+        isEs ? 'Correo electrónico inválido' : 'Invalid email address',
+      );
     }
 
     if (_signatureStrokes.isNotEmpty) {
@@ -314,35 +308,29 @@ class _Step2State extends State<Step2Guardian> {
     }
 
     if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
-      final String cleanDoc2 = _docNumber2.text.trim();
-      final String cleanPhone2 = _phone2.text.trim();
-      final String cleanEmail2 = _email2.text.trim();
-
-      if (cleanDoc2.isNotEmpty &&
-          !RegExp(r'^[a-zA-Z0-9-]{5,20}$').hasMatch(cleanDoc2)) {
+      if (validateDocumentNumber(_docNumber2.text) != null) {
         missing.add(
           isEs
-              ? 'Documento de Guardián 2 inválido'
-              : 'Invalid Guardian 2 Document',
+              ? 'Documento de guardián 2 inválido'
+              : 'Invalid guardian 2 document',
         );
       }
-      if (cleanPhone2.isNotEmpty &&
-          !RegExp(r'^\+?[0-9]{7,15}$').hasMatch(cleanPhone2)) {
+      if (validatePhone(_phone2.text) != null) {
         missing.add(
-          isEs ? 'Teléfono de Guardián 2 inválido' : 'Invalid Guardian 2 Phone',
+          isEs ? 'Teléfono de guardián 2 inválido' : 'Invalid guardian 2 phone',
         );
       }
-      if (cleanEmail2.isNotEmpty &&
-          !RegExp(
-            r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
-          ).hasMatch(cleanEmail2)) {
+      if (validateEmail(_email2.text) != null) {
         missing.add(
-          isEs ? 'Correo de Guardián 2 inválido' : 'Invalid Guardian 2 Email',
+          isEs ? 'Correo de guardián 2 inválido' : 'Invalid guardian 2 email',
         );
       }
 
       if (_signatureStrokes2.isNotEmpty) {
         if (!_auth2Accepted) missing.add(auth2Label);
+      }
+      if (_auth2Accepted && _signatureStrokes2.isEmpty) {
+        missing.add(isEs ? 'Firma del guardián 2' : 'Guardian 2 signature');
       }
     }
 
@@ -369,6 +357,9 @@ class _Step2State extends State<Step2Guardian> {
     d.guardianAuthAccepted = _authAccepted;
     d.guardianEmail = _email.text.trim().isEmpty ? null : _email.text.trim();
     d.guardianSignatureBase64 = sig1Base64;
+    d.guardianSignatureStrokes = _signatureStrokes
+        .map((stroke) => List<Offset>.from(stroke))
+        .toList();
     d.guardianRelationship = d.guardianRelationship ?? '01';
 
     if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
@@ -389,6 +380,9 @@ class _Step2State extends State<Step2Guardian> {
           ? null
           : _email2.text.trim();
       d.guardian2SignatureBase64 = sig2Base64;
+      d.guardian2SignatureStrokes = _signatureStrokes2
+          .map((stroke) => List<Offset>.from(stroke))
+          .toList();
     } else {
       d.guardian2Name = null;
       d.guardian2Phone = null;
@@ -399,6 +393,7 @@ class _Step2State extends State<Step2Guardian> {
       d.guardian2AuthAccepted = null;
       d.guardian2Email = null;
       d.guardian2SignatureBase64 = null;
+      d.guardian2SignatureStrokes = <List<Offset>>[];
     }
 
     widget.onContinue();
@@ -408,6 +403,8 @@ class _Step2State extends State<Step2Guardian> {
     setState(() {
       _signatureStrokes.clear();
       _currentStroke = null;
+      widget.draft.guardianSignatureStrokes = <List<Offset>>[];
+      widget.draft.guardianSignatureBase64 = null;
     });
   }
 
@@ -661,6 +658,16 @@ class _Step2State extends State<Step2Guardian> {
                       _auth2Accepted = false;
                       _signatureStrokes2.clear();
                       _currentStroke2 = null;
+                      widget.draft.guardian2Name = null;
+                      widget.draft.guardian2Phone = null;
+                      widget.draft.guardian2DeviceUid = null;
+                      widget.draft.guardian2DocType = null;
+                      widget.draft.guardian2DocNumber = null;
+                      widget.draft.guardian2Relationship = null;
+                      widget.draft.guardian2AuthAccepted = null;
+                      widget.draft.guardian2Email = null;
+                      widget.draft.guardian2SignatureBase64 = null;
+                      widget.draft.guardian2SignatureStrokes = <List<Offset>>[];
                     });
                   },
                   onScanNfc: _scanNfc2,
@@ -680,6 +687,8 @@ class _Step2State extends State<Step2Guardian> {
                     setState(() {
                       _signatureStrokes2.clear();
                       _currentStroke2 = null;
+                      widget.draft.guardian2SignatureStrokes = <List<Offset>>[];
+                      widget.draft.guardian2SignatureBase64 = null;
                     });
                   },
                   onNfcFieldChanged: () => setState(() {}),

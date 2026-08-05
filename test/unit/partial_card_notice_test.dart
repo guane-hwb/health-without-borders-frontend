@@ -2,7 +2,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_payload.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/patient_profile_screen.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/partial_card_notice.dart';
 
 GuardianPayloadFit _fit({
   int keptConsultations = 0,
@@ -86,8 +86,6 @@ void main() {
     });
 
     test('no rompe cuando no se recortó nada', () {
-      // La pantalla solo muestra el aviso si isPartial, pero la función debe
-      // seguir devolviendo texto válido si se la llama igual.
       final message = partialCardNoticeMessage(_fit(), true);
       expect(message, isNotEmpty);
     });

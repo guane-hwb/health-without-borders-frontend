@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_service.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/register_nfc_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step3_patient_data.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/register_draft.dart';
 
 Widget _wrap(Widget child, {String locale = 'es'}) {
   return MaterialApp(
