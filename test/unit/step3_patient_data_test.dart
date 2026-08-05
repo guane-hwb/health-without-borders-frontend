@@ -2,7 +2,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/register_nfc_screen.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/register_draft.dart';
 
 String _formatDate(DateTime? value) {
   if (value == null) return '';

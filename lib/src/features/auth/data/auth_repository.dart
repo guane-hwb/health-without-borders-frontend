@@ -15,8 +15,6 @@ class AuthRepository implements TokenProvider {
     FlutterSecureStorage? secureStorage,
     LocalDatabase? localDatabase,
   }) : _apiClient = apiClient,
-       // fe-keychain-accesible-migra-backup & fe-keychain-sin-thisdeviceonly:
-       // Configura accesibilidad ThisDeviceOnly para evitar que credenciales y claves migren en backups.
        _secureStorage =
            secureStorage ??
            const FlutterSecureStorage(
@@ -27,6 +25,7 @@ class AuthRepository implements TokenProvider {
                accessibility: KeychainAccessibility.first_unlock_this_device,
              ),
              aOptions: AndroidOptions(),
+             webOptions: WebOptions(useSessionStorage: true),
            ),
        _localDb = localDatabase ?? LocalDatabase.instance;
 
@@ -50,6 +49,7 @@ class AuthRepository implements TokenProvider {
 
   String? _cachedToken;
   String? _cachedRefreshToken;
+  String? _cachedNfcKey;
   UserSession? _session;
 
   Future<String?>? _refreshInFlight;
@@ -92,16 +92,30 @@ class AuthRepository implements TokenProvider {
 
     final nfcKey = tokenData['nfc_encryption_key']?.toString();
     if (nfcKey != null && nfcKey.isNotEmpty) {
-      try {
-        await _secureStorage.write(key: _nfcKeyKey, value: nfcKey);
-      } catch (_) {}
+      if (kIsWeb) {
+        _cachedNfcKey = nfcKey;
+      } else {
+        try {
+          await _secureStorage.write(key: _nfcKeyKey, value: nfcKey);
+        } catch (_) {}
+      }
     }
 
+    final UserSession? previous = await _readPersistedSession();
     _session = await _fetchMe(accessToken);
 
-    // fe-persiste-sesion-fallback-doctor:
-    // Solo persiste la sesión en disco si provino de un perfil válido del backend (id no vacío),
-    // previniendo guardar sesiones fallback con roles incorrectos.
+    if (previous != null && previous.id != _session!.id) {
+      if (await _localDb.getUnsyncedCount() == 0) {
+        await _localDb.clearAll();
+        await _localDb.destroyEncryptionKey();
+      } else {
+        AppLogger.e(
+          'Cambio de usuario con ${await _localDb.getUnsyncedCount()} '
+          'registros pendientes de ${previous.id}: se conservan.',
+        );
+      }
+    }
+
     if (_session!.id.isNotEmpty) {
       await _persistSession(_session!);
     }
@@ -201,6 +215,8 @@ class AuthRepository implements TokenProvider {
   }
 
   Future<String?> getNfcEncryptionKey() async {
+    if (_cachedNfcKey?.isNotEmpty == true) return _cachedNfcKey;
+    if (kIsWeb) return null;
     try {
       return await _secureStorage.read(key: _nfcKeyKey);
     } catch (_) {
@@ -235,6 +251,7 @@ class AuthRepository implements TokenProvider {
   Future<void> clearSession() async {
     _cachedToken = null;
     _cachedRefreshToken = null;
+    _cachedNfcKey = null;
     _session = null;
     try {
       await _secureStorage.delete(key: _tokenKey);
@@ -254,6 +271,7 @@ class AuthRepository implements TokenProvider {
     try {
       if (!force && await _localDb.getUnsyncedCount() > 0) return false;
       await _localDb.clearAll();
+      await _localDb.destroyEncryptionKey();
       return true;
     } catch (e, stack) {
       AppLogger.e('Error limpiando la base local', error: e, stackTrace: stack);

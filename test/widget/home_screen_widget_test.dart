@@ -139,6 +139,12 @@ class FakeLocalDatabase implements LocalDatabase {
   }) async {}
 
   @override
+  Future<void> destroyEncryptionKey() async {}
+
+  @override
+  Future<void> markEmergencyLogsSynced(List<int> logIds) async {}
+
+  @override
   Future<void> savePatient(PatientFullRecord record) async {}
 
   @override

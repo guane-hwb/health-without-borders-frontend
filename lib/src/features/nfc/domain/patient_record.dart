@@ -7,6 +7,21 @@
 // Reference: Resolution 866/2021 & 1888/2025 (RDA elements)
 // =============================================================================
 
+// ---------------------------------------------------------------------------
+// Equality helper — v2-modelos-sin-copywith-ni-equals (Hallazgo 24)
+//
+// Used by every model's operator== below so lists compare by content instead
+// of by reference (the default List== in Dart).
+// ---------------------------------------------------------------------------
+bool _listEquals<T>(List<T> a, List<T> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
 DateTime? tryParsePatientDate(String? raw) {
   if (raw == null || raw.trim().isEmpty) return null;
   final clean = raw.trim();
@@ -84,6 +99,54 @@ class Address {
     if (countryName != null) 'countryName': countryName,
     if (zone != null) 'zone': zone,
   };
+
+  Address copyWith({
+    String? street,
+    String? city,
+    String? cityCode,
+    String? state,
+    String? zipCode,
+    String? country,
+    String? countryName,
+    String? zone,
+  }) {
+    return Address(
+      street: street ?? this.street,
+      city: city ?? this.city,
+      cityCode: cityCode ?? this.cityCode,
+      state: state ?? this.state,
+      zipCode: zipCode ?? this.zipCode,
+      country: country ?? this.country,
+      countryName: countryName ?? this.countryName,
+      zone: zone ?? this.zone,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Address &&
+          runtimeType == other.runtimeType &&
+          street == other.street &&
+          city == other.city &&
+          cityCode == other.cityCode &&
+          state == other.state &&
+          zipCode == other.zipCode &&
+          country == other.country &&
+          countryName == other.countryName &&
+          zone == other.zone;
+
+  @override
+  int get hashCode => Object.hash(
+    street,
+    city,
+    cityCode,
+    state,
+    zipCode,
+    country,
+    countryName,
+    zone,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +173,27 @@ class PatientIdentification {
     'documentType': documentType,
     'documentNumber': documentNumber,
   };
+
+  PatientIdentification copyWith({
+    String? documentType,
+    String? documentNumber,
+  }) {
+    return PatientIdentification(
+      documentType: documentType ?? this.documentType,
+      documentNumber: documentNumber ?? this.documentNumber,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PatientIdentification &&
+          runtimeType == other.runtimeType &&
+          documentType == other.documentType &&
+          documentNumber == other.documentNumber;
+
+  @override
+  int get hashCode => Object.hash(documentType, documentNumber);
 }
 
 // ---------------------------------------------------------------------------
@@ -165,18 +249,18 @@ class PatientInfo {
   }
 
   final PatientIdentification identification;
-  final String firstLastName; // Primer apellido (Elem. 3.1)
-  final String? secondLastName; // Segundo apellido (Elem. 3.2)
-  final String firstName; // Primer nombre (Elem. 3.3)
-  final String? secondName; // Segundo nombre (Elem. 3.4)
-  final String dob; // YYYY-MM-DD (Elem. 4)
-  final String nationalityCode; // ISO 3166-1 alpha-3 (Elem. 1.1)
+  final String firstLastName;
+  final String? secondLastName;
+  final String firstName;
+  final String? secondName;
+  final String dob;
+  final String nationalityCode;
   final String? nationalityName;
-  final String biologicalSex; // "M", "F", "I" (Elem. 5)
-  final String? genderIdentity; // "01"-"04", "99" (Elem. 6)
-  final String? ethnicity; // "01"-"06" (Elem. 13.1)
+  final String biologicalSex;
+  final String? genderIdentity;
+  final String? ethnicity;
   final String? ethnicCommunity;
-  final String? disabilityCategory; // "00"-"07" (Elem. 10)
+  final String? disabilityCategory;
   final Address address;
   final String? bloodType;
   final double? weight;
@@ -192,27 +276,86 @@ class PatientInfo {
     return parts.join(' ').trim();
   }
 
-  PatientInfo copyWith({double? weight, double? height, String? bloodType}) {
+  PatientInfo copyWith({
+    PatientIdentification? identification,
+    String? firstLastName,
+    String? secondLastName,
+    String? firstName,
+    String? secondName,
+    String? dob,
+    String? nationalityCode,
+    String? nationalityName,
+    String? biologicalSex,
+    String? genderIdentity,
+    String? ethnicity,
+    String? ethnicCommunity,
+    String? disabilityCategory,
+    Address? address,
+    String? bloodType,
+    double? weight,
+    double? height,
+  }) {
     return PatientInfo(
-      identification: identification,
-      firstLastName: firstLastName,
-      secondLastName: secondLastName,
-      firstName: firstName,
-      secondName: secondName,
-      dob: dob,
-      nationalityCode: nationalityCode,
-      nationalityName: nationalityName,
-      biologicalSex: biologicalSex,
-      genderIdentity: genderIdentity,
-      ethnicity: ethnicity,
-      ethnicCommunity: ethnicCommunity,
-      disabilityCategory: disabilityCategory,
-      address: address,
+      identification: identification ?? this.identification,
+      firstLastName: firstLastName ?? this.firstLastName,
+      secondLastName: secondLastName ?? this.secondLastName,
+      firstName: firstName ?? this.firstName,
+      secondName: secondName ?? this.secondName,
+      dob: dob ?? this.dob,
+      nationalityCode: nationalityCode ?? this.nationalityCode,
+      nationalityName: nationalityName ?? this.nationalityName,
+      biologicalSex: biologicalSex ?? this.biologicalSex,
+      genderIdentity: genderIdentity ?? this.genderIdentity,
+      ethnicity: ethnicity ?? this.ethnicity,
+      ethnicCommunity: ethnicCommunity ?? this.ethnicCommunity,
+      disabilityCategory: disabilityCategory ?? this.disabilityCategory,
+      address: address ?? this.address,
       bloodType: bloodType ?? this.bloodType,
       weight: weight ?? this.weight,
       height: height ?? this.height,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PatientInfo &&
+          runtimeType == other.runtimeType &&
+          identification == other.identification &&
+          firstLastName == other.firstLastName &&
+          secondLastName == other.secondLastName &&
+          firstName == other.firstName &&
+          secondName == other.secondName &&
+          dob == other.dob &&
+          nationalityCode == other.nationalityCode &&
+          nationalityName == other.nationalityName &&
+          biologicalSex == other.biologicalSex &&
+          genderIdentity == other.genderIdentity &&
+          ethnicity == other.ethnicity &&
+          ethnicCommunity == other.ethnicCommunity &&
+          disabilityCategory == other.disabilityCategory &&
+          address == other.address &&
+          bloodType == other.bloodType &&
+          weight == other.weight &&
+          height == other.height;
+
+  @override
+  int get hashCode => Object.hash(
+    identification,
+    firstLastName,
+    secondLastName,
+    firstName,
+    secondName,
+    dob,
+    nationalityCode,
+    nationalityName,
+    biologicalSex,
+    genderIdentity,
+    Object.hash(ethnicity, ethnicCommunity, disabilityCategory, address),
+    bloodType,
+    weight,
+    height,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'identification': identification.toJson(),
@@ -266,6 +409,33 @@ class GuardianConsent {
     if (email != null) 'email': email,
     if (signatureBase64 != null) 'signatureBase64': signatureBase64,
   };
+
+  GuardianConsent copyWith({
+    bool? accepted,
+    String? acceptedAt,
+    String? email,
+    String? signatureBase64,
+  }) {
+    return GuardianConsent(
+      accepted: accepted ?? this.accepted,
+      acceptedAt: acceptedAt ?? this.acceptedAt,
+      email: email ?? this.email,
+      signatureBase64: signatureBase64 ?? this.signatureBase64,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GuardianConsent &&
+          runtimeType == other.runtimeType &&
+          accepted == other.accepted &&
+          acceptedAt == other.acceptedAt &&
+          email == other.email &&
+          signatureBase64 == other.signatureBase64;
+
+  @override
+  int get hashCode => Object.hash(accepted, acceptedAt, email, signatureBase64);
 }
 
 // ---------------------------------------------------------------------------
@@ -313,6 +483,50 @@ class GuardianInfo {
     if (documentNumber != null) 'documentNumber': documentNumber,
     if (consent != null) 'consent': consent!.toJson(),
   };
+
+  GuardianInfo copyWith({
+    String? name,
+    String? relationship,
+    String? phone,
+    String? deviceUid,
+    String? documentType,
+    String? documentNumber,
+    GuardianConsent? consent,
+  }) {
+    return GuardianInfo(
+      name: name ?? this.name,
+      relationship: relationship ?? this.relationship,
+      phone: phone ?? this.phone,
+      deviceUid: deviceUid ?? this.deviceUid,
+      documentType: documentType ?? this.documentType,
+      documentNumber: documentNumber ?? this.documentNumber,
+      consent: consent ?? this.consent,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GuardianInfo &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          relationship == other.relationship &&
+          phone == other.phone &&
+          deviceUid == other.deviceUid &&
+          documentType == other.documentType &&
+          documentNumber == other.documentNumber &&
+          consent == other.consent;
+
+  @override
+  int get hashCode => Object.hash(
+    name,
+    relationship,
+    phone,
+    deviceUid,
+    documentType,
+    documentNumber,
+    consent,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -350,6 +564,38 @@ class FamilyHistoryItem {
     'conditionDescription': conditionDescription,
     'relationship': relationship,
   };
+
+  FamilyHistoryItem copyWith({
+    String? conditionCie10Code,
+    String? conditionCie11Code,
+    String? conditionDescription,
+    String? relationship,
+  }) {
+    return FamilyHistoryItem(
+      conditionCie10Code: conditionCie10Code ?? this.conditionCie10Code,
+      conditionCie11Code: conditionCie11Code ?? this.conditionCie11Code,
+      conditionDescription: conditionDescription ?? this.conditionDescription,
+      relationship: relationship ?? this.relationship,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FamilyHistoryItem &&
+          runtimeType == other.runtimeType &&
+          conditionCie10Code == other.conditionCie10Code &&
+          conditionCie11Code == other.conditionCie11Code &&
+          conditionDescription == other.conditionDescription &&
+          relationship == other.relationship;
+
+  @override
+  int get hashCode => Object.hash(
+    conditionCie10Code,
+    conditionCie11Code,
+    conditionDescription,
+    relationship,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -382,6 +628,31 @@ class ChronicConditionItem {
     if (chronicCie10Code != null) 'chronicCie10Code': chronicCie10Code,
     if (chronicCie11Code != null) 'chronicCie11Code': chronicCie11Code,
   };
+
+  ChronicConditionItem copyWith({
+    String? chronicDescription,
+    String? chronicCie10Code,
+    String? chronicCie11Code,
+  }) {
+    return ChronicConditionItem(
+      chronicDescription: chronicDescription ?? this.chronicDescription,
+      chronicCie10Code: chronicCie10Code ?? this.chronicCie10Code,
+      chronicCie11Code: chronicCie11Code ?? this.chronicCie11Code,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ChronicConditionItem &&
+          runtimeType == other.runtimeType &&
+          chronicDescription == other.chronicDescription &&
+          chronicCie10Code == other.chronicCie10Code &&
+          chronicCie11Code == other.chronicCie11Code;
+
+  @override
+  int get hashCode =>
+      Object.hash(chronicDescription, chronicCie10Code, chronicCie11Code);
 }
 
 // ---------------------------------------------------------------------------
@@ -419,6 +690,37 @@ class MedicationStatementItem {
     if (dosage != null) 'dosage': dosage,
     if (notes != null) 'notes': notes,
   };
+
+  MedicationStatementItem copyWith({
+    String? medicationName,
+    String? dciCode,
+    String? status,
+    String? dosage,
+    String? notes,
+  }) {
+    return MedicationStatementItem(
+      medicationName: medicationName ?? this.medicationName,
+      dciCode: dciCode ?? this.dciCode,
+      status: status ?? this.status,
+      dosage: dosage ?? this.dosage,
+      notes: notes ?? this.notes,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MedicationStatementItem &&
+          runtimeType == other.runtimeType &&
+          medicationName == other.medicationName &&
+          dciCode == other.dciCode &&
+          status == other.status &&
+          dosage == other.dosage &&
+          notes == other.notes;
+
+  @override
+  int get hashCode =>
+      Object.hash(medicationName, dciCode, status, dosage, notes);
 }
 
 // ---------------------------------------------------------------------------
@@ -489,6 +791,42 @@ class BackgroundHistory {
         .map((MedicationStatementItem m) => m.toJson())
         .toList(),
   };
+
+  BackgroundHistory copyWith({
+    List<ChronicConditionItem>? chronicConditions,
+    String? personalHistory,
+    List<FamilyHistoryItem>? familyHistory,
+    String? familyHistoryNotes,
+    List<MedicationStatementItem>? medications,
+  }) {
+    return BackgroundHistory(
+      chronicConditions: chronicConditions ?? this.chronicConditions,
+      personalHistory: personalHistory ?? this.personalHistory,
+      familyHistory: familyHistory ?? this.familyHistory,
+      familyHistoryNotes: familyHistoryNotes ?? this.familyHistoryNotes,
+      medications: medications ?? this.medications,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BackgroundHistory &&
+          runtimeType == other.runtimeType &&
+          _listEquals(chronicConditions, other.chronicConditions) &&
+          personalHistory == other.personalHistory &&
+          _listEquals(familyHistory, other.familyHistory) &&
+          familyHistoryNotes == other.familyHistoryNotes &&
+          _listEquals(medications, other.medications);
+
+  @override
+  int get hashCode => Object.hash(
+    Object.hashAll(chronicConditions),
+    personalHistory,
+    Object.hashAll(familyHistory),
+    familyHistoryNotes,
+    Object.hashAll(medications),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -522,6 +860,33 @@ class AllergyInfo {
     if (reaction != null) 'reaction': reaction,
     if (notes != null) 'notes': notes,
   };
+
+  AllergyInfo copyWith({
+    String? category,
+    String? allergen,
+    String? reaction,
+    String? notes,
+  }) {
+    return AllergyInfo(
+      category: category ?? this.category,
+      allergen: allergen ?? this.allergen,
+      reaction: reaction ?? this.reaction,
+      notes: notes ?? this.notes,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AllergyInfo &&
+          runtimeType == other.runtimeType &&
+          category == other.category &&
+          allergen == other.allergen &&
+          reaction == other.reaction &&
+          notes == other.notes;
+
+  @override
+  int get hashCode => Object.hash(category, allergen, reaction, notes);
 }
 
 // ---------------------------------------------------------------------------
@@ -571,6 +936,54 @@ class VaccinationRecordItem {
     'administratedAt': administratedAt,
     'status': status,
   };
+
+  VaccinationRecordItem copyWith({
+    String? vaccinationId,
+    String? date,
+    String? vaccineName,
+    String? vaccineCode,
+    int? dose,
+    String? administratedBy,
+    String? administratedAt,
+    String? status,
+  }) {
+    return VaccinationRecordItem(
+      vaccinationId: vaccinationId ?? this.vaccinationId,
+      date: date ?? this.date,
+      vaccineName: vaccineName ?? this.vaccineName,
+      vaccineCode: vaccineCode ?? this.vaccineCode,
+      dose: dose ?? this.dose,
+      administratedBy: administratedBy ?? this.administratedBy,
+      administratedAt: administratedAt ?? this.administratedAt,
+      status: status ?? this.status,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VaccinationRecordItem &&
+          runtimeType == other.runtimeType &&
+          vaccinationId == other.vaccinationId &&
+          date == other.date &&
+          vaccineName == other.vaccineName &&
+          vaccineCode == other.vaccineCode &&
+          dose == other.dose &&
+          administratedBy == other.administratedBy &&
+          administratedAt == other.administratedAt &&
+          status == other.status;
+
+  @override
+  int get hashCode => Object.hash(
+    vaccinationId,
+    date,
+    vaccineName,
+    vaccineCode,
+    dose,
+    administratedBy,
+    administratedAt,
+    status,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -608,6 +1021,41 @@ class ClinicalEvaluation {
     if (treatmentPlanObservations != null)
       'treatmentPlanObservations': treatmentPlanObservations,
   };
+
+  ClinicalEvaluation copyWith({
+    String? historyOfCurrentIllness,
+    String? generalPhysicalExamination,
+    String? systemsExamination,
+    String? treatmentPlanObservations,
+  }) {
+    return ClinicalEvaluation(
+      historyOfCurrentIllness:
+          historyOfCurrentIllness ?? this.historyOfCurrentIllness,
+      generalPhysicalExamination:
+          generalPhysicalExamination ?? this.generalPhysicalExamination,
+      systemsExamination: systemsExamination ?? this.systemsExamination,
+      treatmentPlanObservations:
+          treatmentPlanObservations ?? this.treatmentPlanObservations,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ClinicalEvaluation &&
+          runtimeType == other.runtimeType &&
+          historyOfCurrentIllness == other.historyOfCurrentIllness &&
+          generalPhysicalExamination == other.generalPhysicalExamination &&
+          systemsExamination == other.systemsExamination &&
+          treatmentPlanObservations == other.treatmentPlanObservations;
+
+  @override
+  int get hashCode => Object.hash(
+    historyOfCurrentIllness,
+    generalPhysicalExamination,
+    systemsExamination,
+    treatmentPlanObservations,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -637,6 +1085,30 @@ class DiagnosisItem {
     if (icd11Code != null) 'icd11Code': icd11Code,
     'description': description,
   };
+
+  DiagnosisItem copyWith({
+    String? icd10Code,
+    String? icd11Code,
+    String? description,
+  }) {
+    return DiagnosisItem(
+      icd10Code: icd10Code ?? this.icd10Code,
+      icd11Code: icd11Code ?? this.icd11Code,
+      description: description ?? this.description,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DiagnosisItem &&
+          runtimeType == other.runtimeType &&
+          icd10Code == other.icd10Code &&
+          icd11Code == other.icd11Code &&
+          description == other.description;
+
+  @override
+  int get hashCode => Object.hash(icd10Code, icd11Code, description);
 }
 
 // ---------------------------------------------------------------------------
@@ -659,6 +1131,21 @@ class RiskFactor {
     'type': type,
     'name': name,
   };
+
+  RiskFactor copyWith({String? type, String? name}) {
+    return RiskFactor(type: type ?? this.type, name: name ?? this.name);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RiskFactor &&
+          runtimeType == other.runtimeType &&
+          type == other.type &&
+          name == other.name;
+
+  @override
+  int get hashCode => Object.hash(type, name);
 }
 
 // ---------------------------------------------------------------------------
@@ -688,6 +1175,26 @@ class IncapacityInfo {
     'days': days,
     if (maternityLeaveDays != null) 'maternityLeaveDays': maternityLeaveDays,
   };
+
+  IncapacityInfo copyWith({String? scope, int? days, int? maternityLeaveDays}) {
+    return IncapacityInfo(
+      scope: scope ?? this.scope,
+      days: days ?? this.days,
+      maternityLeaveDays: maternityLeaveDays ?? this.maternityLeaveDays,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is IncapacityInfo &&
+          runtimeType == other.runtimeType &&
+          scope == other.scope &&
+          days == other.days &&
+          maternityLeaveDays == other.maternityLeaveDays;
+
+  @override
+  int get hashCode => Object.hash(scope, days, maternityLeaveDays);
 }
 
 // ---------------------------------------------------------------------------
@@ -733,6 +1240,50 @@ class PractitionerInfo {
     if (firstLastName != null) 'firstLastName': firstLastName,
     if (secondLastName != null) 'secondLastName': secondLastName,
   };
+
+  PractitionerInfo copyWith({
+    String? documentType,
+    String? documentNumber,
+    String? name,
+    String? firstName,
+    String? secondName,
+    String? firstLastName,
+    String? secondLastName,
+  }) {
+    return PractitionerInfo(
+      documentType: documentType ?? this.documentType,
+      documentNumber: documentNumber ?? this.documentNumber,
+      name: name ?? this.name,
+      firstName: firstName ?? this.firstName,
+      secondName: secondName ?? this.secondName,
+      firstLastName: firstLastName ?? this.firstLastName,
+      secondLastName: secondLastName ?? this.secondLastName,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PractitionerInfo &&
+          runtimeType == other.runtimeType &&
+          documentType == other.documentType &&
+          documentNumber == other.documentNumber &&
+          name == other.name &&
+          firstName == other.firstName &&
+          secondName == other.secondName &&
+          firstLastName == other.firstLastName &&
+          secondLastName == other.secondLastName;
+
+  @override
+  int get hashCode => Object.hash(
+    documentType,
+    documentNumber,
+    name,
+    firstName,
+    secondName,
+    firstLastName,
+    secondLastName,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -766,6 +1317,33 @@ class ProviderInfo {
     if (nitNumber != null) 'nitNumber': nitNumber,
     if (locationSeatCode != null) 'locationSeatCode': locationSeatCode,
   };
+
+  ProviderInfo copyWith({
+    String? repsCode,
+    String? name,
+    String? nitNumber,
+    String? locationSeatCode,
+  }) {
+    return ProviderInfo(
+      repsCode: repsCode ?? this.repsCode,
+      name: name ?? this.name,
+      nitNumber: nitNumber ?? this.nitNumber,
+      locationSeatCode: locationSeatCode ?? this.locationSeatCode,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ProviderInfo &&
+          runtimeType == other.runtimeType &&
+          repsCode == other.repsCode &&
+          name == other.name &&
+          nitNumber == other.nitNumber &&
+          locationSeatCode == other.locationSeatCode;
+
+  @override
+  int get hashCode => Object.hash(repsCode, name, nitNumber, locationSeatCode);
 }
 
 // ---------------------------------------------------------------------------
@@ -788,6 +1366,21 @@ class PayerInfo {
     if (code != null) 'code': code,
     if (name != null) 'name': name,
   };
+
+  PayerInfo copyWith({String? code, String? name}) {
+    return PayerInfo(code: code ?? this.code, name: name ?? this.name);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PayerInfo &&
+          runtimeType == other.runtimeType &&
+          code == other.code &&
+          name == other.name;
+
+  @override
+  int get hashCode => Object.hash(code, name);
 }
 
 // ---------------------------------------------------------------------------
@@ -913,6 +1506,95 @@ class MedicalHistoryItem {
     if (incapacity != null) 'incapacity': incapacity!.toJson(),
     if (payer != null) 'payer': payer!.toJson(),
   };
+
+  MedicalHistoryItem copyWith({
+    String? encounterIdentifier,
+    String? type,
+    String? startDateTime,
+    String? endDateTime,
+    String? careModality,
+    String? serviceGroup,
+    String? careEnvironment,
+    String? entryRoute,
+    String? externalCause,
+    ProviderInfo? provider,
+    PractitionerInfo? practitioner,
+    String? location,
+    String? physician,
+    ClinicalEvaluation? clinicalEvaluation,
+    List<DiagnosisItem>? diagnosis,
+    String? diagnosisType,
+    String? dischargeDisposition,
+    List<RiskFactor>? riskFactors,
+    IncapacityInfo? incapacity,
+    PayerInfo? payer,
+  }) {
+    return MedicalHistoryItem(
+      encounterIdentifier: encounterIdentifier ?? this.encounterIdentifier,
+      type: type ?? this.type,
+      startDateTime: startDateTime ?? this.startDateTime,
+      endDateTime: endDateTime ?? this.endDateTime,
+      careModality: careModality ?? this.careModality,
+      serviceGroup: serviceGroup ?? this.serviceGroup,
+      careEnvironment: careEnvironment ?? this.careEnvironment,
+      entryRoute: entryRoute ?? this.entryRoute,
+      externalCause: externalCause ?? this.externalCause,
+      provider: provider ?? this.provider,
+      practitioner: practitioner ?? this.practitioner,
+      location: location ?? this.location,
+      physician: physician ?? this.physician,
+      clinicalEvaluation: clinicalEvaluation ?? this.clinicalEvaluation,
+      diagnosis: diagnosis ?? this.diagnosis,
+      diagnosisType: diagnosisType ?? this.diagnosisType,
+      dischargeDisposition: dischargeDisposition ?? this.dischargeDisposition,
+      riskFactors: riskFactors ?? this.riskFactors,
+      incapacity: incapacity ?? this.incapacity,
+      payer: payer ?? this.payer,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MedicalHistoryItem &&
+          runtimeType == other.runtimeType &&
+          encounterIdentifier == other.encounterIdentifier &&
+          type == other.type &&
+          startDateTime == other.startDateTime &&
+          endDateTime == other.endDateTime &&
+          careModality == other.careModality &&
+          serviceGroup == other.serviceGroup &&
+          careEnvironment == other.careEnvironment &&
+          entryRoute == other.entryRoute &&
+          externalCause == other.externalCause &&
+          provider == other.provider &&
+          practitioner == other.practitioner &&
+          location == other.location &&
+          physician == other.physician &&
+          clinicalEvaluation == other.clinicalEvaluation &&
+          _listEquals(diagnosis, other.diagnosis) &&
+          diagnosisType == other.diagnosisType &&
+          dischargeDisposition == other.dischargeDisposition &&
+          _listEquals(riskFactors, other.riskFactors) &&
+          incapacity == other.incapacity &&
+          payer == other.payer;
+
+  @override
+  int get hashCode => Object.hash(
+    encounterIdentifier,
+    type,
+    startDateTime,
+    endDateTime,
+    careModality,
+    serviceGroup,
+    careEnvironment,
+    Object.hash(entryRoute, externalCause, provider, practitioner),
+    Object.hash(location, physician, clinicalEvaluation),
+    Object.hashAll(diagnosis),
+    diagnosisType,
+    Object.hash(dischargeDisposition, Object.hashAll(riskFactors)),
+    Object.hash(incapacity, payer),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1011,6 +1693,58 @@ class PatientFullRecord {
         .map((VaccinationRecordItem v) => v.toJson())
         .toList(),
   };
+
+  PatientFullRecord copyWith({
+    String? patientId,
+    String? deviceUid,
+    PatientInfo? patientInfo,
+    GuardianInfo? guardianInfo,
+    GuardianInfo? guardian2Info,
+    BackgroundHistory? backgroundHistory,
+    List<AllergyInfo>? allergies,
+    List<MedicalHistoryItem>? medicalHistory,
+    List<VaccinationRecordItem>? vaccinationRecord,
+  }) {
+    return PatientFullRecord(
+      patientId: patientId ?? this.patientId,
+      deviceUid: deviceUid ?? this.deviceUid,
+      patientInfo: patientInfo ?? this.patientInfo,
+      guardianInfo: guardianInfo ?? this.guardianInfo,
+      guardian2Info: guardian2Info ?? this.guardian2Info,
+      backgroundHistory: backgroundHistory ?? this.backgroundHistory,
+      allergies: allergies ?? this.allergies,
+      medicalHistory: medicalHistory ?? this.medicalHistory,
+      vaccinationRecord: vaccinationRecord ?? this.vaccinationRecord,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PatientFullRecord &&
+          runtimeType == other.runtimeType &&
+          patientId == other.patientId &&
+          deviceUid == other.deviceUid &&
+          patientInfo == other.patientInfo &&
+          guardianInfo == other.guardianInfo &&
+          guardian2Info == other.guardian2Info &&
+          backgroundHistory == other.backgroundHistory &&
+          _listEquals(allergies, other.allergies) &&
+          _listEquals(medicalHistory, other.medicalHistory) &&
+          _listEquals(vaccinationRecord, other.vaccinationRecord);
+
+  @override
+  int get hashCode => Object.hash(
+    patientId,
+    deviceUid,
+    patientInfo,
+    guardianInfo,
+    guardian2Info,
+    backgroundHistory,
+    Object.hashAll(allergies),
+    Object.hashAll(medicalHistory),
+    Object.hashAll(vaccinationRecord),
+  );
 }
 
 // ---------------------------------------------------------------------------

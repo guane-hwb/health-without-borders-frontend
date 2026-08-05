@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../shared/widgets/form_widgets.dart';
 import '../../../domain/patient_record.dart';
-import '../register_nfc_screen.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../../profile/shared/voice_text_area.dart';
+import '../../../domain/register_draft.dart';
 
 class Step4Background extends StatefulWidget {
   const Step4Background({

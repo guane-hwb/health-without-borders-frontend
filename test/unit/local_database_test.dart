@@ -1,11 +1,15 @@
 // test/unit/local_database_test.dart
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+
+class MockSecureStorage extends Mock implements FlutterSecureStorage {}
 
 PatientFullRecord _buildRecord({
   String patientId = 'p-100',
@@ -38,6 +42,9 @@ PatientFullRecord _buildRecord({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  late MockSecureStorage mockStorage;
+  final Map<String, String> inMemoryStorage = {};
+
   setUpAll(() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -46,6 +53,33 @@ void main() {
     if (await databaseExists(dbPath)) {
       await deleteDatabase(dbPath);
     }
+  });
+
+  setUp(() {
+    inMemoryStorage.clear();
+    mockStorage = MockSecureStorage();
+    when(() => mockStorage.read(key: any(named: 'key'))).thenAnswer(
+      (invocation) async =>
+          inMemoryStorage[invocation.namedArguments[#key] as String],
+    );
+    when(
+      () => mockStorage.write(
+        key: any(named: 'key'),
+        value: any(named: 'value'),
+      ),
+    ).thenAnswer((invocation) async {
+      inMemoryStorage[invocation.namedArguments[#key] as String] =
+          invocation.namedArguments[#value] as String;
+    });
+    when(() => mockStorage.delete(key: any(named: 'key'))).thenAnswer((
+      invocation,
+    ) async {
+      inMemoryStorage.remove(invocation.namedArguments[#key] as String);
+    });
+
+    LocalDatabase.setInstanceForTesting(
+      LocalDatabase.forTesting(secureStorage: mockStorage),
+    );
   });
 
   // ── LocalPatientEntry.fromRow ─────────────────────────────────────────────
@@ -290,7 +324,7 @@ void main() {
 
   // ── LocalDatabase — real sqlite-backed behaviour ──────────────────────────
   group('LocalDatabase (native/sqlite code path)', () {
-    final localDb = LocalDatabase.instance;
+    late LocalDatabase localDb;
 
     Future<Database> rawConnection() async {
       final dbPath = p.join(await getDatabasesPath(), 'hwb_patients.db');
@@ -298,6 +332,7 @@ void main() {
     }
 
     setUp(() async {
+      localDb = LocalDatabase.instance;
       await localDb.clearAll();
       final db = await rawConnection();
       await db.delete('emergency_access_log');
@@ -344,7 +379,7 @@ void main() {
         expect(all, hasLength(1));
         expect(all.first.patientId, equals('p-200'));
         expect(all.first.deviceUid, equals('dev-100'));
-        expect(all.first.patientName, equals('Ana García'));
+        expect(all.first.patientName, equals('Ana G.'));
         expect(all.first.isSynced, isFalse);
         expect(all.first.syncError, isNull);
         expect(all.first.syncedAt, isNull);
@@ -363,7 +398,7 @@ void main() {
 
         final all = await localDb.getAllRecords();
         expect(all, hasLength(1));
-        expect(all.first.patientName, equals('Bea García'));
+        expect(all.first.patientName, equals('Bea G.'));
       },
     );
 

@@ -1,7 +1,7 @@
 // test/unit/features/nfc/register/register_nfc_screen_test.dart
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/register_nfc_screen.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/register_draft.dart';
 
 bool isMinor(DateTime? dob, DateTime now) {
   if (dob == null) return true;

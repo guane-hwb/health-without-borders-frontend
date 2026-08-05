@@ -1,8 +1,8 @@
 // lib/src/features/nfc/presentation/register/steps/step5_review.dart
 import 'package:flutter/material.dart';
 import '../../../../../design/tokens/app_colors.dart';
-import '../register_nfc_screen.dart';
 import '../../../../../core/i18n/app_strings.dart';
+import '../../../domain/register_draft.dart';
 
 class Step5Review extends StatefulWidget {
   const Step5Review({
