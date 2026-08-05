@@ -36,6 +36,24 @@ const _kReqStyle = TextStyle(
   fontWeight: FontWeight.w700,
 );
 
+const List<String> kEthnicityCodes = <String>['6', '1', '2', '3', '4', '5'];
+
+const List<String> kNoEthnicityCodes = <String>['6', '99'];
+
+const List<String> kDisabilityCodes = <String>[
+  '00',
+  '01',
+  '02',
+  '03',
+  '04',
+  '05',
+  '06',
+  '07',
+];
+
+bool patientHasEthnicity(String? ethnicity) =>
+    ethnicity != null && !kNoEthnicityCodes.contains(ethnicity);
+
 class Step3PatientData extends StatefulWidget {
   const Step3PatientData({
     super.key,
@@ -91,10 +109,7 @@ class _Step3State extends State<Step3PatientData> {
   String? _err;
   bool _isDocInvalid = false;
 
-  bool get _hasEthnicity {
-    final v = widget.draft.ethnicity;
-    return v != null && v != '6' && v != '99';
-  }
+  bool get _hasEthnicity => patientHasEthnicity(widget.draft.ethnicity);
 
   @override
   void initState() {
@@ -265,7 +280,7 @@ class _Step3State extends State<Step3PatientData> {
       'OTHER': isEs ? 'Otra' : 'Other',
     };
 
-    final eth = <String, String>{
+    final ethLabels = <String, String>{
       '6': isEs ? 'Ninguno' : 'None',
       '1': isEs ? 'Indígena' : 'Indigenous',
       '2': isEs ? 'ROM/Gitano' : 'Romani',
@@ -273,8 +288,11 @@ class _Step3State extends State<Step3PatientData> {
       '4': isEs ? 'Palenquero' : 'Palenquero',
       '5': isEs ? 'Afrocolombiano' : 'Afro-Colombian',
     };
+    final eth = <String, String>{
+      for (final code in kEthnicityCodes) code: ethLabels[code]!,
+    };
 
-    final dis = <String, String>{
+    final disLabels = <String, String>{
       '00': isEs ? 'Ninguna' : 'None',
       '01': isEs ? 'Física' : 'Physical',
       '02': isEs ? 'Visual' : 'Visual',
@@ -283,6 +301,9 @@ class _Step3State extends State<Step3PatientData> {
       '05': isEs ? 'Psicosocial' : 'Psychosocial',
       '06': isEs ? 'Sordoceguera' : 'Deaf-blindness',
       '07': isEs ? 'Múltiple' : 'Multiple',
+    };
+    final dis = <String, String>{
+      for (final code in kDisabilityCodes) code: disLabels[code]!,
     };
 
     final zones = <String, String>{'01': s.zoneUrban, '02': s.zoneRural};

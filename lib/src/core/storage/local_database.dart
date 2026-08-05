@@ -16,7 +16,11 @@ import 'web_storage.dart' as web_storage;
 
 class LocalDatabase {
   LocalDatabase._({FlutterSecureStorage? secureStorage})
-    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+    : _secureStorage = secureStorage ?? _defaultSecureStorage,
+      _forceWeb = null,
+      _webGet = web_storage.getWebStorageItem,
+      _webSet = web_storage.setWebStorageItem,
+      _webRemove = web_storage.removeWebStorageItem;
 
   static LocalDatabase instance = LocalDatabase._();
 
@@ -26,8 +30,25 @@ class LocalDatabase {
   }
 
   @visibleForTesting
-  LocalDatabase.forTesting({FlutterSecureStorage? secureStorage})
-    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  LocalDatabase.forTesting({
+    FlutterSecureStorage? secureStorage,
+    bool? forceWeb,
+    String? Function(String key)? webGet,
+    void Function(String key, String value)? webSet,
+    void Function(String key)? webRemove,
+  }) : _secureStorage = secureStorage ?? _defaultSecureStorage,
+       _forceWeb = forceWeb,
+       _webGet = webGet ?? web_storage.getWebStorageItem,
+       _webSet = webSet ?? web_storage.setWebStorageItem,
+       _webRemove = webRemove ?? web_storage.removeWebStorageItem;
+
+  final bool? _forceWeb;
+  final String? Function(String key) _webGet;
+  final void Function(String key, String value) _webSet;
+  final void Function(String key) _webRemove;
+
+  static const FlutterSecureStorage _defaultSecureStorage =
+      FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: true));
 
   static const String _dbName = 'hwb_patients.db';
   static const int _dbVersion = 5;
@@ -46,12 +67,12 @@ class LocalDatabase {
 
   static Future<void> init() async {}
 
-  bool get _isWeb => kIsWeb;
+  bool get _isWeb => _forceWeb ?? kIsWeb;
 
   Map<String, Map<String, dynamic>> get _webStore {
     if (!_isWeb) return {};
     try {
-      final raw = web_storage.getWebStorageItem(_webStoreKey);
+      final raw = _webGet(_webStoreKey);
       if (raw == null || raw.isEmpty) return {};
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
       return decoded.map(
@@ -65,9 +86,13 @@ class LocalDatabase {
   void _saveWebStore(Map<String, Map<String, dynamic>> store) {
     if (!_isWeb) return;
     try {
-      web_storage.setWebStorageItem(_webStoreKey, jsonEncode(store));
+      _webSet(_webStoreKey, jsonEncode(store));
     } catch (e, stack) {
-      AppLogger.e('Error guardando en localStorage web', error: e, stackTrace: stack);
+      AppLogger.e(
+        'Error guardando en localStorage web',
+        error: e,
+        stackTrace: stack,
+      );
       rethrow;
     }
   }
@@ -75,7 +100,7 @@ class LocalDatabase {
   List<Map<String, Object?>> get _webEmergencyLog {
     if (!_isWeb) return [];
     try {
-      final raw = web_storage.getWebStorageItem(_webLogKey);
+      final raw = _webGet(_webLogKey);
       if (raw == null || raw.isEmpty) return [];
       final decoded = jsonDecode(raw) as List;
       return decoded.map((v) => Map<String, Object?>.from(v as Map)).toList();
@@ -87,9 +112,13 @@ class LocalDatabase {
   void _saveWebEmergencyLog(List<Map<String, Object?>> logs) {
     if (!_isWeb) return;
     try {
-      web_storage.setWebStorageItem(_webLogKey, jsonEncode(logs));
+      _webSet(_webLogKey, jsonEncode(logs));
     } catch (e, stack) {
-      AppLogger.e('Error guardando logs de emergencia en web', error: e, stackTrace: stack);
+      AppLogger.e(
+        'Error guardando logs de emergencia en web',
+        error: e,
+        stackTrace: stack,
+      );
       rethrow;
     }
   }
@@ -97,7 +126,7 @@ class LocalDatabase {
   Map<String, Map<String, dynamic>> get _webChipStatus {
     if (!_isWeb) return {};
     try {
-      final raw = web_storage.getWebStorageItem(_webChipKey);
+      final raw = _webGet(_webChipKey);
       if (raw == null || raw.isEmpty) return {};
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
       return decoded.map(
@@ -111,9 +140,13 @@ class LocalDatabase {
   void _saveWebChipStatus(Map<String, Map<String, dynamic>> status) {
     if (!_isWeb) return;
     try {
-      web_storage.setWebStorageItem(_webChipKey, jsonEncode(status));
+      _webSet(_webChipKey, jsonEncode(status));
     } catch (e, stack) {
-      AppLogger.e('Error guardando chip status en web', error: e, stackTrace: stack);
+      AppLogger.e(
+        'Error guardando chip status en web',
+        error: e,
+        stackTrace: stack,
+      );
       rethrow;
     }
   }
@@ -356,7 +389,9 @@ class LocalDatabase {
   }) async {
     final row = <String, Object?>{
       'patient_uid': patientUid,
-      'patient_name': patientName == null ? null : await _encryptPayload(patientName),
+      'patient_name': patientName == null
+          ? null
+          : await _encryptPayload(patientName),
       'user_id': userId == null ? null : await _encryptPayload(userId),
       'reason': reason,
       'occurred_at': DateTime.now().toIso8601String(),
@@ -763,8 +798,8 @@ class LocalDatabase {
 
   Future<void> clearAll() async {
     if (_isWeb) {
-      web_storage.removeWebStorageItem(_webStoreKey);
-      web_storage.removeWebStorageItem(_webChipKey);
+      _webRemove(_webStoreKey);
+      _webRemove(_webChipKey);
       return;
     }
     final db = await _database;
