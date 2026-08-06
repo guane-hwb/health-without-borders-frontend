@@ -198,6 +198,29 @@ void main() {
       verify(() => patientRepo.syncPatient(any())).called(1);
     });
 
+    test('no invoca purgeStalePermanentErrors bajo ninguna circunstancia '
+        '(v2-purga-silenciosa-30-dias)', () async {
+      final entryOk = buildEntry('OK', record: MockPatientFullRecord());
+      final entry409 = buildEntry(
+        'CONFLICT',
+        record: MockPatientFullRecord(),
+        syncErrorCode: 409,
+      );
+
+      when(
+        () => localDb.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [entryOk, entry409]);
+      when(
+        () => patientRepo.syncPatient(any()),
+      ).thenAnswer((_) async => buildResponse('success'));
+
+      await engine.syncAll();
+
+      verifyNever(
+        () => localDb.purgeStalePermanentErrors(maxAge: any(named: 'maxAge')),
+      );
+    });
+
     test(
       'llamadas concurrentes se serializan (segunda no reprocesa)',
       () async {
