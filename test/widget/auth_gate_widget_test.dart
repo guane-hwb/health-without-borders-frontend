@@ -23,6 +23,8 @@ import 'package:health_without_borders_frontend/src/features/home/presentation/h
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
+
 /// Controllable AuthRepository fake. Only restoreSession/currentUser/logout are
 /// exercised here; the rest is left to Fake's noSuchMethod (never called).
 class _GateAuth extends Fake implements AuthRepository {
@@ -86,6 +88,7 @@ Widget _wrap(_GateAuth auth) {
         apiClient: ApiClient(baseUrl: 'http://localhost'),
         authRepository: auth,
       ),
+      reachability: Reachability(baseUrl: 'http://localhost'),
       child: MaterialApp(home: AuthGate(authRepository: auth)),
     ),
   );

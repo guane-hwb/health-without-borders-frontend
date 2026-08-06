@@ -23,6 +23,7 @@ import 'package:health_without_borders_frontend/src/features/nfc/presentation/re
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step4_background.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step5_review.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step6_success.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ─────────────────────────────────────────────────────────────────────────
 //  Mocks
@@ -148,6 +149,7 @@ void main() {
             localDatabase: db,
             syncEngine: sync,
             statsRepository: MockStatsRepository(),
+            reachability: Reachability(baseUrl: 'http://localhost'),
             child: child!,
           ),
         ),

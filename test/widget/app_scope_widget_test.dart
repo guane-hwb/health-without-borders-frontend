@@ -12,6 +12,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 class MockAuthRepository extends Mock implements AuthRepository {}
 
@@ -23,12 +24,15 @@ class MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class MockSyncEngine extends Mock implements SyncEngine {}
 
+class _MockReachability extends Mock implements Reachability {}
+
 void main() {
   late MockAuthRepository authRepository;
   late MockUserRepository userRepository;
   late MockPatientRepository patientRepository;
   late MockLocalDatabase localDatabase;
   late MockSyncEngine syncEngine;
+  late _MockReachability reachability;
 
   setUp(() {
     authRepository = MockAuthRepository();
@@ -36,6 +40,7 @@ void main() {
     patientRepository = MockPatientRepository();
     localDatabase = MockLocalDatabase();
     syncEngine = MockSyncEngine();
+    reachability = _MockReachability();
     when(() => authRepository.currentUser).thenReturn(null);
   });
 
@@ -50,6 +55,7 @@ void main() {
       patientRepository: patient ?? patientRepository,
       localDatabase: localDatabase,
       syncEngine: syncEngine,
+      reachability: reachability,
       statsRepository: StatsRepository(
         apiClient: ApiClient(baseUrl: 'http://localhost'),
         authRepository: auth ?? authRepository,

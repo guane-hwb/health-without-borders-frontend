@@ -6,6 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/storage/local_database.dart';
+import '../../../core/sync/sync_engine.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../nfc/presentation/profile/patient_profile_screen.dart';
@@ -42,12 +43,16 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
 
   Future<void> _syncAll() async {
     final s = AppStrings.of(context);
-    final isEs = s.save == 'Guardar';
+    final isEs = s.isEs;
     final messenger = ScaffoldMessenger.of(context);
-    final syncEngine = AppScope.of(context).syncEngine;
+    final scope = AppScope.of(context);
 
     final netResult = await Connectivity().checkConnectivity();
-    if (netResult.contains(ConnectivityResult.none)) {
+    final reachable =
+        !netResult.contains(ConnectivityResult.none) &&
+        await scope.reachability.probe();
+
+    if (!reachable) {
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(
@@ -65,7 +70,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
 
     setState(() => _syncing = true);
     try {
-      await syncEngine.syncAll();
+      await scope.syncEngine.syncAll();
       await _load();
       if (mounted) {
         final remaining = _entries.length;
@@ -111,12 +116,16 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
 
   Future<void> _syncOne(String id) async {
     final s = AppStrings.of(context);
-    final isEs = s.save == 'Guardar';
+    final isEs = s.isEs;
     final messenger = ScaffoldMessenger.of(context);
-    final syncEngine = AppScope.of(context).syncEngine;
+    final scope = AppScope.of(context);
 
     final netResult = await Connectivity().checkConnectivity();
-    if (netResult.contains(ConnectivityResult.none)) {
+    final reachable =
+        !netResult.contains(ConnectivityResult.none) &&
+        await scope.reachability.probe();
+
+    if (!reachable) {
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(
@@ -130,13 +139,16 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
       return;
     }
 
-    final ok = await syncEngine.syncOne(id);
+    final result = await scope.syncEngine.syncOne(id);
     if (mounted) {
+      final (String message, Color color) = switch (result) {
+        SyncOneResult.success => (s.syncedSuccessfully, AppColors.success),
+        SyncOneResult.notFound => (s.syncedSuccessfully, AppColors.success),
+        SyncOneResult.busy => (s.synchronizing, AppColors.secondary),
+        SyncOneResult.failure => (s.syncFailedRetry, AppColors.error),
+      };
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(ok ? s.syncedSuccessfully : s.syncFailedRetry),
-          backgroundColor: ok ? AppColors.success : AppColors.error,
-        ),
+        SnackBar(content: Text(message), backgroundColor: color),
       );
       _load();
     }
@@ -386,10 +398,8 @@ class _SyncCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isConflict = entry.syncErrorCode == 409;
-    final hasErr =
-        entry.syncError?.isNotEmpty ==
-        true; // fe-sync-ui-oculta-todo-error-no-409
-    final isEs = s.save == 'Guardar';
+    final hasErr = entry.syncError?.isNotEmpty == true;
+    final isEs = s.isEs;
 
     String? errorMessage;
     if (hasErr) {

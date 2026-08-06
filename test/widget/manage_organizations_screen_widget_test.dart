@@ -16,6 +16,7 @@ import 'package:health_without_borders_frontend/src/features/nfc/data/patient_re
 import 'package:health_without_borders_frontend/src/features/admin/presentation/manage_organizations_screen.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ============================================================================
 // FAKES
@@ -183,6 +184,7 @@ Widget _build(_FakeRepo repo, {String locale = 'es'}) => _TestLocaleWrapper(
       apiClient: ApiClient(baseUrl: 'http://localhost'),
       authRepository: _StubAuth(),
     ),
+    reachability: Reachability(baseUrl: 'http://localhost'),
     child: const MaterialApp(home: Scaffold(body: ManageOrganizationsScreen())),
   ),
 );

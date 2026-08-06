@@ -30,6 +30,7 @@ import 'package:health_without_borders_frontend/src/features/nfc/data/patient_re
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/edit_guardian_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Fakes
@@ -223,6 +224,7 @@ Widget _buildSubject({
         apiClient: ApiClient(baseUrl: 'http://localhost'),
         authRepository: authRepo,
       ),
+      reachability: Reachability(baseUrl: 'http://localhost'),
       child: MaterialApp(home: EditGuardianScreen(patient: patient)),
     ),
   );
