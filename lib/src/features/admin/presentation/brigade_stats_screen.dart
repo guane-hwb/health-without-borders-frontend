@@ -12,7 +12,6 @@ import '../data/stats_repository.dart';
 import '../domain/brigade_stats.dart';
 import '../domain/stats_date_range.dart';
 
-/// Sentinel for "no organization filter", distinct from any real organization id.
 const String kAllOrgsFilterId = 'all';
 
 class _OrgFilter {
@@ -23,17 +22,9 @@ class _OrgFilter {
 
 enum _Failure { forbidden, offline, other }
 
-// ── Screen ────────────────────────────────────────────────────────────────
-
 class BrigadeStatsScreen extends StatefulWidget {
   const BrigadeStatsScreen({super.key, this.scopeToOwnOrganization = false});
 
-  /// When true the screen renders for an org_admin: the organization filter is
-  /// hidden and, crucially, `listOrganizations()` is never called — that
-  /// endpoint is superadmin-only and would answer 403.
-  ///
-  /// Passed explicitly by the caller rather than derived from the session role,
-  /// so the screen stays testable without standing up an authenticated scope.
   final bool scopeToOwnOrganization;
 
   @override
@@ -57,8 +48,6 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
 
   bool get _showFilter => !widget.scopeToOwnOrganization;
 
-  /// The organization id sent to the backend. An org_admin sends nothing: the
-  /// backend pins the scope to their own tenant regardless of what is passed.
   String? get _requestedOrgId {
     if (widget.scopeToOwnOrganization) return null;
     return _selectedOrgId == kAllOrgsFilterId ? null : _selectedOrgId;
@@ -73,8 +62,6 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
 
     final scope = AppScope.of(context);
     try {
-      // Only a superadmin may enumerate organizations, and only the superadmin
-      // view shows the filter. Fetched once, then reused across refetches.
       if (_showFilter && _orgs.isEmpty) {
         final orgs = await scope.userRepository.listOrganizations();
         if (!mounted) return;
@@ -120,9 +107,6 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
     }
   }
 
-  /// Handles a tap on a date-range chip. Presets apply immediately; "custom"
-  /// opens the native range picker and applies only if the user commits. A tap
-  /// on the already-selected preset is a no-op, so no needless refetch fires.
   Future<void> _onRangeSelected(StatsRangeKind kind) async {
     if (kind == StatsRangeKind.custom) {
       await _pickCustomRange();
@@ -134,7 +118,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
       StatsRangeKind.all => StatsDateRange.all,
       StatsRangeKind.thisMonth => StatsDateRange.thisMonth(),
       StatsRangeKind.last30Days => StatsDateRange.last30Days(),
-      StatsRangeKind.custom => _range, // unreachable; handled above
+      StatsRangeKind.custom => _range,
     };
     setState(() => _range = next);
     _load();
@@ -196,7 +180,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      _LocaleSwitcher(), // Switch del idioma importado de Home[cite: 2]
+                      _LocaleSwitcher(),
                     ],
                   ),
                 ),
@@ -316,10 +300,9 @@ class _FailureView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     IconData icon = Icons.error_outline;
 
-    // fe-mensaje-5xx-enganoso-en-admin: Mensajes claros sin promesas falsas de reintento automático
     String message =
         detail ??
         (isEs
@@ -455,7 +438,6 @@ class _LocaleSwitcher extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: ['es', 'en'].map((lang) {
-          //[cite: 2]
           final selected = locale == lang;
           return GestureDetector(
             onTap: () => AppLocale.of(context).setLocale(lang),
@@ -484,8 +466,6 @@ class _LocaleSwitcher extends StatelessWidget {
   }
 }
 
-/// The date-range chips: three presets plus a "custom" entry that opens the
-/// native range picker. Same visual language as [_OrgFilterBar].
 class _DateRangeBar extends StatelessWidget {
   const _DateRangeBar({required this.selected, required this.onSelected});
 
@@ -551,16 +531,11 @@ class _DateRangeBar extends StatelessWidget {
   }
 }
 
-/// A small caption showing the concrete active window, e.g. "1 jun – 15 jun
-/// 2026". Only shown when a bounded range is active, so the "custom" trend
-/// ("vs. previous period") is anchored to something the user can see.
 class _ActiveRangeLabel extends StatelessWidget {
   const _ActiveRangeLabel({required this.range});
 
   final StatsDateRange range;
 
-  /// Localized three-letter month abbreviation, reusing the app's existing
-  /// `monEne`..`monDic` strings rather than adding a date-formatting dependency.
   static String _month(AppStrings s, int month) => switch (month) {
     1 => s.monEne,
     2 => s.monFeb,
@@ -596,11 +571,6 @@ class _ActiveRangeLabel extends StatelessWidget {
   }
 }
 
-/// Formats a [TrendMetric] as a signed percentage against the previous period.
-///
-/// A null `deltaPct` means the previous period was empty. It renders as an em
-/// dash in a neutral colour: there is genuinely nothing to compare against, and
-/// showing "+100%" would invent a baseline that never existed.
 class _TrendLabel {
   const _TrendLabel(this.text, this.color);
   final String text;
@@ -644,7 +614,7 @@ class _KpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.save == 'Guardar';
+    final bool isEs = s.isEs; // v2-i18n-por-comparacion-de-cadena
     final bool monthly = stats.trend.isMonthly;
 
     final patientsTrend = _TrendLabel.from(
@@ -709,8 +679,6 @@ class _KpiGrid extends StatelessWidget {
             _KpiCard(
               icon: Icons.child_care,
               label: s.statsMinorsPercentage,
-              // The backend divides by the patients that actually have a birth
-              // date on file, so never rebuild this from patients x pct.
               value: '${stats.totals.minorsPct.toStringAsFixed(0)}%',
               sub: minorsSub,
               iconColor: const Color(0xFF6A1B9A),
@@ -809,14 +777,12 @@ class _VaccineBarChart extends StatelessWidget {
   const _VaccineBarChart({required this.stats});
   final BrigadeStats stats;
 
-  /// The endpoint returns every code it saw. A brigade with a broad catalogue
-  /// would otherwise push the rest of the page off screen.
   static const int maxRows = 8;
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.save == 'Guardar';
+    final bool isEs = s.isEs; // v2-i18n-por-comparacion-de-cadena
     final int maxCount = stats.maxVaccineCount;
     final rows = stats.vaccines.take(maxRows).toList();
 
@@ -898,15 +864,13 @@ class _AllergyChips extends StatelessWidget {
   final List<AllergyStat> allergies;
   final int others;
 
-  /// Res. 866/2021 Elem. 47.1 defines six categories. The previous palette had
-  /// four, so skin substances and insect bites both fell through to grey.
   static Color bg(String category) => switch (category) {
-    '01' => const Color(0xFFFAECE7), // Medicamento
-    '02' => const Color(0xFFFAEEDA), // Alimento
-    '03' => const Color(0xFFE1F5EE), // Sustancia ambiente
-    '04' => const Color(0xFFEDE7F6), // Sustancia piel
-    '05' => const Color(0xFFFFF3E0), // Picadura de insectos
-    _ => const Color(0xFFF1EFE8), // Otra
+    '01' => const Color(0xFFFAECE7),
+    '02' => const Color(0xFFFAEEDA),
+    '03' => const Color(0xFFE1F5EE),
+    '04' => const Color(0xFFEDE7F6),
+    '05' => const Color(0xFFFFF3E0),
+    _ => const Color(0xFFF1EFE8),
   };
 
   static Color fg(String category) => switch (category) {
@@ -921,7 +885,7 @@ class _AllergyChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.save == 'Guardar';
+    final bool isEs = s.isEs; // v2-i18n-por-comparacion-de-cadena
 
     if (allergies.isEmpty && others == 0) {
       return _EmptyView(message: s.statsEmpty);
@@ -984,7 +948,7 @@ class _NationalityList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.save == 'Guardar';
+    final bool isEs = s.isEs; // v2-i18n-por-comparacion-de-cadena
 
     if (nationalities.isEmpty && others == 0) {
       return _EmptyView(message: s.statsEmpty);

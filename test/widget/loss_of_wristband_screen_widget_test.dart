@@ -15,6 +15,7 @@ import 'package:health_without_borders_frontend/src/core/storage/local_database.
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/loss_of_wristband_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ─── Fakes ────────────────────────────────────────────────────────────────────
 
@@ -127,6 +128,8 @@ Widget _wrap(
         apiClient: ApiClient(baseUrl: 'http://localhost'),
         authRepository: _FakeAuthRepository(),
       ),
+      reachability: Reachability(baseUrl: 'http://localhost'),
+
       child: MaterialApp(
         navigatorObservers: observer != null ? [observer] : [],
         home: child,
@@ -252,6 +255,7 @@ void main() {
               apiClient: ApiClient(baseUrl: 'http://localhost'),
               authRepository: authRepo,
             ),
+            reachability: Reachability(baseUrl: 'http://localhost'),
             child: MaterialApp(
               home: Builder(
                 builder: (ctx) => ElevatedButton(

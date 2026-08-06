@@ -51,22 +51,12 @@ class ApiClient {
   }) async {
     final http.Response response = await send(headers).timeout(timeout);
 
-    if (response.statusCode == 301 ||
-        response.statusCode == 302 ||
-        response.statusCode == 307 ||
-        response.statusCode == 308) {
-      final location = response.headers['location'];
-      if (location != null) {
-        final redirectUri = Uri.parse(location);
-        final baseUri = Uri.parse(baseUrl);
-        final isExternal =
-            redirectUri.hasAuthority && redirectUri.host != baseUri.host;
-
-        final safeHeaders = Map<String, String>.from(headers);
-        if (isExternal) {
-          safeHeaders.remove('Authorization');
-        }
-      }
+    if (response.statusCode >= 300 && response.statusCode < 400) {
+      throw ApiException(
+        'Untrusted redirect (HTTP ${response.statusCode}). '
+        'The current network is intercepting requests.',
+        statusCode: response.statusCode,
+      );
     }
 
     if (response.statusCode != 401 ||

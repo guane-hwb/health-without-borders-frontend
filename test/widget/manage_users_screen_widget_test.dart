@@ -14,6 +14,7 @@ import 'package:health_without_borders_frontend/src/features/nfc/data/patient_re
 import 'package:health_without_borders_frontend/src/features/admin/presentation/manage_users_screen.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Fakes
@@ -175,6 +176,7 @@ Widget buildTestApp(
           apiClient: ApiClient(baseUrl: 'http://localhost'),
           authRepository: fakeAuth ?? FakeAuthRepository(),
         ),
+        reachability: Reachability(baseUrl: 'http://localhost'),
         child: const ManageUsersScreen(),
       ),
     ),

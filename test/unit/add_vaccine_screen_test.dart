@@ -30,6 +30,7 @@ import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/add_vaccine_screen.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ---------------------------------------------------------------------------
 // Fakes & mocks
@@ -46,6 +47,8 @@ class _MockLocalDatabase extends Mock implements LocalDatabase {}
 class _MockSyncEngine extends Mock implements SyncEngine {}
 
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
+
+class _MockReachability extends Mock implements Reachability {}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -108,6 +111,7 @@ Widget _buildApp({
       apiClient: ApiClient(baseUrl: 'http://localhost'),
       authRepository: wrapper.authRepository,
     ),
+    reachability: wrapper.reachability,
     child: AppLocale(
       locale: locale,
       setLocale: (_) {},
@@ -130,6 +134,9 @@ AppScope _defaultScope() {
 
   when(() => sync.syncAll()).thenAnswer((_) async => true);
 
+    final resolvedReach = _MockReachability();
+  when(() => resolvedReach.probe()).thenAnswer((_) async => true);
+
   return AppScope(
     authRepository: auth,
     userRepository: user,
@@ -140,6 +147,7 @@ AppScope _defaultScope() {
       apiClient: ApiClient(baseUrl: 'http://localhost'),
       authRepository: auth,
     ),
+    reachability: resolvedReach,
     child: const SizedBox.shrink(),
   );
 }
@@ -543,6 +551,7 @@ void main() {
             apiClient: ApiClient(baseUrl: 'http://localhost'),
             authRepository: scope.authRepository,
           ),
+          reachability: scope.reachability,
           child: AppLocale(
             locale: 'es',
             setLocale: (_) {},
@@ -565,6 +574,7 @@ void main() {
                                 ),
                                 authRepository: scope.authRepository,
                               ),
+                              reachability: scope.reachability,
                               child: AppLocale(
                                 locale: 'es',
                                 setLocale: (_) {},

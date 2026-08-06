@@ -13,6 +13,7 @@ import 'package:health_without_borders_frontend/src/features/auth/domain/user_se
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 class MockAuthRepository extends Mock implements AuthRepository {}
 
@@ -25,6 +26,8 @@ class MockLocalDatabase extends Mock implements LocalDatabase {}
 class MockSyncEngine extends Mock implements SyncEngine {}
 
 class MockUserSession extends Mock implements UserSession {}
+
+class _MockReachability extends Mock implements Reachability {}
 
 void main() {
   late MockAuthRepository authRepository;
@@ -62,6 +65,7 @@ void main() {
         apiClient: ApiClient(baseUrl: 'http://localhost'),
         authRepository: auth ?? authRepository,
       ),
+      reachability: _MockReachability(),
       child: child,
     );
   }

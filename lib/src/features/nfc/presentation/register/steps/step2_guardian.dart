@@ -270,41 +270,41 @@ class _Step2State extends State<Step2Guardian> {
 
     final isEs = s.welcome == 'Bienvenido';
     final bioSigLabel = isEs ? 'Firma biométrica' : 'Biometric signature';
+    final privacyAuthLabel = isEs
+        ? 'Autorización de política de privacidad'
+        : 'Privacy policy authorization';
     final auth2Label = isEs
         ? 'Autorización guardián 2'
         : 'Guardian 2 Authorization';
     final requiredFieldsLabel = isEs ? 'Campos requeridos' : 'Required fields';
 
-    if (widget.requiredForMinor) {
-      if (_name.text.trim().isEmpty) missing.add(s.guardianFullName);
-      if (_phone.text.trim().isEmpty) missing.add(s.guardianPhoneLabel);
-      if (_uid.text.trim().isEmpty) missing.add(s.guardianNfcDevice);
-      if (_docNumber.text.trim().isEmpty) missing.add(s.documentNumberLabel);
-      if (_signatureStrokes.isEmpty) missing.add(bioSigLabel);
-    }
+    if (_name.text.trim().isEmpty) missing.add(s.guardianFullName);
+    if (_phone.text.trim().isEmpty) missing.add(s.guardianPhoneLabel);
+    if (_selectedDocType.trim().isEmpty) missing.add(s.documentTypeLabel);
+    if (_docNumber.text.trim().isEmpty) missing.add(s.documentNumberLabel);
+    if (_uid.text.trim().isEmpty) missing.add(s.guardianNfcDevice);
+    if (!_authAccepted) missing.add(privacyAuthLabel);
+    if (_signatureStrokes.isEmpty) missing.add(bioSigLabel);
 
-    if (validateDocumentNumber(_docNumber.text) != null) {
+    if (_docNumber.text.trim().isNotEmpty &&
+        validateDocumentNumber(_docNumber.text) != null) {
       missing.add(
         isEs
             ? 'Documento de guardián inválido (5 a 20 caracteres, sin símbolos)'
             : 'Invalid guardian document (5 to 20 characters, no symbols)',
       );
     }
-    if (validatePhone(_phone.text) != null) {
+    if (_phone.text.trim().isNotEmpty && validatePhone(_phone.text) != null) {
       missing.add(
         isEs
             ? 'Teléfono inválido (mínimo 7 dígitos)'
             : 'Invalid phone number (minimum 7 digits)',
       );
     }
-    if (validateEmail(_email.text) != null) {
+    if (_email.text.trim().isNotEmpty && validateEmail(_email.text) != null) {
       missing.add(
         isEs ? 'Correo electrónico inválido' : 'Invalid email address',
       );
-    }
-
-    if (_signatureStrokes.isNotEmpty) {
-      if (!_authAccepted) missing.add(s.confirmChanges);
     }
 
     if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
@@ -543,7 +543,7 @@ class _Step2State extends State<Step2Guardian> {
                             label: s.guardianFullName,
                             controller: _name,
                             hint: s.guardianFullNameHint,
-                            required: widget.requiredForMinor,
+                            required: true,
                             icon: Icons.person_outline,
                             keyboardType: TextInputType.name,
                             textCapitalization: TextCapitalization.words,
@@ -551,7 +551,7 @@ class _Step2State extends State<Step2Guardian> {
                           const SizedBox(height: 12),
                           _RelChipSelector(
                             label: s.guardianRelationship,
-                            required: widget.requiredForMinor,
+                            required: true,
                             value: d.guardianRelationship ?? '01',
                             options: rels,
                             onChanged: (v) =>
@@ -562,14 +562,14 @@ class _Step2State extends State<Step2Guardian> {
                             label: s.guardianPhoneLabel,
                             controller: _phone,
                             hint: s.guardianPhoneHint,
-                            required: widget.requiredForMinor,
+                            required: true,
                             icon: Icons.phone_outlined,
                             keyboardType: TextInputType.phone,
                           ),
                           const SizedBox(height: 12),
                           _DocTypeSelector(
                             label: s.documentTypeLabel,
-                            required: widget.requiredForMinor,
+                            required: true,
                             value: _selectedDocType,
                             options: docTypes,
                             onChanged: (v) =>
@@ -580,14 +580,14 @@ class _Step2State extends State<Step2Guardian> {
                             label: s.documentNumberLabel,
                             controller: _docNumber,
                             hint: 'Ej. 1234567890',
-                            required: widget.requiredForMinor,
+                            required: true,
                             icon: Icons.badge_outlined,
                             keyboardType: TextInputType.number,
                           ),
                           const SizedBox(height: 16),
                           FormSectionHeader(
                             icon: Icons.nfc,
-                            title: s.guardianNfcDevice,
+                            title: '${s.guardianNfcDevice} *',
                           ),
                           const SizedBox(height: 12),
                           _NfcField(
@@ -843,13 +843,25 @@ class _AuthSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            s.confirmChanges,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
+          Row(
+            children: [
+              Text(
+                s.confirmChanges,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const Text(
+                ' *',
+                style: TextStyle(
+                  color: AppColors.error,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
 
@@ -1029,6 +1041,13 @@ class _AuthCheckbox extends StatelessWidget {
                     text: isEs
                         ? ' incluyendo el recibo electrónico de comprobantes.'
                         : ' including the electronic receipt of credentials.',
+                  ),
+                  const TextSpan(
+                    text: ' *',
+                    style: TextStyle(
+                      color: AppColors.error,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),

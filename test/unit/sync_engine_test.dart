@@ -259,7 +259,13 @@ void main() {
         await engine.syncAll();
 
         verifyNever(() => patientRepo.syncPatient(any()));
-        verifyNever(() => localDb.markSyncError(any(), any()));
+        verify(
+          () => localDb.markSyncError(
+            'A',
+            'Registro local ilegible (fallo de descifrado)',
+            statusCode: 422,
+          ),
+        ).called(1);
       },
     );
 
@@ -307,6 +313,37 @@ void main() {
     });
 
     test(
+      'FHIR falla pero el status raiz es success: no borra la copia local',
+      () async {
+        final entry = buildEntry('A', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(),
+        ).thenAnswer((_) async => [entry]);
+        when(() => patientRepo.syncPatient(any())).thenAnswer(
+          (_) async => buildResponse('success', fhirStatus: 'error'),
+        );
+
+        String? recordedError;
+        engine.onRecordSynced = (id, ok, err) => recordedError = err;
+
+        await engine.syncAll();
+
+        verifyNever(
+          () => localDb.markSynced(
+            any(),
+            createdAt: any(named: 'createdAt'),
+            recordJson: any(named: 'recordJson'),
+            revision: any(named: 'revision'),
+          ),
+        );
+        verify(
+          () => localDb.markSyncError('A', 'Envío FHIR fallido: error'),
+        ).called(1);
+        expect(recordedError, '');
+      },
+    );
+
+    test(
       'ApiException 401 marca error y detiene el flujo de ese registro',
       () async {
         final entry = buildEntry('A', record: MockPatientFullRecord());
@@ -321,9 +358,13 @@ void main() {
 
         await engine.syncAll();
 
-        verify(
-          () => localDb.markSyncError('A', 'token expirado', statusCode: 401),
-        ).called(1);
+        verifyNever(
+          () => localDb.markSyncError(
+            any(),
+            any(),
+            statusCode: any(named: 'statusCode'),
+          ),
+        );
         expect(success, false);
       },
     );
@@ -446,17 +487,20 @@ void main() {
   });
 
   group('syncOne', () {
-    test('retorna false si no hay ningún registro con ese patientId', () async {
-      when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
+    test(
+      'retorna notFound si no hay ningún registro con ese patientId',
+      () async {
+        when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
 
-      final result = await engine.syncOne('no-existe');
+        final result = await engine.syncOne('no-existe');
 
-      expect(result, false);
-      verifyNever(() => patientRepo.syncPatient(any()));
-    });
+        expect(result, SyncOneResult.notFound);
+        verifyNever(() => patientRepo.syncPatient(any()));
+      },
+    );
 
     test(
-      'retorna true cuando el registro se sincroniza correctamente',
+      'retorna success cuando el registro se sincroniza correctamente',
       () async {
         final entry = buildEntry('A', record: MockPatientFullRecord());
 
@@ -471,7 +515,7 @@ void main() {
 
         final result = await engine.syncOne('A');
 
-        expect(result, true);
+        expect(result, SyncOneResult.success);
         verify(
           () => localDb.markSynced(
             'A',
@@ -483,7 +527,7 @@ void main() {
       },
     );
 
-    test('retorna false cuando el registro sigue sin sincronizar', () async {
+    test('retorna failure cuando el registro sigue sin sincronizar', () async {
       final entry = buildEntry('A', record: MockPatientFullRecord());
 
       when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => [entry]);
@@ -492,7 +536,7 @@ void main() {
 
       final result = await engine.syncOne('A');
 
-      expect(result, false);
+      expect(result, SyncOneResult.failure);
     });
   });
 

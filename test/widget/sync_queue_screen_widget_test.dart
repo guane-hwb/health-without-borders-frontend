@@ -10,6 +10,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
@@ -28,6 +29,8 @@ class MockAuthRepository extends Mock implements AuthRepository {}
 class MockUserRepository extends Mock implements UserRepository {}
 
 class MockPatientRepository extends Mock implements PatientRepository {}
+
+class MockReachability extends Mock implements Reachability {}
 
 LocalPatientEntry makeEntry({
   String patientId = 'p-001',
@@ -53,6 +56,7 @@ Widget buildTestApp({
   required Widget child,
   required MockLocalDatabase db,
   required MockSyncEngine syncEngine,
+  required MockReachability reachability,
   String locale = 'es',
 }) {
   return MaterialApp(
@@ -68,6 +72,7 @@ Widget buildTestApp({
           apiClient: ApiClient(baseUrl: 'http://localhost'),
           authRepository: MockAuthRepository(),
         ),
+        reachability: reachability,
         child: child,
       ),
     ),
@@ -107,10 +112,12 @@ void main() {
 
   late MockLocalDatabase db;
   late MockSyncEngine syncEngine;
+  late MockReachability reachability;
 
   setUp(() {
     db = MockLocalDatabase();
     syncEngine = MockSyncEngine();
+    reachability = MockReachability();
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -123,6 +130,7 @@ void main() {
           },
         );
 
+    when(() => reachability.probe()).thenAnswer((_) async => true);
     when(() => syncEngine.refreshPendingCount()).thenAnswer((_) async {});
   });
 
@@ -145,6 +153,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -162,6 +171,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -179,6 +189,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -196,6 +207,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -222,6 +234,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pump();
@@ -247,6 +260,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -267,6 +281,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -285,6 +300,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -308,6 +324,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -330,6 +347,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -347,6 +365,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -364,6 +383,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -383,6 +403,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -402,6 +423,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -419,6 +441,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -443,6 +466,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -464,6 +488,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -486,6 +511,7 @@ void main() {
             child: const SyncQueueScreen(),
             db: db,
             syncEngine: syncEngine,
+            reachability: reachability,
           ),
         );
         await tester.pumpAndSettle();
@@ -505,6 +531,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -524,6 +551,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -550,6 +578,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -574,6 +603,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -594,13 +624,16 @@ void main() {
       when(
         () => db.getUnsyncedRecords(),
       ).thenAnswer((_) async => [makeEntry(patientId: 'target-id')]);
-      when(() => syncEngine.syncOne('target-id')).thenAnswer((_) async => true);
+      when(
+        () => syncEngine.syncOne('target-id'),
+      ).thenAnswer((_) async => SyncOneResult.success);
 
       await tester.pumpWidget(
         buildTestApp(
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -611,19 +644,22 @@ void main() {
       verify(() => syncEngine.syncOne('target-id')).called(1);
     });
 
-    testWidgets('SnackBar de éxito se muestra cuando syncOne retorna true', (
+    testWidgets('SnackBar de éxito se muestra cuando syncOne retorna success', (
       tester,
     ) async {
       when(
         () => db.getUnsyncedRecords(),
       ).thenAnswer((_) async => [makeEntry()]);
-      when(() => syncEngine.syncOne(any())).thenAnswer((_) async => true);
+      when(
+        () => syncEngine.syncOne(any()),
+      ).thenAnswer((_) async => SyncOneResult.success);
 
       await tester.pumpWidget(
         buildTestApp(
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -635,19 +671,22 @@ void main() {
       expect(find.text('Sincronizado correctamente'), findsOneWidget);
     });
 
-    testWidgets('SnackBar de error se muestra cuando syncOne retorna false', (
+    testWidgets('SnackBar de error se muestra cuando syncOne retorna failure', (
       tester,
     ) async {
       when(
         () => db.getUnsyncedRecords(),
       ).thenAnswer((_) async => [makeEntry()]);
-      when(() => syncEngine.syncOne(any())).thenAnswer((_) async => false);
+      when(
+        () => syncEngine.syncOne(any()),
+      ).thenAnswer((_) async => SyncOneResult.failure);
 
       await tester.pumpWidget(
         buildTestApp(
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -676,6 +715,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -698,6 +738,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -727,6 +768,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -750,6 +792,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -773,6 +816,7 @@ void main() {
           child: const SyncQueueScreen(),
           db: db,
           syncEngine: syncEngine,
+          reachability: reachability,
         ),
       );
       await tester.pumpAndSettle();
@@ -799,6 +843,7 @@ void main() {
                 apiClient: ApiClient(baseUrl: 'http://localhost'),
                 authRepository: MockAuthRepository(),
               ),
+              reachability: reachability,
               child: Builder(
                 builder: (ctx) => ElevatedButton(
                   onPressed: () => Navigator.of(ctx).push(
@@ -813,6 +858,7 @@ void main() {
                           apiClient: ApiClient(baseUrl: 'http://localhost'),
                           authRepository: MockAuthRepository(),
                         ),
+                        reachability: reachability,
                         child: const _LocaleWrapper(
                           locale: 'es',
                           child: SyncQueueScreen(),
@@ -849,6 +895,7 @@ void main() {
             child: const SyncQueueScreen(),
             db: db,
             syncEngine: syncEngine,
+            reachability: reachability,
             locale: 'es',
           ),
         );

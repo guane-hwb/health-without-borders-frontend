@@ -21,6 +21,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/auth_repo
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ============================================================================
 // FAKES
@@ -242,6 +243,7 @@ Widget _buildScreen({
       localDatabase: _FakeLocalDatabase(),
       syncEngine: _FakeSyncEngine(),
       statsRepository: statsRepo,
+      reachability: Reachability(baseUrl: 'http://localhost'),
       child: MaterialApp(
         home: BrigadeStatsScreen(
           scopeToOwnOrganization: scopeToOwnOrganization,
@@ -665,7 +667,9 @@ void main() {
       expect(statsRepo.callCount, 1);
     });
 
-    testWidgets('a bounded range shows the active-range caption', (tester) async {
+    testWidgets('a bounded range shows the active-range caption', (
+      tester,
+    ) async {
       final statsRepo = FakeStatsRepository(_stats(period: 'custom'));
       await _pump(
         tester,

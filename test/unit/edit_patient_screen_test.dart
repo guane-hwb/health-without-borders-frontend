@@ -15,6 +15,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/edit_patient_screen.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 class _MockAuthRepository extends Mock implements AuthRepository {}
 
@@ -27,6 +28,8 @@ class _MockLocalDatabase extends Mock implements LocalDatabase {}
 class _MockSyncEngine extends Mock implements SyncEngine {}
 
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
+
+class _MockReachability extends Mock implements Reachability {}
 
 AppScope _buildTestScope({Widget? child}) {
   final auth = _MockAuthRepository();
@@ -41,6 +44,9 @@ AppScope _buildTestScope({Widget? child}) {
   ).thenAnswer((_) async {});
   when(() => sync.syncAll()).thenAnswer((_) async => true);
 
+  final resolvedReach = _MockReachability();
+  when(() => resolvedReach.probe()).thenAnswer((_) async => true);
+
   return AppScope(
     authRepository: auth,
     userRepository: user,
@@ -51,6 +57,7 @@ AppScope _buildTestScope({Widget? child}) {
       apiClient: ApiClient(baseUrl: 'http://localhost'),
       authRepository: auth,
     ),
+    reachability: resolvedReach,
     child: child ?? const SizedBox.shrink(),
   );
 }
@@ -64,6 +71,7 @@ Widget _wrap(Widget child, {String locale = 'es'}) {
     patientRepository: scope.patientRepository,
     localDatabase: scope.localDatabase,
     syncEngine: scope.syncEngine,
+    reachability: scope.reachability,
     statsRepository: scope.statsRepository,
     child: MaterialApp(
       home: _AppLocaleProvider(locale: locale, child: child),
@@ -168,6 +176,7 @@ Future<void> _pumpViaRoute(
       patientRepository: scope.patientRepository,
       localDatabase: scope.localDatabase,
       syncEngine: scope.syncEngine,
+      reachability: scope.reachability,
       statsRepository: scope.statsRepository,
       child: MaterialApp(
         navigatorObservers: [spy],
