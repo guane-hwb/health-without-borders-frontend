@@ -1094,7 +1094,10 @@ void main() {
           'relationship': 'Madre',
           'phone': '301',
         },
-        'backgroundHistory': {'chronicConditions': [], 'medications': []},
+        'backgroundHistory': <String, dynamic>{
+          'chronicConditions': <String>[],
+          'medications': <String>[],
+        },
         'allergies': [
           {'category': '01', 'allergen': 'Penicilina'},
         ],

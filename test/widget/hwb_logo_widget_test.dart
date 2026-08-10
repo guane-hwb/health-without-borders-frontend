@@ -118,7 +118,7 @@ void main() {
         final shadow = decoration.boxShadow!.single;
         expect(shadow.color, equals(AppColors.primary.withValues(alpha: 0.3)));
         expect(shadow.blurRadius, equals(120 * 0.16));
-        expect(shadow.offset, equals(Offset(0, 120 * 0.06)));
+        expect(shadow.offset, equals(const Offset(0, 120 * 0.06)));
       },
     );
 

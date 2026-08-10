@@ -434,7 +434,7 @@ void main() {
               return ElevatedButton(
                 onPressed: () async {
                   await Navigator.of(ctx).push(
-                    MaterialPageRoute(
+                    MaterialPageRoute<void>(
                       builder: (_) =>
                           EditMedicalHistoryScreen(patient: emptyPatient()),
                     ),
@@ -471,7 +471,7 @@ void main() {
               return ElevatedButton(
                 onPressed: () async {
                   await Navigator.of(ctx).push(
-                    MaterialPageRoute(
+                    MaterialPageRoute<void>(
                       builder: (_) =>
                           EditMedicalHistoryScreen(patient: emptyPatient()),
                     ),
@@ -512,7 +512,7 @@ void main() {
               return ElevatedButton(
                 onPressed: () async {
                   await Navigator.of(ctx).push(
-                    MaterialPageRoute(
+                    MaterialPageRoute<void>(
                       builder: (_) =>
                           EditMedicalHistoryScreen(patient: emptyPatient()),
                     ),

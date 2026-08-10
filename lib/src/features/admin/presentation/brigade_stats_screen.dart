@@ -121,7 +121,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
       StatsRangeKind.custom => _range,
     };
     setState(() => _range = next);
-    _load();
+    await _load();
   }
 
   Future<void> _pickCustomRange() async {
@@ -138,7 +138,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
     if (picked == null || !mounted) return;
 
     setState(() => _range = StatsDateRange.custom(picked.start, picked.end));
-    _load();
+    await _load();
   }
 
   @override
@@ -267,8 +267,6 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
     );
   }
 }
-
-// ── Sub-widgets ───────────────────────────────────────────────────────────
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.title});
@@ -614,7 +612,7 @@ class _KpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.isEs; // v2-i18n-por-comparacion-de-cadena
+    final bool isEs = s.isEs;
     final bool monthly = stats.trend.isMonthly;
 
     final patientsTrend = _TrendLabel.from(
@@ -639,9 +637,13 @@ class _KpiGrid extends StatelessWidget {
         : 'in $categories ${categories == 1 ? 'category' : 'categories'}';
 
     final int minors = stats.totals.minors;
-    final String minorsSub = isEs
+    final bool hasActiveRange = stats.window.dateFrom != null;
+    final String minorsCount = isEs
         ? '$minors ${minors == 1 ? 'paciente' : 'pacientes'}'
         : '$minors ${minors == 1 ? 'patient' : 'patients'}';
+    final String minorsSub = hasActiveRange
+        ? '$minorsCount · ${s.statsMinorsAsOfToday}'
+        : minorsCount;
 
     return Column(
       children: [
@@ -782,7 +784,7 @@ class _VaccineBarChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.isEs; // v2-i18n-por-comparacion-de-cadena
+    final bool isEs = s.isEs;
     final int maxCount = stats.maxVaccineCount;
     final rows = stats.vaccines.take(maxRows).toList();
 
@@ -885,7 +887,7 @@ class _AllergyChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.isEs; // v2-i18n-por-comparacion-de-cadena
+    final bool isEs = s.isEs;
 
     if (allergies.isEmpty && others == 0) {
       return _EmptyView(message: s.statsEmpty);
@@ -948,7 +950,7 @@ class _NationalityList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.isEs; // v2-i18n-por-comparacion-de-cadena
+    final bool isEs = s.isEs;
 
     if (nationalities.isEmpty && others == 0) {
       return _EmptyView(message: s.statsEmpty);

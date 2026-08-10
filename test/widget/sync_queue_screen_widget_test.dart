@@ -847,7 +847,7 @@ void main() {
               child: Builder(
                 builder: (ctx) => ElevatedButton(
                   onPressed: () => Navigator.of(ctx).push(
-                    MaterialPageRoute(
+                    MaterialPageRoute<void>(
                       builder: (_) => AppScope(
                         authRepository: MockAuthRepository(),
                         userRepository: MockUserRepository(),

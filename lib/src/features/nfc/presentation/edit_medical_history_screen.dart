@@ -72,8 +72,8 @@ class _EditMedicalHistoryScreenState extends State<EditMedicalHistoryScreen> {
               ]),
               const SizedBox(height: 8),
               if (_chronicConditionItems.isEmpty)
-                Padding(padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: const Text('Sin condiciones crónicas registradas.', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)))
+                const Padding(padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text('Sin condiciones crónicas registradas.', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)))
               else ..._chronicConditionItems.asMap().entries.map((e) => _ccCard(e.key, e.value)),
               const SizedBox(height: 14),
               // Medications (list)
@@ -87,8 +87,8 @@ class _EditMedicalHistoryScreenState extends State<EditMedicalHistoryScreen> {
               ]),
               const SizedBox(height: 8),
               if (_medicationItems.isEmpty)
-                Padding(padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: const Text('Sin medicamentos registrados.', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)))
+                const Padding(padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text('Sin medicamentos registrados.', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)))
               else ..._medicationItems.asMap().entries.map((e) => _medCard(e.key, e.value)),
               const SizedBox(height: 14),
               _ta(s.personalHistory, _personalHistoryCtrl),
@@ -167,7 +167,7 @@ class _EditMedicalHistoryScreenState extends State<EditMedicalHistoryScreen> {
           Text(s.addFamilyHistory, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.secondary)),
           const SizedBox(height: 14),
           Text(s.condition, style: const TextStyle(fontSize: 13)), const SizedBox(height: 4),
-          TextField(controller: condCtrl, decoration: InputDecoration(hintText: 'e.g., Diabetes', isDense: true, contentPadding: const EdgeInsets.all(12))),
+          TextField(controller: condCtrl, decoration: const InputDecoration(hintText: 'e.g., Diabetes', isDense: true, contentPadding: EdgeInsets.all(12))),
           const SizedBox(height: 14),
           Text(s.relationship, style: const TextStyle(fontSize: 13)), const SizedBox(height: 4),
           Container(padding: const EdgeInsets.symmetric(horizontal: 12),

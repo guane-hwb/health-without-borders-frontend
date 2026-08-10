@@ -213,7 +213,7 @@ class NfcPayloadCodec {
   static Uint8List _hexToBytes(String hex) {
     final clean = hex.replaceAll(RegExp(r'[\s:-]'), '');
     if (clean.length % 2 != 0) {
-      throw FormatException('Hex string must have even length');
+      throw const FormatException('Hex string must have even length');
     }
     return Uint8List.fromList([
       for (var i = 0; i < clean.length; i += 2)

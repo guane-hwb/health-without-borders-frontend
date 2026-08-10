@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../domain/patient_record.dart';
+import '../patient_profile_helpers.dart' as helpers;
 
 class ProfileHeader extends StatelessWidget {
   const ProfileHeader({
@@ -20,60 +21,19 @@ class ProfileHeader extends StatelessWidget {
   final VoidCallback onBack;
   final String? lastSyncedAt;
 
-  int? get _age {
-    final dobDateTime = tryParsePatientDate(patient.patientInfo.dob);
-    if (dobDateTime == null) return null;
+  int? get _age => helpers.computeAge(patient.patientInfo.dob, DateTime.now());
 
-    final now = DateTime.now();
-    var age = now.year - dobDateTime.year;
-    if (now.month < dobDateTime.month ||
-        (now.month == dobDateTime.month && now.day < dobDateTime.day)) {
-      age--;
-    }
-    return age >= 0 ? age : null;
-  }
+  String _initials(String fullName) => helpers.computeInitials(fullName);
 
-  String _initials(String fullName) {
-    final parts = fullName.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
+  String _sexLabel(BuildContext context) => helpers.sexLabel(
+    AppStrings.of(context),
+    patient.patientInfo.biologicalSex,
+  );
 
-  String _sexLabel(BuildContext context) {
-    final s = AppStrings.of(context);
-    switch (patient.patientInfo.biologicalSex) {
-      case 'M':
-        return s.sexMale;
-      case 'F':
-        return s.sexFemale;
-      default:
-        return s.sexIndeterminate;
-    }
-  }
-
-  String _docTypeLabel(BuildContext context) {
-    final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
-    final code = patient.patientInfo.identification.documentType;
-
-    final map = {
-      'RC': s.docTypeRC,
-      'TI': s.docTypeTI,
-      'CC': s.docTypeCC,
-      'CE': s.docTypeCE,
-      'PA': s.docTypePA,
-      'PE': s.docTypePE,
-      'PT': s.docTypePT,
-      'MS': s.docTypeMS,
-      'AS': s.docTypeAS,
-      'SC': isEs ? 'Salvoconducto' : 'Safe-conduct',
-      'CN': isEs ? 'Cert. Nacido Vivo' : 'Live Birth Cert.',
-      'DE': isEs ? 'Doc. Extranjero' : 'Foreign ID',
-    };
-
-    return map[code] ?? (code.isNotEmpty ? code : '—');
-  }
+  String _docTypeLabel(BuildContext context) => helpers.docTypeLabel(
+    AppStrings.of(context),
+    patient.patientInfo.identification.documentType,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -93,7 +53,7 @@ class ProfileHeader extends StatelessWidget {
                 icon: const Icon(Icons.arrow_back, color: AppColors.white),
               ),
               const Spacer(),
-              LanguageToggle(),
+              const LanguageToggle(),
               const SizedBox(width: 4),
             ],
           ),
@@ -187,23 +147,19 @@ class Avatar extends StatelessWidget {
   const Avatar({super.key, required this.initials});
   final String initials;
 
-  static Color _avatarColor(String initials) {
-    const colors = [
-      Color(0xFFE6A817),
-      Color(0xFF2563EB),
-      Color(0xFF16A34A),
-      Color(0xFFDC2626),
-      Color(0xFF9333EA),
-      Color(0xFF0891B2),
-      Color(0xFFEA580C),
-      Color(0xFF0F766E),
-    ];
-    var hash = 0;
-    for (var i = 0; i < initials.length; i++) {
-      hash = hash * 31 + initials.codeUnitAt(i);
-    }
-    return colors[hash.abs() % colors.length];
-  }
+  static const List<Color> _palette = [
+    Color(0xFFE6A817),
+    Color(0xFF2563EB),
+    Color(0xFF16A34A),
+    Color(0xFFDC2626),
+    Color(0xFF9333EA),
+    Color(0xFF0891B2),
+    Color(0xFFEA580C),
+    Color(0xFF0F766E),
+  ];
+
+  static Color _avatarColor(String initials) =>
+      _palette[helpers.avatarColorIndex(initials)];
 
   @override
   Widget build(BuildContext context) {

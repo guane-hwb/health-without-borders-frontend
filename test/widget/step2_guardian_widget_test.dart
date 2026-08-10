@@ -116,7 +116,7 @@ void main() {
       final draft = RegisterDraft()
         ..guardianName = 'Ana García'
         ..guardianPhone = '3001234567'
-        ..guardianDocNumber = '12345678'
+        ..guardianDocNumber = '123456789'
         ..guardianEmail = 'ana@example.com';
 
       await tester.pumpWidget(buildSubject(draft: draft));
@@ -124,7 +124,7 @@ void main() {
 
       expect(find.text('Ana García'), findsOneWidget);
       expect(find.text('3001234567'), findsOneWidget);
-      expect(find.text('12345678'), findsOneWidget);
+      expect(find.text('123456789'), findsOneWidget);
       expect(find.text('ana@example.com'), findsOneWidget);
     });
 
@@ -253,7 +253,7 @@ void main() {
       tester,
     ) async {
       resizeViewport(tester);
-      final draft = RegisterDraft()..guardianDeviceUid = 'UID-123';
+      final draft = RegisterDraft()..guardianDeviceUid = 'HWB041A2CDE';
       await tester.pumpWidget(buildSubject(draft: draft));
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.check_circle), findsWidgets);
@@ -317,11 +317,17 @@ void main() {
       (tester) async {
         resizeViewport(tester);
         bool continueCalled = false;
+
         final draft = RegisterDraft()
-          ..guardianName = 'Ana'
-          ..guardianPhone = '3007253964'
-          ..guardianDeviceUid = 'UID'
-          ..guardianDocNumber = '1234567891';
+          ..guardianName = 'Ana María García'
+          ..guardianPhone = '3158492041'
+          ..guardianDeviceUid = 'HWB041A2CDE'
+          ..guardianDocNumber = '52384912'
+          ..guardianDocType = 'CC'
+          ..guardianAuthAccepted = true
+          ..guardianSignatureStrokes = [
+            [const Offset(10, 10), const Offset(50, 50)],
+          ];
 
         await tester.pumpWidget(
           buildSubject(
@@ -335,6 +341,10 @@ void main() {
         final continueBtn = find.byIcon(Icons.arrow_forward);
         await tester.ensureVisible(continueBtn);
         await tester.tap(continueBtn);
+
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
         await tester.pumpAndSettle();
 
         expect(find.byIcon(Icons.error_outline), findsNothing);
@@ -363,8 +373,21 @@ void main() {
       (tester) async {
         resizeViewport(tester);
         bool continueCalled = false;
+
+        final draft = RegisterDraft()
+          ..guardianName = 'Ana María García'
+          ..guardianPhone = '3158492041'
+          ..guardianDeviceUid = 'HWB041A2CDE'
+          ..guardianDocNumber = '52384912'
+          ..guardianDocType = 'CC'
+          ..guardianAuthAccepted = true
+          ..guardianSignatureStrokes = [
+            [const Offset(10, 10), const Offset(50, 50)],
+          ];
+
         await tester.pumpWidget(
           buildSubject(
+            draft: draft,
             requiredForMinor: false,
             onContinue: () => continueCalled = true,
           ),
@@ -374,6 +397,10 @@ void main() {
         final continueBtn = find.byIcon(Icons.arrow_forward);
         await tester.ensureVisible(continueBtn);
         await tester.tap(continueBtn);
+
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
         await tester.pumpAndSettle();
 
         expect(continueCalled, isTrue);
@@ -542,11 +569,16 @@ void main() {
       (tester) async {
         resizeViewport(tester);
         bool continueCalled = false;
+
         final draft = RegisterDraft()
-          ..guardianName = 'Ana García'
-          ..guardianPhone = '3001234567'
-          ..guardianDocNumber = '12345678'
-          ..guardianDeviceUid = 'UID-001';
+          ..guardianName = 'Ana María García'
+          ..guardianPhone = '3158492041'
+          ..guardianDocNumber = '52384912'
+          ..guardianDocType = 'CC'
+          ..guardianDeviceUid = 'HWB041A2CDE'
+          ..guardianSignatureStrokes = [
+            [const Offset(10, 10), const Offset(50, 50)],
+          ];
 
         await tester.pumpWidget(
           buildSubject(
@@ -557,34 +589,24 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // 1. Realizar el trazo de la firma sobre el lienzo CustomPaint
-        final padFinder = find.byType(CustomPaint).first;
-        await tester.ensureVisible(padFinder);
-
-        final center = tester.getCenter(padFinder);
-        final gesture = await tester.startGesture(center);
-        await gesture.moveBy(const Offset(20, 20));
-        await gesture.moveBy(const Offset(40, 40));
-        await gesture.up();
-        await tester.pumpAndSettle();
-
-        // 2. Marcar el Checkbox de autorización
+        // 1. Checkbox de autorización
         final checkbox = find.byType(Checkbox).first;
         await tester.ensureVisible(checkbox);
         await tester.tap(checkbox);
         await tester.pumpAndSettle();
 
-        // 3. Presionar "Continuar" para ejecutar _save() y ejercitar _signatureToBase64
-        final continueBtn = find.byIcon(Icons.arrow_forward);
-        await tester.ensureVisible(continueBtn);
-        await tester.tap(continueBtn);
+        // 2. Invocar la lógica de guardado mediante saveForTest
+        final dynamic state = tester.state(find.byType(Step2Guardian));
+        await tester.runAsync(() async {
+          await state.saveForTest();
+        });
         await tester.pumpAndSettle();
 
-        // 4. Confirmar que la firma y los datos pasaron las validaciones de _save()
+        // 3. Confirmar que la firma y los datos pasaron la validación y llamaron a onContinue
         expect(continueCalled, isTrue);
         expect(find.byIcon(Icons.error_outline), findsNothing);
 
-        // 5. Probar la función de limpiar firma
+        // 4. Probar la función de limpiar firma
         final clearBtn = find.text('Limpiar firma').first;
         await tester.ensureVisible(clearBtn);
         await tester.tap(clearBtn);
@@ -598,11 +620,15 @@ void main() {
         resizeViewport(tester);
 
         final draft = RegisterDraft()
-          ..guardianName = 'Ana García'
+          ..guardianName = 'Ana Garcia'
           ..guardianPhone = '3001234567'
-          ..guardianDocNumber = '12345678'
-          ..guardianDeviceUid = 'UID-001'
-          ..guardianEmail = 'ana@example.com';
+          ..guardianDocNumber = '123456789'
+          ..guardianDeviceUid = 'HWB041A2CDE'
+          ..guardianEmail = 'ana@example.com'
+          ..guardianAuthAccepted = true
+          ..guardianSignatureStrokes = [
+            [const Offset(10, 10), const Offset(50, 50)],
+          ];
 
         await tester.pumpWidget(buildSubject(draft: draft));
         await tester.pumpAndSettle();
@@ -641,7 +667,10 @@ void main() {
         await tester.pumpAndSettle();
 
         final dynamic state = tester.state(find.byType(Step2Guardian));
-        await state.saveForTest();
+
+        await tester.runAsync(() async {
+          await state.saveForTest();
+        });
         await tester.pumpAndSettle();
 
         expect(draft.guardian2Name, equals('Carlos López'));

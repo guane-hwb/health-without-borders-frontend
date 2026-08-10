@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../shared/sheet_scaffold.dart';
+import 'edit_vital_signs_helpers.dart' as helpers;
 
 class EditVitalSignsSheet extends StatefulWidget {
   const EditVitalSignsSheet({
@@ -50,10 +51,10 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
   void initState() {
     super.initState();
     _weightCtrl = TextEditingController(
-      text: widget.weight != null ? widget.weight!.toStringAsFixed(1) : '',
+      text: helpers.weightInitText(widget.weight),
     );
     _heightCtrl = TextEditingController(
-      text: widget.height != null ? widget.height!.toStringAsFixed(0) : '',
+      text: helpers.heightInitText(widget.height),
     );
     _selectedBloodType = widget.bloodType;
   }
@@ -67,32 +68,28 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
 
   void _handleConfirm() {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
-    final wText = _weightCtrl.text.trim().replaceAll(',', '.');
-    final hText = _heightCtrl.text.trim().replaceAll(',', '.');
+    final wText = _weightCtrl.text;
+    final hText = _heightCtrl.text;
 
     double? w;
-    if (wText.isNotEmpty) {
-      w = double.tryParse(wText);
-      if (w == null || w <= 0.2 || w > 350.0) {
+    if (wText.trim().isNotEmpty) {
+      w = helpers.parseWeight(wText);
+      if (w == null || !helpers.isWeightInRange(w)) {
         setState(() {
-          _errorMessage = isEs
-              ? 'El peso debe estar entre 0.2 kg y 350 kg'
-              : 'Weight must be between 0.2 kg and 350 kg';
+          _errorMessage = helpers.weightErrorMessage(isEs: isEs);
         });
         return;
       }
     }
 
     double? h;
-    if (hText.isNotEmpty) {
-      h = double.tryParse(hText);
-      if (h == null || h <= 20.0 || h > 250.0) {
+    if (hText.trim().isNotEmpty) {
+      h = helpers.parseHeight(hText);
+      if (h == null || !helpers.isHeightInRange(h)) {
         setState(() {
-          _errorMessage = isEs
-              ? 'La altura debe estar entre 20 cm y 250 cm'
-              : 'Height must be between 20 cm and 250 cm';
+          _errorMessage = helpers.heightErrorMessage(isEs: isEs);
         });
         return;
       }
@@ -183,10 +180,10 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
               ),
             ),
           ),
-          if (widget.previousWeight != null) ...[
+          if (helpers.showPreviousWeight(widget.previousWeight)) ...[
             const SizedBox(height: 4),
             Text(
-              '${s.previous}: ${widget.previousWeight!.toStringAsFixed(1)} kg',
+              helpers.previousWeightText(s.previous, widget.previousWeight!),
               style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,
@@ -237,10 +234,10 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
               ),
             ),
           ),
-          if (widget.previousHeight != null) ...[
+          if (helpers.showPreviousHeight(widget.previousHeight)) ...[
             const SizedBox(height: 4),
             Text(
-              '${s.previous}: ${widget.previousHeight!.toStringAsFixed(0)} cm',
+              helpers.previousHeightText(s.previous, widget.previousHeight!),
               style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,
