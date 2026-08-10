@@ -598,6 +598,7 @@ class AppStrings {
   String get statsTotalVaccines => _get('statsTotalVaccines');
   String get statsTotalAllergies => _get('statsTotalAllergies');
   String get statsMinorsPercentage => _get('statsMinorsPercentage');
+  String get statsMinorsAsOfToday => _get('statsMinorsAsOfToday');
   String get statsVaccineDistribution => _get('statsVaccineDistribution');
   String get statsAllergyDistribution => _get('statsAllergyDistribution');
   String get statsNationalityDistribution =>
@@ -1169,6 +1170,7 @@ class AppStrings {
     'statsTotalVaccines': 'Vacunas Aplicadas',
     'statsTotalAllergies': 'Alergias Detectadas',
     'statsMinorsPercentage': 'Porcentaje Menores',
+    'statsMinorsAsOfToday': 'menores a día de hoy, no de la fecha del rango',
     'statsVaccineDistribution': 'Distribución de Vacunas',
     'statsAllergyDistribution': 'Distribución de Alergias',
     'statsNationalityDistribution': 'Distribución por Nacionalidad',
@@ -1742,6 +1744,7 @@ class AppStrings {
     'statsTotalVaccines': 'Vaccines Administered',
     'statsTotalAllergies': 'Detected Allergies',
     'statsMinorsPercentage': 'Minors Percentage',
+    'statsMinorsAsOfToday': "minors as of today, not the range's date",
     'statsVaccineDistribution': 'Vaccine Distribution',
     'statsAllergyDistribution': 'Allergy Distribution',
     'statsNationalityDistribution': 'Nationality Distribution',

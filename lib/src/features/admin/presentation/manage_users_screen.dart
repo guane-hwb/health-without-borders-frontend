@@ -214,7 +214,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           );
           if (mounted) {
             Navigator.of(context).pop();
-            _load();
+            await _load();
           }
         },
       ),
@@ -234,14 +234,14 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           await AppScope.of(context).userRepository.deleteUser(user.id);
           if (mounted) {
             Navigator.of(context).pop();
-            _load();
+            await _load();
           }
         },
         onToggleActive: (isActive) async {
           await AppScope.of(
             context,
           ).userRepository.setUserActive(user.id, isActive);
-          if (mounted) _load();
+          if (mounted) await _load();
         },
       ),
     );

@@ -8,6 +8,7 @@ analyzer:
   errors:
     missing_required_param: error
     missing_return: error
+    unawaited_futures: error
     todo: ignore
 
 linter:
@@ -34,6 +35,7 @@ linter:
     - prefer_is_not_empty
     - prefer_iterable_whereType
     - prefer_single_quotes
+    - unawaited_futures
     - unnecessary_const
     - unnecessary_new
     - unnecessary_null_aware_assignments

@@ -2,117 +2,37 @@
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/patient_profile_helpers.dart';
 
-// ── _age ────────────────────────────────────────────────────────────────────
-int? computeAge(String dob, DateTime now) {
-  final parts = dob.split('-');
-  if (parts.length != 3 || dob.length != 10) return null;
-
-  final dobDateTime = tryParsePatientDate(dob);
-  if (dobDateTime == null) return null;
-
-  var age = now.year - dobDateTime.year;
-  if (now.month < dobDateTime.month ||
-      (now.month == dobDateTime.month && now.day < dobDateTime.day)) {
-    age--;
-  }
-  return age >= 0 ? age : null;
-}
-
-// ── _initials ────────────────────────────────────────────────────────────────
-String computeInitials(String fullName) {
-  final parts = fullName.trim().split(RegExp(r'\s+'));
-  if (parts.isEmpty || (parts.length == 1 && parts.first.isEmpty)) return '?';
-  if (parts.length == 1) return parts.first[0].toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
-
-// ── _relLabel ────────────────────────────────────────────────────────────────
-String relLabel(String r) {
-  switch (r) {
-    case '01':
-      return 'Padres';
-    case '02':
-      return 'Hermanos';
-    case '03':
-      return 'Tíos';
-    case '04':
-      return 'Abuelos';
-    default:
-      return r;
-  }
-}
-
-// ── _medStatusLabel ──────────────────────────────────────────────────────────
-String medStatusLabel(String c) {
-  switch (c) {
-    case 'active':
-      return 'Activo';
-    case 'completed':
-      return 'Completado';
-    case 'stopped':
-      return 'Suspendido';
-    case 'unknown':
-      return 'Desconocido';
-    default:
-      return c;
-  }
-}
-
-// ── _hasUnsyncedChanges ──────────────────────────────────────────────────────
-bool hasUnsyncedChanges(
-  Map<String, dynamic> draft,
-  Map<String, dynamic> original,
-) {
-  return draft.toString() != original.toString();
-}
-
-// ── _avatarColor hash ────────────────────────────────────────────────────────
-int avatarColorIndex(String initials) {
-  const colorsLength = 8;
-  var hash = 0;
-  for (var i = 0; i < initials.length; i++) {
-    hash = hash * 31 + initials.codeUnitAt(i);
-  }
-  return hash.abs() % colorsLength;
-}
-
-String sexLabel(String biologicalSex) {
-  switch (biologicalSex) {
-    case 'M':
-      return 'Masculino';
-    case 'F':
-      return 'Femenino';
-    default:
-      return 'Indeterminado';
-  }
-}
-
-String docTypeLabel(String documentType) {
-  switch (documentType) {
-    case 'RC':
-      return 'Registro Civil';
-    case 'TI':
-      return 'Tarjeta de Identidad';
-    case 'CC':
-      return 'Cédula de Ciudadanía';
-    case 'CE':
-      return 'Cédula de Extranjería';
-    case 'PA':
-      return 'Pasaporte';
-    case 'PE':
-      return 'Permiso Especial';
-    case 'PT':
-      return 'Permiso Temporal';
-    case 'MS':
-      return 'Menor sin Identificación';
-    case 'AS':
-      return 'Adulto sin Identificación';
-    default:
-      return documentType;
-  }
+PatientFullRecord _buildRecord({
+  String patientId = 'p1',
+  double? weight,
+  double? height,
+}) {
+  return PatientFullRecord(
+    patientId: patientId,
+    deviceUid: 'uid-1',
+    patientInfo: PatientInfo(
+      identification: PatientIdentification(
+        documentType: 'RC',
+        documentNumber: '123',
+      ),
+      firstLastName: 'Pérez',
+      firstName: 'Juan',
+      dob: '2000-01-01',
+      biologicalSex: 'M',
+      address: Address(city: 'Bogotá', state: 'Cundinamarca'),
+      weight: weight,
+      height: height,
+    ),
+    guardianInfo: GuardianInfo(
+      name: 'María Pérez',
+      relationship: '01',
+      phone: '3000000000',
+    ),
+  );
 }
 
 void main() {
@@ -136,8 +56,8 @@ void main() {
       expect(computeAge('1990-06-15', DateTime(2025, 6, 16)), 35);
     });
 
-    test('5. devuelve null para formato sin guiones', () {
-      expect(computeAge('19900615', DateTime(2025, 1, 1)), isNull);
+    test('5. devuelve null para formato no soportado (puntos)', () {
+      expect(computeAge('1990.06.15', DateTime(2025, 1, 1)), isNull);
     });
 
     test('6. devuelve null para cadena vacía', () {
@@ -192,76 +112,85 @@ void main() {
   });
 
   group('relLabel (6 tests)', () {
-    test('18. 01 → Padres', () => expect(relLabel('01'), 'Padres'));
-    test('19. 02 → Hermanos', () => expect(relLabel('02'), 'Hermanos'));
-    test('20. 03 → Tíos', () => expect(relLabel('03'), 'Tíos'));
-    test('21. 04 → Abuelos', () => expect(relLabel('04'), 'Abuelos'));
+    final es = AppStrings.forTesting('es');
+    test('18. 01 → Padres', () => expect(relLabel(es, '01'), 'Padres'));
+    test('19. 02 → Hermanos', () => expect(relLabel(es, '02'), 'Hermanos'));
+    test('20. 03 → Tíos', () => expect(relLabel(es, '03'), 'Tíos'));
+    test('21. 04 → Abuelos', () => expect(relLabel(es, '04'), 'Abuelos'));
     test('22. código desconocido → mismo valor', () {
-      expect(relLabel('99'), '99');
+      expect(relLabel(es, '99'), '99');
     });
     test('23. cadena vacía → cadena vacía', () {
-      expect(relLabel(''), '');
+      expect(relLabel(es, ''), '');
     });
   });
 
   group('medStatusLabel (6 tests)', () {
+    final es = AppStrings.forTesting('es');
     test(
       '24. active → Activo',
-      () => expect(medStatusLabel('active'), 'Activo'),
+      () => expect(medStatusLabel(es, 'active'), 'Activo'),
     );
     test(
       '25. completed → Completado',
-      () => expect(medStatusLabel('completed'), 'Completado'),
+      () => expect(medStatusLabel(es, 'completed'), 'Completado'),
     );
     test(
       '26. stopped → Suspendido',
-      () => expect(medStatusLabel('stopped'), 'Suspendido'),
+      () => expect(medStatusLabel(es, 'stopped'), 'Suspendido'),
     );
     test(
       '27. unknown → Desconocido',
-      () => expect(medStatusLabel('unknown'), 'Desconocido'),
+      () => expect(medStatusLabel(es, 'unknown'), 'Desconocido'),
     );
     test('28. estado arbitrario → mismo valor', () {
-      expect(medStatusLabel('on-hold'), 'on-hold');
+      expect(medStatusLabel(es, 'on-hold'), 'on-hold');
     });
     test('29. cadena vacía → cadena vacía', () {
-      expect(medStatusLabel(''), '');
+      expect(medStatusLabel(es, ''), '');
     });
   });
 
-  group('hasUnsyncedChanges (5 tests)', () {
-    final base = <String, dynamic>{'id': '1', 'name': 'Juan'};
+  group('hasUnsyncedChanges vía PatientFullRecord real (5 tests)', () {
+    final base = _buildRecord(weight: 70.0, height: 170.0);
 
-    test('30. false cuando draft y original son idénticos', () {
-      expect(
-        hasUnsyncedChanges(
-          Map<String, dynamic>.from(base),
-          Map<String, dynamic>.from(base),
+    test('30. false cuando draft y original son idénticos (misma data)', () {
+      final draft = _buildRecord(weight: 70.0, height: 170.0);
+      expect(draft != base, false);
+    });
+
+    test('31. true cuando un campo del draft difiere (peso)', () {
+      final draft = base.copyWith(
+        patientInfo: base.patientInfo.copyWith(weight: 71.0),
+      );
+      expect(draft != base, true);
+    });
+
+    test('32. true cuando cambia un campo anidado (dirección)', () {
+      final draft = base.copyWith(
+        patientInfo: base.patientInfo.copyWith(
+          address: Address(city: 'Medellín', state: 'Antioquia'),
         ),
-        false,
       );
+      expect(draft != base, true);
     });
 
-    test('31. true cuando un campo del draft difiere', () {
-      final draft = Map<String, dynamic>.from(base)..['name'] = 'Pedro';
-      expect(hasUnsyncedChanges(draft, Map<String, dynamic>.from(base)), true);
-    });
+    test(
+      '33. false con dos instancias construidas por separado pero iguales',
+      () {
+        final a = _buildRecord(weight: 70.0, height: 170.0);
+        final b = _buildRecord(weight: 70.0, height: 170.0);
+        expect(a != b, false);
+      },
+    );
 
-    test('32. true cuando el draft tiene un campo extra', () {
-      final draft = Map<String, dynamic>.from(base)..['extra'] = 'valor';
-      expect(hasUnsyncedChanges(draft, Map<String, dynamic>.from(base)), true);
-    });
-
-    test('33. false con dos mapas vacíos', () {
-      expect(hasUnsyncedChanges({}, {}), false);
-    });
-
-    test('34. true cuando original tiene un campo que draft no tiene', () {
-      final original = Map<String, dynamic>.from(base)..['extra'] = 'valor';
-      expect(
-        hasUnsyncedChanges(Map<String, dynamic>.from(base), original),
-        true,
+    test('34. true cuando cambia la lista de alergias', () {
+      final draft = base.copyWith(
+        allergies: [
+          AllergyInfo(category: '02', allergen: 'Maní', reaction: 'Urticaria'),
+        ],
       );
+      expect(draft != base, true);
     });
   });
 
@@ -281,7 +210,7 @@ void main() {
       ]) {
         final idx = avatarColorIndex(input);
         expect(idx, greaterThanOrEqualTo(0));
-        expect(idx, lessThan(8));
+        expect(idx, lessThan(avatarColorPaletteLength));
       }
     });
 
@@ -300,55 +229,67 @@ void main() {
   });
 
   group('sexLabel (4 tests)', () {
-    test('39. M → Masculino', () => expect(sexLabel('M'), 'Masculino'));
-    test('40. F → Femenino', () => expect(sexLabel('F'), 'Femenino'));
+    final es = AppStrings.forTesting('es');
+    test('39. M → Masculino', () => expect(sexLabel(es, 'M'), 'Masculino'));
+    test('40. F → Femenino', () => expect(sexLabel(es, 'F'), 'Femenino'));
     test('41. valor desconocido → Indeterminado', () {
-      expect(sexLabel('X'), 'Indeterminado');
+      expect(sexLabel(es, 'X'), 'Indeterminado');
     });
     test('42. cadena vacía → Indeterminado', () {
-      expect(sexLabel(''), 'Indeterminado');
+      expect(sexLabel(es, ''), 'Indeterminado');
     });
   });
 
-  group('docTypeLabel (11 tests)', () {
+  group('docTypeLabel (14 tests)', () {
+    final es = AppStrings.forTesting('es');
+    final en = AppStrings.forTesting('en');
     test(
-      '43. RC → Registro Civil',
-      () => expect(docTypeLabel('RC'), 'Registro Civil'),
+      '43. RC → Reg. civil',
+      () => expect(docTypeLabel(es, 'RC'), 'Reg. civil'),
     );
     test(
-      '44. TI → Tarjeta de Identidad',
-      () => expect(docTypeLabel('TI'), 'Tarjeta de Identidad'),
+      '44. TI → Tarjeta identidad',
+      () => expect(docTypeLabel(es, 'TI'), 'Tarjeta identidad'),
+    );
+    test('45. CC → Cédula', () => expect(docTypeLabel(es, 'CC'), 'Cédula'));
+    test(
+      '46. CE → Céd. extranjería',
+      () => expect(docTypeLabel(es, 'CE'), 'Céd. extranjería'),
     );
     test(
-      '45. CC → Cédula de Ciudadanía',
-      () => expect(docTypeLabel('CC'), 'Cédula de Ciudadanía'),
+      '47. PA → Pasaporte',
+      () => expect(docTypeLabel(es, 'PA'), 'Pasaporte'),
     );
     test(
-      '46. CE → Cédula de Extranjería',
-      () => expect(docTypeLabel('CE'), 'Cédula de Extranjería'),
+      '48. PE → Permiso esp.',
+      () => expect(docTypeLabel(es, 'PE'), 'Permiso esp.'),
     );
-    test('47. PA → Pasaporte', () => expect(docTypeLabel('PA'), 'Pasaporte'));
+    test('49. PT → PPT', () => expect(docTypeLabel(es, 'PT'), 'PPT'));
     test(
-      '48. PE → Permiso Especial',
-      () => expect(docTypeLabel('PE'), 'Permiso Especial'),
-    );
-    test(
-      '49. PT → Permiso Temporal',
-      () => expect(docTypeLabel('PT'), 'Permiso Temporal'),
+      '50. MS → Menor s/ID',
+      () => expect(docTypeLabel(es, 'MS'), 'Menor s/ID'),
     );
     test(
-      '50. MS → Menor sin Identificación',
-      () => expect(docTypeLabel('MS'), 'Menor sin Identificación'),
-    );
-    test(
-      '51. AS → Adulto sin Identificación',
-      () => expect(docTypeLabel('AS'), 'Adulto sin Identificación'),
+      '51. AS → Adulto s/ID',
+      () => expect(docTypeLabel(es, 'AS'), 'Adulto s/ID'),
     );
     test(
       '52. código desconocido → mismo valor',
-      () => expect(docTypeLabel('XX'), 'XX'),
+      () => expect(docTypeLabel(es, 'XX'), 'XX'),
     );
-    test('53. cadena vacía → cadena vacía', () => expect(docTypeLabel(''), ''));
+    test('53. cadena vacía → "—"', () => expect(docTypeLabel(es, ''), '—'));
+    test(
+      '53b. SC en es → Salvoconducto',
+      () => expect(docTypeLabel(es, 'SC'), 'Salvoconducto'),
+    );
+    test(
+      '53c. SC en en → Safe-conduct',
+      () => expect(docTypeLabel(en, 'SC'), 'Safe-conduct'),
+    );
+    test(
+      '53d. CN en es → Cert. Nacido Vivo',
+      () => expect(docTypeLabel(es, 'CN'), 'Cert. Nacido Vivo'),
+    );
   });
 
   group('hasInternetConnection (6 tests)', () {

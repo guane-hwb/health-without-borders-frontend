@@ -1,31 +1,8 @@
-// test/unit/features/nfc/profile/sheets/edit_vital_signs_sheet_unit_test.dart
+// test/unit/edit_vital_signs_sheet_unit_test.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-// ── Helpers Replicating Private Widget Logic ─────────────────────────────────
-
-String weightInitText(double? weight) =>
-    weight != null ? weight.toStringAsFixed(1) : '';
-
-String heightInitText(double? height) =>
-    height != null ? height.toStringAsFixed(0) : '';
-
-double? parseWeight(String text) => double.tryParse(text.trim());
-
-double? parseHeight(String text) => double.tryParse(text.trim());
-
-bool showPreviousWeight(double? previousWeight) => previousWeight != null;
-
-bool showPreviousHeight(double? previousHeight) => previousHeight != null;
-
-String previousWeightText(String previous, double previousWeight) =>
-    '$previous: ${previousWeight.toStringAsFixed(1)} kg';
-
-String previousHeightText(String previous, double previousHeight) =>
-    '$previous: ${previousHeight.toStringAsFixed(0)} cm';
-
-// ── Tests ────────────────────────────────────────────────────────────────────
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/edit_vital_signs_helpers.dart';
 
 void main() {
   group('Weight Formatting — toStringAsFixed(1)', () {
@@ -97,7 +74,7 @@ void main() {
     );
   });
 
-  group('Weight Parsing Execution — double.tryParse operations', () {
+  group('Weight Parsing — parseWeight (matches _handleConfirm exactly)', () {
     test('"72.5" → 72.5', () {
       expect(parseWeight('72.5'), equals(72.5));
     });
@@ -126,9 +103,9 @@ void main() {
     );
 
     test(
-      '"72,5" → null (comma decimal separators reject baseline format expectations)',
+      '"72,5" → 72.5 (producción SÍ acepta coma decimal via replaceAll)',
       () {
-        expect(parseWeight('72,5'), isNull);
+        expect(parseWeight('72,5'), equals(72.5));
       },
     );
 
@@ -148,7 +125,7 @@ void main() {
     );
   });
 
-  group('Height Parsing Execution — double.tryParse operations', () {
+  group('Height Parsing — parseHeight (matches _handleConfirm exactly)', () {
     test('"170" → 170.0', () {
       expect(parseHeight('170'), equals(170.0));
     });
@@ -179,7 +156,68 @@ void main() {
     test('"0" → 0.0', () {
       expect(parseHeight('0'), equals(0.0));
     });
+
+    test('"180,5" → 180.5 (coma decimal aceptada, igual que en peso)', () {
+      expect(parseHeight('180,5'), equals(180.5));
+    });
   });
+
+  group('Range validation — isWeightInRange / isHeightInRange', () {
+    test('0.2 kg es el límite inferior EXCLUSIVO → false', () {
+      expect(isWeightInRange(0.2), isFalse);
+    });
+    test('0.3 kg está dentro de rango → true', () {
+      expect(isWeightInRange(0.3), isTrue);
+    });
+    test('350.0 kg es el límite superior INCLUSIVO → true', () {
+      expect(isWeightInRange(350.0), isTrue);
+    });
+    test('350.1 kg excede el límite superior → false', () {
+      expect(isWeightInRange(350.1), isFalse);
+    });
+    test('20.0 cm es el límite inferior EXCLUSIVO → false', () {
+      expect(isHeightInRange(20.0), isFalse);
+    });
+    test('20.1 cm está dentro de rango → true', () {
+      expect(isHeightInRange(20.1), isTrue);
+    });
+    test('250.0 cm es el límite superior INCLUSIVO → true', () {
+      expect(isHeightInRange(250.0), isTrue);
+    });
+    test('250.1 cm excede el límite superior → false', () {
+      expect(isHeightInRange(250.1), isFalse);
+    });
+  });
+
+  group(
+    'Mensajes de error bilingües — weightErrorMessage / heightErrorMessage',
+    () {
+      test('es: peso', () {
+        expect(
+          weightErrorMessage(isEs: true),
+          'El peso debe estar entre 0.2 kg y 350 kg',
+        );
+      });
+      test('en: peso', () {
+        expect(
+          weightErrorMessage(isEs: false),
+          'Weight must be between 0.2 kg and 350 kg',
+        );
+      });
+      test('es: altura', () {
+        expect(
+          heightErrorMessage(isEs: true),
+          'La altura debe estar entre 20 cm y 250 cm',
+        );
+      });
+      test('en: altura', () {
+        expect(
+          heightErrorMessage(isEs: false),
+          'Height must be between 20 cm and 250 cm',
+        );
+      });
+    },
+  );
 
   group('TextEditingControllers — Memory Instance Initializations', () {
     test(
@@ -213,26 +251,6 @@ void main() {
       '_heightCtrl initializes completely empty if model parameters evaluate to null',
       () {
         final ctrl = TextEditingController(text: heightInitText(null));
-        expect(ctrl.text, isEmpty);
-        ctrl.dispose();
-      },
-    );
-
-    test(
-      'mutating active weight forms reflects target controller content changes',
-      () {
-        final ctrl = TextEditingController(text: '65.0');
-        ctrl.text = '70.5';
-        expect(ctrl.text, equals('70.5'));
-        ctrl.dispose();
-      },
-    );
-
-    test(
-      'invoking controller clear operations purges metric tracking states',
-      () {
-        final ctrl = TextEditingController(text: '170');
-        ctrl.clear();
         expect(ctrl.text, isEmpty);
         ctrl.dispose();
       },
@@ -320,71 +338,4 @@ void main() {
       },
     );
   });
-
-  group(
-    'onConfirm Extraction Pipelines — Value Extraction Gates Assertions',
-    () {
-      test('extracts valid numerical weight contents accurately', () {
-        final w = parseWeight('72.5');
-        expect(w, equals(72.5));
-      });
-
-      test('extracts valid numerical height contents accurately', () {
-        final h = parseHeight('170');
-        expect(h, equals(170.0));
-      });
-
-      test(
-        'extracts unpopulated weight fields directly into null attributes',
-        () {
-          final w = parseWeight('');
-          expect(w, isNull);
-        },
-      );
-
-      test(
-        'extracts unpopulated height fields directly into null attributes',
-        () {
-          final h = parseHeight('');
-          expect(h, isNull);
-        },
-      );
-
-      test(
-        'extracts corrupted weight entries directly into null properties',
-        () {
-          final w = parseWeight('no-es-un-numero');
-          expect(w, isNull);
-        },
-      );
-
-      test(
-        'extracts corrupted height entries directly into null properties',
-        () {
-          final h = parseHeight('--');
-          expect(h, isNull);
-        },
-      );
-
-      test(
-        'both fields capture non-null values under flawless input sequences',
-        () {
-          final w = parseWeight('72.5');
-          final h = parseHeight('170');
-          expect(w, isNotNull);
-          expect(h, isNotNull);
-        },
-      );
-
-      test(
-        'both fields evaluate into null parameters when text fields are empty',
-        () {
-          final w = parseWeight('');
-          final h = parseHeight('');
-          expect(w, isNull);
-          expect(h, isNull);
-        },
-      );
-    },
-  );
 }

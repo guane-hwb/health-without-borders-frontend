@@ -121,7 +121,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
       StatsRangeKind.custom => _range,
     };
     setState(() => _range = next);
-    _load();
+    await _load();
   }
 
   Future<void> _pickCustomRange() async {
@@ -138,7 +138,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
     if (picked == null || !mounted) return;
 
     setState(() => _range = StatsDateRange.custom(picked.start, picked.end));
-    _load();
+    await _load();
   }
 
   @override
@@ -637,9 +637,13 @@ class _KpiGrid extends StatelessWidget {
         : 'in $categories ${categories == 1 ? 'category' : 'categories'}';
 
     final int minors = stats.totals.minors;
-    final String minorsSub = isEs
+    final bool hasActiveRange = stats.window.dateFrom != null;
+    final String minorsCount = isEs
         ? '$minors ${minors == 1 ? 'paciente' : 'pacientes'}'
         : '$minors ${minors == 1 ? 'patient' : 'patients'}';
+    final String minorsSub = hasActiveRange
+        ? '$minorsCount · ${s.statsMinorsAsOfToday}'
+        : minorsCount;
 
     return Column(
       children: [

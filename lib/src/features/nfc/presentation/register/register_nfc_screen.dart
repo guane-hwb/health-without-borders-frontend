@@ -103,7 +103,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final canLeave = await _confirmDiscard();
     if (!canLeave || !mounted) return;
 
-    Navigator.of(context).pushAndRemoveUntil(
+    await Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (context) => const HomeScreen()),
       (route) => false,
     );
@@ -240,7 +240,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final scope = AppScope.of(context);
     final record = _savedRecord;
     if (record == null) {
-      _goToHomeDirectly();
+      await _goToHomeDirectly();
       return;
     }
 

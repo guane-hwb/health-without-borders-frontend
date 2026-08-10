@@ -108,7 +108,7 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                 : _gnCtrl.text.trim(),
           );
       if (!mounted) return;
-      Navigator.of(context).push(
+      await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => PatientProfileScreen(patient: patient),
         ),

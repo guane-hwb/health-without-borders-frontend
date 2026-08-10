@@ -919,7 +919,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       if (confirmed != true) return;
       if (!mounted) return;
     }
-    Navigator.of(context).pushAndRemoveUntil(
+    await Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (context) => const HomeScreen()),
       (route) => false,
     );

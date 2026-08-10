@@ -150,7 +150,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
       messenger.showSnackBar(
         SnackBar(content: Text(message), backgroundColor: color),
       );
-      _load();
+      await _load();
     }
   }
 
@@ -190,7 +190,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
 
     if (ok == true && mounted) {
       await db.deleteRecord(e.patientId);
-      _load();
+      await _load();
     }
   }
 
