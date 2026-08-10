@@ -104,7 +104,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     if (!canLeave || !mounted) return;
 
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const HomeScreen()),
+      MaterialPageRoute<void>(builder: (context) => const HomeScreen()),
       (route) => false,
     );
   }

@@ -61,7 +61,7 @@ class HomeScreen extends StatelessWidget {
       await scope.authRepository.logout();
       if (context.mounted) {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
           (_) => false,
         );
       }
@@ -122,7 +122,7 @@ class HomeScreen extends StatelessWidget {
           title: s.manageOrgsTitle,
           subtitle: s.manageOrgsSubtitle,
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
+            MaterialPageRoute<void>(
               builder: (_) => const ManageOrganizationsScreen(),
             ),
           ),
@@ -134,9 +134,9 @@ class HomeScreen extends StatelessWidget {
           iconColor: const Color(0xFF1565C0),
           title: s.brigadeStatsTitle,
           subtitle: s.brigadeStatsSubtitle,
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const BrigadeStatsScreen())),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const BrigadeStatsScreen()),
+          ),
         ),
         const SizedBox(height: 28),
         _LogoutButton(onTap: () => _logout(context)),
@@ -157,9 +157,9 @@ class HomeScreen extends StatelessWidget {
           iconColor: const Color(0xFF2E7D32),
           title: s.adminManageUsers,
           subtitle: s.adminManageUsersSub,
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const ManageUsersScreen())),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ManageUsersScreen()),
+          ),
         ),
         const SizedBox(height: 14),
         _ActionCard(
@@ -169,7 +169,9 @@ class HomeScreen extends StatelessWidget {
           title: s.actionSearchPatient,
           subtitle: s.actionSearchPatientSubAdmin,
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const LossOfWristbandScreen()),
+            MaterialPageRoute<void>(
+              builder: (_) => const LossOfWristbandScreen(),
+            ),
           ),
         ),
         const SizedBox(height: 14),
@@ -182,7 +184,7 @@ class HomeScreen extends StatelessWidget {
           title: s.brigadeStatsTitle,
           subtitle: s.brigadeStatsSubtitle,
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
+            MaterialPageRoute<void>(
               builder: (_) =>
                   const BrigadeStatsScreen(scopeToOwnOrganization: true),
             ),
@@ -207,9 +209,9 @@ class HomeScreen extends StatelessWidget {
           iconColor: const Color(0xFF1CABE2),
           title: s.actionReadNfc,
           subtitle: s.actionReadNfcSub,
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const ReadNfcScreen())),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ReadNfcScreen()),
+          ),
         ),
         const SizedBox(height: 14),
         if (user.role.canRegisterPatient) ...[
@@ -220,7 +222,9 @@ class HomeScreen extends StatelessWidget {
             title: s.actionNewPatient,
             subtitle: s.actionNewPatientSub,
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const RegisterNfcScreen()),
+              MaterialPageRoute<void>(
+                builder: (_) => const RegisterNfcScreen(),
+              ),
             ),
           ),
           const SizedBox(height: 14),
@@ -232,14 +236,16 @@ class HomeScreen extends StatelessWidget {
           title: s.actionSearchPatient,
           subtitle: s.actionSearchPatientSub,
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const LossOfWristbandScreen()),
+            MaterialPageRoute<void>(
+              builder: (_) => const LossOfWristbandScreen(),
+            ),
           ),
         ),
         const SizedBox(height: 14),
         _SyncCard(
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const SyncQueueScreen())),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const SyncQueueScreen()),
+          ),
         ),
         const SizedBox(height: 28),
         _LogoutButton(onTap: () => _logout(context)),

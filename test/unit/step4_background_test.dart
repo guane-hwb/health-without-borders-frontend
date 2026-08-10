@@ -180,7 +180,7 @@ void main() {
       "'04' → relGrandparents",
       () => expect(relLabel(s, '04'), s.relGrandparents),
     );
-    test("código desconocido → devuelve el código (fallback)", () {
+    test('código desconocido → devuelve el código (fallback)', () {
       expect(relLabel(s, '99'), '99');
       expect(relLabel(s, ''), '');
       expect(relLabel(s, 'XYZ'), 'XYZ');
@@ -243,7 +243,7 @@ void main() {
       "'06' → allergenOther",
       () => expect(catLabel(s, '06'), s.allergenOther),
     );
-    test("código desconocido → fallback al código", () {
+    test('código desconocido → fallback al código', () {
       expect(catLabel(s, '07'), '07');
       expect(catLabel(s, ''), '');
     });
@@ -289,7 +289,7 @@ void main() {
       "'unknown' → medStatusUnknown",
       () => expect(medStatusLabel(s, 'unknown'), s.medStatusUnknown),
     );
-    test("código desconocido → fallback al código", () {
+    test('código desconocido → fallback al código', () {
       expect(medStatusLabel(s, 'other'), 'other');
       expect(medStatusLabel(s, ''), '');
     });

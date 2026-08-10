@@ -158,7 +158,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
     final r = e.toPatientRecord();
     if (r == null) return;
     Navigator.of(context).push(
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => PatientProfileScreen(patient: r, readOnly: true),
       ),
     );

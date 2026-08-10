@@ -93,7 +93,7 @@ class ProfileHeader extends StatelessWidget {
                 icon: const Icon(Icons.arrow_back, color: AppColors.white),
               ),
               const Spacer(),
-              LanguageToggle(),
+              const LanguageToggle(),
               const SizedBox(width: 4),
             ],
           ),

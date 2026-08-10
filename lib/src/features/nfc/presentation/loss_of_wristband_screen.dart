@@ -68,7 +68,7 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
       lastDate: now,
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
-          colorScheme: ColorScheme.light(
+          colorScheme: const ColorScheme.light(
             primary: AppColors.primary,
             onPrimary: AppColors.white,
             surface: AppColors.white,

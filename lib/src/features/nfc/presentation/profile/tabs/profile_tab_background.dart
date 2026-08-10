@@ -44,8 +44,8 @@ class ProfileTabBackground extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         if (bg.chronicConditions.isEmpty)
-          ProfileCard(
-            child: const Text(
+          const ProfileCard(
+            child: Text(
               'Sin condiciones crónicas registradas.',
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
@@ -96,8 +96,8 @@ class ProfileTabBackground extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         if (bg.medications.isEmpty)
-          ProfileCard(
-            child: const Text(
+          const ProfileCard(
+            child: Text(
               'Sin medicamentos registrados.',
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
@@ -123,8 +123,8 @@ class ProfileTabBackground extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         if (bg.familyHistory.isEmpty)
-          ProfileCard(
-            child: const Text(
+          const ProfileCard(
+            child: Text(
               'Sin antecedentes familiares registrados.',
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),

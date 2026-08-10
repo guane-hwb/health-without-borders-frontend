@@ -121,7 +121,9 @@ class ProfileTabConsultations extends StatelessWidget {
 
   void _showDetail(BuildContext context, MedicalHistoryItem item) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => _ConsultationDetailScreen(item: item)),
+      MaterialPageRoute<void>(
+        builder: (_) => _ConsultationDetailScreen(item: item),
+      ),
     );
   }
 }

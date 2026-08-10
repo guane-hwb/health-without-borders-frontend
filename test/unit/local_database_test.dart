@@ -404,7 +404,7 @@ void main() {
 
     test('getAllRecords orders rows by createdAt descending', () async {
       await localDb.savePatient(_buildRecord(patientId: 'p-first'));
-      await Future.delayed(const Duration(milliseconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
       await localDb.savePatient(_buildRecord(patientId: 'p-second'));
 
       final all = await localDb.getAllRecords();
@@ -429,7 +429,7 @@ void main() {
 
     test('getUnsyncedRecords orders rows by createdAt ascending', () async {
       await localDb.savePatient(_buildRecord(patientId: 'p-old'));
-      await Future.delayed(const Duration(milliseconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
       await localDb.savePatient(_buildRecord(patientId: 'p-new'));
 
       final unsynced = await localDb.getUnsyncedRecords();

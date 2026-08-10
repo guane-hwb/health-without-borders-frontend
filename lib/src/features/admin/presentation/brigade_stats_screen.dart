@@ -268,8 +268,6 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
   }
 }
 
-// ── Sub-widgets ───────────────────────────────────────────────────────────
-
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.title});
   final String title;
@@ -614,7 +612,7 @@ class _KpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.isEs; // v2-i18n-por-comparacion-de-cadena
+    final bool isEs = s.isEs;
     final bool monthly = stats.trend.isMonthly;
 
     final patientsTrend = _TrendLabel.from(
@@ -782,7 +780,7 @@ class _VaccineBarChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.isEs; // v2-i18n-por-comparacion-de-cadena
+    final bool isEs = s.isEs;
     final int maxCount = stats.maxVaccineCount;
     final rows = stats.vaccines.take(maxRows).toList();
 
@@ -885,7 +883,7 @@ class _AllergyChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.isEs; // v2-i18n-por-comparacion-de-cadena
+    final bool isEs = s.isEs;
 
     if (allergies.isEmpty && others == 0) {
       return _EmptyView(message: s.statsEmpty);
@@ -948,7 +946,7 @@ class _NationalityList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.isEs; // v2-i18n-por-comparacion-de-cadena
+    final bool isEs = s.isEs;
 
     if (nationalities.isEmpty && others == 0) {
       return _EmptyView(message: s.statsEmpty);

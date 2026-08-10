@@ -1,25 +1,24 @@
 // test/unit/patient_profile_screen_test.dart
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/patient_profile_helpers.dart';
 
 // ── _age ────────────────────────────────────────────────────────────────────
 int? computeAge(String dob, DateTime now) {
-  try {
-    final parts = dob.split('-');
-    if (parts.length != 3) return null;
-    final dobDate = DateTime(
-      int.parse(parts[0]),
-      int.parse(parts[1]),
-      int.parse(parts[2]),
-    );
-    var age = now.year - dobDate.year;
-    if (now.month < dobDate.month ||
-        (now.month == dobDate.month && now.day < dobDate.day)) {
-      age--;
-    }
-    return age;
-  } catch (_) {
-    return null;
+  final parts = dob.split('-');
+  if (parts.length != 3 || dob.length != 10) return null;
+
+  final dobDateTime = tryParsePatientDate(dob);
+  if (dobDateTime == null) return null;
+
+  var age = now.year - dobDateTime.year;
+  if (now.month < dobDateTime.month ||
+      (now.month == dobDateTime.month && now.day < dobDateTime.day)) {
+    age--;
   }
+  return age >= 0 ? age : null;
 }
 
 // ── _initials ────────────────────────────────────────────────────────────────
@@ -114,10 +113,6 @@ String docTypeLabel(String documentType) {
     default:
       return documentType;
   }
-}
-
-bool resolveHasInternet(List<String> results) {
-  return !results.contains('none');
 }
 
 void main() {
@@ -356,27 +351,42 @@ void main() {
     test('53. cadena vacía → cadena vacía', () => expect(docTypeLabel(''), ''));
   });
 
-  group('resolveHasInternet (6 tests)', () {
+  group('hasInternetConnection (6 tests)', () {
     test(
       '54. true cuando hay wifi',
-      () => expect(resolveHasInternet(['wifi']), true),
+      () => expect(hasInternetConnection([ConnectivityResult.wifi]), true),
     );
     test(
       '55. true cuando hay mobile',
-      () => expect(resolveHasInternet(['mobile']), true),
+      () => expect(hasInternetConnection([ConnectivityResult.mobile]), true),
     );
     test(
       '56. false cuando contiene none',
-      () => expect(resolveHasInternet(['none']), false),
+      () => expect(hasInternetConnection([ConnectivityResult.none]), false),
     );
     test(
       '57. false cuando hay varios resultados y uno es none',
-      () => expect(resolveHasInternet(['wifi', 'none']), false),
+      () => expect(
+        hasInternetConnection([
+          ConnectivityResult.wifi,
+          ConnectivityResult.none,
+        ]),
+        false,
+      ),
     );
-    test('58. lista vacía → true', () => expect(resolveHasInternet([]), true));
+    test(
+      '58. lista vacía → true',
+      () => expect(hasInternetConnection(const []), true),
+    );
     test(
       '59. múltiples tipos sin none → true',
-      () => expect(resolveHasInternet(['wifi', 'ethernet']), true),
+      () => expect(
+        hasInternetConnection([
+          ConnectivityResult.wifi,
+          ConnectivityResult.ethernet,
+        ]),
+        true,
+      ),
     );
   });
 }

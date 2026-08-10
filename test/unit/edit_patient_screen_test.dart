@@ -17,34 +17,41 @@ import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/edit_patient_screen.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
-class _MockAuthRepository extends Mock implements AuthRepository {}
+class MockAuthRepository extends Mock implements AuthRepository {}
 
-class _MockUserRepository extends Mock implements UserRepository {}
+class MockUserRepository extends Mock implements UserRepository {}
 
-class _MockPatientRepository extends Mock implements PatientRepository {}
+class MockPatientRepository extends Mock implements PatientRepository {}
 
-class _MockLocalDatabase extends Mock implements LocalDatabase {}
+class MockLocalDatabase extends Mock implements LocalDatabase {}
 
-class _MockSyncEngine extends Mock implements SyncEngine {}
+class MockSyncEngine extends Mock implements SyncEngine {}
 
-class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
+class FakePatientFullRecord extends Fake implements PatientFullRecord {}
 
-class _MockReachability extends Mock implements Reachability {}
+class MockReachability extends Mock implements Reachability {}
 
-AppScope _buildTestScope({Widget? child}) {
-  final auth = _MockAuthRepository();
-  final user = _MockUserRepository();
-  final repo = _MockPatientRepository();
-  final db = _MockLocalDatabase();
-  final sync = _MockSyncEngine();
+AppScope _buildTestScope({
+  Widget? child,
+  MockLocalDatabase? dbMock,
+  MockSyncEngine? syncMock,
+}) {
+  final auth = MockAuthRepository();
+  final user = MockUserRepository();
+  final repo = MockPatientRepository();
+  final db = dbMock ?? MockLocalDatabase();
+  final sync = syncMock ?? MockSyncEngine();
 
-  when(() => db.savePatient(any())).thenAnswer((_) async {});
+  when(() => db.savePatient(any<PatientFullRecord>())).thenAnswer((_) async {});
   when(
-    () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
+    () => db.markChipsDirty(
+      any<String>(),
+      guardian: any<bool>(named: 'guardian'),
+    ),
   ).thenAnswer((_) async {});
   when(() => sync.syncAll()).thenAnswer((_) async => true);
 
-  final resolvedReach = _MockReachability();
+  final resolvedReach = MockReachability();
   when(() => resolvedReach.probe()).thenAnswer((_) async => true);
 
   return AppScope(
@@ -62,9 +69,13 @@ AppScope _buildTestScope({Widget? child}) {
   );
 }
 
-/// Minimal widget tree configuration that satisfies localization dependencies.
-Widget _wrap(Widget child, {String locale = 'es'}) {
-  final scope = _buildTestScope();
+Widget _wrap(
+  Widget child, {
+  String locale = 'es',
+  MockLocalDatabase? dbMock,
+  MockSyncEngine? syncMock,
+}) {
+  final scope = _buildTestScope(dbMock: dbMock, syncMock: syncMock);
   return AppScope(
     authRepository: scope.authRepository,
     userRepository: scope.userRepository,
@@ -107,7 +118,6 @@ class _AppLocaleProviderState extends State<_AppLocaleProvider> {
   }
 }
 
-/// Test data factory for PatientFullRecord configurations.
 PatientFullRecord _makeRecord({
   String firstName = 'Laura',
   String firstLastName = 'Torres',
@@ -151,7 +161,6 @@ PatientFullRecord _makeRecord({
   ),
 );
 
-/// Spy observer used to verify Navigator.pop occurrences.
 class _PopSpy extends NavigatorObserver {
   bool didPopCalled = false;
 
@@ -161,14 +170,15 @@ class _PopSpy extends NavigatorObserver {
   }
 }
 
-/// Utility helper to programmatically push EditPatientScreen onto a root routing stack.
 Future<void> _pumpViaRoute(
   WidgetTester tester,
   PatientFullRecord record,
   _PopSpy spy, {
   String locale = 'es',
+  MockLocalDatabase? dbMock,
+  MockSyncEngine? syncMock,
 }) async {
-  final scope = _buildTestScope();
+  final scope = _buildTestScope(dbMock: dbMock, syncMock: syncMock);
   await tester.pumpWidget(
     AppScope(
       authRepository: scope.authRepository,
@@ -209,10 +219,9 @@ final _s = AppStrings.forTesting('es');
 
 void main() {
   setUpAll(() {
-    registerFallbackValue(_FakePatientFullRecord());
+    registerFallbackValue(FakePatientFullRecord());
   });
 
-  /// Modify global binding parameters to enforce custom physical viewport dimensions.
   setUp(() {
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
     binding.platformDispatcher.views.first.physicalSize = const Size(800, 1400);
@@ -528,45 +537,80 @@ void main() {
     });
   });
 
-  group('EditPatientScreen – botones de acción', () {
-    testWidgets('el botón Volver dispara Navigator.pop', (tester) async {
-      final spy = _PopSpy();
-      await _pumpViaRoute(tester, _makeRecord(), spy);
+  group(
+    'EditPatientScreen – botones de acción y verficación (v2-edit-patient-sin-verify)',
+    () {
+      testWidgets('el botón Volver dispara Navigator.pop', (tester) async {
+        final spy = _PopSpy();
+        await _pumpViaRoute(tester, _makeRecord(), spy);
 
-      await tester.tap(find.byIcon(Icons.arrow_back_ios));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.arrow_back_ios));
+        await tester.pumpAndSettle();
 
-      expect(spy.didPopCalled, isTrue);
-    });
+        expect(spy.didPopCalled, isTrue);
+      });
 
-    testWidgets('el botón Guardar dispara Navigator.pop', (tester) async {
-      final spy = _PopSpy();
-      await _pumpViaRoute(tester, _makeRecord(), spy);
+      testWidgets(
+        'el botón Guardar dispara Navigator.pop y verifica persistencia',
+        (tester) async {
+          final spy = _PopSpy();
+          final dbMock = MockLocalDatabase();
+          final syncMock = MockSyncEngine();
 
-      await tester.tap(find.byIcon(Icons.save));
-      await tester.pumpAndSettle();
+          when(
+            () => dbMock.savePatient(any<PatientFullRecord>()),
+          ).thenAnswer((_) async {});
+          when(
+            () => dbMock.markChipsDirty(
+              any<String>(),
+              guardian: any<bool>(named: 'guardian'),
+            ),
+          ).thenAnswer((_) async {});
+          when(() => syncMock.syncAll()).thenAnswer((_) async => true);
 
-      expect(spy.didPopCalled, isTrue);
-    });
+          await _pumpViaRoute(
+            tester,
+            _makeRecord(),
+            spy,
+            dbMock: dbMock,
+            syncMock: syncMock,
+          );
 
-    testWidgets('el botón Volver muestra la etiqueta i18n correcta', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
-      await tester.pumpAndSettle();
+          await tester.tap(find.byIcon(Icons.save));
+          await tester.pumpAndSettle();
 
-      expect(find.text(_s.back), findsOneWidget);
-    });
+          expect(spy.didPopCalled, isTrue);
+          verify(() => dbMock.savePatient(any<PatientFullRecord>())).called(1);
+          verify(
+            () => dbMock.markChipsDirty('uuid-widget-test', guardian: true),
+          ).called(1);
+          verify(() => syncMock.syncAll()).called(1);
+        },
+      );
 
-    testWidgets('el botón Guardar muestra la etiqueta i18n correcta', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
-      await tester.pumpAndSettle();
+      testWidgets('el botón Volver muestra la etiqueta i18n correcta', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _wrap(EditPatientScreen(patient: _makeRecord())),
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.text(_s.save), findsOneWidget);
-    });
-  });
+        expect(find.text(_s.back), findsOneWidget);
+      });
+
+      testWidgets('el botón Guardar muestra la etiqueta i18n correcta', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _wrap(EditPatientScreen(patient: _makeRecord())),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text(_s.save), findsOneWidget);
+      });
+    },
+  );
 
   group('EditPatientScreen – locale inglés', () {
     testWidgets('renderiza sin errores en inglés', (tester) async {

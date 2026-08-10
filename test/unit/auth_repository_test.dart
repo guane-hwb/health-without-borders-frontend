@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 
@@ -16,6 +17,8 @@ import 'package:health_without_borders_frontend/src/features/auth/domain/user_se
 class MockApiClient extends Mock implements ApiClient {}
 
 class MockSecureStorage extends Mock implements FlutterSecureStorage {}
+
+class MockLocalDatabase extends Mock implements LocalDatabase {}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -41,7 +44,12 @@ Map<String, dynamic> _meResponse({String email = 'doc@hwb.org'}) => {
 AuthRepository _makeRepo({
   required MockApiClient api,
   required MockSecureStorage storage,
-}) => AuthRepository(apiClient: api, secureStorage: storage);
+  LocalDatabase? localDb,
+}) => AuthRepository(
+  apiClient: api,
+  secureStorage: storage,
+  localDatabase: localDb,
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TESTS
@@ -49,6 +57,7 @@ AuthRepository _makeRepo({
 void main() {
   late MockApiClient api;
   late MockSecureStorage storage;
+  late MockLocalDatabase localDb;
   late AuthRepository repo;
 
   setUpAll(() {
@@ -59,7 +68,12 @@ void main() {
   setUp(() {
     api = MockApiClient();
     storage = MockSecureStorage();
-    repo = _makeRepo(api: api, storage: storage);
+    localDb = MockLocalDatabase();
+    repo = _makeRepo(api: api, storage: storage, localDb: localDb);
+
+    when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+    when(() => localDb.clearAll()).thenAnswer((_) async {});
+    when(() => localDb.destroyEncryptionKey()).thenAnswer((_) async {});
 
     when(
       () => storage.write(
@@ -68,6 +82,41 @@ void main() {
       ),
     ).thenAnswer((_) async {});
     when(() => storage.delete(key: any(named: 'key'))).thenAnswer((_) async {});
+  });
+
+  group('la cola offline sobrevive al cierre de sesión', () {
+    test('clearSession NUNCA borra la base local', () async {
+      await repo.clearSession();
+      verifyNever(() => localDb.clearAll());
+    });
+
+    test('logout() por defecto conserva la base local sin purgar', () async {
+      await repo.logout();
+      verifyNever(() => localDb.clearAll());
+    });
+
+    test('logout(wipeLocalData: true) no purga si quedan pendientes', () async {
+      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 3);
+      await repo.logout(wipeLocalData: true);
+      verifyNever(() => localDb.clearAll());
+    });
+
+    test('logout(wipeLocalData: true) purga sólo con la cola vacía', () async {
+      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+      when(
+        () => storage.read(key: AuthRepository.tokenKey),
+      ).thenAnswer((_) async => _validJwt('a@b.com'));
+      when(
+        () => api.postJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer((_) async => <String, dynamic>{});
+
+      await repo.logout(wipeLocalData: true);
+      verify(() => localDb.clearAll()).called(1);
+    });
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -412,8 +461,6 @@ void main() {
           body: captureAny(named: 'body'),
         ),
       ).captured;
-      // mocktail returns captured named args in the method's declaration
-      // order: postJson({path, body, headers}) -> [path, body, headers].
       expect(captured[0], '/api/v1/logout');
       expect((captured[1] as Map)['refresh_token'], 'refresh-xyz');
       expect((captured[2] as Map)['Authorization'], 'Bearer $jwt');
@@ -713,7 +760,6 @@ void main() {
       expect(token, isNull);
       expect(repo.sessionExpired.value, isTrue);
       expect(repo.currentUser, isNull);
-      // clearSession ran: the persisted profile was wiped.
       verify(() => storage.delete(key: AuthRepository.sessionKey)).called(1);
     });
 
@@ -827,26 +873,6 @@ void main() {
       expect(user, isNull);
     });
 
-    //   test(
-    //     'sin sesión y _fetchMe lanza excepción genérica → devuelve null',
-    //     () async {
-    //       final jwt = _validJwt('x@y.com');
-    //       when(
-    //         () => storage.read(key: AuthRepository.tokenKey),
-    //       ).thenAnswer((_) async => jwt);
-    //       when(
-    //         () => api.getJson(
-    //           path: any(named: 'path'),
-    //           headers: any(named: 'headers'),
-    //         ),
-    //       ).thenThrow(Exception('unexpected'));
-
-    //       final user = await repo.getCurrentUser();
-
-    //       expect(user, isNull);
-    //     },
-    //   );
-    // });
     test(
       'sin sesión y _fetchMe lanza excepción genérica → devuelve sesión fallback desde JWT',
       () async {
@@ -1003,13 +1029,10 @@ void main() {
         final session = await repo.restoreSession();
 
         expect(session, isNotNull);
-        // The whole point: an org_admin is restored as org_admin, NOT downgraded
-        // to the doctor default that a JWT-only offline session would yield.
         expect(session!.role, UserRole.orgAdmin);
         expect(session.email, 'admin@hwb.org');
         expect(session.id, '7');
         expect(repo.currentUser, isNotNull);
-        // No network was needed to restore.
         verifyNever(
           () => api.getJson(
             path: any(named: 'path'),
@@ -1039,7 +1062,6 @@ void main() {
 
         expect(session?.email, 'doc@hwb.org');
         expect(session?.id, '42');
-        // A genuine profile (non-empty id) is persisted for exact future starts.
         verify(
           () => storage.write(
             key: AuthRepository.sessionKey,
@@ -1246,7 +1268,6 @@ void main() {
 
       final session = await repo.login(email: 'x@y.com', password: 'p');
 
-      // _emailFromJwt devuelve null → UserSession.fromEmail('user')
       expect(session.email, 'user');
     });
   });

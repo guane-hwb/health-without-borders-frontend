@@ -20,6 +20,7 @@ import '../../../auth/domain/user_session.dart';
 import '../../domain/patient_record.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
+import 'patient_profile_helpers.dart';
 import 'sheets/add_allergy_sheet.dart';
 import 'sheets/add_chronic_condition_sheet.dart';
 import 'sheets/add_family_history_sheet.dart';
@@ -122,7 +123,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   void _updateConnectivityStatus(List<ConnectivityResult> results) {
-    final hasNet = !results.contains(ConnectivityResult.none);
+    final hasNet = hasInternetConnection(results);
     if (_hasInternet != hasNet) {
       setState(() {
         _hasInternet = hasNet;
@@ -166,7 +167,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   Future<void> _updateNfcChips() async {
     if (_isUpdatingChips) return;
     final scope = AppScope.of(context);
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final isEs = AppStrings.of(context).isEs;
 
     final nfcKey = await scope.authRepository.getNfcEncryptionKey();
     if (!mounted) return;
@@ -334,7 +335,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       );
       if (!mounted) return;
       setState(() => _lastSaveFailed = true);
-      final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+      final isEs = AppStrings.of(context).isEs;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -541,7 +542,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (widget.readOnly) return;
     if (_isSyncing) return;
 
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final isEs = AppStrings.of(context).isEs;
 
     if (!_hasInternet && !silent) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -888,7 +889,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   Future<void> _confirmExit() async {
     if (_lastSaveFailed) {
-      final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+      final isEs = AppStrings.of(context).isEs;
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -919,7 +920,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       if (!mounted) return;
     }
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const HomeScreen()),
+      MaterialPageRoute<void>(builder: (context) => const HomeScreen()),
       (route) => false,
     );
   }

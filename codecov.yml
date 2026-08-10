@@ -2,11 +2,11 @@ coverage:
   status:
     project:
       default:
-        target: 15%
-        threshold: 2%
+        target: 80%
+        threshold: 1%
     patch:
       default:
-        target: 60%
+        target: 70%
 
 ignore:
   - "lib/**/*.g.dart"
