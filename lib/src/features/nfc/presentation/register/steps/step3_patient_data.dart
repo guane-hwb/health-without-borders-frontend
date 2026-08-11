@@ -1,8 +1,10 @@
 // lib/src/features/nfc/presentation/register/steps/step3_patient_data.dart
+
 import 'package:flutter/material.dart';
 import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../core/validation/identity_validators.dart';
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../shared/country_display.dart';
 import '../../../domain/register_draft.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../widgets/nfc_uid_field.dart';
@@ -37,9 +39,7 @@ const _kReqStyle = TextStyle(
 );
 
 const List<String> kEthnicityCodes = <String>['6', '1', '2', '3', '4', '5'];
-
 const List<String> kNoEthnicityCodes = <String>['6', '99'];
-
 const List<String> kDisabilityCodes = <String>[
   '00',
   '01',
@@ -200,6 +200,15 @@ class _Step3State extends State<Step3PatientData> {
       );
     }
 
+    final natCode = widget.draft.nationalityCode;
+    if (!kSupportedNationalityCodes.contains(natCode)) {
+      missing.add(
+        isEs
+            ? 'Nacionalidad no válida (código ISO 3166-1 requerido)'
+            : 'Invalid nationality (ISO 3166-1 code required)',
+      );
+    }
+
     if (missing.isNotEmpty) {
       final errPrefix = isEs ? 'Campos requeridos' : 'Required fields';
       setState(() => _err = '$errPrefix: ${missing.join(', ')}');
@@ -226,6 +235,8 @@ class _Step3State extends State<Step3PatientData> {
         ? null
         : _ethnicComm.text.trim();
     d.bloodType = (d.bloodType ?? '').trim().isEmpty ? null : d.bloodType;
+
+    d.nationalityName = countryDisplay(d.nationalityCode).name(isEs: isEs);
 
     d.weight = double.tryParse(_weight.text.trim().replaceAll(',', '.'));
     d.height = double.tryParse(_height.text.trim().replaceAll(',', '.'));
@@ -271,13 +282,8 @@ class _Step3State extends State<Step3PatientData> {
     };
 
     final nat = <String, String>{
-      'COL': isEs ? 'Colombiana' : 'Colombian',
-      'VEN': isEs ? 'Venezolana' : 'Venezuelan',
-      'ECU': isEs ? 'Ecuatoriana' : 'Ecuadorian',
-      'PER': isEs ? 'Peruana' : 'Peruvian',
-      'HTI': isEs ? 'Haitiana' : 'Haitian',
-      'CUB': isEs ? 'Cubana' : 'Cuban',
-      'OTHER': isEs ? 'Otra' : 'Other',
+      for (final code in kSupportedNationalityCodes)
+        code: countryDisplay(code).name(isEs: isEs),
     };
 
     final ethLabels = <String, String>{
@@ -752,7 +758,6 @@ class _SectionHeader extends StatelessWidget {
                     color: AppColors.textPrimary,
                   ),
                 ),
-              //
             ],
           ),
         ),

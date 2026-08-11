@@ -7,6 +7,8 @@ import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/country_display.dart';
+import '../../../shared/widgets/hwb_async_state_view.dart';
+import '../../../shared/widgets/hwb_screen_header.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../data/stats_repository.dart';
 import '../domain/brigade_stats.dart';
@@ -31,7 +33,8 @@ class BrigadeStatsScreen extends StatefulWidget {
   State<BrigadeStatsScreen> createState() => _BrigadeStatsScreenState();
 }
 
-class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
+class _BrigadeStatsScreenState extends State<BrigadeStatsScreen>
+    with WidgetsBindingObserver {
   BrigadeStats? _stats;
   List<_OrgFilter> _orgs = const <_OrgFilter>[];
   String _selectedOrgId = kAllOrgsFilterId;
@@ -43,7 +46,21 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _load();
+    }
   }
 
   bool get _showFilter => !widget.scopeToOwnOrganization;
@@ -53,8 +70,18 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
     return _selectedOrgId == kAllOrgsFilterId ? null : _selectedOrgId;
   }
 
+  StatsDateRange _reevaluateRange(StatsDateRange range) {
+    return switch (range.kind) {
+      StatsRangeKind.all => StatsDateRange.all,
+      StatsRangeKind.thisMonth => StatsDateRange.thisMonth(),
+      StatsRangeKind.last30Days => StatsDateRange.last30Days(),
+      StatsRangeKind.custom => range,
+    };
+  }
+
   Future<void> _load() async {
     setState(() {
+      _range = _reevaluateRange(_range);
       _loading = true;
       _failure = null;
       _errorDetail = null;
@@ -112,7 +139,6 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
       await _pickCustomRange();
       return;
     }
-    if (kind == _range.kind) return;
 
     final StatsDateRange next = switch (kind) {
       StatsRangeKind.all => StatsDateRange.all,
@@ -120,6 +146,9 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
       StatsRangeKind.last30Days => StatsDateRange.last30Days(),
       StatsRangeKind.custom => _range,
     };
+
+    if (next == _range) return;
+
     setState(() => _range = next);
     await _load();
   }
@@ -151,38 +180,10 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
           children: [
             Column(
               children: [
-                Container(
-                  color: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: AppColors.white,
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          widget.scopeToOwnOrganization
-                              ? s.statsScreenTitleOrg
-                              : s.statsScreenTitle,
-                          style: const TextStyle(
-                            color: AppColors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      _LocaleSwitcher(),
-                    ],
-                  ),
+                HwbScreenHeader(
+                  title: widget.scopeToOwnOrganization
+                      ? s.statsScreenTitleOrg
+                      : s.statsScreenTitle,
                 ),
                 Expanded(child: _buildBody()),
               ],
@@ -200,19 +201,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_failure != null) {
-      return _FailureView(
-        failure: _failure!,
-        detail: _errorDetail,
-        onRetry: _load,
-      );
-    }
-
     final s = AppStrings.of(context);
-    final stats = _stats!;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -234,35 +223,117 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
           _DateRangeBar(selected: _range.kind, onSelected: _onRangeSelected),
           if (_range.isBounded) ...[
             const SizedBox(height: 6),
-            _ActiveRangeLabel(range: _range),
+            _ActiveRangeLabel(
+              range: _range,
+              windowFrom: _stats?.window.dateFrom,
+              windowTo: _stats?.window.dateTo,
+            ),
           ],
           const SizedBox(height: 16),
-          if (stats.isEmpty)
-            _EmptyView(message: s.statsEmpty)
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_failure != null)
+            _buildFailureView()
+          else if (_stats!.isEmpty)
+            HwbEmptyStateView(message: s.statsEmpty)
           else ...[
+            if (_stats?.generatedAt != null) ...[
+              _GeneratedAtLabel(generatedAt: _stats!.generatedAt!),
+              const SizedBox(height: 10),
+            ],
             _SectionTitle(title: s.tabSummary),
             const SizedBox(height: 10),
-            _KpiGrid(stats: stats),
+            _KpiGrid(stats: _stats!),
             const SizedBox(height: 20),
             _SectionTitle(title: s.statsVaccineDistribution),
             const SizedBox(height: 10),
-            _VaccineBarChart(stats: stats),
+            _VaccineBarChart(stats: _stats!),
             const SizedBox(height: 20),
             _SectionTitle(title: s.statsAllergyDistribution),
             const SizedBox(height: 10),
             _AllergyChips(
-              allergies: stats.allergies,
-              others: stats.allergiesOthers,
+              allergies: _stats!.allergies,
+              others: _stats!.allergiesOthers,
             ),
             const SizedBox(height: 20),
             _SectionTitle(title: s.statsNationalityDistribution),
             const SizedBox(height: 10),
             _NationalityList(
-              nationalities: stats.nationalities,
-              others: stats.nationalitiesOthers,
+              nationalities: _stats!.nationalities,
+              others: _stats!.nationalitiesOthers,
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildFailureView() {
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
+    IconData icon = Icons.error_outline;
+
+    String message =
+        _errorDetail ??
+        (isEs
+            ? 'Ocurrió un error al cargar las estadísticas.'
+            : 'An error occurred loading stats.');
+    if (_failure == _Failure.forbidden) {
+      icon = Icons.lock_outline;
+      message = s.statsForbidden;
+    } else if (_failure == _Failure.offline) {
+      icon = Icons.cloud_off_rounded;
+      message = s.statsOfflineHint;
+    }
+
+    return HwbAsyncErrorView(
+      message: message,
+      onRetry: _failure == _Failure.forbidden ? null : _load,
+      icon: icon,
+    );
+  }
+}
+
+class _GeneratedAtLabel extends StatelessWidget {
+  const _GeneratedAtLabel({required this.generatedAt});
+  final DateTime generatedAt;
+
+  static String _month(AppStrings s, int month) => switch (month) {
+    1 => s.monEne,
+    2 => s.monFeb,
+    3 => s.monMar,
+    4 => s.monAbr,
+    5 => s.monMay,
+    6 => s.monJun,
+    7 => s.monJul,
+    8 => s.monAgo,
+    9 => s.monSep,
+    10 => s.monOct,
+    11 => s.monNov,
+    _ => s.monDic,
+  };
+
+  static String _fmt(DateTime d, AppStrings s) {
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mm = d.minute.toString().padLeft(2, '0');
+    return '${d.day} ${_month(s, d.month)} ${d.year}, $hh:$mm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, bottom: 6),
+      child: Text(
+        s.statsGeneratedAt(_fmt(generatedAt, s)),
+        style: const TextStyle(
+          fontSize: 10,
+          color: AppColors.textSecondary,
+          fontStyle: FontStyle.italic,
+        ),
       ),
     );
   }
@@ -280,88 +351,6 @@ class _SectionTitle extends StatelessWidget {
       fontWeight: FontWeight.w700,
       color: AppColors.textSecondary,
       letterSpacing: 0.6,
-    ),
-  );
-}
-
-class _FailureView extends StatelessWidget {
-  const _FailureView({
-    required this.failure,
-    required this.onRetry,
-    this.detail,
-  });
-
-  final _Failure failure;
-  final String? detail;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppStrings.of(context);
-    final isEs = s.isEs;
-    IconData icon = Icons.error_outline;
-
-    String message =
-        detail ??
-        (isEs
-            ? 'Ocurrió un error al cargar las estadísticas.'
-            : 'An error occurred loading stats.');
-    if (failure == _Failure.forbidden) {
-      icon = Icons.lock_outline;
-      message = s.statsForbidden;
-    } else if (failure == _Failure.offline) {
-      icon = Icons.cloud_off_rounded;
-      message = s.statsOfflineHint;
-    }
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: AppColors.error),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.error),
-            ),
-            const SizedBox(height: 16),
-            if (failure != _Failure.forbidden)
-              ElevatedButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: Text(s.retry),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyView extends StatelessWidget {
-  const _EmptyView({required this.message});
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-    child: Column(
-      children: [
-        const Icon(
-          Icons.insights_outlined,
-          size: 48,
-          color: AppColors.textSecondary,
-        ),
-        const SizedBox(height: 12),
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-        ),
-      ],
     ),
   );
 }
@@ -418,47 +407,6 @@ class _OrgFilterDropdown extends StatelessWidget {
             );
           }).toList(),
         ),
-      ),
-    );
-  }
-}
-
-class _LocaleSwitcher extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final locale = AppLocale.of(context).locale;
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: ['es', 'en'].map((lang) {
-          final selected = locale == lang;
-          return GestureDetector(
-            onTap: () => AppLocale.of(context).setLocale(lang),
-            child: Container(
-              margin: const EdgeInsets.only(left: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: selected
-                    ? Colors.white.withValues(alpha: 0.95)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                lang.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? AppColors.primary : AppColors.white,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
       ),
     );
   }
@@ -530,9 +478,15 @@ class _DateRangeBar extends StatelessWidget {
 }
 
 class _ActiveRangeLabel extends StatelessWidget {
-  const _ActiveRangeLabel({required this.range});
+  const _ActiveRangeLabel({
+    required this.range,
+    this.windowFrom,
+    this.windowTo,
+  });
 
   final StatsDateRange range;
+  final DateTime? windowFrom;
+  final DateTime? windowTo;
 
   static String _month(AppStrings s, int month) => switch (month) {
     1 => s.monEne,
@@ -555,15 +509,38 @@ class _ActiveRangeLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final fromDate = windowFrom ?? range.from;
+    final toDate = windowTo ?? range.to;
+
+    if (fromDate == null || toDate == null) return const SizedBox.shrink();
+
+    final baseline = range.comparisonBaseline;
+
     return Padding(
       padding: const EdgeInsets.only(left: 2),
-      child: Text(
-        '${_fmt(range.from!, s)} – ${_fmt(range.to!, s)}',
-        style: const TextStyle(
-          fontSize: 11,
-          color: AppColors.textSecondary,
-          fontWeight: FontWeight.w500,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${_fmt(fromDate, s)} – ${_fmt(toDate, s)}',
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (baseline != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              s.statsComparedTo(_fmt(baseline.from, s), _fmt(baseline.to, s)),
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -622,11 +599,6 @@ class _KpiGrid extends StatelessWidget {
     );
     final vaccinesTrend = _TrendLabel.from(
       stats.trend.vaccineDoses,
-      monthly: monthly,
-      isEs: isEs,
-    );
-    final encountersTrend = _TrendLabel.from(
-      stats.trend.encounters,
       monthly: monthly,
       isEs: isEs,
     );
@@ -692,8 +664,16 @@ class _KpiGrid extends StatelessWidget {
           icon: Icons.medical_information_outlined,
           label: s.statsTotalEncounters,
           value: fmt(stats.totals.encounters),
-          sub: encountersTrend.text,
-          subColor: encountersTrend.color,
+          sub: _TrendLabel.from(
+            stats.trend.encounters,
+            monthly: monthly,
+            isEs: isEs,
+          ).text,
+          subColor: _TrendLabel.from(
+            stats.trend.encounters,
+            monthly: monthly,
+            isEs: isEs,
+          ).color,
           iconColor: const Color(0xFF00695C),
         ),
       ],
@@ -789,7 +769,7 @@ class _VaccineBarChart extends StatelessWidget {
     final rows = stats.vaccines.take(maxRows).toList();
 
     if (rows.isEmpty) {
-      return _EmptyView(message: s.statsEmpty);
+      return HwbEmptyStateView(message: s.statsEmpty);
     }
 
     return Container(
@@ -890,7 +870,7 @@ class _AllergyChips extends StatelessWidget {
     final bool isEs = s.isEs;
 
     if (allergies.isEmpty && others == 0) {
-      return _EmptyView(message: s.statsEmpty);
+      return HwbEmptyStateView(message: s.statsEmpty);
     }
 
     return Wrap(
@@ -953,7 +933,7 @@ class _NationalityList extends StatelessWidget {
     final bool isEs = s.isEs;
 
     if (nationalities.isEmpty && others == 0) {
-      return _EmptyView(message: s.statsEmpty);
+      return HwbEmptyStateView(message: s.statsEmpty);
     }
 
     final rows = <_NationalityRow>[
