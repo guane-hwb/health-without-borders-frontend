@@ -20,6 +20,8 @@ class SyncQueueScreen extends StatefulWidget {
 class _SyncQueueScreenState extends State<SyncQueueScreen> {
   List<LocalPatientEntry> _entries = [];
   bool _loading = true, _syncing = false;
+  int _syncedSoFar = 0;
+  int _syncTotal = 0;
 
   @override
   void initState() {
@@ -68,7 +70,18 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
       return;
     }
 
-    setState(() => _syncing = true);
+    setState(() {
+      _syncing = true;
+      _syncedSoFar = 0;
+      _syncTotal = _entries.length;
+    });
+
+    scope.syncEngine.onRecordSynced =
+        (String patientId, bool success, String? _) {
+          if (!mounted) return;
+          setState(() => _syncedSoFar++);
+        };
+
     try {
       await scope.syncEngine.syncAll();
       await _load();
@@ -108,6 +121,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
         );
       }
     } finally {
+      scope.syncEngine.onRecordSynced = null;
       if (mounted) {
         setState(() => _syncing = false);
       }
@@ -271,7 +285,9 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                                     color: AppColors.white,
                                   ),
                             label: Text(
-                              s.syncAll,
+                              _syncing && _syncTotal > 0
+                                  ? '$_syncedSoFar / $_syncTotal'
+                                  : s.syncAll,
                               style: const TextStyle(
                                 color: AppColors.white,
                                 fontSize: 14,
@@ -416,7 +432,7 @@ class _SyncCard extends StatelessWidget {
             ? 'Error de validación (422): El registro contiene campos incompatibles con el backend.'
             : 'Validation error (422): The record contains incompatible fields.';
       } else {
-        errorMessage = entry.syncError;
+        errorMessage = _friendlyNetworkError(entry.syncError!, isEs);
       }
     }
 
@@ -560,6 +576,20 @@ class _SyncCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static String _friendlyNetworkError(String raw, bool isEs) {
+    final String lower = raw.toLowerCase();
+    final bool isNetwork =
+        lower.contains('timeout') ||
+        lower.contains('socketexception') ||
+        lower.contains('clientexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('unexpected response payload format');
+    if (!isNetwork) return raw;
+    return isEs
+        ? 'No se pudo contactar el servidor. Verifique la conexión a la red.'
+        : 'Could not reach the server. Please check network connection.';
   }
 
   Widget _btn(IconData icon, String label, Color color, VoidCallback onTap) =>

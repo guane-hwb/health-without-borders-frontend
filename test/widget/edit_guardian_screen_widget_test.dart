@@ -153,6 +153,12 @@ class FakeLocalDatabase implements LocalDatabase {
 
   @override
   Future<void> markEmergencyLogsSynced(List<int> emergencyLogIds) async {}
+
+  @override
+  Future<int> getBlockedCount() async => 0;
+
+  @override
+  Future<int> getRetryablePendingCount() async => 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

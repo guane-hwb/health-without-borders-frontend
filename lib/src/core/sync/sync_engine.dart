@@ -1,9 +1,11 @@
 // lib/src/core/sync/sync_engine.dart
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 import '../../features/nfc/data/patient_repository.dart';
 import '../../features/nfc/domain/patient_record.dart';
@@ -14,7 +16,7 @@ import '../utils/app_logger.dart';
 
 enum SyncOneResult { success, failure, busy, notFound }
 
-enum _SyncOutcome { success, failure, abortBatch }
+enum _SyncOutcome { success, failure, networkFailure, abortBatch }
 
 /// Background sync engine that pushes local patient records to the backend.
 class SyncEngine {
@@ -52,10 +54,12 @@ class SyncEngine {
   bool _isSyncing = false;
 
   final ValueNotifier<int> pendingCount = ValueNotifier<int>(0);
+  final ValueNotifier<int> blockedCount = ValueNotifier<int>(0);
 
   Future<void> refreshPendingCount() async {
     try {
-      pendingCount.value = await _localDb.getUnsyncedCount();
+      pendingCount.value = await _localDb.getRetryablePendingCount();
+      blockedCount.value = await _localDb.getBlockedCount();
     } catch (e, stack) {
       AppLogger.e(
         'Error al refrescar conteo de pendientes',
@@ -113,8 +117,6 @@ class SyncEngine {
 
   // ── Sync logic ────────────────────────────────────────────────────────────
 
-  static const Set<int> _permanentErrorCodes = <int>{400, 409, 422};
-
   Future<bool> syncAll() async {
     await refreshPendingCount();
     if (_isSyncing) return false;
@@ -134,23 +136,39 @@ class SyncEngine {
 
       final pending = allUnsynced.where((entry) {
         final code = entry.syncErrorCode;
-        return code == null || !_permanentErrorCodes.contains(code);
+        return code == null || !kPermanentSyncErrorCodes.contains(code);
       }).toList();
 
       AppLogger.d('Iniciando syncAll: ${pending.length} registros pendientes.');
+
+      const int maxConsecutiveNetworkFailures = 3;
+      int consecutiveNetworkFailures = 0;
 
       for (final entry in pending) {
         final outcome = await _syncOne(entry);
         if (outcome == _SyncOutcome.abortBatch) {
           allSuccessful = false;
+          AppLogger.e('Lote abortado por sesión caducada.');
           break;
         }
+        if (outcome == _SyncOutcome.networkFailure) {
+          allSuccessful = false;
+          consecutiveNetworkFailures++;
+          if (consecutiveNetworkFailures >= maxConsecutiveNetworkFailures) {
+            AppLogger.e(
+              'Red inutilizable: abandonando el lote tras $consecutiveNetworkFailures fallos de red consecutivos.',
+            );
+            break;
+          }
+          continue;
+        }
+        consecutiveNetworkFailures = 0;
         if (outcome != _SyncOutcome.success) {
           allSuccessful = false;
         }
       }
 
-      final remaining = await _localDb.getUnsyncedCount();
+      final remaining = await _localDb.getRetryablePendingCount();
       pendingCount.value = remaining;
       onSyncStatusChanged?.call(remaining);
 
@@ -215,16 +233,20 @@ class SyncEngine {
       );
 
       if (e.statusCode == 401) {
-        onRecordSynced?.call(entry.patientId, false, e.message);
+        onRecordSynced?.call(entry.patientId, false, 'Sesión expirada');
         return _SyncOutcome.abortBatch;
       }
 
+      final String safeMsg = (e.statusCode == 422)
+          ? 'Error de validación (422): Campos incompatibles con el backend'
+          : e.message;
+
       await _localDb.markSyncError(
         entry.patientId,
-        e.message,
+        safeMsg,
         statusCode: e.statusCode,
       );
-      onRecordSynced?.call(entry.patientId, false, e.message);
+      onRecordSynced?.call(entry.patientId, false, safeMsg);
       return _SyncOutcome.failure;
     } catch (e, stack) {
       AppLogger.e(
@@ -232,9 +254,21 @@ class SyncEngine {
         error: e,
         stackTrace: stack,
       );
-      await _localDb.markSyncError(entry.patientId, '$e');
-      onRecordSynced?.call(entry.patientId, false, '$e');
-      return _SyncOutcome.failure;
+      final bool isNetworkError =
+          e is TimeoutException ||
+          e is SocketException ||
+          e is http.ClientException ||
+          e.toString().contains('SocketException');
+
+      final String safeMsg = isNetworkError
+          ? 'Error de conexión de red'
+          : 'Error en proceso de sincronización';
+
+      await _localDb.markSyncError(entry.patientId, safeMsg);
+      onRecordSynced?.call(entry.patientId, false, safeMsg);
+      return isNetworkError
+          ? _SyncOutcome.networkFailure
+          : _SyncOutcome.failure;
     }
   }
 

@@ -85,6 +85,8 @@ void main() {
     localDb = MockLocalDatabase();
 
     when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+    when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 0);
+    when(() => localDb.getBlockedCount()).thenAnswer((_) async => 0);
     when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
     when(
       () => localDb.purgeStalePermanentErrors(maxAge: any(named: 'maxAge')),
@@ -117,7 +119,7 @@ void main() {
 
   group('refreshPendingCount', () {
     test('actualiza pendingCount con el valor de la base local', () async {
-      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 7);
+      when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 7);
 
       await engine.refreshPendingCount();
 
@@ -125,12 +127,12 @@ void main() {
     });
 
     test('mantiene el valor previo si la base local lanza un error', () async {
-      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 3);
+      when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 3);
       await engine.refreshPendingCount();
       expect(engine.pendingCount.value, 3);
 
       when(
-        () => localDb.getUnsyncedCount(),
+        () => localDb.getRetryablePendingCount(),
       ).thenThrow(Exception('storage down'));
       await engine.refreshPendingCount();
 
@@ -143,7 +145,7 @@ void main() {
   group('syncAll', () {
     test('sin registros pendientes no llama al repositorio', () async {
       when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
-      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+      when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 0);
 
       int? notifiedCount;
       engine.onSyncStatusChanged = (count) => notifiedCount = count;
@@ -165,7 +167,7 @@ void main() {
       when(
         () => patientRepo.syncPatient(any()),
       ).thenAnswer((_) async => buildResponse('success'));
-      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+      when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 0);
 
       await engine.syncAll();
 
@@ -418,7 +420,7 @@ void main() {
       verify(
         () => localDb.markSyncError(
           'A',
-          'entidad no procesable',
+          'Error de validación (422): Campos incompatibles con el backend',
           statusCode: 422,
         ),
       ).called(1);
@@ -470,7 +472,7 @@ void main() {
         ).thenAnswer((_) async => [entry]);
         when(
           () => patientRepo.syncPatient(any()),
-        ).thenThrow(Exception('timeout de red'));
+        ).thenThrow(TimeoutException('timeout de red'));
 
         bool? success;
         engine.onRecordSynced = (id, ok, err) => success = ok;
@@ -478,8 +480,7 @@ void main() {
         await engine.syncAll();
 
         verify(
-          () =>
-              localDb.markSyncError('A', any(that: contains('timeout de red'))),
+          () => localDb.markSyncError('A', 'Error de conexión de red'),
         ).called(1);
         expect(success, false);
       },

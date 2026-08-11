@@ -1,4 +1,5 @@
 // lib/src/features/nfc/presentation/profile/tabs/profile_tab_summary.dart
+
 import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
@@ -58,6 +59,11 @@ class ProfileTabSummary extends StatelessWidget {
       draft.patientInfo.height != original.patientInfo.height;
   @visibleForTesting
   bool get heightChanged => _heightChanged;
+
+  bool get _bloodTypeChanged =>
+      draft.patientInfo.bloodType != original.patientInfo.bloodType;
+  @visibleForTesting
+  bool get bloodTypeChanged => _bloodTypeChanged;
 
   bool get _addressChanged {
     final da = draft.patientInfo.address;
@@ -247,7 +253,7 @@ class ProfileTabSummary extends StatelessWidget {
                     icon: Icons.bloodtype_outlined,
                     label: s.bloodType.toUpperCase(),
                     value: p.bloodType ?? '—',
-                    changed: false,
+                    changed: _bloodTypeChanged,
                   ),
                 ],
               ),
