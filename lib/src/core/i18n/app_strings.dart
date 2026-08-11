@@ -637,6 +637,10 @@ class AppStrings {
   String get orgDeleteButton => _get('orgDeleteButton');
   String get orgDeleteDialogTitle => _get('orgDeleteDialogTitle');
   String get orgDeleteDialogContent => _get('orgDeleteDialogContent');
+  String statsComparedTo(String from, String to) =>
+      _get('statsComparedTo').replaceAll('{from}', from).replaceAll('{to}', to);
+  String statsGeneratedAt(String time) =>
+      _get('statsGeneratedAt').replaceAll('{time}', time);
 
   // ══════════════════════════════════════════════════════════════════════════
   // TRANSLATIONS
@@ -1211,6 +1215,8 @@ class AppStrings {
     'orgDeleteDialogTitle': '¿Eliminar organización?',
     'orgDeleteDialogContent':
         'Esta acción eliminará permanentemente la organización {name} y todos sus datos asociados.',
+    'statsComparedTo': 'Comparado con {from} – {to}',
+    'statsGeneratedAt': 'Generado el {time}',
   };
 
   static const Map<String, String> _en = {
@@ -1785,5 +1791,7 @@ class AppStrings {
     'orgDeleteDialogTitle': 'Delete organization?',
     'orgDeleteDialogContent':
         'This action will permanently delete the organization {name} and all its associated data.',
+    'statsComparedTo': 'Compared to {from} – {to}',
+    'statsGeneratedAt': 'Generated at {time}',
   };
 }

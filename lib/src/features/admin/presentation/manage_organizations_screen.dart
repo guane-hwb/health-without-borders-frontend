@@ -6,6 +6,9 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../core/i18n/app_strings.dart';
+import '../../../shared/widgets/hwb_async_state_view.dart';
+import '../../../shared/widgets/hwb_detail_row.dart';
+import '../../../shared/widgets/hwb_screen_header.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../auth/data/user_repository.dart';
 
@@ -112,37 +115,7 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
           children: [
             Column(
               children: [
-                Container(
-                  color: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: AppColors.white,
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          s.manageOrgsScreenTitle,
-                          style: const TextStyle(
-                            color: AppColors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      _LocaleSwitcher(),
-                    ],
-                  ),
-                ),
+                HwbScreenHeader(title: s.manageOrgsScreenTitle),
                 Expanded(child: _buildBody()),
               ],
             ),
@@ -164,34 +137,10 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-            const SizedBox(height: 12),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.error),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _load,
-              icon: const Icon(Icons.refresh),
-              label: Text(s.retry),
-            ),
-          ],
-        ),
-      );
+      return HwbAsyncErrorView(message: _error!, onRetry: _load);
     }
     if (_orgs.isEmpty) {
-      return Center(
-        child: Text(
-          s.orgsNoOrganizations,
-          style: const TextStyle(color: AppColors.textSecondary),
-        ),
-      );
+      return HwbEmptyStateView(message: s.orgsNoOrganizations);
     }
     return RefreshIndicator(
       onRefresh: _load,
@@ -201,47 +150,6 @@ class _ManageOrganizationsScreenState extends State<ManageOrganizationsScreen> {
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (_, i) =>
             _OrgCard(org: _orgs[i], onTap: () => _showOrgDetailSheet(_orgs[i])),
-      ),
-    );
-  }
-}
-
-class _LocaleSwitcher extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final locale = AppLocale.of(context).locale;
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: ['es', 'en'].map((lang) {
-          final selected = locale == lang;
-          return GestureDetector(
-            onTap: () => AppLocale.of(context).setLocale(lang),
-            child: Container(
-              margin: const EdgeInsets.only(left: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: selected
-                    ? Colors.white.withValues(alpha: 0.95)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                lang.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? AppColors.primary : AppColors.white,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
       ),
     );
   }
@@ -382,8 +290,6 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final isEs = s.save == 'Guardar';
-    // Clinical records are irreversible: an org is deletable only when it has no
-    // patients. Its users (admin + staff) are cascaded by the backend on delete.
     final canDelete = _org.patientCount == 0;
 
     return Padding(
@@ -407,24 +313,28 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 20),
-          _row(Icons.fingerprint, s.orgDetailId, _org.id),
-          const SizedBox(height: 8),
-          _row(
-            Icons.check_circle_outline,
-            s.userDetailStatus,
-            _org.isActive ? s.userStatusActive : s.userStatusSuspended,
+          HwbDetailRow(
+            icon: Icons.fingerprint,
+            label: s.orgDetailId,
+            value: _org.id,
           ),
           const SizedBox(height: 8),
-          _row(
-            Icons.people_alt_outlined,
-            isEs ? 'Usuarios' : 'Users',
-            '${_org.userCount}',
+          HwbDetailRow(
+            icon: Icons.check_circle_outline,
+            label: s.userDetailStatus,
+            value: _org.isActive ? s.userStatusActive : s.userStatusSuspended,
           ),
           const SizedBox(height: 8),
-          _row(
-            Icons.medical_information_outlined,
-            isEs ? 'Pacientes' : 'Patients',
-            '${_org.patientCount}',
+          HwbDetailRow(
+            icon: Icons.people_alt_outlined,
+            label: isEs ? 'Usuarios' : 'Users',
+            value: '${_org.userCount}',
+          ),
+          const SizedBox(height: 8),
+          HwbDetailRow(
+            icon: Icons.medical_information_outlined,
+            label: isEs ? 'Pacientes' : 'Patients',
+            value: '${_org.patientCount}',
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -436,7 +346,6 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
           ],
           const SizedBox(height: 24),
 
-          // Soft state — deactivate / reactivate
           SizedBox(
             width: double.infinity,
             height: 44,
@@ -477,7 +386,6 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
           ),
           const SizedBox(height: 10),
 
-          // Hard delete — only when the organization is empty
           SizedBox(
             width: double.infinity,
             height: 44,
@@ -532,20 +440,6 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
     );
   }
 
-  Widget _row(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: AppColors.secondary),
-        const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-        ),
-        Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
-      ],
-    );
-  }
-
   Future<void> _toggleActive() async {
     setState(() {
       _isToggling = true;
@@ -582,8 +476,6 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
     final contentMessage =
         s.orgDeleteDialogContent.replaceAll('{name}', _org.name) + cascadeNote;
 
-    // Capture before the first async gap (showDialog) so no BuildContext is used
-    // across an await further down.
     final navigator = Navigator.of(context);
     final repository = AppScope.of(context).userRepository;
 

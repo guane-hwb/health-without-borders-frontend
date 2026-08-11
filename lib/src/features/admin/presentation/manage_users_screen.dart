@@ -1,10 +1,14 @@
 // lib/src/features/admin/presentation/manage_users_screen.dart
+
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../core/i18n/app_strings.dart';
+import '../../../shared/widgets/hwb_async_state_view.dart';
+import '../../../shared/widgets/hwb_detail_row.dart';
+import '../../../shared/widgets/hwb_screen_header.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../auth/domain/user_session.dart';
 
@@ -18,7 +22,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   List<UserSession> _users = [];
   bool _loading = true;
   String? _error;
-  String _filter = 'all'; // 'all' | 'doctor' | 'nurse' | 'org_admin'
+  String _filter = 'all';
 
   @override
   void initState() {
@@ -88,38 +92,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           children: [
             Column(
               children: [
-                Container(
-                  color: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: AppColors.white,
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          s.manageUsersTitle,
-                          style: const TextStyle(
-                            color: AppColors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      _LocaleSwitcher(),
-                    ],
-                  ),
-                ),
-                // Barra de filtros optimizada con navegación en ambos sentidos (< y >)
+                HwbScreenHeader(title: s.manageUsersTitle),
                 _FilterBar(
                   filter: _filter,
                   users: _users,
@@ -144,35 +117,11 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   Widget _buildContent(AppStrings s) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-            const SizedBox(height: 12),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.error),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _load,
-              icon: const Icon(Icons.refresh),
-              label: Text(s.retry),
-            ),
-          ],
-        ),
-      );
+      return HwbAsyncErrorView(message: _error!, onRetry: _load);
     }
 
     if (_filtered.isEmpty) {
-      return Center(
-        child: Text(
-          s.noUsersInFilter,
-          style: const TextStyle(color: AppColors.textSecondary),
-        ),
-      );
+      return HwbEmptyStateView(message: s.noUsersInFilter);
     }
 
     return RefreshIndicator(
@@ -243,47 +192,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           ).userRepository.setUserActive(user.id, isActive);
           if (mounted) await _load();
         },
-      ),
-    );
-  }
-}
-
-class _LocaleSwitcher extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final locale = AppLocale.of(context).locale;
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: ['es', 'en'].map((lang) {
-          final selected = locale == lang;
-          return GestureDetector(
-            onTap: () => AppLocale.of(context).setLocale(lang),
-            child: Container(
-              margin: const EdgeInsets.only(left: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: selected
-                    ? Colors.white.withValues(alpha: 0.95)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                lang.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? AppColors.primary : AppColors.white,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
       ),
     );
   }
@@ -792,16 +700,16 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
           const SizedBox(height: 12),
           _RoleBadge(role: widget.user.role),
           const SizedBox(height: 20),
-          _row(
-            Icons.business,
-            s.userDetailOrganization,
-            widget.user.organizationId,
+          HwbDetailRow(
+            icon: Icons.business,
+            label: s.userDetailOrganization,
+            value: widget.user.organizationId,
           ),
           const SizedBox(height: 8),
-          _row(
-            Icons.check_circle_outline,
-            s.userDetailStatus,
-            _isActive ? s.userStatusActive : s.userStatusSuspended,
+          HwbDetailRow(
+            icon: Icons.check_circle_outline,
+            label: s.userDetailStatus,
+            value: _isActive ? s.userStatusActive : s.userStatusSuspended,
           ),
 
           if (_error != null) ...[
@@ -815,7 +723,6 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
 
           const SizedBox(height: 24),
 
-          // Soft state — deactivate / reactivate
           SizedBox(
             width: double.infinity,
             height: 44,
@@ -893,20 +800,6 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
           const SizedBox(height: 16),
         ],
       ),
-    );
-  }
-
-  Widget _row(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: AppColors.secondary),
-        const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-        ),
-        Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
-      ],
     );
   }
 

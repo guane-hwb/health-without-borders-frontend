@@ -5,17 +5,6 @@ enum StatsRangeKind { all, thisMonth, last30Days, custom }
 
 /// A selected reporting window: a [kind] plus, for the bounded kinds, the
 /// concrete [from]/[to] dates sent to the backend.
-///
-/// The date arithmetic lives here rather than inline in the widget so it can be
-/// tested against an injected `now` instead of the wall clock — the same reason
-/// the backend's aggregation service takes an explicit `now`.
-///
-/// **Time zone.** These are local calendar dates. The backend interprets
-/// `date_from` / `date_to` in `America/Bogota`, and a device used in the field
-/// is already in that zone, so `DateTime.now()` lines up. Running the app from
-/// another zone could shift "today" by a few hours relative to the backend's
-/// day boundary; that is not worth solving while every user is in Colombia, but
-/// it is the thing to revisit if that ever changes.
 class StatsDateRange {
   const StatsDateRange._(this.kind, this.from, this.to);
 
@@ -27,15 +16,12 @@ class StatsDateRange {
   /// Inclusive upper bound, or null for [StatsRangeKind.all].
   final DateTime? to;
 
-  /// The default: no window, so the backend reports the full history and a
-  /// month-over-month trend.
   static const StatsDateRange all = StatsDateRange._(
     StatsRangeKind.all,
     null,
     null,
   );
 
-  /// Whether a bounded window is active. False only for [StatsRangeKind.all].
   bool get isBounded => from != null;
 
   /// From the first of the current month through today, inclusive.
@@ -48,19 +34,15 @@ class StatsDateRange {
     );
   }
 
-  /// The 30 days ending today, inclusive on both ends — so today minus 29.
   factory StatsDateRange.last30Days({DateTime? now}) {
     final today = _dateOnly(now ?? DateTime.now());
     return StatsDateRange._(
       StatsRangeKind.last30Days,
-      today.subtract(const Duration(days: 29)),
+      DateTime(today.year, today.month, today.day - 29),
       today,
     );
   }
 
-  /// A user-picked window. [from] and [to] are normalised to date-only, and
-  /// swapped if they arrive reversed, so the backend never receives
-  /// `date_from > date_to` (which it rejects with a 400).
   factory StatsDateRange.custom(DateTime from, DateTime to) {
     final a = _dateOnly(from);
     final b = _dateOnly(to);
@@ -71,6 +53,35 @@ class StatsDateRange {
       ordered ? a : b,
     );
   }
+
+  ({DateTime from, DateTime to})? get comparisonBaseline {
+    final DateTime? start = from;
+    final DateTime? end = to;
+    if (start == null || end == null) return null;
+
+    final int spanDays = end.difference(start).inDays;
+    final DateTime previousEnd = DateTime(
+      start.year,
+      start.month,
+      start.day - 1,
+    );
+    final DateTime previousStart = DateTime(
+      previousEnd.year,
+      previousEnd.month,
+      previousEnd.day - spanDays,
+    );
+    return (from: previousStart, to: previousEnd);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is StatsDateRange &&
+      other.kind == kind &&
+      other.from == from &&
+      other.to == to;
+
+  @override
+  int get hashCode => Object.hash(kind, from, to);
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 }

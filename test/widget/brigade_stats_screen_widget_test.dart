@@ -686,7 +686,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // The caption uses an en dash between two localized dates.
-      expect(find.textContaining('–'), findsOneWidget);
+      expect(find.textContaining('–'), findsWidgets);
     });
 
     testWidgets('the range filter is shown for an org_admin too', (
