@@ -1,4 +1,5 @@
 // lib/src/features/nfc/presentation/profile/patient_profile_screen.dart
+
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -55,12 +56,6 @@ class PatientProfileScreen extends StatefulWidget {
 
   final bool readOnly;
 
-  /// When true the record was reconstructed from an NFC chip because the
-  /// backend was unreachable. Shows an offline banner. When the record came
-  /// from the guardian card it is a full record with a real patientId, so it
-  /// may be edited offline — edits are saved locally, flagged as pending and
-  /// synced when connectivity returns. Triage-only and emergency reads pass
-  /// [readOnly] as well, since those snapshots are partial.
   final bool offline;
   final bool emergency;
 
@@ -111,6 +106,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   Future<void> _checkInitialConnectivity() async {
     final result = await Connectivity().checkConnectivity();
+    if (!mounted) return;
     _updateConnectivityStatus(result);
   }
 
@@ -123,6 +119,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   void _updateConnectivityStatus(List<ConnectivityResult> results) {
+    if (!mounted) return;
     final hasNet = hasInternetConnection(results);
     if (_hasInternet != hasNet) {
       setState(() {
@@ -219,14 +216,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       final guardian2Uid = (record.guardian2Info?.deviceUid ?? '').trim();
       final hasTwoGuardians =
           guardian1Uid.isNotEmpty && guardian2Uid.isNotEmpty;
-      // Captured before the write gaps so the partial notice never touches
-      // context across an async boundary.
       final messenger = ScaffoldMessenger.of(context);
 
-      // Writes one guardian card through the guided overlay. Returns true only
-      // when the card was actually written — the clinician can skip when that
-      // guardian is not present. Shows a partial-record notice when the card
-      // was too small for the full history.
       Future<bool> writeGuardianCard({
         required String expectedUid,
         required String title,
@@ -284,9 +275,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         allWritten = allWritten && ok;
       }
 
-      // Clear the stale flag only when every present guardian card was
-      // written. If the clinician skipped one (that guardian was not present),
-      // the "backup out of date" banner stays so they can finish it later.
       final hadAnyGuardian = guardian1Uid.isNotEmpty || guardian2Uid.isNotEmpty;
       if (allWritten && hadAnyGuardian) {
         await scope.localDatabase.clearChipsDirty(
@@ -360,8 +348,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       _draft = _replacePatientInfo(
         _draft.patientInfo.copyWith(
           bloodType: bloodType,
-          weight: weight,
-          height: height,
+          weight: weight ?? _draft.patientInfo.weight,
+          height: height ?? _draft.patientInfo.height,
         ),
       );
     });
@@ -549,8 +537,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         SnackBar(
           content: Text(
             isEs
-                ? 'Sin conexión. Se sincronizará automáticamente al '
-                      'reconectar.'
+                ? 'Sin conexión. Se sincronizará automáticamente al reconectar.'
                 : 'Offline. It will sync automatically once reconnected.',
           ),
           backgroundColor: Colors.orange.shade800,
@@ -568,17 +555,25 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       final scope = AppScope.of(context);
       await scope.localDatabase.savePatient(_draft);
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
-      await scope.syncEngine.syncAll();
+      final bool ok = await scope.syncEngine.syncAll();
       if (!mounted) return;
       setState(() {
-        _original = _draft;
+        if (ok) {
+          _original = _draft;
+        }
         _isSyncing = false;
       });
       if (!silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppStrings.of(context).savedChangesMsg),
-            backgroundColor: AppColors.success,
+            content: Text(
+              ok
+                  ? AppStrings.of(context).savedChangesMsg
+                  : (isEs
+                        ? 'Fallo al sincronizar con el servidor. Cambios preservados localmente.'
+                        : 'Sync failed with server. Changes preserved locally.'),
+            ),
+            backgroundColor: ok ? AppColors.success : AppColors.error,
           ),
         );
       }
@@ -832,6 +827,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                   hasUnsyncedChanges: !_hasInternet && _hasUnsyncedChanges,
                   lastSyncedAt: widget.lastSyncedAt,
                   onBack: () => _confirmExit(),
+                  onSync: widget.readOnly ? null : () => _sync(silent: false),
                 ),
                 ProfileTabsBar(controller: _tabController, draft: _draft),
                 if (widget.emergency) const EmergencyBanner(),

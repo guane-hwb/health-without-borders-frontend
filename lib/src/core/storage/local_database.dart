@@ -14,6 +14,8 @@ import '../../features/nfc/domain/patient_record.dart';
 import '../utils/app_logger.dart';
 import 'web_storage.dart' as web_storage;
 
+const Set<int> kPermanentSyncErrorCodes = <int>{400, 409, 422};
+
 class LocalDatabase {
   LocalDatabase._({FlutterSecureStorage? secureStorage})
     : _secureStorage = secureStorage ?? _defaultSecureStorage,
@@ -603,6 +605,38 @@ class LocalDatabase {
     final db = await _database;
     final result = await db!.rawQuery(
       'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0',
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<int> getRetryablePendingCount() async {
+    if (_isWeb) {
+      return _webStore.values.where((r) {
+        if ((r['is_synced'] as int) != 0) return false;
+        final code = r['sync_error_code'] as int?;
+        return code == null || !kPermanentSyncErrorCodes.contains(code);
+      }).length;
+    }
+    final db = await _database;
+    final result = await db!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
+      'AND (sync_error_code IS NULL OR sync_error_code NOT IN (400, 409, 422))',
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<int> getBlockedCount() async {
+    if (_isWeb) {
+      return _webStore.values.where((r) {
+        if ((r['is_synced'] as int) != 0) return false;
+        final code = r['sync_error_code'] as int?;
+        return code != null && kPermanentSyncErrorCodes.contains(code);
+      }).length;
+    }
+    final db = await _database;
+    final result = await db!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
+      'AND sync_error_code IN (400, 409, 422)',
     );
     return Sqflite.firstIntValue(result) ?? 0;
   }

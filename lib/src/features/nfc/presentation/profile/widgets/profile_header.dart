@@ -14,12 +14,16 @@ class ProfileHeader extends StatelessWidget {
     required this.hasUnsyncedChanges,
     required this.onBack,
     this.lastSyncedAt,
+    this.isSyncing = false,
+    this.onSync,
   });
 
   final PatientFullRecord patient;
   final bool hasUnsyncedChanges;
   final VoidCallback onBack;
   final String? lastSyncedAt;
+  final bool isSyncing;
+  final VoidCallback? onSync;
 
   int? get _age => helpers.computeAge(patient.patientInfo.dob, DateTime.now());
 
@@ -53,6 +57,24 @@ class ProfileHeader extends StatelessWidget {
                 icon: const Icon(Icons.arrow_back, color: AppColors.white),
               ),
               const Spacer(),
+              if (onSync != null)
+                IconButton(
+                  onPressed: isSyncing ? null : onSync,
+                  tooltip: isSyncing ? s.syncingBtn : s.syncBtn,
+                  icon: isSyncing
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.white,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.cloud_upload_outlined,
+                          color: AppColors.white,
+                        ),
+                ),
               const LanguageToggle(),
               const SizedBox(width: 4),
             ],

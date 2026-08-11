@@ -43,6 +43,20 @@ class ApiClient {
 
   bool _isPublicRoute(String path) => _publicRoutes.contains(path);
 
+  Future<http.Response> _send(
+    String method,
+    Uri uri, {
+    Map<String, String>? headers,
+    String? body,
+  }) async {
+    final http.Request request = http.Request(method, uri)
+      ..followRedirects = false
+      ..headers.addAll(headers ?? const <String, String>{});
+    if (body != null) request.body = body;
+    final http.StreamedResponse streamed = await _client.send(request);
+    return http.Response.fromStream(streamed);
+  }
+
   Future<http.Response> _dispatch(
     String path, {
     required Map<String, String> headers,
@@ -88,13 +102,14 @@ class ApiClient {
       path,
       headers: <String, String>{...?headers},
       timeout: timeout,
-      send: (Map<String, String> h) => _client.post(
+      send: (Map<String, String> h) => _send(
+        'POST',
         uri,
         headers: <String, String>{
           'Content-Type': 'application/x-www-form-urlencoded',
           ...h,
         },
-        body: form,
+        body: Uri(queryParameters: form).query,
       ),
     );
 
@@ -112,7 +127,8 @@ class ApiClient {
       path,
       headers: <String, String>{...?headers},
       timeout: timeout,
-      send: (Map<String, String> h) => _client.post(
+      send: (Map<String, String> h) => _send(
+        'POST',
         uri,
         headers: <String, String>{'Content-Type': 'application/json', ...h},
         body: jsonEncode(body),
@@ -135,7 +151,7 @@ class ApiClient {
       path,
       headers: <String, String>{...?headers},
       timeout: timeout,
-      send: (Map<String, String> h) => _client.get(uri, headers: h),
+      send: (Map<String, String> h) => _send('GET', uri, headers: h),
     );
 
     return _decodeMapOrThrow(response);
