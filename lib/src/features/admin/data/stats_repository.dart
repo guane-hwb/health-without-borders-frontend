@@ -65,8 +65,8 @@ class StatsRepository {
   //
   // [dateFrom] and [dateTo] are inclusive. Supplying [dateFrom] switches the
   // backend's trend from "month-to-date vs. last month" to "this window vs.
-  // the preceding window of equal length". No screen passes them yet; the
-  // parameters exist so a date-range picker lands without touching this layer.
+  // the preceding window of equal length".
+  // Passed directly from [BrigadeStatsScreen] via [StatsDateRange].
 
   Future<BrigadeStats> fetchOverview({
     String? organizationId,
@@ -74,10 +74,8 @@ class StatsRepository {
     DateTime? dateTo,
   }) async {
     final Map<String, String> query = <String, String>{
-      // Null-aware element: the entry is dropped when the value is null.
-      // The date entries keep the collection-if because their value is a call,
-      // not the nullable variable itself.
-      'organization_id': ?organizationId,
+      if (organizationId != null && organizationId.isNotEmpty)
+        'organization_id': organizationId,
       if (dateFrom != null) 'date_from': formatDate(dateFrom),
       if (dateTo != null) 'date_to': formatDate(dateTo),
     };
@@ -90,8 +88,6 @@ class StatsRepository {
       );
       return BrigadeStats.fromJson(data);
     } on http.ClientException catch (e) {
-      // package:http wraps a SocketException into a ClientException on IO and
-      // raises one directly on web, so this single catch covers both targets.
       throw StatsUnavailableException(e);
     } on TimeoutException catch (e) {
       throw StatsUnavailableException(e);
