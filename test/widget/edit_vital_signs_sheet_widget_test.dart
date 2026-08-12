@@ -239,17 +239,14 @@ void main() {
         );
 
         final confirmBtn = find.byType(ElevatedButton);
-        if (confirmBtn.evaluate().isNotEmpty) {
-          await tester.tap(confirmBtn.first);
-          await tester.pumpAndSettle();
-          expect(confirmedWeight, equals(72.5));
-          expect(confirmedHeight, equals(170.0));
-          expect(confirmedBloodType, equals('O+'));
-        }
+        await tester.tap(confirmBtn.first);
+        await tester.pumpAndSettle();
+        expect(confirmedWeight, equals(72.5));
+        expect(confirmedHeight, equals(170.0));
+        expect(confirmedBloodType, equals('O+'));
       },
     );
 
-    // FIX TEST 1: Ampliar alto de pantalla en el test para evitar hit test fuera de límites
     testWidgets(
       'Forwards newly modified alphanumeric string context changes inside callback arguments',
       (tester) async {
@@ -278,12 +275,10 @@ void main() {
         await tester.pump();
 
         final confirmBtn = find.byType(ElevatedButton);
-        if (confirmBtn.evaluate().isNotEmpty) {
-          await tester.tap(confirmBtn.first);
-          await tester.pumpAndSettle();
-          expect(confirmedWeight, equals(80.0));
-          expect(confirmedBloodType, equals('B+'));
-        }
+        await tester.tap(confirmBtn.first);
+        await tester.pumpAndSettle();
+        expect(confirmedWeight, equals(80.0));
+        expect(confirmedBloodType, equals('B+'));
       },
     );
   });
@@ -307,13 +302,11 @@ void main() {
         );
 
         final confirmBtn = find.byType(ElevatedButton);
-        if (confirmBtn.evaluate().isNotEmpty) {
-          await tester.tap(confirmBtn.first);
-          await tester.pumpAndSettle();
-          expect(confirmedWeight, isNull);
-          expect(confirmedHeight, isNull);
-          expect(confirmedBloodType, isNull);
-        }
+        await tester.tap(confirmBtn.first);
+        await tester.pumpAndSettle();
+        expect(confirmedWeight, isNull);
+        expect(confirmedHeight, isNull);
+        expect(confirmedBloodType, isNull);
       },
     );
   });
@@ -337,11 +330,9 @@ void main() {
       await tester.pump();
 
       final confirmBtn = find.byType(ElevatedButton);
-      if (confirmBtn.evaluate().isNotEmpty) {
-        await tester.tap(confirmBtn.first);
-        await tester.pumpAndSettle();
-        expect(selectedBlood, equals('A-'));
-      }
+      await tester.tap(confirmBtn.first);
+      await tester.pumpAndSettle();
+      expect(selectedBlood, equals('A-'));
     });
 
     testWidgets('Tapping a selected blood type chip deselects it', (
@@ -365,11 +356,9 @@ void main() {
       await tester.pump();
 
       final confirmBtn = find.byType(ElevatedButton);
-      if (confirmBtn.evaluate().isNotEmpty) {
-        await tester.tap(confirmBtn.first);
-        await tester.pumpAndSettle();
-        expect(selectedBlood, isNull);
-      }
+      await tester.tap(confirmBtn.first);
+      await tester.pumpAndSettle();
+      expect(selectedBlood, isNull);
     });
   });
 

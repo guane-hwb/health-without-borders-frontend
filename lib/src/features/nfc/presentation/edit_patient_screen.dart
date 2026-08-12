@@ -98,6 +98,7 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
         city: _cityCtrl.text.trim(),
         cityCode: currentInfo.address.cityCode,
         state: _stateCtrl.text.trim(),
+        zipCode: currentInfo.address.zipCode,
         country: currentInfo.address.country,
         countryName: currentInfo.address.countryName,
         zone: currentInfo.address.zone,

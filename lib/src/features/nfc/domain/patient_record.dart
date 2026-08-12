@@ -1384,6 +1384,87 @@ class PayerInfo {
 }
 
 // ---------------------------------------------------------------------------
+// MedicationRequestItem — Prescripción estructurada para FHIR / RDA
+// ---------------------------------------------------------------------------
+class MedicationRequestItem {
+  MedicationRequestItem({
+    required this.medicationName,
+    this.dciCode,
+    this.iumCode,
+    this.quantity,
+    this.frequency,
+    this.duration,
+    this.route,
+    this.intent = 'order',
+    this.notes,
+  });
+
+  factory MedicationRequestItem.fromJson(Map<String, dynamic> json) {
+    return MedicationRequestItem(
+      medicationName: json['medicationName']?.toString() ?? '',
+      dciCode: json['dciCode']?.toString(),
+      iumCode: json['iumCode']?.toString(),
+      quantity: json['quantity']?.toString(),
+      frequency: json['frequency']?.toString(),
+      duration: json['duration']?.toString(),
+      route: json['route']?.toString(),
+      intent: json['intent']?.toString() ?? 'order',
+      notes: json['notes']?.toString(),
+    );
+  }
+
+  final String medicationName;
+  final String? dciCode;
+  final String? iumCode;
+  final String? quantity;
+  final String? frequency;
+  final String? duration;
+  final String? route;
+  final String intent;
+  final String? notes;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'medicationName': medicationName,
+    if (dciCode != null) 'dciCode': dciCode,
+    if (iumCode != null) 'iumCode': iumCode,
+    if (quantity != null) 'quantity': quantity,
+    if (frequency != null) 'frequency': frequency,
+    if (duration != null) 'duration': duration,
+    if (route != null) 'route': route,
+    'intent': intent,
+    if (notes != null) 'notes': notes,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MedicationRequestItem &&
+          runtimeType == other.runtimeType &&
+          medicationName == other.medicationName &&
+          dciCode == other.dciCode &&
+          iumCode == other.iumCode &&
+          quantity == other.quantity &&
+          frequency == other.frequency &&
+          duration == other.duration &&
+          route == other.route &&
+          intent == other.intent &&
+          notes == other.notes;
+
+  @override
+  int get hashCode => Object.hash(
+    medicationName,
+    dciCode,
+    iumCode,
+    quantity,
+    frequency,
+    duration,
+    route,
+    intent,
+    notes,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // MedicalHistoryItem — One clinical encounter (RDA-Consulta)
 // ---------------------------------------------------------------------------
 class MedicalHistoryItem {
@@ -1408,6 +1489,14 @@ class MedicalHistoryItem {
     this.riskFactors = const <RiskFactor>[],
     this.incapacity,
     this.payer,
+    this.externalCauseDisplay,
+    this.healthcareServiceCode,
+    this.healthcareServiceDisplay,
+    this.cupsCode,
+    this.cupsDisplay,
+    this.occupation,
+    this.occupationDescription,
+    this.prescriptions = const <MedicationRequestItem>[],
   }) : clinicalEvaluation = clinicalEvaluation ?? ClinicalEvaluation();
 
   factory MedicalHistoryItem.fromJson(Map<String, dynamic> json) {
@@ -1459,11 +1548,26 @@ class MedicalHistoryItem {
       payer: json['payer'] is Map<String, dynamic>
           ? PayerInfo.fromJson(json['payer'] as Map<String, dynamic>)
           : null,
+      externalCauseDisplay: json['externalCauseDisplay']?.toString(),
+      healthcareServiceCode: json['healthcareServiceCode']?.toString(),
+      healthcareServiceDisplay: json['healthcareServiceDisplay']?.toString(),
+      cupsCode: json['cupsCode']?.toString(),
+      cupsDisplay: json['cupsDisplay']?.toString(),
+      occupation: json['occupation']?.toString(),
+      occupationDescription: json['occupationDescription']?.toString(),
+      prescriptions:
+          (json['prescriptions'] as List<dynamic>?)
+              ?.map(
+                (e) =>
+                    MedicationRequestItem.fromJson(e as Map<String, dynamic>),
+              )
+              .toList() ??
+          const <MedicationRequestItem>[],
     );
   }
 
   final String type;
-  final String startDateTime; // ISO 8601 datetime
+  final String startDateTime;
   final String? endDateTime;
   final String? encounterIdentifier;
   final String careModality;
@@ -1482,6 +1586,15 @@ class MedicalHistoryItem {
   final List<RiskFactor> riskFactors;
   final IncapacityInfo? incapacity;
   final PayerInfo? payer;
+
+  final String? externalCauseDisplay;
+  final String? healthcareServiceCode;
+  final String? healthcareServiceDisplay;
+  final String? cupsCode;
+  final String? cupsDisplay;
+  final String? occupation;
+  final String? occupationDescription;
+  final List<MedicationRequestItem> prescriptions;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     if (encounterIdentifier != null) 'encounterIdentifier': encounterIdentifier,
@@ -1505,96 +1618,19 @@ class MedicalHistoryItem {
     'riskFactors': riskFactors.map((RiskFactor r) => r.toJson()).toList(),
     if (incapacity != null) 'incapacity': incapacity!.toJson(),
     if (payer != null) 'payer': payer!.toJson(),
+    if (externalCauseDisplay != null)
+      'externalCauseDisplay': externalCauseDisplay,
+    if (healthcareServiceCode != null)
+      'healthcareServiceCode': healthcareServiceCode,
+    if (healthcareServiceDisplay != null)
+      'healthcareServiceDisplay': healthcareServiceDisplay,
+    if (cupsCode != null) 'cupsCode': cupsCode,
+    if (cupsDisplay != null) 'cupsDisplay': cupsDisplay,
+    if (occupation != null) 'occupation': occupation,
+    if (occupationDescription != null)
+      'occupationDescription': occupationDescription,
+    'prescriptions': prescriptions.map((m) => m.toJson()).toList(),
   };
-
-  MedicalHistoryItem copyWith({
-    String? encounterIdentifier,
-    String? type,
-    String? startDateTime,
-    String? endDateTime,
-    String? careModality,
-    String? serviceGroup,
-    String? careEnvironment,
-    String? entryRoute,
-    String? externalCause,
-    ProviderInfo? provider,
-    PractitionerInfo? practitioner,
-    String? location,
-    String? physician,
-    ClinicalEvaluation? clinicalEvaluation,
-    List<DiagnosisItem>? diagnosis,
-    String? diagnosisType,
-    String? dischargeDisposition,
-    List<RiskFactor>? riskFactors,
-    IncapacityInfo? incapacity,
-    PayerInfo? payer,
-  }) {
-    return MedicalHistoryItem(
-      encounterIdentifier: encounterIdentifier ?? this.encounterIdentifier,
-      type: type ?? this.type,
-      startDateTime: startDateTime ?? this.startDateTime,
-      endDateTime: endDateTime ?? this.endDateTime,
-      careModality: careModality ?? this.careModality,
-      serviceGroup: serviceGroup ?? this.serviceGroup,
-      careEnvironment: careEnvironment ?? this.careEnvironment,
-      entryRoute: entryRoute ?? this.entryRoute,
-      externalCause: externalCause ?? this.externalCause,
-      provider: provider ?? this.provider,
-      practitioner: practitioner ?? this.practitioner,
-      location: location ?? this.location,
-      physician: physician ?? this.physician,
-      clinicalEvaluation: clinicalEvaluation ?? this.clinicalEvaluation,
-      diagnosis: diagnosis ?? this.diagnosis,
-      diagnosisType: diagnosisType ?? this.diagnosisType,
-      dischargeDisposition: dischargeDisposition ?? this.dischargeDisposition,
-      riskFactors: riskFactors ?? this.riskFactors,
-      incapacity: incapacity ?? this.incapacity,
-      payer: payer ?? this.payer,
-    );
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is MedicalHistoryItem &&
-          runtimeType == other.runtimeType &&
-          encounterIdentifier == other.encounterIdentifier &&
-          type == other.type &&
-          startDateTime == other.startDateTime &&
-          endDateTime == other.endDateTime &&
-          careModality == other.careModality &&
-          serviceGroup == other.serviceGroup &&
-          careEnvironment == other.careEnvironment &&
-          entryRoute == other.entryRoute &&
-          externalCause == other.externalCause &&
-          provider == other.provider &&
-          practitioner == other.practitioner &&
-          location == other.location &&
-          physician == other.physician &&
-          clinicalEvaluation == other.clinicalEvaluation &&
-          _listEquals(diagnosis, other.diagnosis) &&
-          diagnosisType == other.diagnosisType &&
-          dischargeDisposition == other.dischargeDisposition &&
-          _listEquals(riskFactors, other.riskFactors) &&
-          incapacity == other.incapacity &&
-          payer == other.payer;
-
-  @override
-  int get hashCode => Object.hash(
-    encounterIdentifier,
-    type,
-    startDateTime,
-    endDateTime,
-    careModality,
-    serviceGroup,
-    careEnvironment,
-    Object.hash(entryRoute, externalCause, provider, practitioner),
-    Object.hash(location, physician, clinicalEvaluation),
-    Object.hashAll(diagnosis),
-    diagnosisType,
-    Object.hash(dischargeDisposition, Object.hashAll(riskFactors)),
-    Object.hash(incapacity, payer),
-  );
 }
 
 // ---------------------------------------------------------------------------

@@ -631,7 +631,7 @@ void main() {
     });
   });
 
-  // ── LocalDatabase — (localStorage/sessionStorage) ────────────────
+  // ── LocalDatabase — (localStorage/sessionStorage Web path) ────────────────
 
   group('LocalDatabase (web code path)', () {
     late LocalDatabase localDb;
@@ -649,7 +649,7 @@ void main() {
     });
 
     test(
-      'savePatient guarda un registro recuperable por getAllRecords',
+      'savePatient guarda un registro recuperable por getAllRecords en Web',
       () async {
         await localDb.savePatient(_buildRecord(patientId: 'w-1'));
 
@@ -663,7 +663,7 @@ void main() {
     );
 
     test(
-      'savePatient persiste el registro cifrado en el backend inyectado',
+      'savePatient persiste el registro cifrado en el backend Web inyectado',
       () async {
         await localDb.savePatient(_buildRecord(patientId: 'w-cipher'));
 
@@ -733,6 +733,23 @@ void main() {
 
       expect(await localDb.getUnsyncedCount(), equals(1));
     });
+
+    test(
+      'purgeStalePermanentErrors solo retira registros con errores permanentes en Web',
+      () async {
+        await localDb.savePatient(_buildRecord(patientId: 'w-perm'));
+        await localDb.markSyncError('w-perm', 'conflict', statusCode: 409);
+
+        await localDb.savePatient(_buildRecord(patientId: 'w-temp'));
+        await localDb.markSyncError('w-temp', 'timeout', statusCode: 503);
+
+        await localDb.purgeStalePermanentErrors(maxAge: Duration.zero);
+
+        final remaining = await localDb.getAllRecords();
+        expect(remaining.map((e) => e.patientId), contains('w-temp'));
+        expect(remaining.map((e) => e.patientId), isNot(contains('w-perm')));
+      },
+    );
 
     test('markSyncError guarda el código y mensaje en Web', () async {
       await localDb.savePatient(_buildRecord(patientId: 'w-9'));

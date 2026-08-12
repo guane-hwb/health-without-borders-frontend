@@ -645,10 +645,10 @@ void main() {
       expect(statsRepo.callCount, 2);
       final from = statsRepo.requestedFrom.last;
       final to = statsRepo.requestedTo.last;
-      expect(from, isNotNull);
-      expect(to, isNotNull);
-      // First of the current month.
-      expect(from!.day, 1);
+      final now = DateTime.now();
+
+      expect(from, equals(DateTime(now.year, now.month, 1)));
+      expect(to, equals(DateTime(now.year, now.month, now.day)));
     });
 
     testWidgets('re-tapping the active range does not refetch', (tester) async {
@@ -685,7 +685,13 @@ void main() {
       await tester.tap(find.text('Últimos 30 días'));
       await tester.pumpAndSettle();
 
-      // The caption uses an en dash between two localized dates.
+      final from = statsRepo.requestedFrom.last!;
+      final to = statsRepo.requestedTo.last!;
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      expect(from, equals(DateTime(today.year, today.month, today.day - 29)));
+      expect(to, equals(today));
       expect(find.textContaining('–'), findsWidgets);
     });
 
@@ -701,9 +707,55 @@ void main() {
         ),
       );
 
-      // No organization filter, but the date range is still available.
       expect(find.text('Todas'), findsNothing);
       expect(find.text('Este mes'), findsOneWidget);
     });
+
+    testWidgets(
+      'Custom date range picker opens with correct bounds, confirms selection and refetches with exact dates',
+      (tester) async {
+        final statsRepo = FakeStatsRepository(_stats(period: 'custom'));
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+            statsRepo: statsRepo,
+          ),
+        );
+
+        await tester.tap(find.text('Personalizado'));
+        await tester.pumpAndSettle();
+
+        final dialogFinder = find.byType(DateRangePickerDialog);
+        expect(dialogFinder, findsOneWidget);
+
+        final picker = tester.widget<DateRangePickerDialog>(dialogFinder);
+        expect(picker.firstDate.year, equals(DateTime.now().year - 5));
+        expect(picker.lastDate.year, equals(DateTime.now().year));
+
+        await tester.tap(find.byIcon(Icons.edit_outlined));
+        await tester.pumpAndSettle();
+
+        final textFields = find.byType(TextField);
+        expect(textFields, findsNWidgets(2));
+
+        await tester.enterText(textFields.at(0), '07/01/2026');
+        await tester.enterText(textFields.at(1), '07/15/2026');
+        await tester.pumpAndSettle();
+
+        final saveButton = find
+            .descendant(of: dialogFinder, matching: find.byType(TextButton))
+            .last;
+        await tester.tap(saveButton);
+        await tester.pumpAndSettle();
+
+        expect(statsRepo.callCount, 2);
+        final from = statsRepo.requestedFrom.last;
+        final to = statsRepo.requestedTo.last;
+
+        expect(from, equals(DateTime(2026, 7, 1)));
+        expect(to, equals(DateTime(2026, 7, 15)));
+      },
+    );
   });
 }
