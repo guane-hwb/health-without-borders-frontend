@@ -52,12 +52,21 @@ class AuthRepository implements TokenProvider {
   String? _cachedNfcKey;
   UserSession? _session;
 
+  final ValueNotifier<UserSession?> _sessionNotifier =
+      ValueNotifier<UserSession?>(null);
+  ValueNotifier<UserSession?> get sessionNotifier => _sessionNotifier;
+
   Future<String?>? _refreshInFlight;
 
   final ValueNotifier<bool> _sessionExpired = ValueNotifier<bool>(false);
   ValueListenable<bool> get sessionExpired => _sessionExpired;
 
   UserSession? get currentUser => _session;
+
+  void _updateSession(UserSession? session) {
+    _session = session;
+    _sessionNotifier.value = session;
+  }
 
   // ── Login ─────────────────────────────────────────────────────────────────
 
@@ -102,7 +111,8 @@ class AuthRepository implements TokenProvider {
     }
 
     final UserSession? previous = await _readPersistedSession();
-    _session = await _fetchMe(accessToken);
+    final fetchedSession = await _fetchMe(accessToken);
+    _updateSession(fetchedSession);
 
     if (previous != null && previous.id != _session!.id) {
       if (await _localDb.getUnsyncedCount() == 0) {
@@ -129,7 +139,7 @@ class AuthRepository implements TokenProvider {
     if (_session != null) return _session;
     try {
       final token = await getAccessToken();
-      _session = await _fetchMe(token);
+      _updateSession(await _fetchMe(token));
     } catch (_) {}
     return _session;
   }
@@ -143,13 +153,13 @@ class AuthRepository implements TokenProvider {
 
     final UserSession? persisted = await _readPersistedSession();
     if (persisted != null) {
-      _session = persisted;
+      _updateSession(persisted);
       return _session;
     }
 
     try {
       final UserSession fetched = await _fetchMe(token);
-      _session = fetched;
+      _updateSession(fetched);
       if (fetched.id.isNotEmpty) await _persistSession(fetched);
     } catch (_) {}
     return _session;
@@ -252,7 +262,7 @@ class AuthRepository implements TokenProvider {
     _cachedToken = null;
     _cachedRefreshToken = null;
     _cachedNfcKey = null;
-    _session = null;
+    _updateSession(null);
     try {
       await _secureStorage.delete(key: _tokenKey);
     } catch (_) {}

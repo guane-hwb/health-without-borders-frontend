@@ -3,12 +3,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
+import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
-import '../../../core/i18n/app_strings.dart';
 import '../../../shared/widgets/hwb_async_state_view.dart';
 import '../../../shared/widgets/hwb_detail_row.dart';
 import '../../../shared/widgets/hwb_screen_header.dart';
+import '../../../shared/widgets/hwb_text_field.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../auth/domain/user_session.dart';
 
@@ -137,8 +138,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       ),
     );
   }
-
-  // ── Create user sheet ─────────────────────────────────────────────────────
 
   void _showCreateUserSheet() {
     final s = AppStrings.of(context);
@@ -452,8 +451,6 @@ class _FilterBarState extends State<_FilterBar> {
   }
 }
 
-// ── Filter chip ───────────────────────────────────────────────────────────
-
 class _FilterChip extends StatelessWidget {
   const _FilterChip({
     required this.label,
@@ -489,8 +486,6 @@ class _FilterChip extends StatelessWidget {
     );
   }
 }
-
-// ── User card ─────────────────────────────────────────────────────────────
 
 class _UserCard extends StatelessWidget {
   const _UserCard({required this.user, required this.onTap});
@@ -640,8 +635,6 @@ class _RoleBadge extends StatelessWidget {
     );
   }
 }
-
-// ── User detail sheet (read-only) ────────────────────────────────────────
 
 class _UserDetailSheet extends StatefulWidget {
   const _UserDetailSheet({
@@ -866,8 +859,6 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
   }
 }
 
-// ── Create user form sheet ────────────────────────────────────────────────
-
 class _UserFormSheet extends StatefulWidget {
   const _UserFormSheet({
     required this.title,
@@ -894,7 +885,6 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   final _passCtrl = TextEditingController();
   late String _role;
   bool _saving = false;
-  bool _obscurePass = true;
   String? _error;
 
   List<MapEntry<String, String>> _getRoleOptions(AppStrings s) {
@@ -955,22 +945,23 @@ class _UserFormSheetState extends State<_UserFormSheet> {
               ),
             ),
             const SizedBox(height: 16),
-            _tf(s.userFormFullNameLabel, _nameCtrl, icon: Icons.person),
-            const SizedBox(height: 12),
-            _tf(
-              s.userFormEmailLabel,
-              _emailCtrl,
-              icon: Icons.email,
-              keyboard: TextInputType.emailAddress,
+            HwbTextField(
+              label: s.userFormFullNameLabel,
+              controller: _nameCtrl,
+              icon: Icons.person,
             ),
             const SizedBox(height: 12),
-            _tf(
-              s.userFormPasswordLabel,
-              _passCtrl,
+            HwbTextField(
+              label: s.userFormEmailLabel,
+              controller: _emailCtrl,
+              icon: Icons.email,
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 12),
+            HwbTextField(
+              label: s.userFormPasswordLabel,
+              controller: _passCtrl,
               icon: Icons.lock,
-              obscure: _obscurePass,
-              onToggleObscure: () =>
-                  setState(() => _obscurePass = !_obscurePass),
             ),
             const SizedBox(height: 12),
             Text(s.userFormRoleLabel, style: const TextStyle(fontSize: 13)),
@@ -1026,49 +1017,6 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _tf(
-    String label,
-    TextEditingController ctrl, {
-    IconData? icon,
-    TextInputType keyboard = TextInputType.text,
-    bool obscure = false,
-    VoidCallback? onToggleObscure,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 13)),
-        const SizedBox(height: 4),
-        TextField(
-          controller: ctrl,
-          keyboardType: keyboard,
-          obscureText: obscure,
-          style: const TextStyle(fontSize: 14),
-          decoration: InputDecoration(
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 12,
-            ),
-            prefixIcon: icon != null
-                ? Icon(icon, size: 18, color: AppColors.secondary)
-                : null,
-            suffixIcon: onToggleObscure != null
-                ? IconButton(
-                    icon: Icon(
-                      obscure ? Icons.visibility_off : Icons.visibility,
-                      size: 20,
-                      color: AppColors.textSecondary,
-                    ),
-                    onPressed: onToggleObscure,
-                  )
-                : null,
-          ),
-        ),
-      ],
     );
   }
 

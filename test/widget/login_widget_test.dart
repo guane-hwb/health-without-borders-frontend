@@ -75,6 +75,10 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   bool get hasToken => false;
+
+  @override
+  ValueNotifier<UserSession?> get sessionNotifier =>
+      ValueNotifier<UserSession?>(null);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

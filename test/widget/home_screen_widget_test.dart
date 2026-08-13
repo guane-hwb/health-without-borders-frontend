@@ -89,6 +89,10 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   bool get hasToken => currentUser != null;
+
+  @override
+  ValueNotifier<UserSession?> get sessionNotifier =>
+      ValueNotifier<UserSession?>(null);
 }
 
 class FakeLocalDatabase implements LocalDatabase {

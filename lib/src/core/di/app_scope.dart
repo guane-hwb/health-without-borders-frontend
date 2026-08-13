@@ -11,8 +11,8 @@ import '../network/reachability.dart';
 import '../storage/local_database.dart';
 import '../sync/sync_engine.dart';
 
-class AppScope extends InheritedWidget {
-  const AppScope({
+class AppScope extends InheritedNotifier<ValueNotifier<UserSession?>> {
+  AppScope({
     super.key,
     required this.authRepository,
     required this.userRepository,
@@ -22,7 +22,7 @@ class AppScope extends InheritedWidget {
     required this.syncEngine,
     required this.reachability,
     required super.child,
-  });
+  }) : super(notifier: authRepository.sessionNotifier);
 
   final AuthRepository authRepository;
   final UserRepository userRepository;
@@ -40,9 +40,4 @@ class AppScope extends InheritedWidget {
     if (scope == null) throw StateError('AppScope not found in widget tree.');
     return scope;
   }
-
-  @override
-  bool updateShouldNotify(covariant AppScope old) =>
-      old.authRepository != authRepository ||
-      old.patientRepository != patientRepository;
 }

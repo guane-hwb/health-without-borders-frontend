@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/country_display.dart';
+import '../../../shared/widgets/hwb_text_field.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
@@ -17,6 +19,7 @@ class EditPatientScreen extends StatefulWidget {
 }
 
 class _EditPatientScreenState extends State<EditPatientScreen> {
+  final _formKey = GlobalKey<FormState>();
   late final String _fullName, _dob, _biologicalSex, _bloodType, _documentInfo;
   late final TextEditingController _weightCtrl,
       _heightCtrl,
@@ -26,12 +29,14 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
   late String _nationalityCode;
   bool _isSaving = false;
 
-  static const _nationCodes = {
-    'COL': 'Colombia',
-    'VEN': 'Venezuela',
-    'ECU': 'Ecuador',
-    'PER': 'Perú',
-  };
+  static const _offeredNationCodes = <String>[
+    'COL',
+    'VEN',
+    'ECU',
+    'PER',
+    'HTI',
+    'CUB',
+  ];
 
   @override
   void initState() {
@@ -47,9 +52,7 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
     _streetCtrl = TextEditingController(text: info.address.street ?? '');
     _cityCtrl = TextEditingController(text: info.address.city);
     _stateCtrl = TextEditingController(text: info.address.state);
-    _nationalityCode = _nationCodes.containsKey(info.nationalityCode)
-        ? info.nationalityCode
-        : 'COL';
+    _nationalityCode = info.nationalityCode;
     _biologicalSex = info.biologicalSex;
   }
 
@@ -63,20 +66,48 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
     super.dispose();
   }
 
-  // fe-edit-patient-guardar-descarta: Implementación de guardado y persistencia
+  String? _validateWeight(String? val) {
+    if (val == null || val.trim().isEmpty) return null;
+    final parsed = double.tryParse(val.replaceAll(',', '.'));
+    if (parsed == null || parsed <= 0.5 || parsed > 250) {
+      final isEs = AppStrings.of(context).isEs;
+      return isEs
+          ? 'Peso fuera de rango (0.5 - 250 kg)'
+          : 'Weight out of range (0.5 - 250 kg)';
+    }
+    return null;
+  }
+
+  String? _validateHeight(String? val) {
+    if (val == null || val.trim().isEmpty) return null;
+    final parsed = double.tryParse(val.replaceAll(',', '.'));
+    if (parsed == null || parsed <= 20 || parsed > 220) {
+      final isEs = AppStrings.of(context).isEs;
+      return isEs
+          ? 'Talla fuera de rango (20 - 220 cm)'
+          : 'Height out of range (20 - 220 cm)';
+    }
+    return null;
+  }
+
   Future<void> _save() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
     setState(() => _isSaving = true);
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
-    final double? parsedWeight = double.tryParse(
-      _weightCtrl.text.trim().replaceAll(',', '.'),
-    );
-    final double? parsedHeight = double.tryParse(
-      _heightCtrl.text.trim().replaceAll(',', '.'),
-    );
+    final String wText = _weightCtrl.text.trim().replaceAll(',', '.');
+    final String hText = _heightCtrl.text.trim().replaceAll(',', '.');
 
     final currentInfo = widget.patient.patientInfo;
+    final double? parsedWeight = wText.isEmpty
+        ? currentInfo.weight
+        : double.tryParse(wText);
+    final double? parsedHeight = hText.isEmpty
+        ? currentInfo.height
+        : double.tryParse(hText);
+
     final updatedInfo = PatientInfo(
       identification: currentInfo.identification,
       firstName: currentInfo.firstName,
@@ -85,7 +116,7 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
       secondLastName: currentInfo.secondLastName,
       dob: currentInfo.dob,
       nationalityCode: _nationalityCode,
-      nationalityName: _nationCodes[_nationalityCode],
+      nationalityName: countryDisplay(_nationalityCode).name(isEs: isEs),
       biologicalSex: currentInfo.biologicalSex,
       genderIdentity: currentInfo.genderIdentity,
       ethnicity: currentInfo.ethnicity,
@@ -162,7 +193,16 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final isEs = s.isEs;
     final sexLabels = {'M': 'Masculino', 'F': 'Femenino', 'I': 'Indeterminado'};
+
+    final nationCodes = <String, String>{
+      for (final code in _offeredNationCodes)
+        code: countryDisplay(code).name(isEs: isEs),
+      if (!_offeredNationCodes.contains(_nationalityCode))
+        _nationalityCode: countryDisplay(_nationalityCode).name(isEs: isEs),
+    };
+
     return Scaffold(
       backgroundColor: const Color(0xFFEBF2F8),
       body: SafeArea(
@@ -175,77 +215,100 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
                   onBack: () => Navigator.of(context).pop(),
                 ),
                 Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 60),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _sec(s.patientInfoReadOnly),
-                        const SizedBox(height: 4),
-                        Text(
-                          s.fieldsProtected,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
+                  child: Form(
+                    key: _formKey,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 60),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _sec(s.patientInfoReadOnly),
+                          const SizedBox(height: 4),
+                          Text(
+                            s.fieldsProtected,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        _ro(s.name, _fullName, Icons.person),
-                        const SizedBox(height: 10),
-                        _ro(s.documentNumber, _documentInfo, Icons.badge),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _ro(
-                                s.dateOfBirth,
-                                _dob,
-                                Icons.calendar_today,
+                          const SizedBox(height: 12),
+                          _ro(s.name, _fullName, Icons.person),
+                          const SizedBox(height: 10),
+                          _ro(s.documentNumber, _documentInfo, Icons.badge),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _ro(
+                                  s.dateOfBirth,
+                                  _dob,
+                                  Icons.calendar_today,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _ro(
-                                s.gender,
-                                sexLabels[_biologicalSex] ?? _biologicalSex,
-                                Icons.wc,
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _ro(
+                                  s.gender,
+                                  sexLabels[_biologicalSex] ?? _biologicalSex,
+                                  Icons.wc,
+                                ),
                               ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          _ro(s.bloodType, _bloodType, Icons.bloodtype),
+                          const SizedBox(height: 20),
+                          _sec(s.editableInfo),
+                          const SizedBox(height: 12),
+                          _dd(s.nationality, _nationalityCode, nationCodes, (
+                            v,
+                          ) {
+                            if (v != null) setState(() => _nationalityCode = v);
+                          }),
+                          const SizedBox(height: 12),
+                          HwbTextField(
+                            label: s.weight,
+                            controller: _weightCtrl,
+                            icon: Icons.monitor_weight,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        _ro(s.bloodType, _bloodType, Icons.bloodtype),
-                        const SizedBox(height: 20),
-                        _sec(s.editableInfo),
-                        const SizedBox(height: 12),
-                        _dd(s.nationality, _nationalityCode, _nationCodes, (v) {
-                          if (v != null) setState(() => _nationalityCode = v);
-                        }),
-                        const SizedBox(height: 12),
-                        _tf(
-                          s.weight,
-                          _weightCtrl,
-                          icon: Icons.monitor_weight,
-                          keyboard: TextInputType.number,
-                        ),
-                        const SizedBox(height: 12),
-                        _tf(
-                          s.height,
-                          _heightCtrl,
-                          icon: Icons.open_in_full,
-                          keyboard: TextInputType.number,
-                        ),
-                        const SizedBox(height: 20),
-                        _sec(s.address),
-                        const SizedBox(height: 12),
-                        _tf(s.street, _streetCtrl, icon: Icons.location_on),
-                        const SizedBox(height: 12),
-                        _tf(s.city, _cityCtrl, icon: Icons.location_city),
-                        const SizedBox(height: 12),
-                        _tf(s.state, _stateCtrl, icon: Icons.map),
-                        const SizedBox(height: 24),
-                        _btns(context, s),
-                      ],
+                            validator: _validateWeight,
+                          ),
+                          const SizedBox(height: 12),
+                          HwbTextField(
+                            label: s.height,
+                            controller: _heightCtrl,
+                            icon: Icons.open_in_full,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            validator: _validateHeight,
+                          ),
+                          const SizedBox(height: 20),
+                          _sec(s.address),
+                          const SizedBox(height: 12),
+                          HwbTextField(
+                            label: s.street,
+                            controller: _streetCtrl,
+                            icon: Icons.location_on,
+                          ),
+                          const SizedBox(height: 12),
+                          HwbTextField(
+                            label: s.city,
+                            controller: _cityCtrl,
+                            icon: Icons.location_city,
+                          ),
+                          const SizedBox(height: 12),
+                          HwbTextField(
+                            label: s.state,
+                            controller: _stateCtrl,
+                            icon: Icons.map,
+                          ),
+                          const SizedBox(height: 24),
+                          _btns(context, s),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -271,6 +334,7 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
       color: AppColors.primary,
     ),
   );
+
   Widget _ro(String label, String val, IconData icon) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -302,39 +366,7 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
       ),
     ],
   );
-  Widget _tf(
-    String label,
-    TextEditingController c, {
-    IconData? icon,
-    TextInputType keyboard = TextInputType.text,
-  }) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: const TextStyle(fontSize: 13)),
-      const SizedBox(height: 4),
-      TextField(
-        controller: c,
-        keyboardType: keyboard,
-        style: const TextStyle(fontSize: 14),
-        decoration: InputDecoration(
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 12,
-          ),
-          prefixIcon: icon != null
-              ? Icon(icon, size: 18, color: AppColors.secondary)
-              : null,
-          filled: true,
-          fillColor: AppColors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide.none,
-          ),
-        ),
-      ),
-    ],
-  );
+
   Widget _dd(
     String label,
     String val,
@@ -354,7 +386,7 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
         child: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
             isExpanded: true,
-            value: val,
+            value: opts.containsKey(val) ? val : null,
             items: opts.entries
                 .map(
                   (e) => DropdownMenuItem(value: e.key, child: Text(e.value)),
