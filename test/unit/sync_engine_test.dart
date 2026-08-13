@@ -119,6 +119,7 @@ void main() {
 
   group('refreshPendingCount', () {
     test('actualiza pendingCount con el valor de la base local', () async {
+      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 7);
       when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 7);
 
       await engine.refreshPendingCount();
@@ -127,10 +128,14 @@ void main() {
     });
 
     test('mantiene el valor previo si la base local lanza un error', () async {
+      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 3);
       when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 3);
       await engine.refreshPendingCount();
       expect(engine.pendingCount.value, 3);
 
+      when(
+        () => localDb.getUnsyncedCount(),
+      ).thenThrow(Exception('storage down'));
       when(
         () => localDb.getRetryablePendingCount(),
       ).thenThrow(Exception('storage down'));
@@ -145,6 +150,7 @@ void main() {
   group('syncAll', () {
     test('sin registros pendientes no llama al repositorio', () async {
       when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
+      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
       when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 0);
 
       int? notifiedCount;
@@ -167,6 +173,7 @@ void main() {
       when(
         () => patientRepo.syncPatient(any()),
       ).thenAnswer((_) async => buildResponse('success'));
+      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
       when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 0);
 
       await engine.syncAll();
