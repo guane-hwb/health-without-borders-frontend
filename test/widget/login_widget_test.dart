@@ -1,4 +1,4 @@
-// test/widget/features/auth/login_screen_widget_test.dart
+// test/widget/login_widget_test.dart
 
 import 'dart:async';
 
@@ -23,6 +23,8 @@ class FakeAuthRepository implements AuthRepository {
   bool loginCalled = false;
   String? loginEmail;
   String? loginPassword;
+  UserSession? _session;
+
   Future<UserSession> Function({
     required String email,
     required String password,
@@ -41,16 +43,18 @@ class FakeAuthRepository implements AuthRepository {
     loginEmail = email;
     loginPassword = password;
     if (loginHandler != null) {
-      return loginHandler!(email: email, password: password);
+      _session = await loginHandler!(email: email, password: password);
+      return _session!;
     }
-    return UserSession.fromEmail(email);
+    _session = UserSession.fromEmail(email);
+    return _session!;
   }
 
   @override
-  UserSession? get currentUser => null;
+  UserSession? get currentUser => _session;
 
   @override
-  Future<UserSession?> getCurrentUser() async => null;
+  Future<UserSession?> getCurrentUser() async => _session;
 
   @override
   Future<String> getAccessToken({bool forceRefresh = false}) async => '';
@@ -59,26 +63,30 @@ class FakeAuthRepository implements AuthRepository {
   Future<String?> refreshAccessToken() async => null;
 
   @override
-  Future<UserSession?> restoreSession() async => null;
+  Future<UserSession?> restoreSession() async => _session;
 
   @override
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
-  Future<void> clearSession() async {}
+  Future<void> clearSession() async {
+    _session = null;
+  }
 
   @override
-  Future<void> logout({bool wipeLocalData = false}) async {}
+  Future<void> logout({bool wipeLocalData = false}) async {
+    await clearSession();
+  }
 
   @override
   Future<bool> wipeLocalPhi({bool force = false}) async => true;
 
   @override
-  bool get hasToken => false;
+  bool get hasToken => _session != null;
 
   @override
   ValueNotifier<UserSession?> get sessionNotifier =>
-      ValueNotifier<UserSession?>(null);
+      ValueNotifier<UserSession?>(_session);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -118,6 +126,7 @@ void main() {
         ),
         reachability: Reachability(baseUrl: 'http://localhost'),
         child: MaterialApp(
+          routes: {'/login': (_) => const LoginScreen()},
           home: LoginScreen(showSessionExpired: showSessionExpired),
         ),
       ),

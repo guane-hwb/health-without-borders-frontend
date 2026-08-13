@@ -1,4 +1,4 @@
-// test/src/features/nfc/presentation/profile/tabs/profile_tab_vaccines_test.dart
+// test/unit/profile_tab_vaccines_test.dart
 //
 // Covers unit tests for ProfileTabVaccines via rendered text:
 // • _formattedDate — valid date, month out of range, no hyphens, insufficient parts

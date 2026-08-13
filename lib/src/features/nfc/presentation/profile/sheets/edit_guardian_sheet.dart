@@ -56,10 +56,16 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     _phoneCtrl = TextEditingController(text: widget.guardian.phone);
     _uidCtrl = TextEditingController(text: widget.guardian.deviceUid ?? '');
     _relationship = widget.guardian.relationship;
+    _uidCtrl.addListener(_onUidChanged);
+  }
+
+  void _onUidChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _uidCtrl.removeListener(_onUidChanged);
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _uidCtrl.dispose();
@@ -123,8 +129,9 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _label(s.guardianFullName),
           HwbTextField(
-            label: s.guardianFullName,
+            label: '',
             controller: _nameCtrl,
             hint: s.guardianFullNameHint,
             icon: Icons.person_outline,
@@ -163,8 +170,9 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
             }).toList(),
           ),
           const SizedBox(height: 14),
+          _label(s.guardianPhoneLabel),
           HwbTextField(
-            label: s.guardianPhoneLabel,
+            label: '',
             controller: _phoneCtrl,
             hint: s.guardianPhoneHint,
             icon: Icons.phone_outlined,
@@ -221,7 +229,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     child: Text(
       t,
       style: const TextStyle(
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),

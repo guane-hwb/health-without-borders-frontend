@@ -20,14 +20,20 @@ import 'package:health_without_borders_frontend/src/core/network/reachability.da
 // ─── Fakes ────────────────────────────────────────────────────────────────────
 
 class _FakeAuthRepository extends Fake implements AuthRepository {
-  @override
-  UserSession? get currentUser => UserSession(
+  final UserSession _session = UserSession(
     id: '1',
     email: 'test@org.com',
     fullName: 'Test User',
     role: UserRole.doctor,
     organizationId: 'org-1',
   );
+
+  @override
+  UserSession? get currentUser => _session;
+
+  @override
+  ValueNotifier<UserSession?> get sessionNotifier =>
+      ValueNotifier<UserSession?>(_session);
 
   @override
   Future<String> getAccessToken({bool forceRefresh = false}) async =>
@@ -116,17 +122,19 @@ Widget _wrap(
   String initialLocale = 'es',
 }) {
   final repo = patientRepo ?? _FakePatientRepository();
+  final authRepo = _FakeAuthRepository();
+
   return _TestLocaleWrapper(
     initialLocale: initialLocale,
     child: AppScope(
-      authRepository: _FakeAuthRepository(),
+      authRepository: authRepo,
       userRepository: _FakeUserRepository(),
       patientRepository: repo,
       localDatabase: _FakeLocalDatabase(),
       syncEngine: _FakeSyncEngine(),
       statsRepository: StatsRepository(
         apiClient: ApiClient(baseUrl: 'http://localhost'),
-        authRepository: _FakeAuthRepository(),
+        authRepository: authRepo,
       ),
       reachability: Reachability(baseUrl: 'http://localhost'),
 

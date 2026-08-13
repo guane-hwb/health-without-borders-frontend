@@ -28,21 +28,25 @@ import 'package:health_without_borders_frontend/src/core/network/reachability.da
 /// Controllable AuthRepository fake. Only restoreSession/currentUser/logout are
 /// exercised here; the rest is left to Fake's noSuchMethod (never called).
 class _GateAuth extends Fake implements AuthRepository {
-  _GateAuth({this.restoreResult, this.restoreFuture});
+  _GateAuth({this.restoreResult, this.restoreFuture}) {
+    _current = restoreResult;
+    _sessionNotifier = ValueNotifier<UserSession?>(restoreResult);
+  }
 
   final UserSession? restoreResult;
   final Future<UserSession?>? restoreFuture;
   UserSession? _current;
+  late final ValueNotifier<UserSession?> _sessionNotifier;
 
   @override
   UserSession? get currentUser => _current;
 
   @override
+  ValueNotifier<UserSession?> get sessionNotifier => _sessionNotifier;
+
+  @override
   Future<UserSession?> restoreSession() {
     if (restoreFuture != null) return restoreFuture!;
-    // Mirror production: a restored session becomes the current user, which is
-    // what HomeScreen reads via AppScope.
-    _current = restoreResult;
     return Future<UserSession?>.value(restoreResult);
   }
 

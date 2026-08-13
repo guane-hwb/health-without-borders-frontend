@@ -16,6 +16,7 @@ import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/sync/presentation/sync_queue_screen.dart';
 import 'package:health_without_borders_frontend/src/shared/widgets/screen_bottom_handle.dart';
@@ -59,18 +60,23 @@ Widget buildTestApp({
   required MockReachability reachability,
   String locale = 'es',
 }) {
+  final mockAuth = MockAuthRepository();
+  when(
+    () => mockAuth.sessionNotifier,
+  ).thenReturn(ValueNotifier<UserSession?>(null));
+
   return MaterialApp(
     home: _LocaleWrapper(
       locale: locale,
       child: AppScope(
-        authRepository: MockAuthRepository(),
+        authRepository: mockAuth,
         userRepository: MockUserRepository(),
         patientRepository: MockPatientRepository(),
         localDatabase: db,
         syncEngine: syncEngine,
         statsRepository: StatsRepository(
           apiClient: ApiClient(baseUrl: 'http://localhost'),
-          authRepository: MockAuthRepository(),
+          authRepository: mockAuth,
         ),
         reachability: reachability,
         child: child,
@@ -829,19 +835,24 @@ void main() {
     testWidgets('el botón back hace pop de la pantalla', (tester) async {
       when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
 
+      final mockAuth = MockAuthRepository();
+      when(
+        () => mockAuth.sessionNotifier,
+      ).thenReturn(ValueNotifier<UserSession?>(null));
+
       await tester.pumpWidget(
         MaterialApp(
           home: _LocaleWrapper(
             locale: 'es',
             child: AppScope(
-              authRepository: MockAuthRepository(),
+              authRepository: mockAuth,
               userRepository: MockUserRepository(),
               patientRepository: MockPatientRepository(),
               localDatabase: db,
               syncEngine: syncEngine,
               statsRepository: StatsRepository(
                 apiClient: ApiClient(baseUrl: 'http://localhost'),
-                authRepository: MockAuthRepository(),
+                authRepository: mockAuth,
               ),
               reachability: reachability,
               child: Builder(
@@ -849,14 +860,14 @@ void main() {
                   onPressed: () => Navigator.of(ctx).push(
                     MaterialPageRoute<void>(
                       builder: (_) => AppScope(
-                        authRepository: MockAuthRepository(),
+                        authRepository: mockAuth,
                         userRepository: MockUserRepository(),
                         patientRepository: MockPatientRepository(),
                         localDatabase: db,
                         syncEngine: syncEngine,
                         statsRepository: StatsRepository(
                           apiClient: ApiClient(baseUrl: 'http://localhost'),
-                          authRepository: MockAuthRepository(),
+                          authRepository: mockAuth,
                         ),
                         reachability: reachability,
                         child: const _LocaleWrapper(

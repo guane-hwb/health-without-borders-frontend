@@ -4,17 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
+import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/features/admin/presentation/manage_users_screen.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
-import 'package:health_without_borders_frontend/src/features/admin/presentation/manage_users_screen.dart';
-import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
-import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
-import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Fakes
@@ -87,6 +87,10 @@ class FakeAuthRepository extends Fake implements AuthRepository {
     isActive: true,
     organizationId: 'org-1',
   );
+
+  @override
+  ValueNotifier<UserSession?> get sessionNotifier =>
+      ValueNotifier<UserSession?>(currentUser);
 }
 
 class FakeUserRepositoryWithError extends FakeUserRepository {
@@ -163,18 +167,19 @@ Widget buildTestApp(
   String locale = 'es',
   FakeAuthRepository? fakeAuth,
 }) {
+  final authRepo = fakeAuth ?? FakeAuthRepository();
   return _TestLocaleWrapper(
     initialLocale: locale,
     child: MaterialApp(
       home: AppScope(
-        authRepository: fakeAuth ?? FakeAuthRepository(),
+        authRepository: authRepo,
         userRepository: fakeRepo,
         patientRepository: FakePatientRepository(),
         localDatabase: FakeLocalDatabase(),
         syncEngine: FakeSyncEngine(),
         statsRepository: StatsRepository(
           apiClient: ApiClient(baseUrl: 'http://localhost'),
-          authRepository: fakeAuth ?? FakeAuthRepository(),
+          authRepository: authRepo,
         ),
         reachability: Reachability(baseUrl: 'http://localhost'),
         child: const ManageUsersScreen(),

@@ -1,13 +1,4 @@
 // test/widget/home_screen_widget_test.dart
-//
-// Widget testing for HomeScreen.
-// It covers what the Flutter widget tree DOES require:
-//   • Rendering of the header (greeting, name, role badge)
-//   • Cards visible according to role (superadmin / orgAdmin / clinician)
-//   • Navigation when tapping each ActionCard
-//   • Logout confirmation dialog
-//   • _SyncCard displays the pending badge when there are > 0
-//   • Redirection to LoginScreen when no user is present
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -92,7 +83,7 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   ValueNotifier<UserSession?> get sessionNotifier =>
-      ValueNotifier<UserSession?>(null);
+      ValueNotifier<UserSession?>(currentUser);
 }
 
 class FakeLocalDatabase implements LocalDatabase {
@@ -215,19 +206,20 @@ Widget _wrapHome({required UserSession? user}) {
   return AppLocale(
     locale: 'es',
     setLocale: (_) {},
-    child: MaterialApp(
-      home: AppScope(
+    child: AppScope(
+      authRepository: mockAuth,
+      userRepository: userRepository,
+      patientRepository: patientRepository,
+      localDatabase: mockDb,
+      syncEngine: syncEngine,
+      statsRepository: StatsRepository(
+        apiClient: ApiClient(baseUrl: 'http://localhost'),
         authRepository: mockAuth,
-        userRepository: userRepository,
-        patientRepository: patientRepository,
-        localDatabase: mockDb,
-        syncEngine: syncEngine,
-        statsRepository: StatsRepository(
-          apiClient: ApiClient(baseUrl: 'http://localhost'),
-          authRepository: mockAuth,
-        ),
-        reachability: Reachability(baseUrl: 'http://localhost'),
-        child: const HomeScreen(),
+      ),
+      reachability: Reachability(baseUrl: 'http://localhost'),
+      child: MaterialApp(
+        routes: {'/login': (_) => const LoginScreen()},
+        home: const HomeScreen(),
       ),
     ),
   );
