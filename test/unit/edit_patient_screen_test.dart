@@ -12,6 +12,7 @@ import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/edit_patient_screen.dart';
@@ -37,6 +38,10 @@ AppScope _buildTestScope({
   MockSyncEngine? syncMock,
 }) {
   final auth = MockAuthRepository();
+  when(
+    () => auth.sessionNotifier,
+  ).thenReturn(ValueNotifier<UserSession?>(null));
+
   final user = MockUserRepository();
   final repo = MockPatientRepository();
   final db = dbMock ?? MockLocalDatabase();
@@ -127,7 +132,7 @@ PatientFullRecord _makeRecord({
   String sex = 'F',
   String? bloodType = 'A+',
   double? weight = 58.0,
-  double? height = 1.62,
+  double? height = 162.0,
   String nationalityCode = 'COL',
   String street = 'Calle 10 #20-30',
   String city = 'Bogotá',
@@ -365,31 +370,37 @@ void main() {
     testWidgets('peso pre-relleno desde PatientInfo', (tester) async {
       await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(TextField, '58.0'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, '58.0'), findsOneWidget);
     });
 
     testWidgets('altura pre-rellena desde PatientInfo', (tester) async {
       await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(TextField, '1.62'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, '162.0'), findsOneWidget);
     });
 
     testWidgets('calle pre-rellena desde Address', (tester) async {
       await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(TextField, 'Calle 10 #20-30'), findsOneWidget);
+      expect(
+        find.widgetWithText(TextFormField, 'Calle 10 #20-30'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('ciudad pre-rellena desde Address', (tester) async {
       await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(TextField, 'Bogotá'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, 'Bogotá'), findsOneWidget);
     });
 
     testWidgets('departamento pre-relleno desde Address', (tester) async {
       await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(TextField, 'Cundinamarca'), findsOneWidget);
+      expect(
+        find.widgetWithText(TextFormField, 'Cundinamarca'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('peso y altura vacíos cuando PatientInfo no los tiene', (
@@ -403,7 +414,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final emptyTextFields = tester
-          .widgetList<TextField>(find.byType(TextField))
+          .widgetList<TextFormField>(find.byType(TextFormField))
           .where((tf) => tf.controller?.text == '')
           .toList();
       expect(emptyTextFields.length, greaterThanOrEqualTo(2));
@@ -428,7 +439,7 @@ void main() {
         _wrap(EditPatientScreen(patient: _makeRecord(nationalityCode: 'XXX'))),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Colombia'), findsWidgets);
+      expect(find.byType(DropdownButton<String>), findsWidgets);
     });
 
     testWidgets('el usuario puede cambiar la nacionalidad a Venezuela', (
@@ -470,40 +481,40 @@ void main() {
       await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
       await tester.pumpAndSettle();
 
-      final weightField = find.widgetWithText(TextField, '58.0');
+      final weightField = find.widgetWithText(TextFormField, '58.0');
       await tester.tap(weightField);
       await tester.pumpAndSettle();
       await tester.enterText(weightField, '61.0');
       await tester.pumpAndSettle();
 
-      expect(find.widgetWithText(TextField, '61.0'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, '61.0'), findsOneWidget);
     });
 
     testWidgets('el usuario puede editar el campo altura', (tester) async {
       await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
       await tester.pumpAndSettle();
 
-      final heightField = find.widgetWithText(TextField, '1.62');
+      final heightField = find.widgetWithText(TextFormField, '162.0');
       await tester.tap(heightField);
       await tester.pumpAndSettle();
-      await tester.enterText(heightField, '1.65');
+      await tester.enterText(heightField, '165.0');
       await tester.pumpAndSettle();
 
-      expect(find.widgetWithText(TextField, '1.65'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, '165.0'), findsOneWidget);
     });
 
     testWidgets('el usuario puede editar el campo calle', (tester) async {
       await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
       await tester.pumpAndSettle();
 
-      final streetField = find.widgetWithText(TextField, 'Calle 10 #20-30');
+      final streetField = find.widgetWithText(TextFormField, 'Calle 10 #20-30');
       await tester.tap(streetField);
       await tester.pumpAndSettle();
       await tester.enterText(streetField, 'Carrera 15 #30-40');
       await tester.pumpAndSettle();
 
       expect(
-        find.widgetWithText(TextField, 'Carrera 15 #30-40'),
+        find.widgetWithText(TextFormField, 'Carrera 15 #30-40'),
         findsOneWidget,
       );
     });
@@ -512,13 +523,13 @@ void main() {
       await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
       await tester.pumpAndSettle();
 
-      final cityField = find.widgetWithText(TextField, 'Bogotá');
+      final cityField = find.widgetWithText(TextFormField, 'Bogotá');
       await tester.tap(cityField);
       await tester.pumpAndSettle();
       await tester.enterText(cityField, 'Medellín');
       await tester.pumpAndSettle();
 
-      expect(find.widgetWithText(TextField, 'Medellín'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, 'Medellín'), findsOneWidget);
     });
 
     testWidgets('el usuario puede editar el campo departamento', (
@@ -527,13 +538,13 @@ void main() {
       await tester.pumpWidget(_wrap(EditPatientScreen(patient: _makeRecord())));
       await tester.pumpAndSettle();
 
-      final stateField = find.widgetWithText(TextField, 'Cundinamarca');
+      final stateField = find.widgetWithText(TextFormField, 'Cundinamarca');
       await tester.tap(stateField);
       await tester.pumpAndSettle();
       await tester.enterText(stateField, 'Antioquia');
       await tester.pumpAndSettle();
 
-      expect(find.widgetWithText(TextField, 'Antioquia'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, 'Antioquia'), findsOneWidget);
     });
   });
 

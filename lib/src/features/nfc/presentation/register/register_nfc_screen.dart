@@ -20,7 +20,6 @@ import 'steps/step4_background.dart';
 import 'steps/step5_review.dart';
 import 'steps/step6_success.dart';
 import '../../../../core/i18n/app_strings.dart';
-import '../../../home/presentation/home_screen.dart';
 
 class RegisterNfcScreen extends StatefulWidget {
   const RegisterNfcScreen({super.key});
@@ -103,10 +102,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final canLeave = await _confirmDiscard();
     if (!canLeave || !mounted) return;
 
-    await Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (context) => const HomeScreen()),
-      (route) => false,
-    );
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _confirm() async {

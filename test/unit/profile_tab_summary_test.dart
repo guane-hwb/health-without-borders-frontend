@@ -1,4 +1,4 @@
-// test/unit/features/nfc/presentation/profile/tabs/profile_tab_summary_test.dart
+// test/unit/profile_tab_summary_test.dart
 //
 // Unit tests for ProfileTabSummary.
 // Only change detection getters and static formatting/label helpers

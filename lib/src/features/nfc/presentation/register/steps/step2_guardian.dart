@@ -9,6 +9,7 @@ import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../core/validation/identity_validators.dart';
 import '../../../../../shared/widgets/form_widgets.dart';
+import '../../../../../shared/widgets/hwb_text_field.dart';
 import '../../../domain/register_draft.dart';
 
 class Step2Guardian extends StatefulWidget {
@@ -539,14 +540,12 @@ class _Step2State extends State<Step2Guardian> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _StyledTextField(
+                          HwbTextField(
                             label: s.guardianFullName,
                             controller: _name,
                             hint: s.guardianFullNameHint,
-                            required: true,
                             icon: Icons.person_outline,
                             keyboardType: TextInputType.name,
-                            textCapitalization: TextCapitalization.words,
                           ),
                           const SizedBox(height: 12),
                           _RelChipSelector(
@@ -558,11 +557,10 @@ class _Step2State extends State<Step2Guardian> {
                                 setState(() => d.guardianRelationship = v),
                           ),
                           const SizedBox(height: 12),
-                          _StyledTextField(
+                          HwbTextField(
                             label: s.guardianPhoneLabel,
                             controller: _phone,
                             hint: s.guardianPhoneHint,
-                            required: true,
                             icon: Icons.phone_outlined,
                             keyboardType: TextInputType.phone,
                           ),
@@ -576,11 +574,10 @@ class _Step2State extends State<Step2Guardian> {
                                 setState(() => _selectedDocType = v),
                           ),
                           const SizedBox(height: 12),
-                          _StyledTextField(
+                          HwbTextField(
                             label: s.documentNumberLabel,
                             controller: _docNumber,
                             hint: 'Ej. 1234567890',
-                            required: true,
                             icon: Icons.badge_outlined,
                             keyboardType: TextInputType.number,
                           ),
@@ -872,68 +869,12 @@ class _AuthSection extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          Row(
-            children: [
-              Text(
-                s.email,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              if (emailRequired)
-                const Text(
-                  ' *',
-                  style: TextStyle(
-                    color: AppColors.error,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          TextField(
+          HwbTextField(
+            label: s.email,
             controller: emailController,
+            hint: s.emailHint,
+            icon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
-            style: const TextStyle(
-              fontSize: 15,
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
-            decoration: InputDecoration(
-              hintText: s.emailHint,
-              hintStyle: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textSecondary,
-              ),
-              filled: true,
-              fillColor: const Color(0xFFF7F9FC),
-              prefixIcon: const Icon(
-                Icons.email_outlined,
-                size: 20,
-                color: AppColors.textSecondary,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 14,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: Color(0xFFB0B8C4),
-                  width: 1.5,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: AppColors.primary,
-                  width: 2,
-                ),
-              ),
-            ),
           ),
           const SizedBox(height: 16),
 
@@ -1509,92 +1450,6 @@ class _NoticeBanner extends StatelessWidget {
   }
 }
 
-class _StyledTextField extends StatelessWidget {
-  const _StyledTextField({
-    required this.label,
-    required this.controller,
-    required this.hint,
-    required this.icon,
-    this.required = false,
-    this.keyboardType = TextInputType.text,
-    this.textCapitalization = TextCapitalization.none,
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final String hint;
-  final IconData icon;
-  final bool required;
-  final TextInputType keyboardType;
-  final TextCapitalization textCapitalization;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            if (required)
-              const Text(
-                ' *',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          textCapitalization: textCapitalization,
-          style: const TextStyle(
-            fontSize: 15,
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w500,
-          ),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-            ),
-            filled: true,
-            fillColor: AppColors.white,
-            prefixIcon: Icon(icon, size: 20, color: AppColors.textSecondary),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 14,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: Color(0xFFB0B8C4),
-                width: 1.5,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.primary, width: 2),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _RelChipSelector extends StatelessWidget {
   const _RelChipSelector({
     required this.label,
@@ -1945,13 +1800,12 @@ class _Guardian2Section extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _StyledTextField(
+                HwbTextField(
                   label: s.guardianFullName,
                   controller: nameCtrl,
                   hint: s.guardianFullNameHint,
                   icon: Icons.person_outline,
                   keyboardType: TextInputType.name,
-                  textCapitalization: TextCapitalization.words,
                 ),
                 const SizedBox(height: 12),
                 _RelChipSelector(
@@ -1961,7 +1815,7 @@ class _Guardian2Section extends StatelessWidget {
                   onChanged: onRelationshipChanged,
                 ),
                 const SizedBox(height: 12),
-                _StyledTextField(
+                HwbTextField(
                   label: s.guardianPhoneLabel,
                   controller: phoneCtrl,
                   hint: s.guardianPhoneHint,
@@ -1976,7 +1830,7 @@ class _Guardian2Section extends StatelessWidget {
                   onChanged: onDocTypeChanged,
                 ),
                 const SizedBox(height: 12),
-                _StyledTextField(
+                HwbTextField(
                   label: s.documentNumberLabel,
                   controller: docNumberCtrl,
                   hint: 'Ej. 1234567890',

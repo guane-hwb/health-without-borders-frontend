@@ -1,9 +1,11 @@
 // lib/src/features/nfc/presentation/profile/sheets/edit_guardian_sheet.dart
+
 import 'package:flutter/material.dart';
 
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../../../shared/widgets/hwb_text_field.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/sheet_scaffold.dart';
 
@@ -30,10 +32,8 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   late String _relationship;
   bool _scanning = false;
 
-  // Relationship codes — labels are resolved from AppStrings at build time
   static const List<String> _relationshipCodes = ['01', '02', '03', '04'];
 
-  /// Returns the translated label for a relationship code.
   String _relationshipLabel(AppStrings s, String code) {
     switch (code) {
       case '01':
@@ -56,10 +56,16 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     _phoneCtrl = TextEditingController(text: widget.guardian.phone);
     _uidCtrl = TextEditingController(text: widget.guardian.deviceUid ?? '');
     _relationship = widget.guardian.relationship;
+    _uidCtrl.addListener(_onUidChanged);
+  }
+
+  void _onUidChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _uidCtrl.removeListener(_onUidChanged);
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _uidCtrl.dispose();
@@ -124,8 +130,9 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _label(s.guardianFullName),
-          _input(
-            _nameCtrl,
+          HwbTextField(
+            label: '',
+            controller: _nameCtrl,
             hint: s.guardianFullNameHint,
             icon: Icons.person_outline,
           ),
@@ -164,36 +171,25 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
           ),
           const SizedBox(height: 14),
           _label(s.guardianPhoneLabel),
-          _input(
-            _phoneCtrl,
+          HwbTextField(
+            label: '',
+            controller: _phoneCtrl,
             hint: s.guardianPhoneHint,
             icon: Icons.phone_outlined,
-            keyboard: TextInputType.phone,
+            keyboardType: TextInputType.phone,
           ),
           const SizedBox(height: 14),
           _label(s.guardianNfcDevice),
           Row(
             children: [
               Expanded(
-                child: TextField(
+                child: HwbTextField(
+                  label: '',
                   controller: _uidCtrl,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText: s.guardianNfcUidHint,
-                    prefixIcon: Icon(
-                      Icons.family_restroom,
-                      size: 18,
-                      color: _uidCtrl.text.trim().isNotEmpty
-                          ? AppColors.success
-                          : AppColors.primary,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
-                  ),
-                  onChanged: (_) => setState(() {}),
+                  hint: s.guardianNfcUidHint,
+                  icon: _uidCtrl.text.trim().isNotEmpty
+                      ? Icons.check_circle_outline
+                      : Icons.family_restroom,
                 ),
               ),
               const SizedBox(width: 8),
@@ -233,27 +229,10 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     child: Text(
       t,
       style: const TextStyle(
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
-    ),
-  );
-
-  Widget _input(
-    TextEditingController c, {
-    required String hint,
-    required IconData icon,
-    TextInputType keyboard = TextInputType.text,
-  }) => TextField(
-    controller: c,
-    keyboardType: keyboard,
-    style: const TextStyle(fontSize: 14),
-    decoration: InputDecoration(
-      isDense: true,
-      hintText: hint,
-      prefixIcon: Icon(icon, size: 18, color: AppColors.primary),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     ),
   );
 }

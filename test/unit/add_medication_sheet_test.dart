@@ -1,4 +1,4 @@
-// test/unit/add_medication_label_test.dart
+// test/unit/add_medication_sheet_test.dart
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';

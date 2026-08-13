@@ -11,6 +11,7 @@ import 'core/i18n/app_strings.dart';
 import 'core/network/api_client.dart';
 import 'core/network/reachability.dart';
 import 'core/nfc/nfc_session_manager.dart';
+import 'core/routes/app_routes.dart';
 import 'core/storage/local_database.dart';
 import 'core/sync/sync_engine.dart';
 import 'design/theme/app_theme.dart';
@@ -126,6 +127,7 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: ThemeMode.light,
+          onGenerateRoute: AppRoutes.onGenerateRoute,
           home: AuthGate(authRepository: _authRepository),
         ),
       ),

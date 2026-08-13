@@ -2,8 +2,8 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/material.dart';
 
 import '../../../../core/di/app_scope.dart';
 import '../../../../core/i18n/app_strings.dart';
@@ -14,13 +14,13 @@ import '../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../core/nfc/partial_card_notice.dart';
 import '../../../../core/storage/local_database.dart';
 import '../../../../core/utils/app_logger.dart';
-import '../nfc_guided_write.dart';
 import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/screen_bottom_handle.dart';
 import '../../../auth/domain/user_session.dart';
 import '../../domain/patient_record.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
+import '../nfc_guided_write.dart';
 import 'patient_profile_helpers.dart';
 import 'sheets/add_allergy_sheet.dart';
 import 'sheets/add_chronic_condition_sheet.dart';
@@ -38,7 +38,6 @@ import 'tabs/profile_tab_vaccines.dart';
 import 'widgets/profile_banners.dart';
 import 'widgets/profile_header.dart';
 import 'widgets/profile_tabs_bar.dart';
-import '../../../home/presentation/home_screen.dart';
 
 /// Canonical patient profile screen.
 class PatientProfileScreen extends StatefulWidget {
@@ -53,9 +52,7 @@ class PatientProfileScreen extends StatefulWidget {
 
   final PatientFullRecord patient;
   final String? lastSyncedAt;
-
   final bool readOnly;
-
   final bool offline;
   final bool emergency;
 
@@ -114,6 +111,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
       List<ConnectivityResult> results,
     ) {
+      if (!mounted) return;
       _updateConnectivityStatus(results);
     });
   }
@@ -668,7 +666,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   Future<void> _openGuardianSheet(int guardianIndex) async {
     if (widget.readOnly) return;
-    final current = guardianIndex == 1
+    final GuardianInfo? current = guardianIndex == 1
         ? _draft.guardianInfo
         : _draft.guardian2Info;
     if (current == null) return;
@@ -680,7 +678,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       builder: (_) => EditGuardianSheet(
         guardian: current,
         guardianIndex: guardianIndex,
-        onConfirm: (updatedGuardian) {
+        onConfirm: (GuardianInfo updatedGuardian) {
           setState(() {
             _draft = _draft.copyWith(
               guardianInfo: guardianIndex == 1
@@ -915,9 +913,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       if (confirmed != true) return;
       if (!mounted) return;
     }
-    await Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (context) => const HomeScreen()),
-      (route) => false,
-    );
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 }

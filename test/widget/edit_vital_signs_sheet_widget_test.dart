@@ -1,4 +1,4 @@
-// test/widget/features/nfc/profile/sheets/edit_vital_signs_sheet_widget_test.dart
+// test/widget/edit_vital_signs_sheet_widget_test.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
