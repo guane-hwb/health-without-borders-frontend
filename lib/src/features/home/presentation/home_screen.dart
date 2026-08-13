@@ -553,13 +553,12 @@ class _SyncCardState extends State<_SyncCard> {
                   ),
                   if (hasPending)
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD4A017),
-                        borderRadius: BorderRadius.circular(12),
+                      width: 28,
+                      height: 28,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFD4A017),
+                        shape: BoxShape.circle,
                       ),
                       child: Text(
                         '$pending',

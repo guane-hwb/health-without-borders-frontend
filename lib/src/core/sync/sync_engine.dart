@@ -58,7 +58,7 @@ class SyncEngine {
 
   Future<void> refreshPendingCount() async {
     try {
-      pendingCount.value = await _localDb.getRetryablePendingCount();
+      pendingCount.value = await _localDb.getUnsyncedCount();
       blockedCount.value = await _localDb.getBlockedCount();
     } catch (e, stack) {
       AppLogger.e(
