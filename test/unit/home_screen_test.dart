@@ -1,4 +1,4 @@
-// test/unit/features/home/home_screen_unit_test.dart
+// test/unit/features/home/home_screen_test.dart
 //
 // Unit tests for HomeScreen.
 // Covers the pure logic that does NOT require the widget tree:
@@ -53,14 +53,23 @@ class FakeAuthRepository implements AuthRepository {
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
+  ValueNotifier<UserSession?> get sessionNotifier =>
+      ValueNotifier<UserSession?>(session);
+
+  @override
   Future<void> clearSession() async {
     clearSessionCalled = true;
     session = null;
   }
 
   @override
-  Future<void> logout() async {
+  Future<void> logout({bool wipeLocalData = false}) async {
     await clearSession();
+  }
+
+  @override
+  Future<bool> wipeLocalPhi({bool force = false}) async {
+    return true;
   }
 
   @override

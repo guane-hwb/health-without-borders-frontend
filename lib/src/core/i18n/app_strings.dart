@@ -41,6 +41,8 @@ class AppStrings {
 
   final String _locale;
 
+  bool get isEs => _locale == 'es';
+
   static AppStrings of(BuildContext context) {
     return AppStrings._(AppLocale.of(context).locale);
   }
@@ -346,6 +348,7 @@ class AppStrings {
   String get actionPendingSyncEmpty => _get('actionPendingSyncEmpty');
   String actionPendingSyncCount(int n) =>
       _get('actionPendingSyncCount').replaceAll('{n}', '$n');
+
   // Admin v2 ─────────────────────────────────────────────────────────────
   String get kpiUsers => _get('kpiUsers');
   String get kpiSyncedOk => _get('kpiSyncedOk');
@@ -595,6 +598,7 @@ class AppStrings {
   String get statsTotalVaccines => _get('statsTotalVaccines');
   String get statsTotalAllergies => _get('statsTotalAllergies');
   String get statsMinorsPercentage => _get('statsMinorsPercentage');
+  String get statsMinorsAsOfToday => _get('statsMinorsAsOfToday');
   String get statsVaccineDistribution => _get('statsVaccineDistribution');
   String get statsAllergyDistribution => _get('statsAllergyDistribution');
   String get statsNationalityDistribution =>
@@ -633,6 +637,10 @@ class AppStrings {
   String get orgDeleteButton => _get('orgDeleteButton');
   String get orgDeleteDialogTitle => _get('orgDeleteDialogTitle');
   String get orgDeleteDialogContent => _get('orgDeleteDialogContent');
+  String statsComparedTo(String from, String to) =>
+      _get('statsComparedTo').replaceAll('{from}', from).replaceAll('{to}', to);
+  String statsGeneratedAt(String time) =>
+      _get('statsGeneratedAt').replaceAll('{time}', time);
 
   // ══════════════════════════════════════════════════════════════════════════
   // TRANSLATIONS
@@ -1083,6 +1091,7 @@ class AppStrings {
     'dayDom': 'dom',
     'monEne': 'ene',
     'monFeb': 'feb',
+    'monMarString': 'mar',
     'monMar': 'mar',
     'monAbr': 'abr',
     'monMay': 'may',
@@ -1093,7 +1102,8 @@ class AppStrings {
     'monOct': 'oct',
     'monNov': 'nov',
     'monDic': 'dic',
-    'timeAm': 'a.m.', 'timePm': 'p.m.',
+    'timeAm': 'a.m.',
+    'timePm': 'p.m.',
     'modIntramural': 'Intramural',
     'modExtramuralMobil': 'Extramural móvil',
     'modDomiciliaria': 'Domiciliaria',
@@ -1164,6 +1174,7 @@ class AppStrings {
     'statsTotalVaccines': 'Vacunas Aplicadas',
     'statsTotalAllergies': 'Alergias Detectadas',
     'statsMinorsPercentage': 'Porcentaje Menores',
+    'statsMinorsAsOfToday': 'menores a día de hoy, no de la fecha del rango',
     'statsVaccineDistribution': 'Distribución de Vacunas',
     'statsAllergyDistribution': 'Distribución de Alergias',
     'statsNationalityDistribution': 'Distribución por Nacionalidad',
@@ -1204,7 +1215,10 @@ class AppStrings {
     'orgDeleteDialogTitle': '¿Eliminar organización?',
     'orgDeleteDialogContent':
         'Esta acción eliminará permanentemente la organización {name} y todos sus datos asociados.',
+    'statsComparedTo': 'Comparado con {from} – {to}',
+    'statsGeneratedAt': 'Generado el {time}',
   };
+
   static const Map<String, String> _en = {
     // Auth
     'appName': 'Health Without Borders',
@@ -1312,20 +1326,6 @@ class AppStrings {
     'relationship': 'Relationship',
     'guardianPhone': 'Guardian phone *',
     'guardianPin': "Guardian's 4-digit PIN *",
-    'editGuardianTitle': 'Edit guardian',
-    'guardianFullName': 'Full name',
-    'guardianFullNameHint': 'e.g. Carmen Vargas Pinto',
-    'guardianRelationship': 'Relationship',
-    'guardianPhoneLabel': 'Phone',
-    'guardianPhoneHint': 'e.g. +1 310 482 9914',
-    'guardianNfcDevice': 'Guardian NFC device',
-    'guardianNfcUidHint': 'NFC device UID',
-    'guardianNfcUnavailable': 'NFC not available. Enter UID manually.',
-    'guardianNfcError': 'Could not read the device. Please try again.',
-    'relParents': 'Parents',
-    'relSiblings': 'Siblings',
-    'relUncles': 'Uncles',
-    'relGrandparents': 'Grandparents',
 
     // Read NFC
     'scanWristband': 'Bring the device close',
@@ -1458,7 +1458,8 @@ class AppStrings {
     'allergenSkin': 'Skin substance',
     'allergenInsect': 'Insect sting',
     'allergenOther': 'Other',
-    // ── Login v2 / Home v2 ──
+
+    // Login v2 / Home v2
     'appSubtitleShort': 'Mobile clinical history for brigades',
     'emailLabel': 'EMAIL',
     'passwordLabel': 'PASSWORD',
@@ -1475,6 +1476,7 @@ class AppStrings {
     'roleOrgAdmin': 'Administrator',
     'roleSuperadmin': 'Superadmin',
     'offline': 'Offline',
+
     // Home actions v2
     'actionReadNfc': 'Read NFC',
     'actionReadNfcSub': "Scan patient's device",
@@ -1486,6 +1488,7 @@ class AppStrings {
     'actionPendingSync': 'Pending sync',
     'actionPendingSyncEmpty': 'All records synced',
     'actionPendingSyncCount': '{n} records not sent',
+
     // Admin v2
     'kpiUsers': 'Users',
     'kpiSyncedOk': 'Sync OK',
@@ -1494,6 +1497,7 @@ class AppStrings {
     'adminViewPatients': 'View patients',
     'adminViewPatientsSub': 'Read-only',
     'adminBrigadeHistorySub': '{n} synced patients',
+
     // Read NFC v2
     'readWristbandTitle': 'Read device',
     'scanGuardianTitle': "Read guardian's device",
@@ -1507,6 +1511,7 @@ class AppStrings {
     'manualGuardianUidLabel': 'Manual guardian UID (testing)',
     'manualGuardianUidHint': 'E.g. HWB-04:8E:7F:11',
     'useManualUid': 'Use manual UID',
+
     // Search v2
     'searchPatientTitle': 'Search patient',
     'searchSubtitle': 'Strict identification · Law 1581/2012',
@@ -1550,6 +1555,8 @@ class AppStrings {
     'yearsOldSuffix': 'yrs',
     'noAllergiesRegistered': 'No allergies registered.',
     'addAllergyBtn': 'Add allergy',
+
+    // Add allergy sheet
     'allergyCategoryLabel': 'Category',
     'allergenLabel': 'Allergen',
     'allergenHint': 'e.g. Penicillin, Peanut, Pollen...',
@@ -1558,6 +1565,8 @@ class AppStrings {
     'allergiesSheetTitle': 'Allergies',
     'backgroundSheetTitle': 'Background',
     'noChronicConditions': 'No chronic conditions.',
+
+    // Add chronic condition sheet
     'addChronicConditionTitle': 'Add chronic condition',
     'chronicConditionHint': 'e.g. Type 2 diabetes mellitus, Hypertension...',
     'noMedications': 'No medications registered.',
@@ -1577,6 +1586,20 @@ class AppStrings {
     'docTypePT': 'PPT',
     'docTypeMS': 'Minor w/o ID',
     'docTypeAS': 'Adult w/o ID',
+    'editGuardianTitle': 'Edit guardian',
+    'guardianFullName': 'Full name',
+    'guardianFullNameHint': 'e.g. Carmen Vargas Pinto',
+    'guardianRelationship': 'Relationship',
+    'guardianPhoneLabel': 'Phone',
+    'guardianPhoneHint': 'e.g. +1 310 482 9914',
+    'guardianNfcDevice': 'Guardian NFC device',
+    'guardianNfcUidHint': 'NFC device UID',
+    'guardianNfcUnavailable': 'NFC not available. Enter UID manually.',
+    'guardianNfcError': 'Could not read the device. Please try again.',
+    'relParents': 'Parents',
+    'relSiblings': 'Siblings',
+    'relUncles': 'Uncles',
+    'relGrandparents': 'Grandparents',
     'medStatusActive': 'Active',
     'medStatusCompleted': 'Completed',
     'medStatusStopped': 'Stopped',
@@ -1644,6 +1667,7 @@ class AppStrings {
     'dayDom': 'Sun',
     'monEne': 'Jan',
     'monFeb': 'Feb',
+    'monMarString': 'Mar',
     'monMar': 'Mar',
     'monAbr': 'Apr',
     'monMay': 'May',
@@ -1654,7 +1678,8 @@ class AppStrings {
     'monOct': 'Oct',
     'monNov': 'Nov',
     'monDic': 'Dec',
-    'timeAm': 'AM', 'timePm': 'PM',
+    'timeAm': 'AM',
+    'timePm': 'PM',
     'modIntramural': 'Intramural',
     'modExtramuralMobil': 'Mobile extramural',
     'modDomiciliaria': 'Home care',
@@ -1682,7 +1707,7 @@ class AppStrings {
     'ddRemitido': 'Referred',
     'ddAltaMedica': 'Medical discharge',
 
-    // vaccine tab
+    // Vaccines tab
     'vaccineSchemeTitle': 'Scheme',
     'vaccineLabelSingle': 'Vaccine',
     'vaccineLabelPlural': 'Vaccines',
@@ -1725,6 +1750,7 @@ class AppStrings {
     'statsTotalVaccines': 'Vaccines Administered',
     'statsTotalAllergies': 'Detected Allergies',
     'statsMinorsPercentage': 'Minors Percentage',
+    'statsMinorsAsOfToday': "minors as of today, not the range's date",
     'statsVaccineDistribution': 'Vaccine Distribution',
     'statsAllergyDistribution': 'Allergy Distribution',
     'statsNationalityDistribution': 'Nationality Distribution',
@@ -1765,5 +1791,7 @@ class AppStrings {
     'orgDeleteDialogTitle': 'Delete organization?',
     'orgDeleteDialogContent':
         'This action will permanently delete the organization {name} and all its associated data.',
+    'statsComparedTo': 'Compared to {from} – {to}',
+    'statsGeneratedAt': 'Generated at {time}',
   };
 }

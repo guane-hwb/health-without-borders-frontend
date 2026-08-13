@@ -1,13 +1,17 @@
 // lib/src/app.dart
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/config/app_env.dart';
 import 'core/di/app_scope.dart';
 import 'core/i18n/app_strings.dart';
 import 'core/network/api_client.dart';
+import 'core/network/reachability.dart';
 import 'core/nfc/nfc_session_manager.dart';
+import 'core/routes/app_routes.dart';
 import 'core/storage/local_database.dart';
 import 'core/sync/sync_engine.dart';
 import 'design/theme/app_theme.dart';
@@ -25,10 +29,15 @@ class HealthWithoutBordersApp extends StatefulWidget {
       _HealthWithoutBordersAppState();
 }
 
-class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp> {
+class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
+    with WidgetsBindingObserver {
   final ApiClient _apiClient = ApiClient(baseUrl: AppEnv.apiBaseUrl);
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   String _locale = 'es';
+
+  late final Reachability _reachability = Reachability(
+    baseUrl: AppEnv.apiBaseUrl,
+  );
 
   late final AuthRepository _authRepository = AuthRepository(
     apiClient: _apiClient,
@@ -49,39 +58,34 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp> {
   late final SyncEngine _syncEngine = SyncEngine(
     patientRepository: _patientRepository,
     localDatabase: _localDatabase,
+    reachability: _reachability,
   );
 
-  // 🚀 Inicializa el estado global de la aplicación
   @override
   void initState() {
     super.initState();
-    // Cablea el auto-refresh de tokens: ante un 401 en una ruta protegida, el
-    // ApiClient renueva el access token con el refresh token y reintenta la
-    // petición, de forma transparente para toda la app.
+    WidgetsBinding.instance.addObserver(this);
     _apiClient.tokenProvider = _authRepository;
-    // Cuando el backend rechaza el refresh token (sesión definitivamente
-    // vencida), volvemos a login limpiando el stack y avisando al usuario.
     _authRepository.sessionExpired.addListener(_onSessionExpired);
-    // Enciende el motor automático para escuchar cambios de red e iniciar sincronizaciones
     _syncEngine.start();
-    // Toma posesión de la radio NFC mientras la app esté en primer plano. Sin
-    // esto el SO es dueño de la radio y despacha cualquier chip que se acerque
-    // a su propio visor de etiquetas ("Nueva etiqueta escaneada"). Los chips
-    // que lleguen sin que una pantalla los haya pedido se descartan en
-    // silencio: seguimos leyendo sólo cuando el clínico oprime el botón.
     unawaited(NfcSessionManager.instance.attach());
   }
 
-  // 🧹 Limpia los recursos cuando la aplicación se destruye o se recarga
   @override
   void dispose() {
-    // Apaga los listeners de conectividad para evitar fugas de memoria (memory leaks)
+    WidgetsBinding.instance.removeObserver(this);
     _authRepository.sessionExpired.removeListener(_onSessionExpired);
     _syncEngine.stop();
     super.dispose();
   }
 
-  // Redirige a login cuando la sesión se invalida por un refresh token vencido.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_syncEngine.syncAll());
+    }
+  }
+
   void _onSessionExpired() {
     if (!_authRepository.sessionExpired.value) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -106,13 +110,24 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp> {
         statsRepository: _statsRepository,
         localDatabase: _localDatabase,
         syncEngine: _syncEngine,
+        reachability: _reachability,
         child: MaterialApp(
           title: 'Health Without Borders',
           navigatorKey: _navigatorKey,
           debugShowCheckedModeBanner: false,
+
+          locale: Locale(_locale),
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('es', 'CO'), Locale('en', 'US')],
+
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: ThemeMode.light,
+          onGenerateRoute: AppRoutes.onGenerateRoute,
           home: AuthGate(authRepository: _authRepository),
         ),
       ),

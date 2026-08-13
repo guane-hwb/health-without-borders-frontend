@@ -1,8 +1,11 @@
 // lib/src/features/nfc/presentation/register/steps/step3_patient_data.dart
+
 import 'package:flutter/material.dart';
 import '../../../../../core/nfc/nfc_service.dart';
+import '../../../../../core/validation/identity_validators.dart';
 import '../../../../../design/tokens/app_colors.dart';
-import '../register_nfc_screen.dart';
+import '../../../../../shared/country_display.dart';
+import '../../../domain/register_draft.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../widgets/nfc_uid_field.dart';
 
@@ -34,6 +37,22 @@ const _kReqStyle = TextStyle(
   fontSize: 13,
   fontWeight: FontWeight.w700,
 );
+
+const List<String> kEthnicityCodes = <String>['6', '1', '2', '3', '4', '5'];
+const List<String> kNoEthnicityCodes = <String>['6', '99'];
+const List<String> kDisabilityCodes = <String>[
+  '00',
+  '01',
+  '02',
+  '03',
+  '04',
+  '05',
+  '06',
+  '07',
+];
+
+bool patientHasEthnicity(String? ethnicity) =>
+    ethnicity != null && !kNoEthnicityCodes.contains(ethnicity);
 
 class Step3PatientData extends StatefulWidget {
   const Step3PatientData({
@@ -90,10 +109,7 @@ class _Step3State extends State<Step3PatientData> {
   String? _err;
   bool _isDocInvalid = false;
 
-  bool get _hasEthnicity {
-    final v = widget.draft.ethnicity;
-    return v != null && v != '6' && v != '99';
-  }
+  bool get _hasEthnicity => patientHasEthnicity(widget.draft.ethnicity);
 
   @override
   void initState() {
@@ -125,8 +141,7 @@ class _Step3State extends State<Step3PatientData> {
       if (_isDocInvalid) setState(() => _isDocInvalid = false);
       return;
     }
-    final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
-    final invalid = !docRegex.hasMatch(text);
+    final invalid = validateDocumentNumber(text) != null;
     if (invalid != _isDocInvalid) {
       setState(() => _isDocInvalid = invalid);
     }
@@ -176,17 +191,22 @@ class _Step3State extends State<Step3PatientData> {
     if (_city.text.trim().isEmpty) missing.add(s.municipality);
     if (_stateCtrl.text.trim().isEmpty) missing.add(s.department);
 
-    final String cleanDoc = _docNum.text.trim();
-    if (cleanDoc.isNotEmpty) {
-      final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
-      if (!docRegex.hasMatch(cleanDoc)) {
-        setState(() => _isDocInvalid = true);
-        missing.add(
-          isEs
-              ? 'Número de documento inválido (Mínimo 5 caracteres alfanuméricos sin símbolos)'
-              : 'Invalid Document format',
-        );
-      }
+    if (validateDocumentNumber(_docNum.text) != null) {
+      setState(() => _isDocInvalid = true);
+      missing.add(
+        isEs
+            ? 'Número de documento inválido (5 a 20 caracteres, sin símbolos)'
+            : 'Invalid document number (5 to 20 characters, no symbols)',
+      );
+    }
+
+    final natCode = widget.draft.nationalityCode;
+    if (!kSupportedNationalityCodes.contains(natCode)) {
+      missing.add(
+        isEs
+            ? 'Nacionalidad no válida (código ISO 3166-1 requerido)'
+            : 'Invalid nationality (ISO 3166-1 code required)',
+      );
     }
 
     if (missing.isNotEmpty) {
@@ -215,6 +235,8 @@ class _Step3State extends State<Step3PatientData> {
         ? null
         : _ethnicComm.text.trim();
     d.bloodType = (d.bloodType ?? '').trim().isEmpty ? null : d.bloodType;
+
+    d.nationalityName = countryDisplay(d.nationalityCode).name(isEs: isEs);
 
     d.weight = double.tryParse(_weight.text.trim().replaceAll(',', '.'));
     d.height = double.tryParse(_height.text.trim().replaceAll(',', '.'));
@@ -260,16 +282,11 @@ class _Step3State extends State<Step3PatientData> {
     };
 
     final nat = <String, String>{
-      'COL': isEs ? 'Colombiana' : 'Colombian',
-      'VEN': isEs ? 'Venezolana' : 'Venezuelan',
-      'ECU': isEs ? 'Ecuatoriana' : 'Ecuadorian',
-      'PER': isEs ? 'Peruana' : 'Peruvian',
-      'HTI': isEs ? 'Haitiana' : 'Haitian',
-      'CUB': isEs ? 'Cubana' : 'Cuban',
-      'OTHER': isEs ? 'Otra' : 'Other',
+      for (final code in kSupportedNationalityCodes)
+        code: countryDisplay(code).name(isEs: isEs),
     };
 
-    final eth = <String, String>{
+    final ethLabels = <String, String>{
       '6': isEs ? 'Ninguno' : 'None',
       '1': isEs ? 'Indígena' : 'Indigenous',
       '2': isEs ? 'ROM/Gitano' : 'Romani',
@@ -277,8 +294,11 @@ class _Step3State extends State<Step3PatientData> {
       '4': isEs ? 'Palenquero' : 'Palenquero',
       '5': isEs ? 'Afrocolombiano' : 'Afro-Colombian',
     };
+    final eth = <String, String>{
+      for (final code in kEthnicityCodes) code: ethLabels[code]!,
+    };
 
-    final dis = <String, String>{
+    final disLabels = <String, String>{
       '00': isEs ? 'Ninguna' : 'None',
       '01': isEs ? 'Física' : 'Physical',
       '02': isEs ? 'Visual' : 'Visual',
@@ -287,6 +307,9 @@ class _Step3State extends State<Step3PatientData> {
       '05': isEs ? 'Psicosocial' : 'Psychosocial',
       '06': isEs ? 'Sordoceguera' : 'Deaf-blindness',
       '07': isEs ? 'Múltiple' : 'Multiple',
+    };
+    final dis = <String, String>{
+      for (final code in kDisabilityCodes) code: disLabels[code]!,
     };
 
     final zones = <String, String>{'01': s.zoneUrban, '02': s.zoneRural};
@@ -735,7 +758,6 @@ class _SectionHeader extends StatelessWidget {
                     color: AppColors.textPrimary,
                   ),
                 ),
-              //
             ],
           ),
         ),

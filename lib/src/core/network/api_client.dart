@@ -43,6 +43,20 @@ class ApiClient {
 
   bool _isPublicRoute(String path) => _publicRoutes.contains(path);
 
+  Future<http.Response> _send(
+    String method,
+    Uri uri, {
+    Map<String, String>? headers,
+    String? body,
+  }) async {
+    final http.Request request = http.Request(method, uri)
+      ..followRedirects = false
+      ..headers.addAll(headers ?? const <String, String>{});
+    if (body != null) request.body = body;
+    final http.StreamedResponse streamed = await _client.send(request);
+    return http.Response.fromStream(streamed);
+  }
+
   Future<http.Response> _dispatch(
     String path, {
     required Map<String, String> headers,
@@ -51,22 +65,12 @@ class ApiClient {
   }) async {
     final http.Response response = await send(headers).timeout(timeout);
 
-    if (response.statusCode == 301 ||
-        response.statusCode == 302 ||
-        response.statusCode == 307 ||
-        response.statusCode == 308) {
-      final location = response.headers['location'];
-      if (location != null) {
-        final redirectUri = Uri.parse(location);
-        final baseUri = Uri.parse(baseUrl);
-        final isExternal =
-            redirectUri.hasAuthority && redirectUri.host != baseUri.host;
-
-        final safeHeaders = Map<String, String>.from(headers);
-        if (isExternal) {
-          safeHeaders.remove('Authorization');
-        }
-      }
+    if (response.statusCode >= 300 && response.statusCode < 400) {
+      throw ApiException(
+        'Untrusted redirect (HTTP ${response.statusCode}). '
+        'The current network is intercepting requests.',
+        statusCode: response.statusCode,
+      );
     }
 
     if (response.statusCode != 401 ||
@@ -98,13 +102,14 @@ class ApiClient {
       path,
       headers: <String, String>{...?headers},
       timeout: timeout,
-      send: (Map<String, String> h) => _client.post(
+      send: (Map<String, String> h) => _send(
+        'POST',
         uri,
         headers: <String, String>{
           'Content-Type': 'application/x-www-form-urlencoded',
           ...h,
         },
-        body: form,
+        body: Uri(queryParameters: form).query,
       ),
     );
 
@@ -122,7 +127,8 @@ class ApiClient {
       path,
       headers: <String, String>{...?headers},
       timeout: timeout,
-      send: (Map<String, String> h) => _client.post(
+      send: (Map<String, String> h) => _send(
+        'POST',
         uri,
         headers: <String, String>{'Content-Type': 'application/json', ...h},
         body: jsonEncode(body),
@@ -145,7 +151,7 @@ class ApiClient {
       path,
       headers: <String, String>{...?headers},
       timeout: timeout,
-      send: (Map<String, String> h) => _client.get(uri, headers: h),
+      send: (Map<String, String> h) => _send('GET', uri, headers: h),
     );
 
     return _decodeMapOrThrow(response);

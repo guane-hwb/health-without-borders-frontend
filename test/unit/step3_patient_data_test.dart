@@ -2,7 +2,8 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/register_nfc_screen.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step3_patient_data.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/register_draft.dart';
 
 String _formatDate(DateTime? value) {
   if (value == null) return '';
@@ -10,8 +11,6 @@ String _formatDate(DateTime? value) {
       '-${value.month.toString().padLeft(2, '0')}'
       '-${value.day.toString().padLeft(2, '0')}';
 }
-
-bool _hasEthnicity(String? ethnicity) => ethnicity != null && ethnicity != '06';
 
 String? _optionalField(String raw) {
   final v = raw.trim();
@@ -53,17 +52,75 @@ void main() {
     });
   });
 
-  group('_hasEthnicity', () {
-    test('null → false', () => expect(_hasEthnicity(null), isFalse));
-    test("'06' → false", () => expect(_hasEthnicity('06'), isFalse));
-    test("'01' → true", () => expect(_hasEthnicity('01'), isTrue));
-    test("'02' → true", () => expect(_hasEthnicity('02'), isTrue));
-    test("'03' → true", () => expect(_hasEthnicity('03'), isTrue));
-    test("'04' → true", () => expect(_hasEthnicity('04'), isTrue));
-    test("'05' → true", () => expect(_hasEthnicity('05'), isTrue));
+  group('patientHasEthnicity (símbolo real de producción)', () {
+    test('null → false', () => expect(patientHasEthnicity(null), isFalse));
+    test("'6' → false ('Ninguno')", () {
+      expect(patientHasEthnicity('6'), isFalse);
+    });
+    test("'99' → false (código heredado del backend para 'Ninguna')", () {
+      expect(patientHasEthnicity('99'), isFalse);
+    });
+    test("'1' → true (Indígena)", () {
+      expect(patientHasEthnicity('1'), isTrue);
+    });
+    test("'2' → true (ROM/Gitano)", () {
+      expect(patientHasEthnicity('2'), isTrue);
+    });
+    test("'3' → true (Raizal)", () {
+      expect(patientHasEthnicity('3'), isTrue);
+    });
+    test("'4' → true (Palenquero)", () {
+      expect(patientHasEthnicity('4'), isTrue);
+    });
+    test("'5' → true (Afrocolombiano)", () {
+      expect(patientHasEthnicity('5'), isTrue);
+    });
+    test("'01' (formato viejo, incompatible con el backend) → true: "
+        'patientHasEthnicity no valida el FORMATO del código, solo si '
+        'representa "ninguna etnia". Un valor así nunca debería llegar a '
+        'draft.ethnicity porque el selector solo emite códigos de '
+        'kEthnicityCodes — este caso documenta el riesgo, no lo avala.', () {
+      expect(patientHasEthnicity('01'), isTrue);
+    });
+  });
+
+  group('kEthnicityCodes / kDisabilityCodes (contrato real exportado)', () {
+    test('kEthnicityCodes contiene exactamente los 6 códigos esperados', () {
+      expect(kEthnicityCodes, equals(<String>['6', '1', '2', '3', '4', '5']));
+    });
+
+    test('kNoEthnicityCodes son los únicos códigos de "sin etnia"', () {
+      expect(kNoEthnicityCodes, equals(<String>['6', '99']));
+      for (final code in kEthnicityCodes) {
+        expect(
+          patientHasEthnicity(code),
+          equals(!kNoEthnicityCodes.contains(code)),
+        );
+      }
+    });
+
+    test('kDisabilityCodes contiene exactamente los 8 códigos esperados', () {
+      expect(
+        kDisabilityCodes,
+        equals(<String>['00', '01', '02', '03', '04', '05', '06', '07']),
+      );
+    });
+
     test(
-      "cadena vacía '' → true (no es null ni '06')",
-      () => expect(_hasEthnicity(''), isTrue),
+      'ningún código de etnia coincide con el formato viejo de 2 dígitos '
+      '(protege contra la regresión original de v2-copia-etnia-divergida)',
+      () {
+        for (final code in kEthnicityCodes) {
+          expect(
+            code.length == 2 && code != '99',
+            isFalse,
+            reason:
+                'Código "$code" parece del formato viejo incompatible '
+                '(01-06). Si esto fallara, alguien reintrodujo el bug '
+                'original.',
+          );
+        }
+      },
     );
   });
 

@@ -5,13 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
-import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
-import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
 class MockAuthRepository extends Mock implements AuthRepository {}
 
@@ -23,12 +25,15 @@ class MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class MockSyncEngine extends Mock implements SyncEngine {}
 
+class _MockReachability extends Mock implements Reachability {}
+
 void main() {
   late MockAuthRepository authRepository;
   late MockUserRepository userRepository;
   late MockPatientRepository patientRepository;
   late MockLocalDatabase localDatabase;
   late MockSyncEngine syncEngine;
+  late _MockReachability reachability;
 
   setUp(() {
     authRepository = MockAuthRepository();
@@ -36,7 +41,11 @@ void main() {
     patientRepository = MockPatientRepository();
     localDatabase = MockLocalDatabase();
     syncEngine = MockSyncEngine();
+    reachability = _MockReachability();
     when(() => authRepository.currentUser).thenReturn(null);
+    when(
+      () => authRepository.sessionNotifier,
+    ).thenReturn(ValueNotifier<UserSession?>(null));
   });
 
   Widget wrapWithScope({
@@ -44,15 +53,24 @@ void main() {
     AuthRepository? auth,
     PatientRepository? patient,
   }) {
+    final activeAuth = auth ?? authRepository;
+    if (auth != null) {
+      when(() => auth.currentUser).thenReturn(null);
+      when(
+        () => auth.sessionNotifier,
+      ).thenReturn(ValueNotifier<UserSession?>(null));
+    }
+
     return AppScope(
-      authRepository: auth ?? authRepository,
+      authRepository: activeAuth,
       userRepository: userRepository,
       patientRepository: patient ?? patientRepository,
       localDatabase: localDatabase,
       syncEngine: syncEngine,
+      reachability: reachability,
       statsRepository: StatsRepository(
         apiClient: ApiClient(baseUrl: 'http://localhost'),
-        authRepository: auth ?? authRepository,
+        authRepository: activeAuth,
       ),
       child: MaterialApp(home: child),
     );

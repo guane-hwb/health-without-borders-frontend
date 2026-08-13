@@ -1,4 +1,4 @@
-// test/widget/edit_medical_history_screen_extra_widget_test.dart
+// test/widget/edit_medical_history_screen_widget_test.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -434,7 +434,7 @@ void main() {
               return ElevatedButton(
                 onPressed: () async {
                   await Navigator.of(ctx).push(
-                    MaterialPageRoute(
+                    MaterialPageRoute<void>(
                       builder: (_) =>
                           EditMedicalHistoryScreen(patient: emptyPatient()),
                     ),
@@ -471,7 +471,7 @@ void main() {
               return ElevatedButton(
                 onPressed: () async {
                   await Navigator.of(ctx).push(
-                    MaterialPageRoute(
+                    MaterialPageRoute<void>(
                       builder: (_) =>
                           EditMedicalHistoryScreen(patient: emptyPatient()),
                     ),
@@ -512,7 +512,7 @@ void main() {
               return ElevatedButton(
                 onPressed: () async {
                   await Navigator.of(ctx).push(
-                    MaterialPageRoute(
+                    MaterialPageRoute<void>(
                       builder: (_) =>
                           EditMedicalHistoryScreen(patient: emptyPatient()),
                     ),

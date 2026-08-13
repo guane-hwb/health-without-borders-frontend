@@ -15,6 +15,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -138,6 +139,7 @@ Widget _buildTestableWidget({
         apiClient: apiClient,
         authRepository: auth,
       ),
+      reachability: Reachability(baseUrl: 'http://localhost'),
       patientRepository: repo,
       localDatabase: LocalDatabase.instance,
       syncEngine: SyncEngine(patientRepository: repo),
@@ -145,6 +147,7 @@ Widget _buildTestableWidget({
         apiClient: ApiClient(baseUrl: 'http://localhost'),
         authRepository: auth,
       ),
+
       child: MaterialApp(
         localizationsDelegates: const [
           DefaultMaterialLocalizations.delegate,

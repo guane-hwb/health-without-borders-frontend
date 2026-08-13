@@ -13,12 +13,14 @@ import 'package:health_without_borders_frontend/src/core/storage/local_database.
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/add_consultation_screen.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +33,8 @@ class _MockPatientRepository extends Mock implements PatientRepository {}
 class _MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class _MockSyncEngine extends Mock implements SyncEngine {}
+
+class _MockReachability extends Mock implements Reachability {}
 
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
 
@@ -88,11 +92,17 @@ AppScope _defaultScope({
   _MockPatientRepository? repo,
 }) {
   final auth = _MockAuthRepository();
+  when(
+    () => auth.sessionNotifier,
+  ).thenReturn(ValueNotifier<UserSession?>(null));
+
   final user = _MockUserRepository();
   final resolvedRepo = repo ?? _MockPatientRepository();
   final resolvedDb = db ?? _MockLocalDatabase();
   final resolvedSync = sync ?? _MockSyncEngine();
   when(() => resolvedSync.syncAll()).thenAnswer((_) async => true);
+  final resolvedReach = _MockReachability();
+  when(() => resolvedReach.probe()).thenAnswer((_) async => true);
   return AppScope(
     authRepository: auth,
     userRepository: user,
@@ -103,6 +113,7 @@ AppScope _defaultScope({
       apiClient: ApiClient(baseUrl: 'http://localhost'),
       authRepository: auth,
     ),
+    reachability: resolvedReach,
     child: const SizedBox.shrink(),
   );
 }
@@ -135,6 +146,7 @@ Widget _buildApp({
       apiClient: ApiClient(baseUrl: 'http://localhost'),
       authRepository: s.authRepository,
     ),
+    reachability: s.reachability,
     child: AppLocale(
       locale: locale,
       setLocale: (_) {},
@@ -669,6 +681,7 @@ void main() {
             apiClient: ApiClient(baseUrl: 'http://localhost'),
             authRepository: scope.authRepository,
           ),
+          reachability: scope.reachability,
           child: AppLocale(
             locale: 'es',
             setLocale: (_) {},
@@ -691,6 +704,7 @@ void main() {
                                 ),
                                 authRepository: scope.authRepository,
                               ),
+                              reachability: scope.reachability,
                               child: AppLocale(
                                 locale: 'es',
                                 setLocale: (_) {},

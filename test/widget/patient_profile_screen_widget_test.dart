@@ -15,6 +15,7 @@ import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/patient_profile_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/tabs/profile_tab_summary.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 class _NullApiClient implements ApiClient {
   const _NullApiClient();
@@ -163,6 +164,7 @@ Widget _wrap(
             apiClient: const _NullApiClient(),
             authRepository: fakeAuth,
           ),
+          reachability: Reachability(baseUrl: 'http://localhost'),
           patientRepository: PatientRepository(
             apiClient: const _NullApiClient(),
             authRepository: fakeAuth,

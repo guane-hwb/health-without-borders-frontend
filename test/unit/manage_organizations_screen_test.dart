@@ -1,4 +1,4 @@
-// test/unit/manage_organizations_unit_test.dart
+// test/unit/manage_organizations_screen_test.dart
 
 import 'package:flutter_test/flutter_test.dart';
 

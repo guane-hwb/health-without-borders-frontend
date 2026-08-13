@@ -23,40 +23,46 @@ import 'package:health_without_borders_frontend/src/features/home/presentation/h
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
+
 /// Controllable AuthRepository fake. Only restoreSession/currentUser/logout are
 /// exercised here; the rest is left to Fake's noSuchMethod (never called).
 class _GateAuth extends Fake implements AuthRepository {
-  _GateAuth({this.restoreResult, this.restoreFuture});
+  _GateAuth({this.restoreResult, this.restoreFuture}) {
+    _current = restoreResult;
+    _sessionNotifier = ValueNotifier<UserSession?>(restoreResult);
+  }
 
   final UserSession? restoreResult;
   final Future<UserSession?>? restoreFuture;
   UserSession? _current;
+  late final ValueNotifier<UserSession?> _sessionNotifier;
 
   @override
   UserSession? get currentUser => _current;
 
   @override
+  ValueNotifier<UserSession?> get sessionNotifier => _sessionNotifier;
+
+  @override
   Future<UserSession?> restoreSession() {
     if (restoreFuture != null) return restoreFuture!;
-    // Mirror production: a restored session becomes the current user, which is
-    // what HomeScreen reads via AppScope.
-    _current = restoreResult;
     return Future<UserSession?>.value(restoreResult);
   }
 
   @override
-  Future<void> logout() async {}
+  Future<void> logout({bool wipeLocalData = false}) async {}
 }
 
 // Superadmin => HomeScreen renders the admin body (static cards, no sync card),
 // so no local database access is triggered during the render.
 UserSession _superadmin() => UserSession(
-      id: 'uid-sa',
-      email: 'root@hwb.org',
-      fullName: 'Root Admin',
-      role: UserRole.superadmin,
-      organizationId: 'org-0',
-    );
+  id: 'uid-sa',
+  email: 'root@hwb.org',
+  fullName: 'Root Admin',
+  role: UserRole.superadmin,
+  organizationId: 'org-0',
+);
 
 Widget _wrap(_GateAuth auth) {
   final apiClient = ApiClient(baseUrl: 'https://example.com');
@@ -86,6 +92,7 @@ Widget _wrap(_GateAuth auth) {
         apiClient: ApiClient(baseUrl: 'http://localhost'),
         authRepository: auth,
       ),
+      reachability: Reachability(baseUrl: 'http://localhost'),
       child: MaterialApp(home: AuthGate(authRepository: auth)),
     ),
   );

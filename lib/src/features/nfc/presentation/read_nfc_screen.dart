@@ -1,4 +1,5 @@
 // lib/src/features/nfc/presentation/read_nfc_screen.dart
+
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
@@ -14,6 +15,7 @@ import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
 import 'profile/patient_profile_screen.dart';
+import 'read_nfc_guardian_screen.dart';
 import 'shared_read_nfc_header.dart';
 
 /// Read-NFC flow:
@@ -62,10 +64,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       _errorMessage = null;
     });
 
-    // Read the full chip payload up-front so we can fall back to it if the
-    // backend turns out to be unreachable. This needs the NFC key; if anything
-    // goes wrong reading the payload we degrade gracefully to a UID-only scan
-    // (the online path), which matches the previous behaviour.
     payload.HwbChipReadResult? chip;
     try {
       final key = await AppScope.of(
@@ -85,7 +83,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       }
       return;
     } catch (_) {
-      chip = null; // degrade to a UID-only scan below
+      chip = null;
     }
 
     String uid;
@@ -117,10 +115,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
 
     if (!mounted) return;
 
-    // A guardian card must never stand in for the patient wristband. It carries
-    // the full record, so accepting it here would hand over a minor's complete
-    // history with no wristband and no verification — offline there is no
-    // backend to enforce the guardian rule, so the gate lives here.
     if (chip != null && chip.kind == payload.HwbChipKind.guardian) {
       final isEs = AppStrings.of(context).welcome == 'Bienvenido';
       setState(() {
@@ -156,12 +150,10 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         context,
       ).patientRepository.scanDevice(deviceUid);
       if (!mounted) return;
-      // Adult patient — go directly to profile
       _patientDeviceUid = deviceUid;
       await _openProfile(patient);
     } on ApiException catch (e) {
       if (!mounted) return;
-      // 403 + guardian-required → switch to step 2
       if (e.statusCode == 403 && e.message.toLowerCase().contains('guardian')) {
         setState(() {
           _scanning = false;
@@ -176,17 +168,11 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         });
       }
     } catch (e) {
-      // A non-API error means the backend is unreachable (offline). If we read
-      // a chip backup up-front, reconstruct the record from it and show it
-      // read-only; otherwise report that there is nothing to fall back to.
       if (!mounted) return;
       if (chip != null && chip.kind == payload.HwbChipKind.triage) {
         final triage = chip.triage;
         _patientDeviceUid = deviceUid;
 
-        // Mirror the online rule the backend enforces with its 403: a minor's
-        // record needs the guardian. Age comes from the wristband itself, so no
-        // network is involved.
         if (triage != null && triage.isMinor) {
           setState(() {
             _scanning = false;
@@ -216,9 +202,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     }
   }
 
-  /// Text for the iOS system scanning sheet. Ignored on Android, where the app
-  /// draws its own scanning UI — but on iOS that sheet covers the screen, so it
-  /// is the only place the clinician can be told which chip to present.
   String _nfcAlert({required bool guardian}) {
     final isEs = AppStrings.of(context).welcome == 'Bienvenido';
     if (guardian) {
@@ -233,10 +216,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
 
   // ── Offline guardian gate ─────────────────────────────────────────────────
 
-  /// Offline: scan the guardian card and verify it belongs to this patient.
-  ///
-  /// The wristband already told us which guardian UIDs are valid, so the check
-  /// is entirely local — no backend, which is the whole point.
   Future<void> _scanGuardianOffline() async {
     final triage = _offlineTriage;
     if (triage == null) return;
@@ -293,12 +272,12 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         patientDeviceUid: _patientDeviceUid ?? '',
       );
       if (!mounted) return;
-      // The guardian card carries the full record with a real patientId, so it
-      // is safe to edit offline: changes are saved locally, flagged as pending
-      // and synced when connectivity returns. The backend merges clinical lists
-      // by UUID, so the bounded card can never truncate the server history.
-      // (The triage-only and emergency paths stay read-only — see those calls.)
-      await _openProfile(record, offline: true);
+      setState(() => _scanning = false);
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ReadNfcGuardianScreen(patient: record),
+        ),
+      );
     } on NfcNotAvailableException {
       if (!mounted) return;
       setState(() {
@@ -322,11 +301,37 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     }
   }
 
-  /// Break-glass: show the minor's critical data without the guardian present.
-  ///
-  /// No extra scan — the wristband was already read. The record shown is built
-  /// from the triage alone, so it can never include consultations, vaccines or
-  /// address: those only live on the guardian card. The access is logged.
+  Future<void> _confirmEmergencyAccess() async {
+    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(isEs ? 'Acceso de emergencia' : 'Emergency access'),
+        content: Text(
+          isEs
+              ? 'Va a ver datos de un menor sin la autorización del guardián. '
+                    'Este acceso queda registrado. ¿Continuar?'
+              : 'You are about to view a minor\'s data without the guardian\'s '
+                    'authorisation. This access is logged. Continue?',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(isEs ? 'Cancelar' : 'Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              isEs ? 'Continuar' : 'Continue',
+              style: const TextStyle(color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed ?? false) await _emergencyAccess();
+  }
+
   Future<void> _emergencyAccess() async {
     final triage = _offlineTriage;
     if (triage == null) return;
@@ -428,7 +433,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         ),
       ),
     );
-    // After returning from profile, reset the screen
     if (mounted) {
       setState(() {
         _step2 = false;
@@ -526,7 +530,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
 
           const SizedBox(height: 28),
 
-          // ── Manual UID input (Chrome / no NFC) ─────────────────
           _ManualUidPanel(
             label: s.manualPatientUidLabel,
             hint: s.manualPatientUidHint,
@@ -538,12 +541,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     );
   }
 
-  // ── Step 2: Guardian ─────────────────────────────────────────────────────
-
-  /// Offline gate for a minor: the guardian card, or an explicit break-glass.
-  ///
-  /// Mirrors the online guardian step so the flow feels identical; the only
-  /// additions are the reason it is asking and the break-glass escape.
   Widget _buildOfflineGuardianGate(AppStrings s) {
     final isEs = s.welcome == 'Bienvenido';
     final triage = _offlineTriage;
@@ -555,7 +552,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
       child: Column(
         children: [
-          // Patient confirmed pill
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -621,7 +617,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
 
           const SizedBox(height: 28),
 
-          // ── Break-glass ───────────────────────────
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -671,44 +666,11 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     );
   }
 
-  /// Makes break-glass a deliberate act, not a mis-tap.
-  Future<void> _confirmEmergencyAccess() async {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext ctx) => AlertDialog(
-        title: Text(isEs ? 'Acceso de emergencia' : 'Emergency access'),
-        content: Text(
-          isEs
-              ? 'Va a ver datos de un menor sin la autorización del guardián. '
-                    'Este acceso queda registrado. ¿Continuar?'
-              : 'You are about to view a minor\'s data without the guardian\'s '
-                    'authorisation. This access is logged. Continue?',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(isEs ? 'Cancelar' : 'Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              isEs ? 'Continuar' : 'Continue',
-              style: const TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed ?? false) await _emergencyAccess();
-  }
-
   Widget _buildGuardianStep(AppStrings s) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
       child: Column(
         children: [
-          // Patient confirmed pill
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -756,7 +718,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
 
           const SizedBox(height: 28),
 
-          // ── Manual UID input ──────────────────────
           _ManualUidPanel(
             label: s.manualGuardianUidLabel,
             hint: s.manualGuardianUidHint,
@@ -769,11 +730,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// COMPONENTS
-// ═════════════════════════════════════════════════════════════════════════════
-
-/// Pulsating NFC button with circular progress when scanning.
 class _NfcButton extends StatelessWidget {
   const _NfcButton({
     required this.scanning,
@@ -792,7 +748,6 @@ class _NfcButton extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Outer halo
           Container(
             width: 200,
             height: 200,
@@ -809,7 +764,6 @@ class _NfcButton extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.12),
             ),
           ),
-          // Main orange circle
           Container(
             width: 110,
             height: 110,
@@ -843,7 +797,6 @@ class _NfcButton extends StatelessWidget {
   }
 }
 
-/// Expandable panel with manual UID textbox + confirm button.
 class _ManualUidPanel extends StatelessWidget {
   const _ManualUidPanel({
     required this.label,

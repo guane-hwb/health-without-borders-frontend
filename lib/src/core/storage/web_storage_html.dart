@@ -5,13 +5,13 @@
 import 'dart:html' as html;
 
 String? getWebStorageItem(String key) {
-  return html.window.localStorage[key];
+  return html.window.sessionStorage[key];
 }
 
 void setWebStorageItem(String key, String value) {
-  html.window.localStorage[key] = value;
+  html.window.sessionStorage[key] = value;
 }
 
 void removeWebStorageItem(String key) {
-  html.window.localStorage.remove(key);
+  html.window.sessionStorage.remove(key);
 }

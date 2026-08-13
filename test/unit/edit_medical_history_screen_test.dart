@@ -1,4 +1,4 @@
-// test/unit/edit_medical_history_screen_unit_test.dart
+// test/unit/edit_medical_history_screen_test.dart
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';

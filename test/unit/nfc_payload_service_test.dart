@@ -398,7 +398,7 @@ void main() {
     test('usa el MIME del guardián, no el de triage', () async {
       final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
       final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
-      await service.writeGuardianPayload({'patientInfo': {}});
+      await service.writeGuardianPayload(<String, dynamic>{'patientInfo': <String, dynamic>{}});
       final record = ndef.written!.records.single;
       expect(String.fromCharCodes(record.type), kHwbGuardianMimeType);
     });
@@ -406,7 +406,7 @@ void main() {
     test('reporta capacidad y utilización del chip', () async {
       final ndef = _FakeNdef(maxSize: 888); // NTAG216
       final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
-      final result = await service.writeGuardianPayload({'a': 1});
+      final result = await service.writeGuardianPayload(<String, dynamic>{'a': 1});
       expect(result.chipCapacity, 888);
       expect(result.bytesWritten, 3);
       expect(result.utilizationPercent, lessThan(10));

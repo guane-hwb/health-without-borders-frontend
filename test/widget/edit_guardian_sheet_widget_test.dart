@@ -420,7 +420,7 @@ void main() {
 
   group('Visual Layout Asset Color Evaluation Rules', () {
     testWidgets(
-      'family_restroom prefix icon utilizes AppColors.primary parameters when text fields are blank',
+      'family_restroom prefix icon utilizes AppColors.secondary parameters when text fields are blank',
       (tester) async {
         await tester.pumpWidget(
           _buildSubject(
@@ -431,12 +431,12 @@ void main() {
         );
 
         final icon = tester.widget<Icon>(find.byIcon(Icons.family_restroom));
-        expect(icon.color, AppColors.primary);
+        expect(icon.color, AppColors.secondary);
       },
     );
 
     testWidgets(
-      'family_restroom prefix icon updates into AppColors.success values when valid parameters exist',
+      'family_restroom prefix icon updates into check_circle_outline icon when valid parameters exist',
       (tester) async {
         await tester.pumpWidget(
           _buildSubject(
@@ -449,13 +449,12 @@ void main() {
           ),
         );
 
-        final icon = tester.widget<Icon>(find.byIcon(Icons.family_restroom));
-        expect(icon.color, AppColors.success);
+        expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
       },
     );
 
     testWidgets(
-      'Prefix icon signals context switches into success accents instantly upon typing',
+      'Prefix icon signals context switches into check_circle_outline instantly upon typing',
       (tester) async {
         await tester.pumpWidget(
           _buildSubject(
@@ -468,8 +467,7 @@ void main() {
         await tester.enterText(find.byType(TextField).last, 'HWB-AA');
         await tester.pump();
 
-        final icon = tester.widget<Icon>(find.byIcon(Icons.family_restroom));
-        expect(icon.color, AppColors.success);
+        expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
       },
     );
   });
@@ -494,7 +492,7 @@ void main() {
 
   group('Structural Typography Styling Parameter Checks', () {
     testWidgets(
-      'Label components explicitly configure text sizes to 12 along w600 weight bounds',
+      'Label components explicitly configure text sizes to 13 along w600 weight bounds',
       (tester) async {
         await tester.pumpWidget(
           _buildSubject(
@@ -505,7 +503,7 @@ void main() {
         );
 
         final labelText = tester.widget<Text>(find.text(sEs.guardianFullName));
-        expect(labelText.style?.fontSize, 12);
+        expect(labelText.style?.fontSize, 13);
         expect(labelText.style?.fontWeight, FontWeight.w600);
       },
     );

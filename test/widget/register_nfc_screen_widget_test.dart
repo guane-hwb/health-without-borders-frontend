@@ -1,5 +1,7 @@
 // test/widget/register_nfc_screen_widget_test.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -23,6 +25,7 @@ import 'package:health_without_borders_frontend/src/features/nfc/presentation/re
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step4_background.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step5_review.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step6_success.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ─────────────────────────────────────────────────────────────────────────
 //  Mocks
@@ -106,7 +109,11 @@ void main() {
   );
 
   void stubDefaults() {
-    when(() => auth.currentUser).thenReturn(user());
+    final activeUser = user();
+    when(() => auth.currentUser).thenReturn(activeUser);
+    when(
+      () => auth.sessionNotifier,
+    ).thenReturn(ValueNotifier<UserSession?>(activeUser));
     when(() => auth.getNfcEncryptionKey()).thenAnswer((_) async => null);
     when(() => auth.logout()).thenAnswer((_) async {});
     when(() => db.savePatient(any())).thenAnswer((_) async {});
@@ -138,23 +145,28 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => _TestLocaleWrapper(
-          initialLocale: locale,
-          child: AppScope(
-            authRepository: auth,
-            userRepository: userRepo,
-            patientRepository: patientRepo,
-            localDatabase: db,
-            syncEngine: sync,
-            statsRepository: MockStatsRepository(),
-            child: child!,
+      _TestLocaleWrapper(
+        initialLocale: locale,
+        child: AppScope(
+          authRepository: auth,
+          userRepository: userRepo,
+          patientRepository: patientRepo,
+          localDatabase: db,
+          syncEngine: sync,
+          statsRepository: MockStatsRepository(),
+          reachability: Reachability(baseUrl: 'http://localhost'),
+          child: MaterialApp(
+            home: const HomeScreen(),
+            routes: {'/register': (_) => const RegisterNfcScreen()},
           ),
         ),
-        home: const RegisterNfcScreen(),
       ),
     );
     await tester.pump();
+
+    final context = tester.element(find.byType(HomeScreen));
+    unawaited(Navigator.of(context).pushNamed('/register'));
+    await tester.pumpAndSettle();
   }
 
   // ── Step-advance helpers ─────────────────────────────────────────────────
@@ -213,7 +225,7 @@ void main() {
 
         expect(backButton, findsOneWidget);
         await tester.tap(backButton);
-        await pumpFrames(tester);
+        await tester.pumpAndSettle();
 
         expect(find.byType(HomeScreen), findsOneWidget);
         expect(find.byType(RegisterNfcScreen), findsNothing);
@@ -439,7 +451,7 @@ void main() {
           await tester.pump();
 
           tester.widget<Step6Success>(find.byType(Step6Success)).onGoHome!();
-          await pumpFrames(tester);
+          await tester.pumpAndSettle();
 
           expect(find.byType(HomeScreen), findsOneWidget);
         },

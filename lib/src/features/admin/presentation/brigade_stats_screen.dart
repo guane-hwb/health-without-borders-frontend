@@ -7,12 +7,13 @@ import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/country_display.dart';
+import '../../../shared/widgets/hwb_async_state_view.dart';
+import '../../../shared/widgets/hwb_screen_header.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../data/stats_repository.dart';
 import '../domain/brigade_stats.dart';
 import '../domain/stats_date_range.dart';
 
-/// Sentinel for "no organization filter", distinct from any real organization id.
 const String kAllOrgsFilterId = 'all';
 
 class _OrgFilter {
@@ -23,24 +24,17 @@ class _OrgFilter {
 
 enum _Failure { forbidden, offline, other }
 
-// ── Screen ────────────────────────────────────────────────────────────────
-
 class BrigadeStatsScreen extends StatefulWidget {
   const BrigadeStatsScreen({super.key, this.scopeToOwnOrganization = false});
 
-  /// When true the screen renders for an org_admin: the organization filter is
-  /// hidden and, crucially, `listOrganizations()` is never called — that
-  /// endpoint is superadmin-only and would answer 403.
-  ///
-  /// Passed explicitly by the caller rather than derived from the session role,
-  /// so the screen stays testable without standing up an authenticated scope.
   final bool scopeToOwnOrganization;
 
   @override
   State<BrigadeStatsScreen> createState() => _BrigadeStatsScreenState();
 }
 
-class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
+class _BrigadeStatsScreenState extends State<BrigadeStatsScreen>
+    with WidgetsBindingObserver {
   BrigadeStats? _stats;
   List<_OrgFilter> _orgs = const <_OrgFilter>[];
   String _selectedOrgId = kAllOrgsFilterId;
@@ -52,20 +46,42 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _load();
+    }
   }
 
   bool get _showFilter => !widget.scopeToOwnOrganization;
 
-  /// The organization id sent to the backend. An org_admin sends nothing: the
-  /// backend pins the scope to their own tenant regardless of what is passed.
   String? get _requestedOrgId {
     if (widget.scopeToOwnOrganization) return null;
     return _selectedOrgId == kAllOrgsFilterId ? null : _selectedOrgId;
   }
 
+  StatsDateRange _reevaluateRange(StatsDateRange range) {
+    return switch (range.kind) {
+      StatsRangeKind.all => StatsDateRange.all,
+      StatsRangeKind.thisMonth => StatsDateRange.thisMonth(),
+      StatsRangeKind.last30Days => StatsDateRange.last30Days(),
+      StatsRangeKind.custom => range,
+    };
+  }
+
   Future<void> _load() async {
     setState(() {
+      _range = _reevaluateRange(_range);
       _loading = true;
       _failure = null;
       _errorDetail = null;
@@ -73,8 +89,6 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
 
     final scope = AppScope.of(context);
     try {
-      // Only a superadmin may enumerate organizations, and only the superadmin
-      // view shows the filter. Fetched once, then reused across refetches.
       if (_showFilter && _orgs.isEmpty) {
         final orgs = await scope.userRepository.listOrganizations();
         if (!mounted) return;
@@ -120,24 +134,23 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
     }
   }
 
-  /// Handles a tap on a date-range chip. Presets apply immediately; "custom"
-  /// opens the native range picker and applies only if the user commits. A tap
-  /// on the already-selected preset is a no-op, so no needless refetch fires.
   Future<void> _onRangeSelected(StatsRangeKind kind) async {
     if (kind == StatsRangeKind.custom) {
       await _pickCustomRange();
       return;
     }
-    if (kind == _range.kind) return;
 
     final StatsDateRange next = switch (kind) {
       StatsRangeKind.all => StatsDateRange.all,
       StatsRangeKind.thisMonth => StatsDateRange.thisMonth(),
       StatsRangeKind.last30Days => StatsDateRange.last30Days(),
-      StatsRangeKind.custom => _range, // unreachable; handled above
+      StatsRangeKind.custom => _range,
     };
+
+    if (next == _range) return;
+
     setState(() => _range = next);
-    _load();
+    await _load();
   }
 
   Future<void> _pickCustomRange() async {
@@ -154,7 +167,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
     if (picked == null || !mounted) return;
 
     setState(() => _range = StatsDateRange.custom(picked.start, picked.end));
-    _load();
+    await _load();
   }
 
   @override
@@ -167,38 +180,10 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
           children: [
             Column(
               children: [
-                Container(
-                  color: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: AppColors.white,
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          widget.scopeToOwnOrganization
-                              ? s.statsScreenTitleOrg
-                              : s.statsScreenTitle,
-                          style: const TextStyle(
-                            color: AppColors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      _LocaleSwitcher(), // Switch del idioma importado de Home[cite: 2]
-                    ],
-                  ),
+                HwbScreenHeader(
+                  title: widget.scopeToOwnOrganization
+                      ? s.statsScreenTitleOrg
+                      : s.statsScreenTitle,
                 ),
                 Expanded(child: _buildBody()),
               ],
@@ -216,19 +201,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_failure != null) {
-      return _FailureView(
-        failure: _failure!,
-        detail: _errorDetail,
-        onRetry: _load,
-      );
-    }
-
     final s = AppStrings.of(context);
-    final stats = _stats!;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -250,41 +223,121 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen> {
           _DateRangeBar(selected: _range.kind, onSelected: _onRangeSelected),
           if (_range.isBounded) ...[
             const SizedBox(height: 6),
-            _ActiveRangeLabel(range: _range),
+            _ActiveRangeLabel(
+              range: _range,
+              windowFrom: _stats?.window.dateFrom,
+              windowTo: _stats?.window.dateTo,
+            ),
           ],
           const SizedBox(height: 16),
-          if (stats.isEmpty)
-            _EmptyView(message: s.statsEmpty)
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_failure != null)
+            _buildFailureView()
+          else if (_stats!.isEmpty)
+            HwbEmptyStateView(message: s.statsEmpty)
           else ...[
+            if (_stats?.generatedAt != null) ...[
+              _GeneratedAtLabel(generatedAt: _stats!.generatedAt!),
+              const SizedBox(height: 10),
+            ],
             _SectionTitle(title: s.tabSummary),
             const SizedBox(height: 10),
-            _KpiGrid(stats: stats),
+            _KpiGrid(stats: _stats!),
             const SizedBox(height: 20),
             _SectionTitle(title: s.statsVaccineDistribution),
             const SizedBox(height: 10),
-            _VaccineBarChart(stats: stats),
+            _VaccineBarChart(stats: _stats!),
             const SizedBox(height: 20),
             _SectionTitle(title: s.statsAllergyDistribution),
             const SizedBox(height: 10),
             _AllergyChips(
-              allergies: stats.allergies,
-              others: stats.allergiesOthers,
+              allergies: _stats!.allergies,
+              others: _stats!.allergiesOthers,
             ),
             const SizedBox(height: 20),
             _SectionTitle(title: s.statsNationalityDistribution),
             const SizedBox(height: 10),
             _NationalityList(
-              nationalities: stats.nationalities,
-              others: stats.nationalitiesOthers,
+              nationalities: _stats!.nationalities,
+              others: _stats!.nationalitiesOthers,
             ),
           ],
         ],
       ),
     );
   }
+
+  Widget _buildFailureView() {
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
+    IconData icon = Icons.error_outline;
+
+    String message =
+        _errorDetail ??
+        (isEs
+            ? 'Ocurrió un error al cargar las estadísticas.'
+            : 'An error occurred loading stats.');
+    if (_failure == _Failure.forbidden) {
+      icon = Icons.lock_outline;
+      message = s.statsForbidden;
+    } else if (_failure == _Failure.offline) {
+      icon = Icons.cloud_off_rounded;
+      message = s.statsOfflineHint;
+    }
+
+    return HwbAsyncErrorView(
+      message: message,
+      onRetry: _failure == _Failure.forbidden ? null : _load,
+      icon: icon,
+    );
+  }
 }
 
-// ── Sub-widgets ───────────────────────────────────────────────────────────
+class _GeneratedAtLabel extends StatelessWidget {
+  const _GeneratedAtLabel({required this.generatedAt});
+  final DateTime generatedAt;
+
+  static String _month(AppStrings s, int month) => switch (month) {
+    1 => s.monEne,
+    2 => s.monFeb,
+    3 => s.monMar,
+    4 => s.monAbr,
+    5 => s.monMay,
+    6 => s.monJun,
+    7 => s.monJul,
+    8 => s.monAgo,
+    9 => s.monSep,
+    10 => s.monOct,
+    11 => s.monNov,
+    _ => s.monDic,
+  };
+
+  static String _fmt(DateTime d, AppStrings s) {
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mm = d.minute.toString().padLeft(2, '0');
+    return '${d.day} ${_month(s, d.month)} ${d.year}, $hh:$mm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, bottom: 6),
+      child: Text(
+        s.statsGeneratedAt(_fmt(generatedAt, s)),
+        style: const TextStyle(
+          fontSize: 10,
+          color: AppColors.textSecondary,
+          fontStyle: FontStyle.italic,
+        ),
+      ),
+    );
+  }
+}
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.title});
@@ -298,89 +351,6 @@ class _SectionTitle extends StatelessWidget {
       fontWeight: FontWeight.w700,
       color: AppColors.textSecondary,
       letterSpacing: 0.6,
-    ),
-  );
-}
-
-class _FailureView extends StatelessWidget {
-  const _FailureView({
-    required this.failure,
-    required this.onRetry,
-    this.detail,
-  });
-
-  final _Failure failure;
-  final String? detail;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
-    IconData icon = Icons.error_outline;
-
-    // fe-mensaje-5xx-enganoso-en-admin: Mensajes claros sin promesas falsas de reintento automático
-    String message =
-        detail ??
-        (isEs
-            ? 'Ocurrió un error al cargar las estadísticas.'
-            : 'An error occurred loading stats.');
-    if (failure == _Failure.forbidden) {
-      icon = Icons.lock_outline;
-      message = s.statsForbidden;
-    } else if (failure == _Failure.offline) {
-      icon = Icons.cloud_off_rounded;
-      message = s.statsOfflineHint;
-    }
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: AppColors.error),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.error),
-            ),
-            const SizedBox(height: 16),
-            if (failure != _Failure.forbidden)
-              ElevatedButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: Text(s.retry),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyView extends StatelessWidget {
-  const _EmptyView({required this.message});
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-    child: Column(
-      children: [
-        const Icon(
-          Icons.insights_outlined,
-          size: 48,
-          color: AppColors.textSecondary,
-        ),
-        const SizedBox(height: 12),
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-        ),
-      ],
     ),
   );
 }
@@ -442,50 +412,6 @@ class _OrgFilterDropdown extends StatelessWidget {
   }
 }
 
-class _LocaleSwitcher extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final locale = AppLocale.of(context).locale;
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: ['es', 'en'].map((lang) {
-          //[cite: 2]
-          final selected = locale == lang;
-          return GestureDetector(
-            onTap: () => AppLocale.of(context).setLocale(lang),
-            child: Container(
-              margin: const EdgeInsets.only(left: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: selected
-                    ? Colors.white.withValues(alpha: 0.95)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                lang.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? AppColors.primary : AppColors.white,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-
-/// The date-range chips: three presets plus a "custom" entry that opens the
-/// native range picker. Same visual language as [_OrgFilterBar].
 class _DateRangeBar extends StatelessWidget {
   const _DateRangeBar({required this.selected, required this.onSelected});
 
@@ -551,16 +477,17 @@ class _DateRangeBar extends StatelessWidget {
   }
 }
 
-/// A small caption showing the concrete active window, e.g. "1 jun – 15 jun
-/// 2026". Only shown when a bounded range is active, so the "custom" trend
-/// ("vs. previous period") is anchored to something the user can see.
 class _ActiveRangeLabel extends StatelessWidget {
-  const _ActiveRangeLabel({required this.range});
+  const _ActiveRangeLabel({
+    required this.range,
+    this.windowFrom,
+    this.windowTo,
+  });
 
   final StatsDateRange range;
+  final DateTime? windowFrom;
+  final DateTime? windowTo;
 
-  /// Localized three-letter month abbreviation, reusing the app's existing
-  /// `monEne`..`monDic` strings rather than adding a date-formatting dependency.
   static String _month(AppStrings s, int month) => switch (month) {
     1 => s.monEne,
     2 => s.monFeb,
@@ -582,25 +509,43 @@ class _ActiveRangeLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final fromDate = windowFrom ?? range.from;
+    final toDate = windowTo ?? range.to;
+
+    if (fromDate == null || toDate == null) return const SizedBox.shrink();
+
+    final baseline = range.comparisonBaseline;
+
     return Padding(
       padding: const EdgeInsets.only(left: 2),
-      child: Text(
-        '${_fmt(range.from!, s)} – ${_fmt(range.to!, s)}',
-        style: const TextStyle(
-          fontSize: 11,
-          color: AppColors.textSecondary,
-          fontWeight: FontWeight.w500,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${_fmt(fromDate, s)} – ${_fmt(toDate, s)}',
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (baseline != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              s.statsComparedTo(_fmt(baseline.from, s), _fmt(baseline.to, s)),
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 }
 
-/// Formats a [TrendMetric] as a signed percentage against the previous period.
-///
-/// A null `deltaPct` means the previous period was empty. It renders as an em
-/// dash in a neutral colour: there is genuinely nothing to compare against, and
-/// showing "+100%" would invent a baseline that never existed.
 class _TrendLabel {
   const _TrendLabel(this.text, this.color);
   final String text;
@@ -644,7 +589,7 @@ class _KpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.save == 'Guardar';
+    final bool isEs = s.isEs;
     final bool monthly = stats.trend.isMonthly;
 
     final patientsTrend = _TrendLabel.from(
@@ -657,11 +602,6 @@ class _KpiGrid extends StatelessWidget {
       monthly: monthly,
       isEs: isEs,
     );
-    final encountersTrend = _TrendLabel.from(
-      stats.trend.encounters,
-      monthly: monthly,
-      isEs: isEs,
-    );
 
     final int categories = stats.allergyCategoryCount;
     final String allergySub = isEs
@@ -669,9 +609,13 @@ class _KpiGrid extends StatelessWidget {
         : 'in $categories ${categories == 1 ? 'category' : 'categories'}';
 
     final int minors = stats.totals.minors;
-    final String minorsSub = isEs
+    final bool hasActiveRange = stats.window.dateFrom != null;
+    final String minorsCount = isEs
         ? '$minors ${minors == 1 ? 'paciente' : 'pacientes'}'
         : '$minors ${minors == 1 ? 'patient' : 'patients'}';
+    final String minorsSub = hasActiveRange
+        ? '$minorsCount · ${s.statsMinorsAsOfToday}'
+        : minorsCount;
 
     return Column(
       children: [
@@ -709,8 +653,6 @@ class _KpiGrid extends StatelessWidget {
             _KpiCard(
               icon: Icons.child_care,
               label: s.statsMinorsPercentage,
-              // The backend divides by the patients that actually have a birth
-              // date on file, so never rebuild this from patients x pct.
               value: '${stats.totals.minorsPct.toStringAsFixed(0)}%',
               sub: minorsSub,
               iconColor: const Color(0xFF6A1B9A),
@@ -722,8 +664,16 @@ class _KpiGrid extends StatelessWidget {
           icon: Icons.medical_information_outlined,
           label: s.statsTotalEncounters,
           value: fmt(stats.totals.encounters),
-          sub: encountersTrend.text,
-          subColor: encountersTrend.color,
+          sub: _TrendLabel.from(
+            stats.trend.encounters,
+            monthly: monthly,
+            isEs: isEs,
+          ).text,
+          subColor: _TrendLabel.from(
+            stats.trend.encounters,
+            monthly: monthly,
+            isEs: isEs,
+          ).color,
           iconColor: const Color(0xFF00695C),
         ),
       ],
@@ -809,19 +759,17 @@ class _VaccineBarChart extends StatelessWidget {
   const _VaccineBarChart({required this.stats});
   final BrigadeStats stats;
 
-  /// The endpoint returns every code it saw. A brigade with a broad catalogue
-  /// would otherwise push the rest of the page off screen.
   static const int maxRows = 8;
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.save == 'Guardar';
+    final bool isEs = s.isEs;
     final int maxCount = stats.maxVaccineCount;
     final rows = stats.vaccines.take(maxRows).toList();
 
     if (rows.isEmpty) {
-      return _EmptyView(message: s.statsEmpty);
+      return HwbEmptyStateView(message: s.statsEmpty);
     }
 
     return Container(
@@ -898,15 +846,13 @@ class _AllergyChips extends StatelessWidget {
   final List<AllergyStat> allergies;
   final int others;
 
-  /// Res. 866/2021 Elem. 47.1 defines six categories. The previous palette had
-  /// four, so skin substances and insect bites both fell through to grey.
   static Color bg(String category) => switch (category) {
-    '01' => const Color(0xFFFAECE7), // Medicamento
-    '02' => const Color(0xFFFAEEDA), // Alimento
-    '03' => const Color(0xFFE1F5EE), // Sustancia ambiente
-    '04' => const Color(0xFFEDE7F6), // Sustancia piel
-    '05' => const Color(0xFFFFF3E0), // Picadura de insectos
-    _ => const Color(0xFFF1EFE8), // Otra
+    '01' => const Color(0xFFFAECE7),
+    '02' => const Color(0xFFFAEEDA),
+    '03' => const Color(0xFFE1F5EE),
+    '04' => const Color(0xFFEDE7F6),
+    '05' => const Color(0xFFFFF3E0),
+    _ => const Color(0xFFF1EFE8),
   };
 
   static Color fg(String category) => switch (category) {
@@ -921,10 +867,10 @@ class _AllergyChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.save == 'Guardar';
+    final bool isEs = s.isEs;
 
     if (allergies.isEmpty && others == 0) {
-      return _EmptyView(message: s.statsEmpty);
+      return HwbEmptyStateView(message: s.statsEmpty);
     }
 
     return Wrap(
@@ -984,10 +930,10 @@ class _NationalityList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final bool isEs = s.save == 'Guardar';
+    final bool isEs = s.isEs;
 
     if (nationalities.isEmpty && others == 0) {
-      return _EmptyView(message: s.statsEmpty);
+      return HwbEmptyStateView(message: s.statsEmpty);
     }
 
     final rows = <_NationalityRow>[

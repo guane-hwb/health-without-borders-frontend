@@ -1,4 +1,4 @@
-// test/widget/loss_of_wristband_screen_test.dart
+// test/unit/loss_of_wristband_screen_test.dart
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';

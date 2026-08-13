@@ -1,3 +1,5 @@
+// test/unit/patient_repository_test.dart
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -50,9 +52,7 @@ void main() {
   group('syncPatient', () {
     test('POSTs to /api/v1/patients/sync with auth header and returns '
         'PatientSyncResponse on success (201)', () async {
-      final record = _FakePatientFullRecord(<String, dynamic>{
-        'document_number': '12345678',
-        'first_name': 'Ana',
+      final record = const _FakePatientFullRecord(<String, dynamic>{
         'last_name': 'Gomez',
       });
 
@@ -83,7 +83,7 @@ void main() {
     });
 
     test('propagates ApiException on 401 (expired token)', () async {
-      final record = _FakePatientFullRecord(<String, dynamic>{});
+      const record = _FakePatientFullRecord(<String, dynamic>{});
 
       when(
         () => apiClient.postJson(
@@ -102,7 +102,7 @@ void main() {
     test(
       'propagates ApiException on 403 (nurse adding medical history)',
       () async {
-        final record = _FakePatientFullRecord(<String, dynamic>{});
+        const record = _FakePatientFullRecord(<String, dynamic>{});
 
         when(
           () => apiClient.postJson(
@@ -122,7 +122,7 @@ void main() {
     );
 
     test('propagates ApiException on 422 (validation error)', () async {
-      final record = _FakePatientFullRecord(<String, dynamic>{});
+      const record = _FakePatientFullRecord(<String, dynamic>{});
 
       when(
         () => apiClient.postJson(
@@ -139,7 +139,7 @@ void main() {
     });
 
     test('propagates ApiException on 500', () async {
-      final record = _FakePatientFullRecord(<String, dynamic>{});
+      const record = _FakePatientFullRecord(<String, dynamic>{});
 
       when(
         () => apiClient.postJson(

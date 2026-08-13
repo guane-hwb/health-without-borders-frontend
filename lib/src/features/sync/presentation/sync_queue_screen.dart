@@ -6,6 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/storage/local_database.dart';
+import '../../../core/sync/sync_engine.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../nfc/presentation/profile/patient_profile_screen.dart';
@@ -19,6 +20,8 @@ class SyncQueueScreen extends StatefulWidget {
 class _SyncQueueScreenState extends State<SyncQueueScreen> {
   List<LocalPatientEntry> _entries = [];
   bool _loading = true, _syncing = false;
+  int _syncedSoFar = 0;
+  int _syncTotal = 0;
 
   @override
   void initState() {
@@ -42,12 +45,16 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
 
   Future<void> _syncAll() async {
     final s = AppStrings.of(context);
-    final isEs = s.save == 'Guardar';
+    final isEs = s.isEs;
     final messenger = ScaffoldMessenger.of(context);
-    final syncEngine = AppScope.of(context).syncEngine;
+    final scope = AppScope.of(context);
 
     final netResult = await Connectivity().checkConnectivity();
-    if (netResult.contains(ConnectivityResult.none)) {
+    final reachable =
+        !netResult.contains(ConnectivityResult.none) &&
+        await scope.reachability.probe();
+
+    if (!reachable) {
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(
@@ -63,9 +70,20 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
       return;
     }
 
-    setState(() => _syncing = true);
+    setState(() {
+      _syncing = true;
+      _syncedSoFar = 0;
+      _syncTotal = _entries.length;
+    });
+
+    scope.syncEngine.onRecordSynced =
+        (String patientId, bool success, String? _) {
+          if (!mounted) return;
+          setState(() => _syncedSoFar++);
+        };
+
     try {
-      await syncEngine.syncAll();
+      await scope.syncEngine.syncAll();
       await _load();
       if (mounted) {
         final remaining = _entries.length;
@@ -103,6 +121,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
         );
       }
     } finally {
+      scope.syncEngine.onRecordSynced = null;
       if (mounted) {
         setState(() => _syncing = false);
       }
@@ -111,12 +130,16 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
 
   Future<void> _syncOne(String id) async {
     final s = AppStrings.of(context);
-    final isEs = s.save == 'Guardar';
+    final isEs = s.isEs;
     final messenger = ScaffoldMessenger.of(context);
-    final syncEngine = AppScope.of(context).syncEngine;
+    final scope = AppScope.of(context);
 
     final netResult = await Connectivity().checkConnectivity();
-    if (netResult.contains(ConnectivityResult.none)) {
+    final reachable =
+        !netResult.contains(ConnectivityResult.none) &&
+        await scope.reachability.probe();
+
+    if (!reachable) {
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(
@@ -130,15 +153,18 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
       return;
     }
 
-    final ok = await syncEngine.syncOne(id);
+    final result = await scope.syncEngine.syncOne(id);
     if (mounted) {
+      final (String message, Color color) = switch (result) {
+        SyncOneResult.success => (s.syncedSuccessfully, AppColors.success),
+        SyncOneResult.notFound => (s.syncedSuccessfully, AppColors.success),
+        SyncOneResult.busy => (s.synchronizing, AppColors.secondary),
+        SyncOneResult.failure => (s.syncFailedRetry, AppColors.error),
+      };
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(ok ? s.syncedSuccessfully : s.syncFailedRetry),
-          backgroundColor: ok ? AppColors.success : AppColors.error,
-        ),
+        SnackBar(content: Text(message), backgroundColor: color),
       );
-      _load();
+      await _load();
     }
   }
 
@@ -146,7 +172,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
     final r = e.toPatientRecord();
     if (r == null) return;
     Navigator.of(context).push(
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => PatientProfileScreen(patient: r, readOnly: true),
       ),
     );
@@ -178,7 +204,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
 
     if (ok == true && mounted) {
       await db.deleteRecord(e.patientId);
-      _load();
+      await _load();
     }
   }
 
@@ -259,7 +285,9 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                                     color: AppColors.white,
                                   ),
                             label: Text(
-                              s.syncAll,
+                              _syncing && _syncTotal > 0
+                                  ? '$_syncedSoFar / $_syncTotal'
+                                  : s.syncAll,
                               style: const TextStyle(
                                 color: AppColors.white,
                                 fontSize: 14,
@@ -386,10 +414,8 @@ class _SyncCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isConflict = entry.syncErrorCode == 409;
-    final hasErr =
-        entry.syncError?.isNotEmpty ==
-        true; // fe-sync-ui-oculta-todo-error-no-409
-    final isEs = s.save == 'Guardar';
+    final hasErr = entry.syncError?.isNotEmpty == true;
+    final isEs = s.isEs;
 
     String? errorMessage;
     if (hasErr) {
@@ -406,7 +432,7 @@ class _SyncCard extends StatelessWidget {
             ? 'Error de validación (422): El registro contiene campos incompatibles con el backend.'
             : 'Validation error (422): The record contains incompatible fields.';
       } else {
-        errorMessage = entry.syncError;
+        errorMessage = _friendlyNetworkError(entry.syncError!, isEs);
       }
     }
 
@@ -550,6 +576,20 @@ class _SyncCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static String _friendlyNetworkError(String raw, bool isEs) {
+    final String lower = raw.toLowerCase();
+    final bool isNetwork =
+        lower.contains('timeout') ||
+        lower.contains('socketexception') ||
+        lower.contains('clientexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('unexpected response payload format');
+    if (!isNetwork) return raw;
+    return isEs
+        ? 'No se pudo contactar el servidor. Verifique la conexión a la red.'
+        : 'Could not reach the server. Please check network connection.';
   }
 
   Widget _btn(IconData icon, String label, Color color, VoidCallback onTap) =>

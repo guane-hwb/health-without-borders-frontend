@@ -1,15 +1,5 @@
 // lib/src/features/admin/domain/brigade_stats.dart
-//
-// Domain models for GET /api/v1/stats/overview.
-//
-// These are deliberately public. The previous version of the statistics screen
-// kept them private and its tests had to re-implement the formatting helpers
-// locally, so the assertions drifted away from the code they claimed to cover.
 
-/// The organization the figures belong to.
-///
-/// Both fields are null for the system-wide aggregate a superadmin sees when
-/// no organization filter is applied.
 class StatsScope {
   const StatsScope({this.organizationId, this.organizationName});
 
@@ -22,8 +12,6 @@ class StatsScope {
   );
 }
 
-/// The inclusive date window the totals were computed over.
-/// Both bounds are null when the totals cover the full history.
 class StatsWindow {
   const StatsWindow({this.dateFrom, this.dateTo});
 
@@ -37,12 +25,6 @@ class StatsWindow {
       StatsWindow(dateFrom: _date(j['date_from']), dateTo: _date(j['date_to']));
 }
 
-/// Headline figures.
-///
-/// [minorsPct] divides by [patientsWithBirthDate], not by [patients]: the birth
-/// date is nullable, and dividing by the full population would understate the
-/// share of minors. Never reconstruct [minors] from the percentage — it is
-/// reported directly.
 class StatsTotals {
   const StatsTotals({
     required this.patients,
@@ -75,10 +57,6 @@ class StatsTotals {
   );
 }
 
-/// One metric against the immediately preceding period.
-///
-/// [deltaPct] is null — not zero — when [previous] is zero. Growth from nothing
-/// is not a percentage, and rendering it as +100% would be a fabrication.
 class TrendMetric {
   const TrendMetric({
     required this.current,
@@ -90,7 +68,6 @@ class TrendMetric {
   final int previous;
   final double? deltaPct;
 
-  /// True when there is no baseline to compare against.
   bool get hasNoBaseline => deltaPct == null;
 
   factory TrendMetric.fromJson(Map<String, dynamic> j) => TrendMetric(
@@ -100,11 +77,6 @@ class TrendMetric {
   );
 }
 
-/// Period-over-period comparison.
-///
-/// [period] is `"month"` (month-to-date against the same elapsed span of the
-/// previous month) or `"custom"` (the requested window against the preceding
-/// window of equal length). The client uses it to pick the sub-label copy.
 class StatsTrend {
   const StatsTrend({
     required this.period,
@@ -132,8 +104,6 @@ class StatsTrend {
   );
 }
 
-/// Doses grouped by vaccine code. [name] is the most frequent spelling the
-/// backend saw for that code; group on [code], display [name].
 class VaccineStat {
   const VaccineStat({
     required this.code,
@@ -145,7 +115,6 @@ class VaccineStat {
   final String name;
   final int count;
 
-  /// The backend buckets doses with no CVX code under this sentinel.
   static const String uncoded = 'UNCODED';
 
   bool get isUncoded => code == uncoded;
@@ -157,10 +126,6 @@ class VaccineStat {
   );
 }
 
-/// Allergy entries grouped by (category, allergen).
-///
-/// [category] is the canonical Res. 866/2021 code, `'01'`..`'06'`. Mapping it
-/// to a colour is presentation, and lives in the screen.
 class AllergyStat {
   const AllergyStat({
     required this.allergen,
@@ -179,18 +144,12 @@ class AllergyStat {
   );
 }
 
-/// Patients grouped by nationality.
-///
-/// [code] is echoed back exactly as stored — in practice an ISO 3166-1 alpha-3
-/// code such as `'COL'` — or [unknown] when the patient has none. (The FHIR
-/// bundle converts to numeric at its own boundary; that does not reach here.)
 class NationalityStat {
   const NationalityStat({required this.code, required this.count});
 
   final String code;
   final int count;
 
-  /// The backend buckets patients with no nationality under this sentinel.
   static const String unknown = 'UNK';
 
   bool get isUnknown => code == unknown;
@@ -201,7 +160,6 @@ class NationalityStat {
   );
 }
 
-/// Full payload of `GET /api/v1/stats/overview`.
 class BrigadeStats {
   const BrigadeStats({
     required this.scope,
@@ -221,35 +179,21 @@ class BrigadeStats {
   final StatsWindow window;
   final StatsTotals totals;
   final StatsTrend trend;
-
   final List<VaccineStat> vaccines;
-
   final List<AllergyStat> allergies;
-
-  /// Sum of the counts of allergens truncated from [allergies], not a count of
-  /// distinct entries.
   final int allergiesOthers;
-
   final List<NationalityStat> nationalities;
-
-  /// Sum of the counts of nationalities truncated from [nationalities].
   final int nationalitiesOthers;
 
-  /// Nothing was recorded in this scope and window — render an empty state
-  /// rather than a page of zeroed bars.
   bool get isEmpty =>
       totals.patients == 0 &&
       totals.vaccineDoses == 0 &&
       totals.encounters == 0 &&
       totals.allergies == 0;
 
-  /// Largest dose count, used to scale the bar chart. Does not assume the
-  /// backend sorted the list.
   int get maxVaccineCount =>
       vaccines.fold<int>(0, (m, v) => v.count > m ? v.count : m);
 
-  /// Distinct allergy categories actually present in [allergies]. Allergens
-  /// folded into [allergiesOthers] may belong to categories not counted here.
   int get allergyCategoryCount =>
       allergies.map((a) => a.category).toSet().length;
 

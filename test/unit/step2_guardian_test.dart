@@ -1,8 +1,7 @@
 // test/unit/step2_guardian_test.dart
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/register_nfc_screen.dart'
-    show RegisterDraft;
+import 'package:health_without_borders_frontend/src/features/nfc/domain/register_draft.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helpers

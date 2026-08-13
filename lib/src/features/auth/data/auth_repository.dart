@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/local_database.dart';
+import '../../../core/utils/app_logger.dart';
 import '../domain/user_session.dart';
 
 class AuthRepository implements TokenProvider {
@@ -14,8 +15,6 @@ class AuthRepository implements TokenProvider {
     FlutterSecureStorage? secureStorage,
     LocalDatabase? localDatabase,
   }) : _apiClient = apiClient,
-       // fe-keychain-accesible-migra-backup & fe-keychain-sin-thisdeviceonly:
-       // Configura accesibilidad ThisDeviceOnly para evitar que credenciales y claves migren en backups.
        _secureStorage =
            secureStorage ??
            const FlutterSecureStorage(
@@ -26,6 +25,7 @@ class AuthRepository implements TokenProvider {
                accessibility: KeychainAccessibility.first_unlock_this_device,
              ),
              aOptions: AndroidOptions(),
+             webOptions: WebOptions(useSessionStorage: true),
            ),
        _localDb = localDatabase ?? LocalDatabase.instance;
 
@@ -49,7 +49,12 @@ class AuthRepository implements TokenProvider {
 
   String? _cachedToken;
   String? _cachedRefreshToken;
+  String? _cachedNfcKey;
   UserSession? _session;
+
+  final ValueNotifier<UserSession?> _sessionNotifier =
+      ValueNotifier<UserSession?>(null);
+  ValueNotifier<UserSession?> get sessionNotifier => _sessionNotifier;
 
   Future<String?>? _refreshInFlight;
 
@@ -57,6 +62,11 @@ class AuthRepository implements TokenProvider {
   ValueListenable<bool> get sessionExpired => _sessionExpired;
 
   UserSession? get currentUser => _session;
+
+  void _updateSession(UserSession? session) {
+    _session = session;
+    _sessionNotifier.value = session;
+  }
 
   // ── Login ─────────────────────────────────────────────────────────────────
 
@@ -91,16 +101,31 @@ class AuthRepository implements TokenProvider {
 
     final nfcKey = tokenData['nfc_encryption_key']?.toString();
     if (nfcKey != null && nfcKey.isNotEmpty) {
-      try {
-        await _secureStorage.write(key: _nfcKeyKey, value: nfcKey);
-      } catch (_) {}
+      if (kIsWeb) {
+        _cachedNfcKey = nfcKey;
+      } else {
+        try {
+          await _secureStorage.write(key: _nfcKeyKey, value: nfcKey);
+        } catch (_) {}
+      }
     }
 
-    _session = await _fetchMe(accessToken);
+    final UserSession? previous = await _readPersistedSession();
+    final fetchedSession = await _fetchMe(accessToken);
+    _updateSession(fetchedSession);
 
-    // fe-persiste-sesion-fallback-doctor:
-    // Solo persiste la sesión en disco si provino de un perfil válido del backend (id no vacío),
-    // previniendo guardar sesiones fallback con roles incorrectos.
+    if (previous != null && previous.id != _session!.id) {
+      if (await _localDb.getUnsyncedCount() == 0) {
+        await _localDb.clearAll();
+        await _localDb.destroyEncryptionKey();
+      } else {
+        AppLogger.e(
+          'Cambio de usuario con ${await _localDb.getUnsyncedCount()} '
+          'registros pendientes de ${previous.id}: se conservan.',
+        );
+      }
+    }
+
     if (_session!.id.isNotEmpty) {
       await _persistSession(_session!);
     }
@@ -114,7 +139,7 @@ class AuthRepository implements TokenProvider {
     if (_session != null) return _session;
     try {
       final token = await getAccessToken();
-      _session = await _fetchMe(token);
+      _updateSession(await _fetchMe(token));
     } catch (_) {}
     return _session;
   }
@@ -128,13 +153,13 @@ class AuthRepository implements TokenProvider {
 
     final UserSession? persisted = await _readPersistedSession();
     if (persisted != null) {
-      _session = persisted;
+      _updateSession(persisted);
       return _session;
     }
 
     try {
       final UserSession fetched = await _fetchMe(token);
-      _session = fetched;
+      _updateSession(fetched);
       if (fetched.id.isNotEmpty) await _persistSession(fetched);
     } catch (_) {}
     return _session;
@@ -200,6 +225,8 @@ class AuthRepository implements TokenProvider {
   }
 
   Future<String?> getNfcEncryptionKey() async {
+    if (_cachedNfcKey?.isNotEmpty == true) return _cachedNfcKey;
+    if (kIsWeb) return null;
     try {
       return await _secureStorage.read(key: _nfcKeyKey);
     } catch (_) {
@@ -207,7 +234,7 @@ class AuthRepository implements TokenProvider {
     }
   }
 
-  Future<void> logout() async {
+  Future<void> logout({bool wipeLocalData = false}) async {
     try {
       final String? token =
           _cachedToken ?? await _secureStorage.read(key: _tokenKey);
@@ -225,13 +252,17 @@ class AuthRepository implements TokenProvider {
     } catch (_) {
     } finally {
       await clearSession();
+      if (wipeLocalData) {
+        await wipeLocalPhi();
+      }
     }
   }
 
   Future<void> clearSession() async {
     _cachedToken = null;
     _cachedRefreshToken = null;
-    _session = null;
+    _cachedNfcKey = null;
+    _updateSession(null);
     try {
       await _secureStorage.delete(key: _tokenKey);
     } catch (_) {}
@@ -244,10 +275,18 @@ class AuthRepository implements TokenProvider {
     try {
       await _secureStorage.delete(key: _sessionKey);
     } catch (_) {}
+  }
 
+  Future<bool> wipeLocalPhi({bool force = false}) async {
     try {
+      if (!force && await _localDb.getUnsyncedCount() > 0) return false;
       await _localDb.clearAll();
-    } catch (_) {}
+      await _localDb.destroyEncryptionKey();
+      return true;
+    } catch (e, stack) {
+      AppLogger.e('Error limpiando la base local', error: e, stackTrace: stack);
+      return false;
+    }
   }
 
   Future<void> _invalidateSession() async {

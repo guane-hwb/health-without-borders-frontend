@@ -24,12 +24,14 @@ import 'package:health_without_borders_frontend/src/core/storage/local_database.
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/add_vaccine_screen.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ---------------------------------------------------------------------------
 // Fakes & mocks
@@ -47,11 +49,12 @@ class _MockSyncEngine extends Mock implements SyncEngine {}
 
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
 
+class _MockReachability extends Mock implements Reachability {}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Search for a [TextField] by its exact hint text.
 Finder textFieldWithHint(String hint) => find.byWidgetPredicate(
   (widget) => widget is TextField && widget.decoration?.hintText == hint,
   description: 'TextField with hint "$hint"',
@@ -62,7 +65,6 @@ const String _hintCvxCode = 'Ej: 03';
 const String _hintAdminBy = 'Ej: Enf. Ana Ruiz';
 const String _hintAdminAt = 'Ej: Brigada Frontera Cúcuta';
 
-/// Minimal [PatientFullRecord] with all required fields.
 PatientFullRecord _fakePatient({String name = 'Ana García'}) =>
     PatientFullRecord(
       patientId: 'P001',
@@ -89,8 +91,6 @@ PatientFullRecord _fakePatient({String name = 'Ana García'}) =>
 // Widget wrapper
 // ---------------------------------------------------------------------------
 
-/// Injects a fake [AppScope] and [AppLocale] so the widget doesn't touch
-/// real platform code.
 Widget _buildApp({
   PatientFullRecord? patient,
   bool returnToProfile = false,
@@ -108,6 +108,7 @@ Widget _buildApp({
       apiClient: ApiClient(baseUrl: 'http://localhost'),
       authRepository: wrapper.authRepository,
     ),
+    reachability: wrapper.reachability,
     child: AppLocale(
       locale: locale,
       setLocale: (_) {},
@@ -123,12 +124,19 @@ Widget _buildApp({
 
 AppScope _defaultScope() {
   final auth = _MockAuthRepository();
+  when(
+    () => auth.sessionNotifier,
+  ).thenReturn(ValueNotifier<UserSession?>(null));
+
   final user = _MockUserRepository();
   final repo = _MockPatientRepository();
   final db = _MockLocalDatabase();
   final sync = _MockSyncEngine();
 
   when(() => sync.syncAll()).thenAnswer((_) async => true);
+
+  final resolvedReach = _MockReachability();
+  when(() => resolvedReach.probe()).thenAnswer((_) async => true);
 
   return AppScope(
     authRepository: auth,
@@ -140,6 +148,7 @@ AppScope _defaultScope() {
       apiClient: ApiClient(baseUrl: 'http://localhost'),
       authRepository: auth,
     ),
+    reachability: resolvedReach,
     child: const SizedBox.shrink(),
   );
 }
@@ -523,90 +532,119 @@ void main() {
     });
   });
 
-  // ── Widget: returnToProfile path ──────────────────────────────────────────
+  // ── Widget: returnToProfile path & Múltiples Vacunas ──────────────────────
 
-  group('returnToProfile = true', () {
-    testWidgets('pops with vaccine result instead of saving locally', (
-      tester,
-    ) async {
-      List<VaccinationRecordItem>? popped;
-      final scope = _defaultScope();
+  group(
+    'returnToProfile = true y preservación de múltiples vacunas (v2-vacunas-multiples-test-insuficiente)',
+    () {
+      testWidgets(
+        'se agregan 2 vacunas y retorna la lista completa al perfil',
+        (tester) async {
+          List<VaccinationRecordItem>? popped;
+          final scope = _defaultScope();
 
-      await tester.pumpWidget(
-        AppScope(
-          authRepository: scope.authRepository,
-          userRepository: scope.userRepository,
-          patientRepository: scope.patientRepository,
-          localDatabase: scope.localDatabase,
-          syncEngine: scope.syncEngine,
-          statsRepository: StatsRepository(
-            apiClient: ApiClient(baseUrl: 'http://localhost'),
-            authRepository: scope.authRepository,
-          ),
-          child: AppLocale(
-            locale: 'es',
-            setLocale: (_) {},
-            child: MaterialApp(
-              home: Builder(
-                builder: (ctx) => TextButton(
-                  onPressed: () async {
-                    final result = await Navigator.of(ctx)
-                        .push<List<VaccinationRecordItem>>(
-                          MaterialPageRoute(
-                            builder: (_) => AppScope(
-                              authRepository: scope.authRepository,
-                              userRepository: scope.userRepository,
-                              patientRepository: scope.patientRepository,
-                              localDatabase: scope.localDatabase,
-                              syncEngine: scope.syncEngine,
-                              statsRepository: StatsRepository(
-                                apiClient: ApiClient(
-                                  baseUrl: 'http://localhost',
+          await tester.pumpWidget(
+            AppScope(
+              authRepository: scope.authRepository,
+              userRepository: scope.userRepository,
+              patientRepository: scope.patientRepository,
+              localDatabase: scope.localDatabase,
+              syncEngine: scope.syncEngine,
+              statsRepository: StatsRepository(
+                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                authRepository: scope.authRepository,
+              ),
+              reachability: scope.reachability,
+              child: AppLocale(
+                locale: 'es',
+                setLocale: (_) {},
+                child: MaterialApp(
+                  home: Builder(
+                    builder: (ctx) => TextButton(
+                      onPressed: () async {
+                        final result = await Navigator.of(ctx)
+                            .push<List<VaccinationRecordItem>>(
+                              MaterialPageRoute(
+                                builder: (_) => AppScope(
+                                  authRepository: scope.authRepository,
+                                  userRepository: scope.userRepository,
+                                  patientRepository: scope.patientRepository,
+                                  localDatabase: scope.localDatabase,
+                                  syncEngine: scope.syncEngine,
+                                  statsRepository: StatsRepository(
+                                    apiClient: ApiClient(
+                                      baseUrl: 'http://localhost',
+                                    ),
+                                    authRepository: scope.authRepository,
+                                  ),
+                                  reachability: scope.reachability,
+                                  child: AppLocale(
+                                    locale: 'es',
+                                    setLocale: (_) {},
+                                    child: AddVaccineScreen(
+                                      patient: _fakePatient(),
+                                      returnToProfile: true,
+                                    ),
+                                  ),
                                 ),
-                                authRepository: scope.authRepository,
                               ),
-                              child: AppLocale(
-                                locale: 'es',
-                                setLocale: (_) {},
-                                child: AddVaccineScreen(
-                                  patient: _fakePatient(),
-                                  returnToProfile: true,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                    popped = result;
-                  },
-                  child: const Text('Open'),
+                            );
+                        popped = result;
+                      },
+                      child: const Text('Open'),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+
+          await tester.tap(find.text('Open'));
+          await tester.pumpAndSettle();
+
+          // Vacuna 1
+          await tester.enterText(
+            textFieldWithHint(_hintVaccineName).first,
+            'Varicela',
+          );
+          await tester.enterText(textFieldWithHint(_hintCvxCode).first, '21');
+          await tester.enterText(
+            textFieldWithHint(_hintAdminBy),
+            'Enfermera R.',
+          );
+          await tester.enterText(textFieldWithHint(_hintAdminAt), 'IPS Sur');
+          await tester.pump();
+
+          final agregarBtn = find.text('Agregar');
+          await tester.ensureVisible(agregarBtn);
+          await tester.pumpAndSettle();
+          await tester.tap(agregarBtn);
+          await tester.pumpAndSettle();
+
+          final v2Name = textFieldWithHint(_hintVaccineName).at(1);
+          await tester.ensureVisible(v2Name);
+          await tester.pumpAndSettle();
+          await tester.enterText(v2Name, 'Hepatitis B');
+
+          final v2Code = textFieldWithHint(_hintCvxCode).at(1);
+          await tester.ensureVisible(v2Code);
+          await tester.pumpAndSettle();
+          await tester.enterText(v2Code, '08');
+          await tester.pump();
+
+          await _tapGuardar(tester, entriesCount: 2);
+          await tester.pumpAndSettle();
+
+          expect(popped, isNotNull);
+          expect(popped!.length, equals(2));
+          expect(popped![0].vaccineName, 'Varicela');
+          expect(popped![0].vaccineCode, '21');
+          expect(popped![1].vaccineName, 'Hepatitis B');
+          expect(popped![1].vaccineCode, '08');
+        },
       );
-
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        textFieldWithHint(_hintVaccineName).first,
-        'Varicela',
-      );
-      await tester.enterText(textFieldWithHint(_hintCvxCode).first, '21');
-      await tester.enterText(textFieldWithHint(_hintAdminBy), 'Enfermera R.');
-      await tester.enterText(textFieldWithHint(_hintAdminAt), 'IPS Sur');
-      await tester.pump();
-
-      await _tapGuardar(tester);
-      await tester.pumpAndSettle();
-
-      expect(popped, isNotNull);
-      expect(popped!.isNotEmpty, isTrue);
-      expect(popped!.first.vaccineName, 'Varicela');
-      expect(popped!.first.vaccineCode, '21');
-    });
-  });
+    },
+  );
 
   // ── Widget: common-vaccines quick-fill ────────────────────────────────────
 
@@ -662,9 +700,7 @@ void main() {
 // Exported helpers for pure unit tests
 // ---------------------------------------------------------------------------
 
-/// Public alias so that unit tests can instantiate _VaccineEntry.
 typedef VaccineEntryTestable = VaccineEntry;
 
-/// Helper exported to check date format without lifting widgets.
 String formatVaccineDate(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

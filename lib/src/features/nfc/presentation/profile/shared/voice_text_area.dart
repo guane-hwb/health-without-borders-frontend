@@ -1,4 +1,6 @@
 // lib/src/features/nfc/presentation/profile/shared/voice_text_area.dart
+
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -115,14 +117,14 @@ class _VoiceTextAreaState extends State<VoiceTextArea>
     }
 
     setState(() => _isListening = true);
-    _pulseCtrl.repeat(reverse: true);
+    unawaited(_pulseCtrl.repeat(reverse: true));
 
     await _speech.listen(
       localeId: isEs ? 'es_CO' : 'en_US',
       listenOptions: stt.SpeechListenOptions(
         cancelOnError: true,
         partialResults: true,
-        onDevice: true,
+        onDevice: false,
       ),
       onResult: (result) {
         if (!mounted) return;

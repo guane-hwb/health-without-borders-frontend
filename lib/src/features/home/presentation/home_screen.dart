@@ -1,25 +1,14 @@
 // lib/src/features/home/presentation/home_screen.dart
-//
-// Home screen — restores the original visual design (logo + brand name in header,
-// white action cards with distinct colored icons) while keeping current functionality
-// (logout at bottom, superadmin/org_admin/clinical role-based bodies).
 
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
+import '../../../core/routes/app_routes.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/hwb_logo.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
-import '../../admin/presentation/brigade_stats_screen.dart';
-import '../../admin/presentation/manage_organizations_screen.dart';
-import '../../admin/presentation/manage_users_screen.dart';
 import '../../auth/domain/user_session.dart';
-import '../../auth/presentation/login_screen.dart';
-import '../../nfc/presentation/loss_of_wristband_screen.dart';
-import '../../nfc/presentation/read_nfc_screen.dart';
-import '../../nfc/presentation/register/register_nfc_screen.dart';
-import '../../sync/presentation/sync_queue_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -60,10 +49,9 @@ class HomeScreen extends StatelessWidget {
     if (confirmed == true && context.mounted) {
       await scope.authRepository.logout();
       if (context.mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-          (_) => false,
-        );
+        await Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
       }
     }
   }
@@ -72,7 +60,12 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final scope = AppScope.of(context);
     final user = scope.currentUser;
-    if (user == null) return const LoginScreen();
+    if (user == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+      });
+      return const SizedBox.shrink();
+    }
 
     return Scaffold(
       backgroundColor: AppColors.backgroundLight,
@@ -121,11 +114,7 @@ class HomeScreen extends StatelessWidget {
           iconColor: const Color(0xFF2E7D32),
           title: s.manageOrgsTitle,
           subtitle: s.manageOrgsSubtitle,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const ManageOrganizationsScreen(),
-            ),
-          ),
+          onTap: () => Navigator.of(context).pushNamed(AppRoutes.manageOrgs),
         ),
         const SizedBox(height: 14),
         _ActionCard(
@@ -134,9 +123,7 @@ class HomeScreen extends StatelessWidget {
           iconColor: const Color(0xFF1565C0),
           title: s.brigadeStatsTitle,
           subtitle: s.brigadeStatsSubtitle,
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const BrigadeStatsScreen())),
+          onTap: () => Navigator.of(context).pushNamed(AppRoutes.brigadeStats),
         ),
         const SizedBox(height: 28),
         _LogoutButton(onTap: () => _logout(context)),
@@ -157,9 +144,7 @@ class HomeScreen extends StatelessWidget {
           iconColor: const Color(0xFF2E7D32),
           title: s.adminManageUsers,
           subtitle: s.adminManageUsersSub,
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const ManageUsersScreen())),
+          onTap: () => Navigator.of(context).pushNamed(AppRoutes.manageUsers),
         ),
         const SizedBox(height: 14),
         _ActionCard(
@@ -168,25 +153,17 @@ class HomeScreen extends StatelessWidget {
           iconColor: const Color(0xFF1565C0),
           title: s.actionSearchPatient,
           subtitle: s.actionSearchPatientSubAdmin,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const LossOfWristbandScreen()),
-          ),
+          onTap: () => Navigator.of(context).pushNamed(AppRoutes.lossWristband),
         ),
         const SizedBox(height: 14),
-        // Same endpoint as the superadmin card. The backend pins the scope to
-        // this admin's own organization, so no filter is offered here.
         _ActionCard(
           icon: Icons.bar_chart_rounded,
           iconBg: const Color(0xFFEDE7F6),
           iconColor: const Color(0xFF5E35B1),
           title: s.brigadeStatsTitle,
           subtitle: s.brigadeStatsSubtitle,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) =>
-                  const BrigadeStatsScreen(scopeToOwnOrganization: true),
-            ),
-          ),
+          onTap: () =>
+              Navigator.of(context).pushNamed(AppRoutes.brigadeStatsOrg),
         ),
         const SizedBox(height: 28),
         _LogoutButton(onTap: () => _logout(context)),
@@ -207,9 +184,7 @@ class HomeScreen extends StatelessWidget {
           iconColor: const Color(0xFF1CABE2),
           title: s.actionReadNfc,
           subtitle: s.actionReadNfcSub,
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const ReadNfcScreen())),
+          onTap: () => Navigator.of(context).pushNamed(AppRoutes.readNfc),
         ),
         const SizedBox(height: 14),
         if (user.role.canRegisterPatient) ...[
@@ -219,9 +194,7 @@ class HomeScreen extends StatelessWidget {
             iconColor: const Color(0xFF37474F),
             title: s.actionNewPatient,
             subtitle: s.actionNewPatientSub,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const RegisterNfcScreen()),
-            ),
+            onTap: () => Navigator.of(context).pushNamed(AppRoutes.registerNfc),
           ),
           const SizedBox(height: 14),
         ],
@@ -231,15 +204,11 @@ class HomeScreen extends StatelessWidget {
           iconColor: const Color(0xFFE6A817),
           title: s.actionSearchPatient,
           subtitle: s.actionSearchPatientSub,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const LossOfWristbandScreen()),
-          ),
+          onTap: () => Navigator.of(context).pushNamed(AppRoutes.lossWristband),
         ),
         const SizedBox(height: 14),
         _SyncCard(
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const SyncQueueScreen())),
+          onTap: () => Navigator.of(context).pushNamed(AppRoutes.syncQueue),
         ),
         const SizedBox(height: 28),
         _LogoutButton(onTap: () => _logout(context)),
@@ -283,7 +252,6 @@ class _Header extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Top row: logo + brand name + language switcher ──
           Row(
             children: [
               const HwbLogo(size: 38, onDark: true),
@@ -303,7 +271,6 @@ class _Header extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          // ── Greeting + name ──
           Text(
             '$greeting,',
             style: const TextStyle(color: Colors.white70, fontSize: 14),
@@ -318,7 +285,6 @@ class _Header extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          // ── Role badge ──
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
@@ -391,8 +357,6 @@ class _LocaleSwitcher extends StatelessWidget {
     );
   }
 }
-
-// ── Generic action card (white background, colored icon) ────────────────────
 
 class _ActionCard extends StatelessWidget {
   const _ActionCard({
@@ -491,8 +455,6 @@ class _ActionCard extends StatelessWidget {
   }
 }
 
-// ── Sync card (special: shows pending count + amber state) ──────────────────
-
 class _SyncCard extends StatefulWidget {
   const _SyncCard({required this.onTap});
   final VoidCallback onTap;
@@ -505,10 +467,6 @@ class _SyncCardState extends State<_SyncCard> {
   @override
   void initState() {
     super.initState();
-    // Pull a fresh count whenever the home screen is shown. The actual value
-    // is rendered reactively from the sync engine's notifier below, so a
-    // background sync that finishes while we're on another screen is reflected
-    // here automatically.
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => AppScope.of(context).syncEngine.refreshPendingCount(),
     );
@@ -595,13 +553,12 @@ class _SyncCardState extends State<_SyncCard> {
                   ),
                   if (hasPending)
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD4A017),
-                        borderRadius: BorderRadius.circular(12),
+                      width: 28,
+                      height: 28,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFD4A017),
+                        shape: BoxShape.circle,
                       ),
                       child: Text(
                         '$pending',
@@ -627,8 +584,6 @@ class _SyncCardState extends State<_SyncCard> {
     );
   }
 }
-
-// ── Logout button ───────────────────────────────────────────────────────────
 
 class _LogoutButton extends StatelessWidget {
   const _LogoutButton({required this.onTap});

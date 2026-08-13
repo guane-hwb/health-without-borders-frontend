@@ -68,7 +68,7 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
       lastDate: now,
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
-          colorScheme: ColorScheme.light(
+          colorScheme: const ColorScheme.light(
             primary: AppColors.primary,
             onPrimary: AppColors.white,
             surface: AppColors.white,
@@ -108,7 +108,7 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                 : _gnCtrl.text.trim(),
           );
       if (!mounted) return;
-      Navigator.of(context).push(
+      await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => PatientProfileScreen(patient: patient),
         ),

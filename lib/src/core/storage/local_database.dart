@@ -5,7 +5,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart' as crypto;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
@@ -14,14 +14,46 @@ import '../../features/nfc/domain/patient_record.dart';
 import '../utils/app_logger.dart';
 import 'web_storage.dart' as web_storage;
 
+const Set<int> kPermanentSyncErrorCodes = <int>{400, 409, 422};
+
 class LocalDatabase {
   LocalDatabase._({FlutterSecureStorage? secureStorage})
-    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+    : _secureStorage = secureStorage ?? _defaultSecureStorage,
+      _forceWeb = null,
+      _webGet = web_storage.getWebStorageItem,
+      _webSet = web_storage.setWebStorageItem,
+      _webRemove = web_storage.removeWebStorageItem;
 
-  static final LocalDatabase instance = LocalDatabase._();
+  static LocalDatabase instance = LocalDatabase._();
+
+  @visibleForTesting
+  static void setInstanceForTesting(LocalDatabase db) {
+    instance = db;
+  }
+
+  @visibleForTesting
+  LocalDatabase.forTesting({
+    FlutterSecureStorage? secureStorage,
+    bool? forceWeb,
+    String? Function(String key)? webGet,
+    void Function(String key, String value)? webSet,
+    void Function(String key)? webRemove,
+  }) : _secureStorage = secureStorage ?? _defaultSecureStorage,
+       _forceWeb = forceWeb,
+       _webGet = webGet ?? web_storage.getWebStorageItem,
+       _webSet = webSet ?? web_storage.setWebStorageItem,
+       _webRemove = webRemove ?? web_storage.removeWebStorageItem;
+
+  final bool? _forceWeb;
+  final String? Function(String key) _webGet;
+  final void Function(String key, String value) _webSet;
+  final void Function(String key) _webRemove;
+
+  static const FlutterSecureStorage _defaultSecureStorage =
+      FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: true));
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 4;
+  static const int _dbVersion = 5;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
@@ -37,12 +69,12 @@ class LocalDatabase {
 
   static Future<void> init() async {}
 
-  bool get _isWeb => kIsWeb;
+  bool get _isWeb => _forceWeb ?? kIsWeb;
 
   Map<String, Map<String, dynamic>> get _webStore {
     if (!_isWeb) return {};
     try {
-      final raw = web_storage.getWebStorageItem(_webStoreKey);
+      final raw = _webGet(_webStoreKey);
       if (raw == null || raw.isEmpty) return {};
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
       return decoded.map(
@@ -56,16 +88,21 @@ class LocalDatabase {
   void _saveWebStore(Map<String, Map<String, dynamic>> store) {
     if (!_isWeb) return;
     try {
-      web_storage.setWebStorageItem(_webStoreKey, jsonEncode(store));
-    } catch (e) {
-      AppLogger.e('Error guardando en localStorage web: $e');
+      _webSet(_webStoreKey, jsonEncode(store));
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error guardando en localStorage web',
+        error: e,
+        stackTrace: stack,
+      );
+      rethrow;
     }
   }
 
   List<Map<String, Object?>> get _webEmergencyLog {
     if (!_isWeb) return [];
     try {
-      final raw = web_storage.getWebStorageItem(_webLogKey);
+      final raw = _webGet(_webLogKey);
       if (raw == null || raw.isEmpty) return [];
       final decoded = jsonDecode(raw) as List;
       return decoded.map((v) => Map<String, Object?>.from(v as Map)).toList();
@@ -77,16 +114,21 @@ class LocalDatabase {
   void _saveWebEmergencyLog(List<Map<String, Object?>> logs) {
     if (!_isWeb) return;
     try {
-      web_storage.setWebStorageItem(_webLogKey, jsonEncode(logs));
-    } catch (e) {
-      AppLogger.e('Error guardando logs de emergencia en web: $e');
+      _webSet(_webLogKey, jsonEncode(logs));
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error guardando logs de emergencia en web',
+        error: e,
+        stackTrace: stack,
+      );
+      rethrow;
     }
   }
 
   Map<String, Map<String, dynamic>> get _webChipStatus {
     if (!_isWeb) return {};
     try {
-      final raw = web_storage.getWebStorageItem(_webChipKey);
+      final raw = _webGet(_webChipKey);
       if (raw == null || raw.isEmpty) return {};
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
       return decoded.map(
@@ -100,9 +142,14 @@ class LocalDatabase {
   void _saveWebChipStatus(Map<String, Map<String, dynamic>> status) {
     if (!_isWeb) return;
     try {
-      web_storage.setWebStorageItem(_webChipKey, jsonEncode(status));
-    } catch (e) {
-      AppLogger.e('Error guardando chip status en web: $e');
+      _webSet(_webChipKey, jsonEncode(status));
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error guardando chip status en web',
+        error: e,
+        stackTrace: stack,
+      );
+      rethrow;
     }
   }
 
@@ -127,17 +174,24 @@ class LocalDatabase {
     final newKeyBytes = Uint8List.fromList(
       List<int>.generate(32, (_) => random.nextInt(256)),
     );
-    _dbEncryptionKey = newKeyBytes;
 
     try {
       await _secureStorage.write(
         key: _dbKeyStorageName,
         value: base64Encode(newKeyBytes),
       );
-    } catch (e) {
-      AppLogger.e('Error guardando clave de cifrado local: $e');
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo persistir la clave de cifrado local',
+        error: e,
+        stackTrace: stack,
+      );
+      throw StateError(
+        'Almacén seguro no disponible: no se puede cifrar la PHI local.',
+      );
     }
 
+    _dbEncryptionKey = newKeyBytes;
     return _dbEncryptionKey!;
   }
 
@@ -167,14 +221,17 @@ class LocalDatabase {
       );
 
       return base64Encode(combined);
-    } catch (e) {
-      AppLogger.e('Error cifrando PHI local: $e');
-      return plainJson;
+    } catch (e, stack) {
+      AppLogger.e('Error cifrando PHI local', error: e, stackTrace: stack);
+      rethrow;
     }
   }
 
   Future<String> _decryptPayload(String cipherBase64) async {
     if (cipherBase64.startsWith('{') && cipherBase64.endsWith('}')) {
+      AppLogger.d(
+        'Registro local en formato heredado (sin cifrar): pendiente de migrar',
+      );
       return cipherBase64;
     }
 
@@ -183,7 +240,7 @@ class LocalDatabase {
       final combined = base64Decode(cipherBase64);
 
       if (combined.length < 12 + 16) {
-        return cipherBase64;
+        return '{}';
       }
 
       final nonce = combined.sublist(0, 12);
@@ -205,7 +262,26 @@ class LocalDatabase {
       return utf8.decode(clearBytes);
     } catch (e) {
       AppLogger.e('Error descifrando PHI local: $e');
-      return cipherBase64;
+      return '{}';
+    }
+  }
+
+  static String _maskName(String fullName) {
+    final parts = fullName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.length <= 1) return parts.isEmpty ? '' : parts.first;
+    return '${parts.first} ${parts[1][0]}.';
+  }
+
+  Future<void> destroyEncryptionKey() async {
+    _dbEncryptionKey = null;
+    try {
+      await _secureStorage.delete(key: _dbKeyStorageName);
+    } catch (e) {
+      AppLogger.e('Error borrando la clave de cifrado local: $e');
     }
   }
 
@@ -223,7 +299,12 @@ class LocalDatabase {
     return openDatabase(
       dbPath,
       version: _dbVersion,
-      onDowngrade: onDatabaseDowngradeDelete,
+      onDowngrade: (Database db, int oldVersion, int newVersion) async {
+        AppLogger.e(
+          'Downgrade de esquema detectado ($oldVersion → $newVersion). '
+          'Se conservan los datos locales.',
+        );
+      },
       onCreate: (Database db, int version) async {
         await db.execute('''
           CREATE TABLE $_table (
@@ -235,7 +316,8 @@ class LocalDatabase {
             sync_error    TEXT,
             sync_error_code INTEGER,
             created_at    TEXT NOT NULL,
-            synced_at     TEXT
+            synced_at     TEXT,
+            revision      INTEGER NOT NULL DEFAULT 0
           )
         ''');
         await db.execute('CREATE INDEX idx_synced ON $_table (is_synced)');
@@ -250,12 +332,30 @@ class LocalDatabase {
           await _createEmergencyLogTable(db);
         }
         if (oldVersion < 3) {
-          await db.execute(
-            'ALTER TABLE $_table ADD COLUMN sync_error_code INTEGER',
+          await _addColumnIfMissing(db, _table, 'sync_error_code', 'INTEGER');
+        }
+        if (oldVersion < 5) {
+          await _addColumnIfMissing(
+            db,
+            _table,
+            'revision',
+            'INTEGER NOT NULL DEFAULT 0',
           );
         }
       },
     );
+  }
+
+  static Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    final bool exists = info.any((row) => row['name'] == column);
+    if (exists) return;
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
   }
 
   static Future<void> _createChipStatusTable(Database db) async {
@@ -291,8 +391,10 @@ class LocalDatabase {
   }) async {
     final row = <String, Object?>{
       'patient_uid': patientUid,
-      'patient_name': patientName,
-      'user_id': userId,
+      'patient_name': patientName == null
+          ? null
+          : await _encryptPayload(patientName),
+      'user_id': userId == null ? null : await _encryptPayload(userId),
       'reason': reason,
       'occurred_at': DateTime.now().toIso8601String(),
       'is_synced': 0,
@@ -301,7 +403,10 @@ class LocalDatabase {
       final db = await _database;
       if (db == null) {
         final logs = _webEmergencyLog;
-        logs.add(row);
+        logs.add(<String, Object?>{
+          ...row,
+          'id': DateTime.now().microsecondsSinceEpoch,
+        });
         _saveWebEmergencyLog(logs);
         return;
       }
@@ -312,24 +417,59 @@ class LocalDatabase {
         error: e,
         stackTrace: stack,
       );
+      rethrow;
     }
   }
 
   Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs() async {
     try {
       final db = await _database;
-      if (db == null) {
-        return _webEmergencyLog
-            .where((Map<String, Object?> r) => r['is_synced'] == 0)
-            .toList();
+      final rows = db == null
+          ? _webEmergencyLog
+                .where((Map<String, Object?> r) => r['is_synced'] == 0)
+                .toList()
+          : await db.query(_emergencyLogTable, where: 'is_synced = 0');
+
+      final out = <Map<String, Object?>>[];
+      for (final r in rows) {
+        final mutable = Map<String, Object?>.from(r);
+        final name = mutable['patient_name'] as String?;
+        if (name != null && name.isNotEmpty) {
+          mutable['patient_name'] = await _decryptPayload(name);
+        }
+        final uId = mutable['user_id'] as String?;
+        if (uId != null && uId.isNotEmpty) {
+          mutable['user_id'] = await _decryptPayload(uId);
+        }
+        out.add(mutable);
       }
-      return db.query(_emergencyLogTable, where: 'is_synced = 0');
+      return out;
     } catch (e) {
       AppLogger.e(
         'Error obteniendo registros de emergencia no sincronizados: $e',
       );
       return const <Map<String, Object?>>[];
     }
+  }
+
+  Future<void> markEmergencyLogsSynced(List<int> ids) async {
+    if (ids.isEmpty) return;
+    if (_isWeb) {
+      final logs = _webEmergencyLog;
+      for (final row in logs) {
+        if (ids.contains(row['id'])) row['is_synced'] = 1;
+      }
+      _saveWebEmergencyLog(logs);
+      return;
+    }
+    final db = await _database;
+    final placeholders = List<String>.filled(ids.length, '?').join(',');
+    await db!.update(
+      _emergencyLogTable,
+      <String, Object?>{'is_synced': 1},
+      where: 'id IN ($placeholders)',
+      whereArgs: ids,
+    );
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
@@ -339,22 +479,28 @@ class LocalDatabase {
     final encryptedJson = await _encryptPayload(rawJson);
 
     String createdAt = DateTime.now().toIso8601String();
+    int revision = 0;
+
+    final maskedNameStr = _maskName(record.patientInfo.fullName);
 
     if (_isWeb) {
       final store = _webStore;
-      if (store.containsKey(record.patientId)) {
-        createdAt = store[record.patientId]!['created_at'] as String;
+      final previous = store[record.patientId];
+      if (previous != null) {
+        createdAt = previous['created_at'] as String;
+        revision = ((previous['revision'] as int?) ?? 0) + 1;
       }
       store[record.patientId] = <String, dynamic>{
         'patient_id': record.patientId,
         'device_uid': record.deviceUid,
-        'patient_name': record.patientInfo.fullName,
+        'patient_name': maskedNameStr,
         'record_json': encryptedJson,
         'is_synced': 0,
         'sync_error': null,
         'sync_error_code': null,
         'created_at': createdAt,
         'synced_at': null,
+        'revision': revision,
       };
       _saveWebStore(store);
       return;
@@ -364,25 +510,28 @@ class LocalDatabase {
 
     final existing = await db!.query(
       _table,
-      columns: ['created_at'],
+      columns: ['created_at', 'revision'],
       where: 'patient_id = ?',
       whereArgs: [record.patientId],
       limit: 1,
     );
-    if (existing.isNotEmpty && existing.first['created_at'] != null) {
-      createdAt = existing.first['created_at'] as String;
+    if (existing.isNotEmpty) {
+      final prevCreatedAt = existing.first['created_at'] as String?;
+      if (prevCreatedAt != null) createdAt = prevCreatedAt;
+      revision = ((existing.first['revision'] as int?) ?? 0) + 1;
     }
 
     final row = <String, dynamic>{
       'patient_id': record.patientId,
       'device_uid': record.deviceUid,
-      'patient_name': record.patientInfo.fullName,
+      'patient_name': maskedNameStr,
       'record_json': encryptedJson,
       'is_synced': 0,
       'sync_error': null,
       'sync_error_code': null,
       'created_at': createdAt,
       'synced_at': null,
+      'revision': revision,
     };
 
     await db.insert(_table, row, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -460,6 +609,38 @@ class LocalDatabase {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  Future<int> getRetryablePendingCount() async {
+    if (_isWeb) {
+      return _webStore.values.where((r) {
+        if ((r['is_synced'] as int) != 0) return false;
+        final code = r['sync_error_code'] as int?;
+        return code == null || !kPermanentSyncErrorCodes.contains(code);
+      }).length;
+    }
+    final db = await _database;
+    final result = await db!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
+      'AND (sync_error_code IS NULL OR sync_error_code NOT IN (400, 409, 422))',
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<int> getBlockedCount() async {
+    if (_isWeb) {
+      return _webStore.values.where((r) {
+        if ((r['is_synced'] as int) != 0) return false;
+        final code = r['sync_error_code'] as int?;
+        return code != null && kPermanentSyncErrorCodes.contains(code);
+      }).length;
+    }
+    final db = await _database;
+    final result = await db!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
+      'AND sync_error_code IN (400, 409, 422)',
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
   // ── Sync lifecycle ────────────────────────────────────────────────────────
 
   Future<void> purgeStalePermanentErrors({
@@ -491,12 +672,15 @@ class LocalDatabase {
     String patientId, {
     String? createdAt,
     String? recordJson,
+    int? revision,
   }) async {
     if (_isWeb) {
       final store = _webStore;
       final current = store[patientId];
-      if (current != null) {
-        if (createdAt != null && current['created_at'] != createdAt) return;
+      if (current == null) return;
+      if (revision != null &&
+          ((current['revision'] as int?) ?? 0) != revision) {
+        return;
       }
       store.remove(patientId);
       _saveWebStore(store);
@@ -504,7 +688,13 @@ class LocalDatabase {
     }
     final db = await _database;
 
-    if (createdAt != null) {
+    if (revision != null) {
+      await db!.delete(
+        _table,
+        where: 'patient_id = ? AND revision = ?',
+        whereArgs: <Object>[patientId, revision],
+      );
+    } else if (createdAt != null) {
       await db!.delete(
         _table,
         where: 'patient_id = ? AND created_at = ?',
@@ -642,15 +832,13 @@ class LocalDatabase {
 
   Future<void> clearAll() async {
     if (_isWeb) {
-      web_storage.removeWebStorageItem(_webStoreKey);
-      web_storage.removeWebStorageItem(_webLogKey);
-      web_storage.removeWebStorageItem(_webChipKey);
+      _webRemove(_webStoreKey);
+      _webRemove(_webChipKey);
       return;
     }
     final db = await _database;
     await db!.delete(_table);
     await db.delete(_chipStatusTable);
-    await db.delete(_emergencyLogTable);
   }
 }
 
@@ -667,6 +855,7 @@ class LocalPatientEntry {
     this.syncErrorCode,
     required this.createdAt,
     this.syncedAt,
+    this.revision = 0,
   });
 
   factory LocalPatientEntry.fromRow(Map<String, dynamic> row) {
@@ -680,6 +869,7 @@ class LocalPatientEntry {
       syncErrorCode: row['sync_error_code'] as int?,
       createdAt: row['created_at'] as String,
       syncedAt: row['synced_at'] as String?,
+      revision: (row['revision'] as int?) ?? 0,
     );
   }
 
@@ -692,6 +882,7 @@ class LocalPatientEntry {
   final int? syncErrorCode;
   final String createdAt;
   final String? syncedAt;
+  final int revision;
 
   PatientFullRecord? toPatientRecord() {
     if (recordJson.isEmpty || recordJson == '{}') return null;

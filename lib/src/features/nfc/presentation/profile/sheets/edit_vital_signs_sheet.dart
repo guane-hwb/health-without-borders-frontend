@@ -1,9 +1,11 @@
 // lib/src/features/nfc/presentation/profile/sheets/edit_vital_signs_sheet.dart
+
 import 'package:flutter/material.dart';
 
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../shared/sheet_scaffold.dart';
+import 'edit_vital_signs_helpers.dart' as helpers;
 
 class EditVitalSignsSheet extends StatefulWidget {
   const EditVitalSignsSheet({
@@ -32,6 +34,7 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
   late final TextEditingController _weightCtrl;
   late final TextEditingController _heightCtrl;
   String? _selectedBloodType;
+  String? _errorMessage;
 
   static const _bloodTypeOptions = {
     'O+': 'O+',
@@ -48,10 +51,10 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
   void initState() {
     super.initState();
     _weightCtrl = TextEditingController(
-      text: widget.weight != null ? widget.weight!.toStringAsFixed(1) : '',
+      text: helpers.weightInitText(widget.weight),
     );
     _heightCtrl = TextEditingController(
-      text: widget.height != null ? widget.height!.toStringAsFixed(0) : '',
+      text: helpers.heightInitText(widget.height),
     );
     _selectedBloodType = widget.bloodType;
   }
@@ -63,22 +66,79 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
     super.dispose();
   }
 
+  void _handleConfirm() {
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
+
+    final wText = _weightCtrl.text;
+    final hText = _heightCtrl.text;
+
+    double? w;
+    if (wText.trim().isNotEmpty) {
+      w = helpers.parseWeight(wText);
+      if (w == null || !helpers.isWeightInRange(w)) {
+        setState(() {
+          _errorMessage = helpers.weightErrorMessage(isEs: isEs);
+        });
+        return;
+      }
+    }
+
+    double? h;
+    if (hText.trim().isNotEmpty) {
+      h = helpers.parseHeight(hText);
+      if (h == null || !helpers.isHeightInRange(h)) {
+        setState(() {
+          _errorMessage = helpers.heightErrorMessage(isEs: isEs);
+        });
+        return;
+      }
+    }
+
+    widget.onConfirm(weight: w, height: h, bloodType: _selectedBloodType);
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     return SheetScaffold(
       title: s.editMeasurements,
-      onConfirm: () {
-        final wText = _weightCtrl.text.trim().replaceAll(',', '.');
-        final hText = _heightCtrl.text.trim().replaceAll(',', '.');
-        final w = double.tryParse(wText);
-        final h = double.tryParse(hText);
-        widget.onConfirm(weight: w, height: h, bloodType: _selectedBloodType);
-        Navigator.of(context).pop();
-      },
+      onConfirm: _handleConfirm,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_errorMessage != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.error),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    color: AppColors.error,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(
+                        color: AppColors.error,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           // Weight
           _FieldLabel(label: s.weightKg),
           const SizedBox(height: 6),
@@ -120,10 +180,10 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
               ),
             ),
           ),
-          if (widget.previousWeight != null) ...[
+          if (helpers.showPreviousWeight(widget.previousWeight)) ...[
             const SizedBox(height: 4),
             Text(
-              '${s.previous}: ${widget.previousWeight!.toStringAsFixed(1)} kg',
+              helpers.previousWeightText(s.previous, widget.previousWeight!),
               style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,
@@ -174,10 +234,10 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
               ),
             ),
           ),
-          if (widget.previousHeight != null) ...[
+          if (helpers.showPreviousHeight(widget.previousHeight)) ...[
             const SizedBox(height: 4),
             Text(
-              '${s.previous}: ${widget.previousHeight!.toStringAsFixed(0)} cm',
+              helpers.previousHeightText(s.previous, widget.previousHeight!),
               style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,

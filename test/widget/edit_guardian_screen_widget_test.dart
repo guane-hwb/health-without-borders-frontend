@@ -30,6 +30,7 @@ import 'package:health_without_borders_frontend/src/features/nfc/data/patient_re
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/edit_guardian_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Fakes
@@ -70,10 +71,17 @@ class FakeAuthRepository implements AuthRepository {
   Future<void> clearSession() async {}
 
   @override
-  Future<void> logout() async {}
+  Future<void> logout({bool wipeLocalData = false}) async {}
+
+  @override
+  Future<bool> wipeLocalPhi({bool force = false}) async => true;
 
   @override
   bool get hasToken => false;
+
+  @override
+  ValueNotifier<UserSession?> get sessionNotifier =>
+      ValueNotifier<UserSession?>(null);
 }
 
 class FakeLocalDatabase implements LocalDatabase {
@@ -116,6 +124,7 @@ class FakeLocalDatabase implements LocalDatabase {
     String patientId, {
     String? createdAt,
     String? recordJson,
+    int? revision,
   }) async {}
 
   @override
@@ -139,7 +148,21 @@ class FakeLocalDatabase implements LocalDatabase {
   }) async {}
 
   @override
-  Future<void> purgeStalePermanentErrors({Duration maxAge = const Duration(days: 7)}) async {}
+  Future<void> purgeStalePermanentErrors({
+    Duration maxAge = const Duration(days: 7),
+  }) async {}
+
+  @override
+  Future<void> destroyEncryptionKey() async {}
+
+  @override
+  Future<void> markEmergencyLogsSynced(List<int> emergencyLogIds) async {}
+
+  @override
+  Future<int> getBlockedCount() async => 0;
+
+  @override
+  Future<int> getRetryablePendingCount() async => 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -211,6 +234,7 @@ Widget _buildSubject({
         apiClient: ApiClient(baseUrl: 'http://localhost'),
         authRepository: authRepo,
       ),
+      reachability: Reachability(baseUrl: 'http://localhost'),
       child: MaterialApp(home: EditGuardianScreen(patient: patient)),
     ),
   );

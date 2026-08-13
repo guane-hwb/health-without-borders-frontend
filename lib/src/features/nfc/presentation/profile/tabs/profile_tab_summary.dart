@@ -1,9 +1,11 @@
 // lib/src/features/nfc/presentation/profile/tabs/profile_tab_summary.dart
+
 import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../domain/patient_record.dart';
+import '../patient_profile_helpers.dart' as helpers;
 import '../shared/profile_card.dart';
 import '../shared/profile_section_header.dart';
 
@@ -58,6 +60,11 @@ class ProfileTabSummary extends StatelessWidget {
   @visibleForTesting
   bool get heightChanged => _heightChanged;
 
+  bool get _bloodTypeChanged =>
+      draft.patientInfo.bloodType != original.patientInfo.bloodType;
+  @visibleForTesting
+  bool get bloodTypeChanged => _bloodTypeChanged;
+
   bool get _addressChanged {
     final da = draft.patientInfo.address;
     final oa = original.patientInfo.address;
@@ -103,7 +110,7 @@ class ProfileTabSummary extends StatelessWidget {
     final s = AppStrings.of(context);
     final p = draft.patientInfo;
     final bg = draft.backgroundHistory;
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 60),
@@ -246,7 +253,7 @@ class ProfileTabSummary extends StatelessWidget {
                     icon: Icons.bloodtype_outlined,
                     label: s.bloodType.toUpperCase(),
                     value: p.bloodType ?? '—',
-                    changed: false,
+                    changed: _bloodTypeChanged,
                   ),
                 ],
               ),
@@ -463,49 +470,19 @@ class ProfileTabSummary extends StatelessWidget {
     );
   }
 
-  String _catLabel(BuildContext context, String c) {
-    final s = AppStrings.of(context);
-    return {
-          '01': s.allergyShortMedication,
-          '02': s.allergyShortFood,
-          '03': s.allergyShortEnvironment,
-          '04': s.allergyShortSkin,
-          '05': s.allergyShortInsect,
-          '06': s.allergyShortOther,
-        }[c] ??
-        (c.isNotEmpty ? c : (s.welcome == 'Bienvenido' ? 'Otra' : 'Other'));
-  }
+  String _catLabel(BuildContext context, String c) =>
+      helpers.allergyCategoryLabel(AppStrings.of(context), c);
 
-  String _docTypeLabel(BuildContext context, String c) {
-    final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
-    return {
-          'RC': s.docTypeRC,
-          'TI': s.docTypeTI,
-          'CC': s.docTypeCC,
-          'CE': s.docTypeCE,
-          'PA': s.docTypePA,
-          'PE': s.docTypePE,
-          'PT': s.docTypePT,
-          'MS': s.docTypeMS,
-          'AS': s.docTypeAS,
-          'SC': isEs ? 'Salvoconducto' : 'Safe-conduct',
-          'CN': isEs ? 'Cert. Nacido Vivo' : 'Live Birth Cert.',
-          'DE': isEs ? 'Doc. Extranjero' : 'Foreign ID',
-        }[c] ??
-        (c.isNotEmpty ? c : '—');
-  }
+  String _docTypeLabel(BuildContext context, String c) =>
+      helpers.docTypeLabel(AppStrings.of(context), c);
 
-  String _sexLabel(BuildContext context, String c) {
-    final s = AppStrings.of(context);
-    return {'M': s.sexMale, 'F': s.sexFemale, 'I': s.sexIndeterminate}[c] ??
-        (s.welcome == 'Bienvenido' ? 'Indeterminado' : 'Indeterminate');
-  }
+  String _sexLabel(BuildContext context, String c) =>
+      helpers.sexLabel(AppStrings.of(context), c);
 
   String? _genderLabel(BuildContext context, String? c) {
     if (c == null || c.isEmpty) return null;
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     return {
           '01': s.sexMale,
           '02': s.sexFemale,

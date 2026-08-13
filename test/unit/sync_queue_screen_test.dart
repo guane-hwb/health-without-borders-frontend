@@ -350,27 +350,33 @@ void main() {
 
   group('SyncEngine Mock Interceptions – syncOne', () {
     test(
-      'returns true boolean state upon successful operational outcome data completion',
+      'returns SyncOneResult.success enum state upon successful operational outcome completion',
       () async {
-        when(() => syncEngine.syncOne(any())).thenAnswer((_) async => true);
+        when(
+          () => syncEngine.syncOne(any()),
+        ).thenAnswer((_) async => SyncOneResult.success);
 
-        expect(await syncEngine.syncOne('p-001'), isTrue);
+        expect(await syncEngine.syncOne('p-001'), SyncOneResult.success);
       },
     );
 
     test(
-      'returns false boolean state when sync operations fail to resolve',
+      'returns SyncOneResult.failure enum state when sync operations fail to resolve',
       () async {
-        when(() => syncEngine.syncOne(any())).thenAnswer((_) async => false);
+        when(
+          () => syncEngine.syncOne(any()),
+        ).thenAnswer((_) async => SyncOneResult.failure);
 
-        expect(await syncEngine.syncOne('p-001'), isFalse);
+        expect(await syncEngine.syncOne('p-001'), SyncOneResult.failure);
       },
     );
 
     test(
       'transfers matching identity parameters downstream into execution engine modules',
       () async {
-        when(() => syncEngine.syncOne(any())).thenAnswer((_) async => true);
+        when(
+          () => syncEngine.syncOne(any()),
+        ).thenAnswer((_) async => SyncOneResult.success);
 
         await syncEngine.syncOne('patient-xyz');
 
@@ -381,7 +387,9 @@ void main() {
     test(
       'processes consecutive distinct calls independently tracking respective identifiers',
       () async {
-        when(() => syncEngine.syncOne(any())).thenAnswer((_) async => true);
+        when(
+          () => syncEngine.syncOne(any()),
+        ).thenAnswer((_) async => SyncOneResult.success);
 
         await syncEngine.syncOne('id-1');
         await syncEngine.syncOne('id-2');
@@ -427,24 +435,28 @@ void main() {
 
   group('SyncOne Lifecycle State Variations Flow', () {
     test(
-      'returning true maps dynamically towards success tracking layout colors channels',
+      'returning SyncOneResult.success maps dynamically towards success tracking layout colors channels',
       () async {
-        when(() => syncEngine.syncOne(any())).thenAnswer((_) async => true);
+        when(
+          () => syncEngine.syncOne(any()),
+        ).thenAnswer((_) async => SyncOneResult.success);
 
-        final ok = await syncEngine.syncOne('p-001');
+        final result = await syncEngine.syncOne('p-001');
 
-        expect(ok, isTrue);
+        expect(result, SyncOneResult.success);
       },
     );
 
     test(
-      'returning false maps dynamically towards error feedback notice presentation metrics',
+      'returning SyncOneResult.failure maps dynamically towards error feedback notice presentation metrics',
       () async {
-        when(() => syncEngine.syncOne(any())).thenAnswer((_) async => false);
+        when(
+          () => syncEngine.syncOne(any()),
+        ).thenAnswer((_) async => SyncOneResult.failure);
 
-        final ok = await syncEngine.syncOne('p-001');
+        final result = await syncEngine.syncOne('p-001');
 
-        expect(ok, isFalse);
+        expect(result, SyncOneResult.failure);
       },
     );
   });
