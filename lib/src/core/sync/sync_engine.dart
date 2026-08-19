@@ -7,6 +7,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../features/auth/data/auth_repository.dart';
 import '../../features/nfc/data/patient_repository.dart';
 import '../../features/nfc/domain/patient_record.dart';
 import '../network/api_client.dart';
@@ -22,17 +23,20 @@ enum _SyncOutcome { success, failure, networkFailure, abortBatch }
 class SyncEngine {
   SyncEngine({
     required PatientRepository patientRepository,
+    AuthRepository? authRepository,
     LocalDatabase? localDatabase,
     Stream<List<ConnectivityResult>>? connectivityStream,
     Reachability? reachability,
     List<Duration>? retryBackoff,
   }) : _patientRepo = patientRepository,
+       _authRepo = authRepository,
        _localDb = localDatabase ?? LocalDatabase.instance,
        _connectivityStream = connectivityStream,
        _reachability = reachability,
        _retryBackoff = retryBackoff ?? _defaultRetryBackoff;
 
   final PatientRepository _patientRepo;
+  final AuthRepository? _authRepo;
   final LocalDatabase _localDb;
   final Stream<List<ConnectivityResult>>? _connectivityStream;
   final Reachability? _reachability;
@@ -56,10 +60,16 @@ class SyncEngine {
   final ValueNotifier<int> pendingCount = ValueNotifier<int>(0);
   final ValueNotifier<int> blockedCount = ValueNotifier<int>(0);
 
+  String? get _currentUserId => _authRepo?.currentUser?.id;
+
   Future<void> refreshPendingCount() async {
     try {
-      pendingCount.value = await _localDb.getUnsyncedCount();
-      blockedCount.value = await _localDb.getBlockedCount();
+      pendingCount.value = await _localDb.getRetryablePendingCount(
+        ownerUserId: _currentUserId,
+      );
+      blockedCount.value = await _localDb.getBlockedCount(
+        ownerUserId: _currentUserId,
+      );
     } catch (e, stack) {
       AppLogger.e(
         'Error al refrescar conteo de pendientes',
@@ -119,20 +129,20 @@ class SyncEngine {
 
   Future<bool> syncAll() async {
     await refreshPendingCount();
+
     if (_isSyncing) return false;
-
-    if (_reachability != null && !await _reachability.probe()) {
-      AppLogger.d('Backend inalcanzable. Se omite el lote.');
-      _scheduleRetry();
-      return false;
-    }
-
     _isSyncing = true;
     bool allSuccessful = true;
 
     try {
+      if (_reachability != null && !await _reachability.probe()) {
+        AppLogger.d('Backend inalcanzable. Se omite el lote.');
+        _scheduleRetry();
+        return false;
+      }
+
       final List<LocalPatientEntry> allUnsynced = await _localDb
-          .getUnsyncedRecords();
+          .getUnsyncedRecords(ownerUserId: _currentUserId);
 
       final pending = allUnsynced.where((entry) {
         final code = entry.syncErrorCode;
@@ -168,7 +178,9 @@ class SyncEngine {
         }
       }
 
-      final remaining = await _localDb.getRetryablePendingCount();
+      final remaining = await _localDb.getRetryablePendingCount(
+        ownerUserId: _currentUserId,
+      );
       pendingCount.value = remaining;
       onSyncStatusChanged?.call(remaining);
 
@@ -191,6 +203,7 @@ class SyncEngine {
         entry.patientId,
         'Registro local ilegible (fallo de descifrado)',
         statusCode: 422,
+        revision: entry.revision,
       );
       return _SyncOutcome.failure;
     }
@@ -223,7 +236,11 @@ class SyncEngine {
         AppLogger.e(
           'Fallo en sincronización para ${entry.patientId}: $errorMsg',
         );
-        await _localDb.markSyncError(entry.patientId, errorMsg);
+        await _localDb.markSyncError(
+          entry.patientId,
+          errorMsg,
+          revision: entry.revision,
+        );
         onRecordSynced?.call(entry.patientId, false, response.message);
         return _SyncOutcome.failure;
       }
@@ -245,6 +262,7 @@ class SyncEngine {
         entry.patientId,
         safeMsg,
         statusCode: e.statusCode,
+        revision: entry.revision,
       );
       onRecordSynced?.call(entry.patientId, false, safeMsg);
       return _SyncOutcome.failure;
@@ -264,7 +282,11 @@ class SyncEngine {
           ? 'Error de conexión de red'
           : 'Error en proceso de sincronización';
 
-      await _localDb.markSyncError(entry.patientId, safeMsg);
+      await _localDb.markSyncError(
+        entry.patientId,
+        safeMsg,
+        revision: entry.revision,
+      );
       onRecordSynced?.call(entry.patientId, false, safeMsg);
       return isNetworkError
           ? _SyncOutcome.networkFailure
@@ -277,7 +299,9 @@ class SyncEngine {
   Future<SyncOneResult> syncOne(String patientId) async {
     if (_isSyncing) return SyncOneResult.busy;
 
-    final entries = await _localDb.getUnsyncedRecords();
+    final entries = await _localDb.getUnsyncedRecords(
+      ownerUserId: _currentUserId,
+    );
     final match = entries.where((e) => e.patientId == patientId);
     if (match.isEmpty) return SyncOneResult.notFound;
 

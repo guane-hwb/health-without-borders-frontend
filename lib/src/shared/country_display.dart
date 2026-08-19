@@ -23,19 +23,11 @@ const Map<String, CountryDisplay> _catalog = <String, CountryDisplay>{
   'COL': CountryDisplay('🇨🇴', 'Colombia', 'Colombia'),
   'VEN': CountryDisplay('🇻🇪', 'Venezuela', 'Venezuela'),
   'ECU': CountryDisplay('🇪🇨', 'Ecuador', 'Ecuador'),
-  'PER': CountryDisplay('🇵🇪', 'Perú', 'Peru'),
   'HTI': CountryDisplay('🇭🇹', 'Haití', 'Haiti'),
-  'CUB': CountryDisplay('🇨🇺', 'Cuba', 'Cuba'),
-  'BRA': CountryDisplay('🇧🇷', 'Brasil', 'Brazil'),
-  'ARG': CountryDisplay('🇦🇷', 'Argentina', 'Argentina'),
-  'CHL': CountryDisplay('🇨🇱', 'Chile', 'Chile'),
-  'BOL': CountryDisplay('🇧🇴', 'Bolivia', 'Bolivia'),
-  'PAN': CountryDisplay('🇵🇦', 'Panamá', 'Panama'),
-  'MEX': CountryDisplay('🇲🇽', 'México', 'Mexico'),
-  'DOM': CountryDisplay('🇩🇴', 'República Dominicana', 'Dominican Republic'),
+  'PER': CountryDisplay('🇵🇪', 'Perú', 'Peru'),
   'NIC': CountryDisplay('🇳🇮', 'Nicaragua', 'Nicaragua'),
-  'USA': CountryDisplay('🇺🇸', 'Estados Unidos', 'United States'),
-  'ESP': CountryDisplay('🇪🇸', 'España', 'Spain'),
+  'CUB': CountryDisplay('🇨🇺', 'Cuba', 'Cuba'),
+  'OTHER': CountryDisplay('🌍', 'Otro', 'Other'),
   'UNK': CountryDisplay('🌍', 'Sin registrar', 'Not recorded'),
 };
 
@@ -43,27 +35,18 @@ const List<String> kSupportedNationalityCodes = <String>[
   'COL',
   'VEN',
   'ECU',
-  'PER',
   'HTI',
-  'CUB',
-  'BRA',
-  'ARG',
-  'CHL',
-  'BOL',
-  'PAN',
-  'MEX',
-  'DOM',
+  'PER',
   'NIC',
-  'USA',
-  'ESP',
-  'UNK',
+  'CUB',
+  'OTHER',
 ];
 
 CountryDisplay countryDisplay(String code) => countryDisplayFor(code);
 
 CountryDisplay countryDisplayFor(String code) {
   final String key = code.trim().toUpperCase();
-  if (key == 'UNK' || key == 'OTHER' || key.isEmpty) return _unknown;
+  if (key == 'UNK' || key.isEmpty) return _unknown;
   return _catalog[key] ?? _globe;
 }
 

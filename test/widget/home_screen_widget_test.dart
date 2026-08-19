@@ -110,21 +110,23 @@ class FakeLocalDatabase implements LocalDatabase {
   Future<void> deleteRecord(String patientId) async {}
 
   @override
-  Future<List<LocalPatientEntry>> getAllRecords() async =>
+  Future<List<LocalPatientEntry>> getAllRecords({String? ownerUserId}) async =>
       <LocalPatientEntry>[];
 
   @override
-  Future<int> getUnsyncedCount() async => pendingCount;
+  Future<int> getUnsyncedCount({String? ownerUserId}) async => pendingCount;
 
   @override
-  Future<List<LocalPatientEntry>> getUnsyncedRecords() async =>
-      <LocalPatientEntry>[];
+  Future<List<LocalPatientEntry>> getUnsyncedRecords({
+    String? ownerUserId,
+  }) async => <LocalPatientEntry>[];
 
   @override
   Future<void> markSyncError(
     String patientId,
     String error, {
     int? statusCode,
+    int? revision,
   }) async {}
 
   @override
@@ -142,7 +144,11 @@ class FakeLocalDatabase implements LocalDatabase {
   Future<void> markEmergencyLogsSynced(List<int> logIds) async {}
 
   @override
-  Future<void> savePatient(PatientFullRecord record) async {}
+  Future<void> savePatient(
+    PatientFullRecord record, {
+    String? ownerUserId,
+    String? organizationId,
+  }) async {}
 
   @override
   Future<NfcChipStatus?> getChipStatus(String patientId) async => null;
@@ -167,10 +173,11 @@ class FakeLocalDatabase implements LocalDatabase {
   }) async {}
 
   @override
-  Future<int> getBlockedCount() async => 0;
+  Future<int> getBlockedCount({String? ownerUserId}) async => 0;
 
   @override
-  Future<int> getRetryablePendingCount() async => pendingCount;
+  Future<int> getRetryablePendingCount({String? ownerUserId}) async =>
+      pendingCount;
 }
 
 /// Create a [UserSession] with the specified role.

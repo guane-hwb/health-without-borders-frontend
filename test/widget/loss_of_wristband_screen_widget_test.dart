@@ -436,12 +436,11 @@ void main() {
       tester,
     ) async {
       _setMobileScreenSize(tester);
-      const errMsg = 'Error interno del servidor';
       final repo = _FakePatientRepository()
         ..shouldThrow = true
         ..throwApiException = true
         ..apiStatusCode = 500
-        ..apiMessage = errMsg;
+        ..apiMessage = 'Server error';
 
       await tester.pumpWidget(
         _wrap(const LossOfWristbandScreen(), patientRepo: repo),
@@ -450,7 +449,8 @@ void main() {
 
       await _fillAndSubmit(tester);
 
-      expect(find.text(errMsg), findsOneWidget);
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.searchError), findsOneWidget);
       _resetScreenSize(tester);
     });
 
@@ -458,12 +458,11 @@ void main() {
       tester,
     ) async {
       _setMobileScreenSize(tester);
-      const errMsg = 'Token expirado';
       final repo = _FakePatientRepository()
         ..shouldThrow = true
         ..throwApiException = true
         ..apiStatusCode = 401
-        ..apiMessage = errMsg;
+        ..apiMessage = 'Token expired';
 
       await tester.pumpWidget(
         _wrap(const LossOfWristbandScreen(), patientRepo: repo),
@@ -472,7 +471,8 @@ void main() {
 
       await _fillAndSubmit(tester);
 
-      expect(find.text(errMsg), findsOneWidget);
+      final s = AppStrings.forTesting('es');
+      expect(find.text(s.searchError), findsOneWidget);
       _resetScreenSize(tester);
     });
   });
