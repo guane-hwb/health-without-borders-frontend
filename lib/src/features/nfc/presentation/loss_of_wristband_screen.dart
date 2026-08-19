@@ -84,12 +84,11 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Future<void> _search() async {
-    final s = AppStrings.of(context);
     if (_docCtrl.text.trim().isEmpty ||
         _dob == null ||
         _fnCtrl.text.trim().isEmpty ||
         _lnCtrl.text.trim().isEmpty) {
-      setState(() => _error = s.searchFieldsRequired);
+      setState(() => _error = 'searchFieldsRequired');
       return;
     }
     setState(() {
@@ -116,13 +115,11 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.statusCode == 404
-            ? AppStrings.of(context).searchNoMatch
-            : e.message;
+        _error = e.statusCode == 404 ? 'searchNoMatch' : 'searchError';
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = s.searchError);
+      setState(() => _error = 'searchError');
     } finally {
       if (mounted) setState(() => _searching = false);
     }
@@ -131,6 +128,14 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+
+    final errorMessage = switch (_error) {
+      'searchNoMatch' => s.searchNoMatch,
+      'searchFieldsRequired' => s.searchFieldsRequired,
+      'searchError' => s.searchError,
+      _ => _error,
+    };
+
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FB),
       body: SafeArea(
@@ -255,7 +260,7 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                           textCapitalization: TextCapitalization.words,
                         ),
 
-                        if (_error != null) ...[
+                        if (errorMessage != null) ...[
                           const SizedBox(height: 16),
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -281,7 +286,7 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    _error!,
+                                    errorMessage,
                                     style: const TextStyle(
                                       fontSize: 13,
                                       color: AppColors.error,

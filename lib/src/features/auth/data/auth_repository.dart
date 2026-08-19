@@ -42,6 +42,7 @@ class AuthRepository implements TokenProvider {
   static const String _refreshKey = 'hwb_refresh_token';
   static const String _nfcKeyKey = 'hwb_nfc_key';
   static const String _sessionKey = 'hwb_user_session';
+  static const String _lastUserIdKey = 'hwb_last_user_id';
 
   final ApiClient _apiClient;
   final FlutterSecureStorage _secureStorage;
@@ -110,24 +111,32 @@ class AuthRepository implements TokenProvider {
       }
     }
 
-    final UserSession? previous = await _readPersistedSession();
+    String? lastUserId;
+    try {
+      lastUserId = await _secureStorage.read(key: _lastUserIdKey);
+    } catch (_) {}
+
     final fetchedSession = await _fetchMe(accessToken);
     _updateSession(fetchedSession);
 
-    if (previous != null && previous.id != _session!.id) {
-      if (await _localDb.getUnsyncedCount() == 0) {
+    if (lastUserId != null &&
+        lastUserId.isNotEmpty &&
+        lastUserId != _session!.id) {
+      if (await _localDb.getUnsyncedCount(ownerUserId: lastUserId) == 0) {
         await _localDb.clearAll();
         await _localDb.destroyEncryptionKey();
       } else {
         AppLogger.e(
-          'Cambio de usuario con ${await _localDb.getUnsyncedCount()} '
-          'registros pendientes de ${previous.id}: se conservan.',
+          'Cambio de usuario detectado. Quedan registros pendientes del usuario $lastUserId.',
         );
       }
     }
 
     if (_session!.id.isNotEmpty) {
       await _persistSession(_session!);
+      try {
+        await _secureStorage.write(key: _lastUserIdKey, value: _session!.id);
+      } catch (_) {}
     }
 
     return _session!;
@@ -279,7 +288,10 @@ class AuthRepository implements TokenProvider {
 
   Future<bool> wipeLocalPhi({bool force = false}) async {
     try {
-      if (!force && await _localDb.getUnsyncedCount() > 0) return false;
+      if (!force &&
+          await _localDb.getUnsyncedCount(ownerUserId: _session?.id) > 0) {
+        return false;
+      }
       await _localDb.clearAll();
       await _localDb.destroyEncryptionKey();
       return true;

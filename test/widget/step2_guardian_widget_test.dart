@@ -444,7 +444,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final s = AppStrings.forTesting('es');
-      expect(find.text(s.guardianRelationship), findsOneWidget);
+      expect(find.textContaining(s.guardianRelationship), findsOneWidget);
     });
   });
 
@@ -692,12 +692,12 @@ void main() {
       await tester.pumpWidget(buildSubject());
       await tester.pumpAndSettle();
 
-      final dropdown = find.byType(DropdownButton<String>).first;
-      await tester.ensureVisible(dropdown);
-      await tester.tap(dropdown);
+      final s = AppStrings.forTesting('es');
+      final selector = find.text(s.docTypeCC).first;
+      await tester.ensureVisible(selector);
+      await tester.tap(selector);
       await tester.pumpAndSettle();
 
-      final s = AppStrings.forTesting('es');
       final ceItem = find.text(s.docTypeCE).last;
       await tester.tap(ceItem);
       await tester.pumpAndSettle();

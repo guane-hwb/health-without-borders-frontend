@@ -53,7 +53,7 @@ class LocalDatabase {
       FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: true));
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 5;
+  static const int _dbVersion = 6;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
@@ -66,6 +66,7 @@ class LocalDatabase {
   final FlutterSecureStorage _secureStorage;
   Database? _db;
   Uint8List? _dbEncryptionKey;
+  Future<Uint8List>? _keyInitFuture;
 
   static Future<void> init() async {}
 
@@ -157,7 +158,10 @@ class LocalDatabase {
 
   Future<Uint8List> _getOrCreateEncryptionKey() async {
     if (_dbEncryptionKey != null) return _dbEncryptionKey!;
+    return _keyInitFuture ??= _initEncryptionKey();
+  }
 
+  Future<Uint8List> _initEncryptionKey() async {
     try {
       final existingKeyBase64 = await _secureStorage.read(
         key: _dbKeyStorageName,
@@ -186,6 +190,7 @@ class LocalDatabase {
         error: e,
         stackTrace: stack,
       );
+      _keyInitFuture = null;
       throw StateError(
         'Almacén seguro no disponible: no se puede cifrar la PHI local.',
       );
@@ -278,6 +283,7 @@ class LocalDatabase {
 
   Future<void> destroyEncryptionKey() async {
     _dbEncryptionKey = null;
+    _keyInitFuture = null;
     try {
       await _secureStorage.delete(key: _dbKeyStorageName);
     } catch (e) {
@@ -317,10 +323,13 @@ class LocalDatabase {
             sync_error_code INTEGER,
             created_at    TEXT NOT NULL,
             synced_at     TEXT,
-            revision      INTEGER NOT NULL DEFAULT 0
+            revision      INTEGER NOT NULL DEFAULT 0,
+            owner_user_id TEXT,
+            organization_id TEXT
           )
         ''');
         await db.execute('CREATE INDEX idx_synced ON $_table (is_synced)');
+        await db.execute('CREATE INDEX idx_owner ON $_table (owner_user_id)');
         await _createChipStatusTable(db);
         await _createEmergencyLogTable(db);
       },
@@ -340,6 +349,13 @@ class LocalDatabase {
             _table,
             'revision',
             'INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+        if (oldVersion < 6) {
+          await _addColumnIfMissing(db, _table, 'owner_user_id', 'TEXT');
+          await _addColumnIfMissing(db, _table, 'organization_id', 'TEXT');
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_owner ON $_table (owner_user_id)',
           );
         }
       },
@@ -474,7 +490,11 @@ class LocalDatabase {
 
   // ── Save ──────────────────────────────────────────────────────────────────
 
-  Future<void> savePatient(PatientFullRecord record) async {
+  Future<void> savePatient(
+    PatientFullRecord record, {
+    String? ownerUserId,
+    String? organizationId,
+  }) async {
     final rawJson = jsonEncode(record.toJson());
     final encryptedJson = await _encryptPayload(rawJson);
 
@@ -501,6 +521,8 @@ class LocalDatabase {
         'created_at': createdAt,
         'synced_at': null,
         'revision': revision,
+        'owner_user_id': ownerUserId ?? previous?['owner_user_id'],
+        'organization_id': organizationId ?? previous?['organization_id'],
       };
       _saveWebStore(store);
       return;
@@ -510,15 +532,20 @@ class LocalDatabase {
 
     final existing = await db!.query(
       _table,
-      columns: ['created_at', 'revision'],
+      columns: ['created_at', 'revision', 'owner_user_id', 'organization_id'],
       where: 'patient_id = ?',
       whereArgs: [record.patientId],
       limit: 1,
     );
+    String? prevOwner = ownerUserId;
+    String? prevOrg = organizationId;
+
     if (existing.isNotEmpty) {
       final prevCreatedAt = existing.first['created_at'] as String?;
       if (prevCreatedAt != null) createdAt = prevCreatedAt;
       revision = ((existing.first['revision'] as int?) ?? 0) + 1;
+      prevOwner ??= existing.first['owner_user_id'] as String?;
+      prevOrg ??= existing.first['organization_id'] as String?;
     }
 
     final row = <String, dynamic>{
@@ -532,6 +559,8 @@ class LocalDatabase {
       'created_at': createdAt,
       'synced_at': null,
       'revision': revision,
+      'owner_user_id': prevOwner,
+      'organization_id': prevOrg,
     };
 
     await db.insert(_table, row, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -539,11 +568,17 @@ class LocalDatabase {
 
   // ── Query ─────────────────────────────────────────────────────────────────
 
-  Future<List<LocalPatientEntry>> getUnsyncedRecords() async {
+  Future<List<LocalPatientEntry>> getUnsyncedRecords({
+    String? ownerUserId,
+  }) async {
     if (_isWeb) {
       final entries = <LocalPatientEntry>[];
       for (final r in _webStore.values.where(
-        (r) => (r['is_synced'] as int) == 0,
+        (r) =>
+            (r['is_synced'] as int) == 0 &&
+            (ownerUserId == null ||
+                r['owner_user_id'] == null ||
+                r['owner_user_id'] == ownerUserId),
       )) {
         final decryptedJson = await _decryptPayload(r['record_json'] as String);
         final row = Map<String, dynamic>.from(r);
@@ -554,10 +589,15 @@ class LocalDatabase {
     }
 
     final db = await _database;
+    final String whereClause = ownerUserId != null
+        ? 'is_synced = 0 AND (owner_user_id = ? OR owner_user_id IS NULL)'
+        : 'is_synced = 0';
+    final List<Object> whereArgs = ownerUserId != null ? [ownerUserId] : [];
+
     final rows = await db!.query(
       _table,
-      where: 'is_synced = ?',
-      whereArgs: const <int>[0],
+      where: whereClause,
+      whereArgs: whereArgs,
       orderBy: 'created_at ASC',
     );
 
@@ -572,10 +612,15 @@ class LocalDatabase {
     return entries;
   }
 
-  Future<List<LocalPatientEntry>> getAllRecords() async {
+  Future<List<LocalPatientEntry>> getAllRecords({String? ownerUserId}) async {
     if (_isWeb) {
       final entries = <LocalPatientEntry>[];
-      for (final r in _webStore.values) {
+      for (final r in _webStore.values.where(
+        (r) =>
+            ownerUserId == null ||
+            r['owner_user_id'] == null ||
+            r['owner_user_id'] == ownerUserId,
+      )) {
         final decryptedJson = await _decryptPayload(r['record_json'] as String);
         final row = Map<String, dynamic>.from(r);
         row['record_json'] = decryptedJson;
@@ -585,7 +630,17 @@ class LocalDatabase {
     }
 
     final db = await _database;
-    final rows = await db!.query(_table, orderBy: 'created_at DESC');
+    final String? whereClause = ownerUserId != null
+        ? 'owner_user_id = ? OR owner_user_id IS NULL'
+        : null;
+    final List<Object>? whereArgs = ownerUserId != null ? [ownerUserId] : null;
+
+    final rows = await db!.query(
+      _table,
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: 'created_at DESC',
+    );
 
     final entries = <LocalPatientEntry>[];
     for (final row in rows) {
@@ -598,46 +653,77 @@ class LocalDatabase {
     return entries;
   }
 
-  Future<int> getUnsyncedCount() async {
+  Future<int> getUnsyncedCount({String? ownerUserId}) async {
     if (_isWeb) {
-      return _webStore.values.where((r) => (r['is_synced'] as int) == 0).length;
+      return _webStore.values
+          .where(
+            (r) =>
+                (r['is_synced'] as int) == 0 &&
+                (ownerUserId == null ||
+                    r['owner_user_id'] == null ||
+                    r['owner_user_id'] == ownerUserId),
+          )
+          .length;
     }
     final db = await _database;
-    final result = await db!.rawQuery(
-      'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0',
-    );
+    final String sql = ownerUserId != null
+        ? 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 AND (owner_user_id = ? OR owner_user_id IS NULL)'
+        : 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0';
+    final List<Object> args = ownerUserId != null ? [ownerUserId] : [];
+
+    final result = await db!.rawQuery(sql, args);
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
-  Future<int> getRetryablePendingCount() async {
+  Future<int> getRetryablePendingCount({String? ownerUserId}) async {
     if (_isWeb) {
       return _webStore.values.where((r) {
         if ((r['is_synced'] as int) != 0) return false;
+        if (ownerUserId != null &&
+            r['owner_user_id'] != null &&
+            r['owner_user_id'] != ownerUserId) {
+          return false;
+        }
         final code = r['sync_error_code'] as int?;
         return code == null || !kPermanentSyncErrorCodes.contains(code);
       }).length;
     }
     final db = await _database;
-    final result = await db!.rawQuery(
-      'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
-      'AND (sync_error_code IS NULL OR sync_error_code NOT IN (400, 409, 422))',
-    );
+    final String sql = ownerUserId != null
+        ? 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
+              'AND (owner_user_id = ? OR owner_user_id IS NULL) '
+              'AND (sync_error_code IS NULL OR sync_error_code NOT IN (400, 409, 422))'
+        : 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
+              'AND (sync_error_code IS NULL OR sync_error_code NOT IN (400, 409, 422))';
+    final List<Object> args = ownerUserId != null ? [ownerUserId] : [];
+
+    final result = await db!.rawQuery(sql, args);
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
-  Future<int> getBlockedCount() async {
+  Future<int> getBlockedCount({String? ownerUserId}) async {
     if (_isWeb) {
       return _webStore.values.where((r) {
         if ((r['is_synced'] as int) != 0) return false;
+        if (ownerUserId != null &&
+            r['owner_user_id'] != null &&
+            r['owner_user_id'] != ownerUserId) {
+          return false;
+        }
         final code = r['sync_error_code'] as int?;
         return code != null && kPermanentSyncErrorCodes.contains(code);
       }).length;
     }
     final db = await _database;
-    final result = await db!.rawQuery(
-      'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
-      'AND sync_error_code IN (400, 409, 422)',
-    );
+    final String sql = ownerUserId != null
+        ? 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
+              'AND (owner_user_id = ? OR owner_user_id IS NULL) '
+              'AND sync_error_code IN (400, 409, 422)'
+        : 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
+              'AND sync_error_code IN (400, 409, 422)';
+    final List<Object> args = ownerUserId != null ? [ownerUserId] : [];
+
+    final result = await db!.rawQuery(sql, args);
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
@@ -713,12 +799,18 @@ class LocalDatabase {
     String patientId,
     String error, {
     int? statusCode,
+    int? revision,
   }) async {
     if (_isWeb) {
       final store = _webStore;
-      if (store.containsKey(patientId)) {
+      final current = store[patientId];
+      if (current != null) {
+        if (revision != null &&
+            ((current['revision'] as int?) ?? 0) != revision) {
+          return;
+        }
         store[patientId] = <String, dynamic>{
-          ...store[patientId]!,
+          ...current,
           'sync_error': error,
           'sync_error_code': statusCode,
         };
@@ -727,12 +819,21 @@ class LocalDatabase {
       return;
     }
     final db = await _database;
-    await db!.update(
-      _table,
-      <String, dynamic>{'sync_error': error, 'sync_error_code': statusCode},
-      where: 'patient_id = ?',
-      whereArgs: <String>[patientId],
-    );
+    if (revision != null) {
+      await db!.update(
+        _table,
+        <String, dynamic>{'sync_error': error, 'sync_error_code': statusCode},
+        where: 'patient_id = ? AND revision = ?',
+        whereArgs: <Object>[patientId, revision],
+      );
+    } else {
+      await db!.update(
+        _table,
+        <String, dynamic>{'sync_error': error, 'sync_error_code': statusCode},
+        where: 'patient_id = ?',
+        whereArgs: <String>[patientId],
+      );
+    }
   }
 
   Future<void> deleteRecord(String patientId) async {
@@ -856,6 +957,8 @@ class LocalPatientEntry {
     required this.createdAt,
     this.syncedAt,
     this.revision = 0,
+    this.ownerUserId,
+    this.organizationId,
   });
 
   factory LocalPatientEntry.fromRow(Map<String, dynamic> row) {
@@ -870,6 +973,8 @@ class LocalPatientEntry {
       createdAt: row['created_at'] as String,
       syncedAt: row['synced_at'] as String?,
       revision: (row['revision'] as int?) ?? 0,
+      ownerUserId: row['owner_user_id'] as String?,
+      organizationId: row['organization_id'] as String?,
     );
   }
 
@@ -883,6 +988,8 @@ class LocalPatientEntry {
   final String createdAt;
   final String? syncedAt;
   final int revision;
+  final String? ownerUserId;
+  final String? organizationId;
 
   PatientFullRecord? toPatientRecord() {
     if (recordJson.isEmpty || recordJson == '{}') return null;

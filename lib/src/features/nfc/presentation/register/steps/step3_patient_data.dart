@@ -54,6 +54,18 @@ const List<String> kDisabilityCodes = <String>[
 bool patientHasEthnicity(String? ethnicity) =>
     ethnicity != null && !kNoEthnicityCodes.contains(ethnicity);
 
+Widget _buildLabel(String labelText, bool isRequired) {
+  final cleanText = labelText.replaceAll('*', '').trim();
+  return Text.rich(
+    TextSpan(
+      text: cleanText,
+      style: _kLabelStyle,
+      children: [if (isRequired) const TextSpan(text: ' *', style: _kReqStyle)],
+    ),
+    overflow: TextOverflow.ellipsis,
+  );
+}
+
 class Step3PatientData extends StatefulWidget {
   const Step3PatientData({
     super.key,
@@ -791,12 +803,7 @@ class _StyledTextField extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Row(
-        children: [
-          Text(label, style: _kLabelStyle),
-          if (required) const Text(' *', style: _kReqStyle),
-        ],
-      ),
+      _buildLabel(label, required),
       const SizedBox(height: 6),
       TextField(
         controller: controller,
@@ -825,8 +832,9 @@ class _StyledTextField extends StatelessWidget {
   );
 }
 
-class _StyledDropdown<T> extends StatelessWidget {
+class _StyledDropdown<T> extends StatefulWidget {
   const _StyledDropdown({
+    super.key,
     required this.label,
     required this.value,
     required this.items,
@@ -841,47 +849,105 @@ class _StyledDropdown<T> extends StatelessWidget {
   final bool required;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: _kLabelStyle,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (required) const Text(' *', style: _kReqStyle),
-        ],
-      ),
-      const SizedBox(height: 6),
-      DropdownButtonFormField<T>(
-        initialValue: value,
-        isExpanded: true,
-        style: _kInputStyle,
-        icon: const Icon(Icons.expand_more, color: AppColors.textSecondary),
-        decoration: const InputDecoration(
-          filled: true,
-          fillColor: AppColors.white,
-          contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          enabledBorder: _kEnabledBorder,
-          focusedBorder: _kFocusedBorder,
-          border: _kEnabledBorder,
-        ),
-        items: items.entries
-            .map(
-              (e) => DropdownMenuItem<T>(
-                value: e.key,
-                child: Text(e.value, overflow: TextOverflow.ellipsis),
+  State<_StyledDropdown<T>> createState() => _StyledDropdownState<T>();
+}
+
+class _StyledDropdownState<T> extends State<_StyledDropdown<T>> {
+  final MenuController _menuController = MenuController();
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedLabel = widget.items[widget.value] ?? '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel(widget.label, widget.required),
+        const SizedBox(height: 6),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            return MenuAnchor(
+              controller: _menuController,
+              style: MenuStyle(
+                fixedSize: WidgetStateProperty.all(
+                  Size(constraints.maxWidth, double.nan),
+                ),
+                maximumSize: WidgetStateProperty.all(
+                  Size(constraints.maxWidth, 250),
+                ),
+                backgroundColor: WidgetStateProperty.all(AppColors.white),
+                elevation: WidgetStateProperty.all(4),
+                shape: WidgetStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
               ),
-            )
-            .toList(),
-        onChanged: onChanged,
-      ),
-    ],
-  );
+              builder: (context, controller, child) {
+                return InkWell(
+                  onTap: () {
+                    if (controller.isOpen) {
+                      controller.close();
+                    } else {
+                      controller.open();
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: AppColors.white,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
+                      ),
+                      enabledBorder: _kEnabledBorder,
+                      focusedBorder: _kFocusedBorder,
+                      border: _kEnabledBorder,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            selectedLabel,
+                            style: _kInputStyle,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(
+                          Icons.expand_more,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              menuChildren: widget.items.entries.map((e) {
+                return SizedBox(
+                  width: constraints.maxWidth,
+                  child: MenuItemButton(
+                    onPressed: () {
+                      widget.onChanged(e.key);
+                      _menuController.close();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        e.value,
+                        style: _kInputStyle,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+      ],
+    );
+  }
 }
 
 class _StyledDateField extends StatelessWidget {
@@ -905,12 +971,7 @@ class _StyledDateField extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Row(
-        children: [
-          Text(label, style: _kLabelStyle),
-          if (required) const Text(' *', style: _kReqStyle),
-        ],
-      ),
+      _buildLabel(label, required),
       const SizedBox(height: 6),
       GestureDetector(
         onTap: () async {
@@ -976,12 +1037,7 @@ class _ChipSelector extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (label.isNotEmpty) ...[
-          Row(
-            children: [
-              Text(label, style: _kLabelStyle),
-              if (required) const Text(' *', style: _kReqStyle),
-            ],
-          ),
+          _buildLabel(label, required),
           const SizedBox(height: 8),
         ],
         Wrap(

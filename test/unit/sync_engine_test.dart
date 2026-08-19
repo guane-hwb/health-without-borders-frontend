@@ -84,10 +84,20 @@ void main() {
     patientRepo = MockPatientRepository();
     localDb = MockLocalDatabase();
 
-    when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
-    when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 0);
-    when(() => localDb.getBlockedCount()).thenAnswer((_) async => 0);
-    when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
+    when(
+      () => localDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
+    ).thenAnswer((_) async => 0);
+    when(
+      () => localDb.getRetryablePendingCount(
+        ownerUserId: any(named: 'ownerUserId'),
+      ),
+    ).thenAnswer((_) async => 0);
+    when(
+      () => localDb.getBlockedCount(ownerUserId: any(named: 'ownerUserId')),
+    ).thenAnswer((_) async => 0);
+    when(
+      () => localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+    ).thenAnswer((_) async => []);
     when(
       () => localDb.purgeStalePermanentErrors(maxAge: any(named: 'maxAge')),
     ).thenAnswer((_) async {});
@@ -99,12 +109,12 @@ void main() {
         revision: any(named: 'revision'),
       ),
     ).thenAnswer((_) async {});
-    when(() => localDb.markSyncError(any(), any())).thenAnswer((_) async {});
     when(
       () => localDb.markSyncError(
         any(),
         any(),
         statusCode: any(named: 'statusCode'),
+        revision: any(named: 'revision'),
       ),
     ).thenAnswer((_) async {});
 
@@ -119,8 +129,11 @@ void main() {
 
   group('refreshPendingCount', () {
     test('actualiza pendingCount con el valor de la base local', () async {
-      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 7);
-      when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 7);
+      when(
+        () => localDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 7);
 
       await engine.refreshPendingCount();
 
@@ -128,16 +141,18 @@ void main() {
     });
 
     test('mantiene el valor previo si la base local lanza un error', () async {
-      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 3);
-      when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 3);
+      when(
+        () => localDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 3);
       await engine.refreshPendingCount();
       expect(engine.pendingCount.value, 3);
 
       when(
-        () => localDb.getUnsyncedCount(),
-      ).thenThrow(Exception('storage down'));
-      when(
-        () => localDb.getRetryablePendingCount(),
+        () => localDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
       ).thenThrow(Exception('storage down'));
       await engine.refreshPendingCount();
 
@@ -149,9 +164,15 @@ void main() {
 
   group('syncAll', () {
     test('sin registros pendientes no llama al repositorio', () async {
-      when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
-      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
-      when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 0);
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => []);
+      when(
+        () => localDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 0);
 
       int? notifiedCount;
       engine.onSyncStatusChanged = (count) => notifiedCount = count;
@@ -168,13 +189,17 @@ void main() {
       final entryB = buildEntry('B', record: MockPatientFullRecord());
 
       when(
-        () => localDb.getUnsyncedRecords(),
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [entryA, entryB]);
       when(
         () => patientRepo.syncPatient(any()),
       ).thenAnswer((_) async => buildResponse('success'));
-      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
-      when(() => localDb.getRetryablePendingCount()).thenAnswer((_) async => 0);
+      when(
+        () => localDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 0);
 
       await engine.syncAll();
 
@@ -196,7 +221,8 @@ void main() {
       );
 
       when(
-        () => localDb.getUnsyncedRecords(),
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [entryOk, entry409, entry422]);
       when(
         () => patientRepo.syncPatient(any()),
@@ -217,7 +243,8 @@ void main() {
       );
 
       when(
-        () => localDb.getUnsyncedRecords(),
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [entryOk, entry409]);
       when(
         () => patientRepo.syncPatient(any()),
@@ -235,7 +262,9 @@ void main() {
       () async {
         final entry = buildEntry('A', record: MockPatientFullRecord());
         when(
-          () => localDb.getUnsyncedRecords(),
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
         ).thenAnswer((_) async => [entry]);
 
         final completer = Completer<PatientSyncResponse>();
@@ -262,7 +291,9 @@ void main() {
       () async {
         final entry = buildEntry('A', record: null);
         when(
-          () => localDb.getUnsyncedRecords(),
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
         ).thenAnswer((_) async => [entry]);
 
         await engine.syncAll();
@@ -273,6 +304,7 @@ void main() {
             'A',
             'Registro local ilegible (fallo de descifrado)',
             statusCode: 422,
+            revision: 0,
           ),
         ).called(1);
       },
@@ -283,7 +315,9 @@ void main() {
       () async {
         final entry = buildEntry('A', record: MockPatientFullRecord());
         when(
-          () => localDb.getUnsyncedRecords(),
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
         ).thenAnswer((_) async => [entry]);
         when(
           () => patientRepo.syncPatient(any()),
@@ -305,7 +339,10 @@ void main() {
 
     test('respuesta con status distinto de "success" marca error', () async {
       final entry = buildEntry('A', record: MockPatientFullRecord());
-      when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => [entry]);
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [entry]);
       when(() => patientRepo.syncPatient(any())).thenAnswer(
         (_) async => buildResponse('rejected', message: 'datos inválidos'),
       );
@@ -316,7 +353,12 @@ void main() {
       await engine.syncAll();
 
       verify(
-        () => localDb.markSyncError('A', 'Sync returned status: rejected'),
+        () => localDb.markSyncError(
+          'A',
+          'Sync returned status: rejected',
+          statusCode: null,
+          revision: 0,
+        ),
       ).called(1);
       expect(recordedError, 'datos inválidos');
     });
@@ -326,7 +368,9 @@ void main() {
       () async {
         final entry = buildEntry('A', record: MockPatientFullRecord());
         when(
-          () => localDb.getUnsyncedRecords(),
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
         ).thenAnswer((_) async => [entry]);
         when(() => patientRepo.syncPatient(any())).thenAnswer(
           (_) async => buildResponse('success', fhirStatus: 'error'),
@@ -346,7 +390,12 @@ void main() {
           ),
         );
         verify(
-          () => localDb.markSyncError('A', 'Envío FHIR fallido: error'),
+          () => localDb.markSyncError(
+            'A',
+            'Envío FHIR fallido: error',
+            statusCode: null,
+            revision: 0,
+          ),
         ).called(1);
         expect(recordedError, '');
       },
@@ -357,7 +406,9 @@ void main() {
       () async {
         final entry = buildEntry('A', record: MockPatientFullRecord());
         when(
-          () => localDb.getUnsyncedRecords(),
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
         ).thenAnswer((_) async => [entry]);
         final exception = buildApiException(401, 'token expirado');
         when(() => patientRepo.syncPatient(any())).thenThrow(exception);
@@ -372,6 +423,7 @@ void main() {
             any(),
             any(),
             statusCode: any(named: 'statusCode'),
+            revision: any(named: 'revision'),
           ),
         );
         expect(success, false);
@@ -380,14 +432,22 @@ void main() {
 
     test('ApiException 400 marca error y no reintenta', () async {
       final entry = buildEntry('A', record: MockPatientFullRecord());
-      when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => [entry]);
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [entry]);
       final exception = buildApiException(400, 'solicitud inválida');
       when(() => patientRepo.syncPatient(any())).thenThrow(exception);
 
       await engine.syncAll();
 
       verify(
-        () => localDb.markSyncError('A', 'solicitud inválida', statusCode: 400),
+        () => localDb.markSyncError(
+          'A',
+          'solicitud inválida',
+          statusCode: 400,
+          revision: 0,
+        ),
       ).called(1);
     });
 
@@ -396,7 +456,9 @@ void main() {
       () async {
         final entry = buildEntry('A', record: MockPatientFullRecord());
         when(
-          () => localDb.getUnsyncedRecords(),
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
         ).thenAnswer((_) async => [entry]);
         final exception = buildApiException(
           409,
@@ -411,6 +473,7 @@ void main() {
             'A',
             'A patient is already registered with this device tag.',
             statusCode: 409,
+            revision: 0,
           ),
         ).called(1);
       },
@@ -418,7 +481,10 @@ void main() {
 
     test('ApiException 422 marca error y no reintenta', () async {
       final entry = buildEntry('A', record: MockPatientFullRecord());
-      when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => [entry]);
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [entry]);
       final exception = buildApiException(422, 'entidad no procesable');
       when(() => patientRepo.syncPatient(any())).thenThrow(exception);
 
@@ -429,6 +495,7 @@ void main() {
           'A',
           'Error de validación (422): Campos incompatibles con el backend',
           statusCode: 422,
+          revision: 0,
         ),
       ).called(1);
     });
@@ -438,7 +505,9 @@ void main() {
       () async {
         final entry = buildEntry('A', record: MockPatientFullRecord());
         when(
-          () => localDb.getUnsyncedRecords(),
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
         ).thenAnswer((_) async => [entry]);
         final exception = buildApiException(429, 'rate limited');
         when(() => patientRepo.syncPatient(any())).thenThrow(exception);
@@ -446,7 +515,12 @@ void main() {
         await engine.syncAll();
 
         verify(
-          () => localDb.markSyncError('A', 'rate limited', statusCode: 429),
+          () => localDb.markSyncError(
+            'A',
+            'rate limited',
+            statusCode: 429,
+            revision: 0,
+          ),
         ).called(1);
       },
     );
@@ -456,7 +530,9 @@ void main() {
       () async {
         final entry = buildEntry('A', record: MockPatientFullRecord());
         when(
-          () => localDb.getUnsyncedRecords(),
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
         ).thenAnswer((_) async => [entry]);
         final exception = buildApiException(500, 'error de servidor');
         when(() => patientRepo.syncPatient(any())).thenThrow(exception);
@@ -464,8 +540,12 @@ void main() {
         await engine.syncAll();
 
         verify(
-          () =>
-              localDb.markSyncError('A', 'error de servidor', statusCode: 500),
+          () => localDb.markSyncError(
+            'A',
+            'error de servidor',
+            statusCode: 500,
+            revision: 0,
+          ),
         ).called(1);
       },
     );
@@ -475,7 +555,9 @@ void main() {
       () async {
         final entry = buildEntry('A', record: MockPatientFullRecord());
         when(
-          () => localDb.getUnsyncedRecords(),
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
         ).thenAnswer((_) async => [entry]);
         when(
           () => patientRepo.syncPatient(any()),
@@ -487,7 +569,12 @@ void main() {
         await engine.syncAll();
 
         verify(
-          () => localDb.markSyncError('A', 'Error de conexión de red'),
+          () => localDb.markSyncError(
+            'A',
+            'Error de conexión de red',
+            statusCode: null,
+            revision: 0,
+          ),
         ).called(1);
         expect(success, false);
       },
@@ -498,7 +585,11 @@ void main() {
     test(
       'retorna notFound si no hay ningún registro con ese patientId',
       () async {
-        when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => []);
 
         final result = await engine.syncOne('no-existe');
 
@@ -513,7 +604,11 @@ void main() {
         final entry = buildEntry('A', record: MockPatientFullRecord());
 
         var callCount = 0;
-        when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async {
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async {
           callCount++;
           return callCount == 1 ? [entry] : <LocalPatientEntry>[];
         });
@@ -538,7 +633,10 @@ void main() {
     test('retorna failure cuando el registro sigue sin sincronizar', () async {
       final entry = buildEntry('A', record: MockPatientFullRecord());
 
-      when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => [entry]);
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [entry]);
       final exception = buildApiException(500, 'error de servidor');
       when(() => patientRepo.syncPatient(any())).thenThrow(exception);
 
@@ -574,7 +672,8 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       verify(
-        () => localDb.getUnsyncedRecords(),
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).called(greaterThanOrEqualTo(1));
     });
 
@@ -586,7 +685,10 @@ void main() {
       connectivityController.add([ConnectivityResult.wifi]);
       await Future<void>.delayed(const Duration(seconds: 4));
 
-      verify(() => localDb.getUnsyncedRecords()).called(1);
+      verify(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).called(1);
     });
 
     test(
@@ -599,7 +701,11 @@ void main() {
         connectivityController.add([ConnectivityResult.none]);
         await Future<void>.delayed(const Duration(seconds: 4));
 
-        verifyNever(() => localDb.getUnsyncedRecords());
+        verifyNever(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        );
       },
     );
 
@@ -615,7 +721,11 @@ void main() {
         connectivityController.add([ConnectivityResult.wifi]);
         await Future<void>.delayed(const Duration(seconds: 4));
 
-        verifyNever(() => localDb.getUnsyncedRecords());
+        verifyNever(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        );
       },
     );
 
@@ -629,7 +739,10 @@ void main() {
       connectivityController.add([ConnectivityResult.wifi]);
       await Future<void>.delayed(const Duration(seconds: 4));
 
-      verify(() => localDb.getUnsyncedRecords()).called(1);
+      verify(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).called(1);
     });
   });
 }

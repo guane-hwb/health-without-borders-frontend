@@ -8,9 +8,44 @@ import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../core/validation/identity_validators.dart';
-import '../../../../../shared/widgets/form_widgets.dart';
 import '../../../../../shared/widgets/hwb_text_field.dart';
 import '../../../domain/register_draft.dart';
+
+const _kEnabledBorder = OutlineInputBorder(
+  borderRadius: BorderRadius.all(Radius.circular(10)),
+  borderSide: BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
+);
+const _kFocusedBorder = OutlineInputBorder(
+  borderRadius: BorderRadius.all(Radius.circular(10)),
+  borderSide: BorderSide(color: AppColors.primary, width: 2),
+);
+const _kInputStyle = TextStyle(
+  fontSize: 15,
+  color: AppColors.textPrimary,
+  fontWeight: FontWeight.w500,
+);
+const _kLabelStyle = TextStyle(
+  fontSize: 13,
+  fontWeight: FontWeight.w600,
+  color: AppColors.textPrimary,
+);
+const _kReqStyle = TextStyle(
+  color: AppColors.error,
+  fontSize: 13,
+  fontWeight: FontWeight.w700,
+);
+
+Widget _buildLabel(String labelText, bool isRequired) {
+  final cleanText = labelText.replaceAll('*', '').trim();
+  return Text.rich(
+    TextSpan(
+      text: cleanText,
+      style: _kLabelStyle,
+      children: [if (isRequired) const TextSpan(text: ' *', style: _kReqStyle)],
+    ),
+    overflow: TextOverflow.ellipsis,
+  );
+}
 
 class Step2Guardian extends StatefulWidget {
   const Step2Guardian({
@@ -540,11 +575,12 @@ class _Step2State extends State<Step2Guardian> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          HwbTextField(
+                          _CustomTextField(
                             label: s.guardianFullName,
                             controller: _name,
                             hint: s.guardianFullNameHint,
                             icon: Icons.person_outline,
+                            required: true,
                             keyboardType: TextInputType.name,
                           ),
                           const SizedBox(height: 12),
@@ -557,11 +593,12 @@ class _Step2State extends State<Step2Guardian> {
                                 setState(() => d.guardianRelationship = v),
                           ),
                           const SizedBox(height: 12),
-                          HwbTextField(
+                          _CustomTextField(
                             label: s.guardianPhoneLabel,
                             controller: _phone,
                             hint: s.guardianPhoneHint,
                             icon: Icons.phone_outlined,
+                            required: true,
                             keyboardType: TextInputType.phone,
                           ),
                           const SizedBox(height: 12),
@@ -574,17 +611,19 @@ class _Step2State extends State<Step2Guardian> {
                                 setState(() => _selectedDocType = v),
                           ),
                           const SizedBox(height: 12),
-                          HwbTextField(
+                          _CustomTextField(
                             label: s.documentNumberLabel,
                             controller: _docNumber,
                             hint: 'Ej. 1234567890',
                             icon: Icons.badge_outlined,
+                            required: true,
                             keyboardType: TextInputType.number,
                           ),
                           const SizedBox(height: 16),
-                          FormSectionHeader(
+                          _CentredFormSectionHeader(
                             icon: Icons.nfc,
-                            title: '${s.guardianNfcDevice} *',
+                            title: s.guardianNfcDevice,
+                            required: true,
                           ),
                           const SizedBox(height: 12),
                           _NfcField(
@@ -705,7 +744,75 @@ class _Step2State extends State<Step2Guardian> {
   }
 }
 
-class _DocTypeSelector extends StatelessWidget {
+class _CustomTextField extends StatelessWidget {
+  const _CustomTextField({
+    required this.label,
+    required this.controller,
+    required this.hint,
+    required this.icon,
+    this.required = false,
+    this.keyboardType = TextInputType.text,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final String hint;
+  final IconData icon;
+  final bool required;
+  final TextInputType keyboardType;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel(label, required),
+        const SizedBox(height: 6),
+        HwbTextField(
+          label: '',
+          controller: controller,
+          hint: hint,
+          icon: icon,
+          keyboardType: keyboardType,
+        ),
+      ],
+    );
+  }
+}
+
+class _CentredFormSectionHeader extends StatelessWidget {
+  const _CentredFormSectionHeader({
+    required this.icon,
+    required this.title,
+    this.required = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final bool required;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 18, color: AppColors.primary),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: _buildLabel(title, required)),
+      ],
+    );
+  }
+}
+
+class _DocTypeSelector extends StatefulWidget {
   const _DocTypeSelector({
     required this.label,
     required this.value,
@@ -721,76 +828,128 @@ class _DocTypeSelector extends StatelessWidget {
   final bool required;
 
   @override
+  State<_DocTypeSelector> createState() => _DocTypeSelectorState();
+}
+
+class _DocTypeSelectorState extends State<_DocTypeSelector> {
+  final MenuController _menuController = MenuController();
+
+  @override
   Widget build(BuildContext context) {
+    final selectedLabel = widget.options[widget.value] ?? '';
+    final itemHeight = 48.0;
+    final calculatedHeight = (widget.options.length * itemHeight).clamp(
+      itemHeight,
+      250.0,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            if (required)
-              const Text(
-                ' *',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+        _buildLabel(widget.label, widget.required),
+        const SizedBox(height: 6),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            return MenuAnchor(
+              controller: _menuController,
+              style: MenuStyle(
+                fixedSize: WidgetStateProperty.all(
+                  Size(constraints.maxWidth, calculatedHeight),
+                ),
+                maximumSize: WidgetStateProperty.all(
+                  Size(constraints.maxWidth, calculatedHeight),
+                ),
+                backgroundColor: WidgetStateProperty.all(AppColors.white),
+                elevation: WidgetStateProperty.all(4),
+                shape: WidgetStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: value,
-              isExpanded: true,
-              icon: const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: AppColors.textSecondary,
-                size: 22,
-              ),
-              style: const TextStyle(
-                fontSize: 15,
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w500,
-              ),
-              items: options.entries
-                  .map(
-                    (e) => DropdownMenuItem<String>(
-                      value: e.key,
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.credit_card_outlined,
-                            size: 20,
-                            color: AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(e.value),
-                        ],
+              builder: (context, controller, child) {
+                return InkWell(
+                  onTap: () {
+                    if (controller.isOpen) {
+                      controller.close();
+                    } else {
+                      controller.open();
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: AppColors.white,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
                       ),
+                      enabledBorder: _kEnabledBorder,
+                      focusedBorder: _kFocusedBorder,
+                      border: _kEnabledBorder,
                     ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                if (v != null) onChanged(v);
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.credit_card_outlined,
+                                size: 20,
+                                color: AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  selectedLabel,
+                                  style: _kInputStyle,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          Icons.expand_more,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
               },
-            ),
-          ),
+              menuChildren: widget.options.entries.map((e) {
+                return SizedBox(
+                  width: constraints.maxWidth,
+                  height: itemHeight,
+                  child: MenuItemButton(
+                    onPressed: () {
+                      widget.onChanged(e.key);
+                      _menuController.close();
+                    },
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.credit_card_outlined,
+                          size: 20,
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            e.value,
+                            style: _kInputStyle,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            );
+          },
         ),
       ],
     );
@@ -840,26 +999,7 @@ class _AuthSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                s.confirmChanges,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const Text(
-                ' *',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
+          _buildLabel(s.confirmChanges, true),
           const SizedBox(height: 14),
 
           _AuthCheckbox(
@@ -878,26 +1018,7 @@ class _AuthSection extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          Row(
-            children: [
-              Text(
-                signatureLabel,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const Text(
-                ' *',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
+          _buildLabel(signatureLabel, true),
           const SizedBox(height: 6),
           _SignaturePad(
             strokes: signatureStrokes,
@@ -1470,27 +1591,7 @@ class _RelChipSelector extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            if (required)
-              const Text(
-                ' *',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-          ],
-        ),
+        _buildLabel(label, required),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -1800,11 +1901,12 @@ class _Guardian2Section extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                HwbTextField(
+                _CustomTextField(
                   label: s.guardianFullName,
                   controller: nameCtrl,
                   hint: s.guardianFullNameHint,
                   icon: Icons.person_outline,
+                  required: true,
                   keyboardType: TextInputType.name,
                 ),
                 const SizedBox(height: 12),
@@ -1815,11 +1917,12 @@ class _Guardian2Section extends StatelessWidget {
                   onChanged: onRelationshipChanged,
                 ),
                 const SizedBox(height: 12),
-                HwbTextField(
+                _CustomTextField(
                   label: s.guardianPhoneLabel,
                   controller: phoneCtrl,
                   hint: s.guardianPhoneHint,
                   icon: Icons.phone_outlined,
+                  required: true,
                   keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 12),
@@ -1830,15 +1933,16 @@ class _Guardian2Section extends StatelessWidget {
                   onChanged: onDocTypeChanged,
                 ),
                 const SizedBox(height: 12),
-                HwbTextField(
+                _CustomTextField(
                   label: s.documentNumberLabel,
                   controller: docNumberCtrl,
                   hint: 'Ej. 1234567890',
                   icon: Icons.badge_outlined,
+                  required: true,
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),
-                FormSectionHeader(
+                _CentredFormSectionHeader(
                   icon: Icons.nfc,
                   title: '${s.guardianNfcDevice} 2',
                 ),
