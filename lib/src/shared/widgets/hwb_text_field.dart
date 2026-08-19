@@ -12,6 +12,7 @@ class HwbTextField extends StatelessWidget {
     this.hint = '',
     this.icon,
     this.enabled = true,
+    this.required = false,
     this.keyboardType = TextInputType.text,
     this.validator,
   });
@@ -21,19 +22,42 @@ class HwbTextField extends StatelessWidget {
   final TextEditingController controller;
   final IconData? icon;
   final bool enabled;
+  final bool required;
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
 
   @override
   Widget build(BuildContext context) {
+    final cleanLabel = label.replaceAll('*', '').trim();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
-        ),
-        const SizedBox(height: 4),
+        if (cleanLabel.isNotEmpty) ...[
+          Text.rich(
+            TextSpan(
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+              children: [
+                TextSpan(text: cleanLabel),
+                if (required || label.contains('*'))
+                  const TextSpan(
+                    text: ' *',
+                    style: TextStyle(
+                      color: AppColors.error,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 6),
+        ],
         TextFormField(
           controller: controller,
           enabled: enabled,
