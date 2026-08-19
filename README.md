@@ -75,3 +75,13 @@ Implementation guidance lives in `docs/development/figma-to-flutter.md`.
 ## License
 
 This project is licensed under the MIT License.
+
+## Community
+
+Questions, ideas, or feedback? Join the conversation in our public [GitHub Discussions](https://github.com/guane-hwb/health-without-borders-frontend/discussions).
+
+* **Announcements** — project news and releases
+* **Q&A** — ask the development team
+* **Ideas** — propose features and improvements
+
+Please review our [Code of Conduct](CODE_OF_CONDUCT.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before participating.
