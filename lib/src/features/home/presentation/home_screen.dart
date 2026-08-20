@@ -9,6 +9,7 @@ import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/hwb_logo.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../auth/domain/user_session.dart';
+import '../../../core/sync/sync_engine.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -208,7 +209,12 @@ class HomeScreen extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         _SyncCard(
-          onTap: () => Navigator.of(context).pushNamed(AppRoutes.syncQueue),
+          onTap: () async {
+            await Navigator.of(context).pushNamed(AppRoutes.syncQueue);
+            if (context.mounted) {
+              await AppScope.of(context).syncEngine.refreshPendingCount();
+            }
+          },
         ),
         const SizedBox(height: 28),
         _LogoutButton(onTap: () => _logout(context)),
@@ -457,130 +463,187 @@ class _ActionCard extends StatelessWidget {
 
 class _SyncCard extends StatefulWidget {
   const _SyncCard({required this.onTap});
-  final VoidCallback onTap;
+  final Future<void> Function() onTap;
 
   @override
   State<_SyncCard> createState() => _SyncCardState();
 }
 
 class _SyncCardState extends State<_SyncCard> {
+  int _pendingCount = 0;
+  bool _initialized = false;
+  SyncEngine? _engineRef;
+
+  void Function(int)? _previousSyncStatusCallback;
+  void Function(String, bool, String?)? _previousRecordSyncedCallback;
+
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => AppScope.of(context).syncEngine.refreshPendingCount(),
-    );
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _initialized = true;
+      _setupListenersAndRefresh();
+    }
+  }
+
+  void _setupListenersAndRefresh() {
+    final scope = AppScope.of(context);
+    _engineRef = scope.syncEngine;
+
+    if (_engineRef == null) return;
+
+    _previousSyncStatusCallback = _engineRef!.onSyncStatusChanged;
+    _previousRecordSyncedCallback = _engineRef!.onRecordSynced;
+
+    _engineRef!.onSyncStatusChanged = (int count) {
+      _previousSyncStatusCallback?.call(count);
+      _fetchCount();
+    };
+
+    _engineRef!.onRecordSynced = (String id, bool success, String? err) {
+      _previousRecordSyncedCallback?.call(id, success, err);
+      _fetchCount();
+    };
+
+    _engineRef!.pendingCount.addListener(_fetchCount);
+    _fetchCount();
+  }
+
+  @override
+  void dispose() {
+    if (_engineRef != null) {
+      _engineRef!.pendingCount.removeListener(_fetchCount);
+      _engineRef!.onSyncStatusChanged = _previousSyncStatusCallback;
+      _engineRef!.onRecordSynced = _previousRecordSyncedCallback;
+    }
+    super.dispose();
+  }
+
+  Future<void> _fetchCount() async {
+    if (!mounted) return;
+    final scope = AppScope.of(context);
+    int count = scope.syncEngine.pendingCount.value;
+
+    try {
+      final dbCount = await scope.localDatabase.getUnsyncedCount();
+      count = dbCount;
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _pendingCount = count;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final scope = AppScope.of(context);
     final s = AppStrings.of(context);
-    return ValueListenableBuilder<int>(
-      valueListenable: AppScope.of(context).syncEngine.pendingCount,
-      builder: (context, pending, _) {
-        final subtitle = pending == 0
-            ? s.actionPendingSyncEmpty
-            : s.actionPendingSyncCount(pending);
+    final hasPending = _pendingCount > 0;
+    final subtitle = hasPending
+        ? s.actionPendingSyncCount(_pendingCount)
+        : s.actionPendingSyncEmpty;
 
-        final hasPending = pending > 0;
-        const cardBg = AppColors.white;
-        const iBg = Color(0xFFE8F5E8);
-        const iColor = Color(0xFF4CAF50);
+    return Material(
+      color: AppColors.white,
+      borderRadius: BorderRadius.circular(16),
+      elevation: 0,
+      child: InkWell(
+        onTap: () async {
+          await widget.onTap();
 
-        return Material(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(16),
-          elevation: 0,
-          child: InkWell(
-            onTap: widget.onTap,
+          if (mounted) {
+            await scope.syncEngine.refreshPendingCount();
+            await _fetchCount();
+          }
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          decoration: BoxDecoration(
+            color: AppColors.white,
             borderRadius: BorderRadius.circular(16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE8ECF0), width: 1),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x0A000000),
-                    blurRadius: 8,
-                    offset: Offset(0, 2),
-                  ),
-                ],
+            border: Border.all(color: const Color(0xFFE8ECF0), width: 1),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0A000000),
+                blurRadius: 8,
+                offset: Offset(0, 2),
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: iBg,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(
-                      hasPending
-                          ? Icons.cloud_upload_outlined
-                          : Icons.cloud_done_outlined,
-                      size: 24,
-                      color: iColor,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          s.actionPendingSync,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          subtitle,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: hasPending
-                                ? const Color(0xFFB8860B)
-                                : AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (hasPending)
-                    Container(
-                      width: 28,
-                      height: 28,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFD4A017),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        '$pending',
-                        style: const TextStyle(
-                          color: AppColors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    )
-                  else
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      color: AppColors.textSecondary,
-                      size: 22,
-                    ),
-                ],
-              ),
-            ),
+            ],
           ),
-        );
-      },
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F5E9),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  hasPending
+                      ? Icons.cloud_upload_outlined
+                      : Icons.cloud_done_outlined,
+                  size: 24,
+                  color: const Color(0xFF4CAF50),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.actionPendingSync,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: hasPending
+                            ? const Color(0xFFB8860B)
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (hasPending)
+                Container(
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFD4A017),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    '$_pendingCount',
+                    style: const TextStyle(
+                      color: AppColors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textSecondary,
+                  size: 22,
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
