@@ -369,7 +369,10 @@ class PatientInfo {
     'biologicalSex': biologicalSex,
     if (genderIdentity != null) 'genderIdentity': genderIdentity,
     if (ethnicity != null) 'ethnicity': ethnicity,
-    if (ethnicCommunity != null) 'ethnicCommunity': ethnicCommunity,
+    if (ethnicCommunity != null) ...<String, dynamic>{
+      'ethnicCommunity': ethnicCommunity,
+      'ethnic_community': ethnicCommunity,
+    },
     if (disabilityCategory != null) 'disabilityCategory': disabilityCategory,
     'address': address.toJson(),
     if (bloodType != null) 'bloodType': bloodType,

@@ -371,6 +371,40 @@ void main() {
     });
 
     test(
+      'getUnsyncedEmergencyLogCount cuenta solo entradas sin sincronizar',
+      () async {
+        await localDb.logEmergencyAccess(patientUid: '04:D1');
+        await localDb.logEmergencyAccess(patientUid: '04:D2');
+        expect(await localDb.getUnsyncedEmergencyLogCount(), equals(2));
+
+        final pending = await localDb.pendingEmergencyAccessLogs();
+        final firstId = pending.first['id'] as int;
+        await localDb.markEmergencyLogsSynced([firstId]);
+
+        expect(await localDb.getUnsyncedEmergencyLogCount(), equals(1));
+      },
+    );
+
+    test('clearAll conserva accesos de emergencia pendientes pero borra los '
+        'ya sincronizados', () async {
+      await localDb.logEmergencyAccess(patientUid: '04:PEND');
+      await localDb.logEmergencyAccess(patientUid: '04:DONE');
+
+      final pending = await localDb.pendingEmergencyAccessLogs();
+      final doneId =
+          pending.firstWhere((r) => r['patient_uid'] == '04:DONE')['id'] as int;
+      await localDb.markEmergencyLogsSynced([doneId]);
+
+      await localDb.clearAll();
+
+      final raw = await rawConnection();
+      final allRows = await raw.query('emergency_access_log');
+      expect(allRows, hasLength(1));
+      expect(allRows.single['patient_uid'], '04:PEND');
+      expect(await localDb.getUnsyncedEmergencyLogCount(), equals(1));
+    });
+
+    test(
       'savePatient persists a record retrievable via getAllRecords',
       () async {
         await localDb.savePatient(_buildRecord(patientId: 'p-200'));
@@ -449,6 +483,78 @@ void main() {
         whereArgs: ['p-c'],
       );
       expect(await localDb.getUnsyncedCount(), equals(1));
+    });
+
+    group('filtrado por owner_user_id', () {
+      test(
+        'getAllRecords(ownerUserId: B) NO devuelve los pacientes de A',
+        () async {
+          await localDb.savePatient(
+            _buildRecord(patientId: 'p-a1'),
+            ownerUserId: 'nurse-a',
+          );
+          await localDb.savePatient(
+            _buildRecord(patientId: 'p-a2'),
+            ownerUserId: 'nurse-a',
+          );
+
+          final forDoctorB = await localDb.getAllRecords(
+            ownerUserId: 'doctor-b',
+          );
+
+          expect(forDoctorB, isEmpty);
+        },
+      );
+
+      test(
+        'getAllRecords(ownerUserId: A) SÍ devuelve los pacientes propios',
+        () async {
+          await localDb.savePatient(
+            _buildRecord(patientId: 'p-a3'),
+            ownerUserId: 'nurse-a',
+          );
+
+          final forNurseA = await localDb.getAllRecords(ownerUserId: 'nurse-a');
+
+          expect(forNurseA.map((e) => e.patientId), equals(['p-a3']));
+        },
+      );
+
+      test(
+        'getUnsyncedCount(ownerUserId: B) es 0 aunque A tenga pendientes '
+        '— esto es lo que evita el incidente de trazabilidad falseada',
+        () async {
+          await localDb.savePatient(
+            _buildRecord(patientId: 'p-a4'),
+            ownerUserId: 'nurse-a',
+          );
+          await localDb.savePatient(
+            _buildRecord(patientId: 'p-a5'),
+            ownerUserId: 'nurse-a',
+          );
+
+          expect(
+            await localDb.getUnsyncedCount(ownerUserId: 'doctor-b'),
+            equals(0),
+          );
+          expect(
+            await localDb.getUnsyncedCount(ownerUserId: 'nurse-a'),
+            equals(2),
+          );
+          expect(await localDb.getUnsyncedCount(), equals(2));
+        },
+      );
+
+      test('registros legados sin owner_user_id (previos a la migración) '
+          'siguen siendo visibles para cualquier usuario', () async {
+        await localDb.savePatient(_buildRecord(patientId: 'p-legacy'));
+
+        final forAnyUser = await localDb.getAllRecords(
+          ownerUserId: 'cualquier-usuario',
+        );
+
+        expect(forAnyUser.map((e) => e.patientId), contains('p-legacy'));
+      });
     });
 
     test('markSynced deletes the local record entirely', () async {
@@ -734,6 +840,41 @@ void main() {
       expect(await localDb.getUnsyncedCount(), equals(1));
     });
 
+    test('Web: getAllRecords(ownerUserId: B) NO devuelve los pacientes de A '
+        'tras un cierre de pestaña sin logout', () async {
+      await localDb.savePatient(
+        _buildRecord(patientId: 'w-a1'),
+        ownerUserId: 'nurse-a',
+      );
+
+      final forDoctorB = await localDb.getAllRecords(ownerUserId: 'doctor-b');
+
+      expect(forDoctorB, isEmpty);
+    });
+
+    test(
+      'Web: getUnsyncedCount(ownerUserId: B) es 0 aunque A tenga pendientes',
+      () async {
+        await localDb.savePatient(
+          _buildRecord(patientId: 'w-a2'),
+          ownerUserId: 'nurse-a',
+        );
+        await localDb.savePatient(
+          _buildRecord(patientId: 'w-a3'),
+          ownerUserId: 'nurse-a',
+        );
+
+        expect(
+          await localDb.getUnsyncedCount(ownerUserId: 'doctor-b'),
+          equals(0),
+        );
+        expect(
+          await localDb.getUnsyncedCount(ownerUserId: 'nurse-a'),
+          equals(2),
+        );
+      },
+    );
+
     test(
       'purgeStalePermanentErrors solo retira registros con errores permanentes en Web',
       () async {
@@ -811,6 +952,40 @@ void main() {
         expect(pending.single['is_synced'], 0);
       },
     );
+
+    test(
+      'getUnsyncedEmergencyLogCount cuenta solo entradas sin sincronizar en Web',
+      () async {
+        await localDb.logEmergencyAccess(patientUid: '04:W-D1');
+        await localDb.logEmergencyAccess(patientUid: '04:W-D2');
+        expect(await localDb.getUnsyncedEmergencyLogCount(), equals(2));
+
+        final pending = await localDb.pendingEmergencyAccessLogs();
+        final firstId = pending.first['id'];
+        await localDb.markEmergencyLogsSynced([firstId as int]);
+
+        expect(await localDb.getUnsyncedEmergencyLogCount(), equals(1));
+      },
+    );
+
+    test('clearAll en Web conserva accesos de emergencia pendientes pero '
+        'borra los ya sincronizados', () async {
+      await localDb.logEmergencyAccess(patientUid: '04:W-PEND');
+      await localDb.logEmergencyAccess(patientUid: '04:W-DONE');
+
+      final pending = await localDb.pendingEmergencyAccessLogs();
+      final doneId = pending.firstWhere(
+        (r) => r['patient_uid'] == '04:W-DONE',
+      )['id'];
+      await localDb.markEmergencyLogsSynced([doneId as int]);
+
+      await localDb.clearAll();
+
+      final remaining = await localDb.pendingEmergencyAccessLogs();
+      expect(remaining, hasLength(1));
+      expect(remaining.single['patient_uid'], '04:W-PEND');
+      expect(await localDb.getUnsyncedEmergencyLogCount(), equals(1));
+    });
 
     test(
       'un backend Web corrupto/vacío no revienta: se trata como sin datos',

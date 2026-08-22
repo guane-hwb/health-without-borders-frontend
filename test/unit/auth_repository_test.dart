@@ -72,6 +72,9 @@ void main() {
     repo = _makeRepo(api: api, storage: storage, localDb: localDb);
 
     when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+    when(
+      () => localDb.getUnsyncedEmergencyLogCount(),
+    ).thenAnswer((_) async => 0);
     when(() => localDb.clearAll()).thenAnswer((_) async {});
     when(() => localDb.destroyEncryptionKey()).thenAnswer((_) async {});
 
@@ -117,6 +120,32 @@ void main() {
       await repo.logout(wipeLocalData: true);
       verify(() => localDb.clearAll()).called(1);
     });
+
+    test(
+      'logout(wipeLocalData: true) NO purga si quedan accesos de '
+      'emergencia sin sincronizar, aunque los pacientes ya estén al día',
+      () async {
+        when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+        when(
+          () => localDb.getUnsyncedEmergencyLogCount(),
+        ).thenAnswer((_) async => 2);
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenAnswer((_) async => _validJwt('a@b.com'));
+        when(
+          () => api.postJson(
+            path: any(named: 'path'),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer((_) async => <String, dynamic>{});
+
+        await repo.logout(wipeLocalData: true);
+
+        verifyNever(() => localDb.clearAll());
+        verifyNever(() => localDb.destroyEncryptionKey());
+      },
+    );
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -365,6 +394,106 @@ void main() {
         () => repo.login(email: 'x@y.com', password: 'p'),
         throwsA(isA<ApiException>()),
       );
+    });
+  });
+  group('login() — cambio de usuario', () {
+    void stubLoginAs(String email) {
+      when(
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
+      ).thenAnswer((_) async => {'access_token': _validJwt(email)});
+      when(
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer((_) async => _meResponse(email: email));
+    }
+
+    test(
+      'usuario distinto y sin nada pendiente: descarta la cola y la clave',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.lastUserIdKey),
+        ).thenAnswer((_) async => '11');
+        when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+        when(
+          () => localDb.getUnsyncedEmergencyLogCount(),
+        ).thenAnswer((_) async => 0);
+        stubLoginAs('doc@hwb.org');
+
+        await repo.login(email: 'doc@hwb.org', password: 'x');
+
+        verify(() => localDb.clearAll()).called(1);
+        verify(() => localDb.destroyEncryptionKey()).called(1);
+        verify(
+          () => storage.write(key: AuthRepository.lastUserIdKey, value: '42'),
+        ).called(1);
+      },
+    );
+
+    test('usuario distinto con pacientes pendientes: NO borra nada', () async {
+      when(
+        () => storage.read(key: AuthRepository.lastUserIdKey),
+      ).thenAnswer((_) async => '11');
+      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 4);
+      when(
+        () => localDb.getUnsyncedEmergencyLogCount(),
+      ).thenAnswer((_) async => 0);
+      stubLoginAs('doc@hwb.org');
+
+      await repo.login(email: 'doc@hwb.org', password: 'x');
+
+      verifyNever(() => localDb.clearAll());
+      verifyNever(() => localDb.destroyEncryptionKey());
+    });
+
+    test('usuario distinto con accesos de emergencia pendientes (aunque los '
+        'pacientes ya estén al día): NO borra nada — el log comparte la '
+        'misma clave de cifrado', () async {
+      when(
+        () => storage.read(key: AuthRepository.lastUserIdKey),
+      ).thenAnswer((_) async => '11');
+      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+      when(
+        () => localDb.getUnsyncedEmergencyLogCount(),
+      ).thenAnswer((_) async => 1);
+      stubLoginAs('doc@hwb.org');
+
+      await repo.login(email: 'doc@hwb.org', password: 'x');
+
+      verifyNever(() => localDb.clearAll());
+      verifyNever(() => localDb.destroyEncryptionKey());
+    });
+
+    test(
+      'mismo usuario que vuelve a entrar: no dispara ningún borrado',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.lastUserIdKey),
+        ).thenAnswer((_) async => '42');
+        stubLoginAs('doc@hwb.org');
+
+        await repo.login(email: 'doc@hwb.org', password: 'x');
+
+        verifyNever(() => localDb.clearAll());
+        verifyNever(() => localDb.destroyEncryptionKey());
+      },
+    );
+
+    test('sin usuario previo registrado (primer login del dispositivo): '
+        'no dispara ningún borrado', () async {
+      when(
+        () => storage.read(key: AuthRepository.lastUserIdKey),
+      ).thenAnswer((_) async => null);
+      stubLoginAs('doc@hwb.org');
+
+      await repo.login(email: 'doc@hwb.org', password: 'x');
+
+      verifyNever(() => localDb.clearAll());
+      verifyNever(() => localDb.destroyEncryptionKey());
     });
   });
 
@@ -988,6 +1117,44 @@ void main() {
     test('clearSession borra la sesión persistida (sessionKey)', () async {
       await repo.clearSession();
       verify(() => storage.delete(key: AuthRepository.sessionKey)).called(1);
+    });
+
+    test('clearSession destruye la clave de cifrado cuando no hay nada '
+        'pendiente (v2-clave-db-sobrevive-logout)', () async {
+      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+      when(
+        () => localDb.getUnsyncedEmergencyLogCount(),
+      ).thenAnswer((_) async => 0);
+
+      await repo.clearSession();
+
+      verify(() => localDb.destroyEncryptionKey()).called(1);
+    });
+
+    test(
+      'clearSession NO destruye la clave si quedan pacientes pendientes',
+      () async {
+        when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 1);
+        when(
+          () => localDb.getUnsyncedEmergencyLogCount(),
+        ).thenAnswer((_) async => 0);
+
+        await repo.clearSession();
+
+        verifyNever(() => localDb.destroyEncryptionKey());
+      },
+    );
+
+    test('clearSession NO destruye la clave si quedan accesos de emergencia '
+        'pendientes, aunque los pacientes ya estén al día', () async {
+      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+      when(
+        () => localDb.getUnsyncedEmergencyLogCount(),
+      ).thenAnswer((_) async => 3);
+
+      await repo.clearSession();
+
+      verifyNever(() => localDb.destroyEncryptionKey());
     });
   });
 
