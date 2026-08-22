@@ -129,6 +129,7 @@ class SyncEngine {
 
   Future<bool> syncAll() async {
     await refreshPendingCount();
+    await _syncEmergencyLogs();
 
     if (_isSyncing) return false;
     _isSyncing = true;
@@ -316,6 +317,28 @@ class SyncEngine {
     } finally {
       _isSyncing = false;
       await refreshPendingCount();
+    }
+  }
+
+  Future<void> _syncEmergencyLogs() async {
+    try {
+      final pending = await _localDb.pendingEmergencyAccessLogs();
+      if (pending.isEmpty) return;
+
+      await _patientRepo.reportEmergencyAccess(pending);
+
+      final ids = pending
+          .map((r) => (r['id'] as num?)?.toInt())
+          .whereType<int>()
+          .toList();
+      await _localDb.markEmergencyLogsSynced(ids);
+      AppLogger.d('Logs de emergencia sincronizados: ${ids.length}');
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error sincronizando logs de acceso de emergencia',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 }
