@@ -136,6 +136,7 @@ class FakeLocalDatabase implements LocalDatabase {
     PatientFullRecord record, {
     String? ownerUserId,
     String? organizationId,
+    String? retiredDeviceReason,
   }) async {}
 
   @override

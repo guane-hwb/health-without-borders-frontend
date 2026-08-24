@@ -24,10 +24,23 @@ class PatientRepository {
   /// Returns [PatientSyncResponse] on 201.
   /// Throws [ApiException] on 401 (expired token), 403 (nurse adding
   /// medical history), 422 (validation), or 500.
-  Future<PatientSyncResponse> syncPatient(PatientFullRecord record) async {
+  Future<PatientSyncResponse> syncPatient(
+    PatientFullRecord record, {
+    String? retiredDeviceReason,
+  }) async {
+    final Map<String, dynamic> body = Map<String, dynamic>.from(
+      record.toJson(),
+    );
+    // Transport-only signal for bracelet/guardian re-labeling. Injected here
+    // rather than in PatientFullRecord.toJson() so it never gets written to an
+    // NFC tag (toJson also feeds the tag payload). The backend consumes it to
+    // record the retirement reason and drops it from the stored record.
+    if (retiredDeviceReason != null && retiredDeviceReason.isNotEmpty) {
+      body['retiredDeviceReason'] = retiredDeviceReason;
+    }
     final Map<String, dynamic> data = await _apiClient.postJson(
       path: '/api/v1/patients/sync',
-      body: record.toJson(),
+      body: body,
       headers: await _authHeaders(),
     );
     return PatientSyncResponse.fromJson(data);

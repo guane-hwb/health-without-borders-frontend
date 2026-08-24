@@ -83,8 +83,10 @@ class FakePatientRepository implements PatientRepository {
   }
 
   @override
-  Future<PatientSyncResponse> syncPatient(PatientFullRecord record) =>
-      throw UnimplementedError();
+  Future<PatientSyncResponse> syncPatient(
+    PatientFullRecord record, {
+    String? retiredDeviceReason,
+  }) => throw UnimplementedError();
 
   @override
   Future<PatientFullRecord> searchPatient({

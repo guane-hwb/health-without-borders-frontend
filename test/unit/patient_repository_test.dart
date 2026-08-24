@@ -82,6 +82,38 @@ void main() {
       verify(() => authRepository.getAccessToken()).called(1);
     });
 
+    test('injects retiredDeviceReason into the body when provided, '
+        'preserving the record fields', () async {
+      final record = const _FakePatientFullRecord(<String, dynamic>{
+        'device_uid': 'TAG-NEW',
+      });
+
+      when(
+        () => apiClient.postJson(
+          path: '/api/v1/patients/sync',
+          body: any(named: 'body'),
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer((_) async => <String, dynamic>{'status': 'synced'});
+
+      await repository.syncPatient(
+        record as PatientFullRecord,
+        retiredDeviceReason: 'lost',
+      );
+
+      final captured =
+          verify(
+                () => apiClient.postJson(
+                  path: '/api/v1/patients/sync',
+                  body: captureAny(named: 'body'),
+                  headers: any(named: 'headers'),
+                ),
+              ).captured.single
+              as Map<String, dynamic>;
+      expect(captured['retiredDeviceReason'], 'lost');
+      expect(captured['device_uid'], 'TAG-NEW');
+    });
+
     test('propagates ApiException on 401 (expired token)', () async {
       const record = _FakePatientFullRecord(<String, dynamic>{});
 
