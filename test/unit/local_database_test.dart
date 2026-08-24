@@ -423,6 +423,20 @@ void main() {
       expect(entry.retiredDeviceReason, isNull);
     });
 
+    test('savePatient preserves an existing retiredDeviceReason when a later '
+        'save omits it', () async {
+      await localDb.savePatient(
+        _buildRecord(patientId: 'p-keep'),
+        retiredDeviceReason: 'damaged',
+      );
+      // An ordinary edit (no reason) must not drop the pending reason.
+      await localDb.savePatient(_buildRecord(patientId: 'p-keep'));
+
+      final pending = await localDb.getUnsyncedRecords();
+      final entry = pending.firstWhere((e) => e.patientId == 'p-keep');
+      expect(entry.retiredDeviceReason, equals('damaged'));
+    });
+
     test('getAllRecords orders rows by createdAt descending', () async {
       await localDb.savePatient(_buildRecord(patientId: 'p-first'));
       await Future<void>.delayed(const Duration(milliseconds: 5));

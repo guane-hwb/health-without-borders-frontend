@@ -288,6 +288,355 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     setState(() => _isUpdatingChips = false);
   }
 
+  // ── Lost / damaged bracelet re-labeling ───────────────────────────────────
+
+  Future<void> _reassignDevices() async {
+    if (_isUpdatingChips || widget.readOnly) return;
+    final scope = AppScope.of(context);
+    final isEs = AppStrings.of(context).isEs;
+
+    final selection = await _showReassignDialog(isEs);
+    if (!mounted || selection == null || selection.targets.isEmpty) return;
+
+    final nfcKey = await scope.authRepository.getNfcEncryptionKey();
+    if (!mounted) return;
+    if (nfcKey == null || nfcKey.isEmpty) {
+      _showReassignSnack(
+        isEs
+            ? 'No hay clave NFC disponible para grabar.'
+            : 'No NFC key available to write.',
+        error: true,
+      );
+      return;
+    }
+    final codec = NfcPayloadCodec(hexKey: nfcKey);
+
+    setState(() => _isUpdatingChips = true);
+    var record = _draft;
+    var patientDone = false;
+    var guardianDone = false;
+
+    for (final target in selection.targets) {
+      final updated = await _reassignOne(
+        target: target,
+        record: record,
+        codec: codec,
+        isEs: isEs,
+      );
+      if (!mounted) return;
+      if (updated == null) break; // skipped or rejected — stop before saving
+      record = updated;
+      if (target == _ReassignTarget.patient) {
+        patientDone = true;
+      } else {
+        guardianDone = true;
+      }
+    }
+
+    if (!mounted) return;
+    if (!patientDone && !guardianDone) {
+      setState(() => _isUpdatingChips = false);
+      return;
+    }
+
+    try {
+      // Persist with the reason (B1 carries it on the next /sync), then flush
+      // the queue directly. We call syncAll() rather than _sync(), because
+      // _sync() re-saves the draft without a reason and would clear it.
+      await scope.localDatabase.savePatient(
+        record,
+        retiredDeviceReason: selection.reason,
+      );
+      // The new chips were just written, so they are clean.
+      await scope.localDatabase.clearChipsDirty(
+        record.patientId,
+        patient: patientDone,
+        guardian: guardianDone,
+      );
+      if (!mounted) return;
+      setState(() {
+        _draft = record;
+        _original = record;
+        _isUpdatingChips = false;
+      });
+      await _loadChipStatus(scope.localDatabase);
+      if (!mounted) return;
+      if (_hasInternet) {
+        await scope.syncEngine.syncAll();
+      }
+      if (!mounted) return;
+      _showReassignSnack(isEs ? 'Manilla reasignada.' : 'Bracelet reassigned.');
+    } catch (e, stack) {
+      AppLogger.e(
+        'Fallo al guardar la reasignación de manilla',
+        error: e,
+        stackTrace: stack,
+      );
+      if (!mounted) return;
+      setState(() => _isUpdatingChips = false);
+      _showReassignSnack(
+        isEs
+            ? 'No se pudo guardar la reasignación.'
+            : 'Could not save the reassignment.',
+        error: true,
+      );
+    }
+  }
+
+  void _showReassignSnack(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? AppColors.error : null,
+      ),
+    );
+  }
+
+  /// Reads a fresh blank tag (verifying it is unassigned) and captures its UID,
+  /// then writes the re-labeled payload to it. Returns the updated record, or
+  /// null if the user skipped or the tag was rejected.
+  Future<PatientFullRecord?> _reassignOne({
+    required _ReassignTarget target,
+    required PatientFullRecord record,
+    required NfcPayloadCodec codec,
+    required bool isEs,
+  }) async {
+    final title = _reassignTitle(target, record, isEs);
+
+    // STEP 1 — read + verify the new tag is blank, capturing its UID.
+    String? newUid;
+    HwbChipKind? kind;
+    final readOk = await showNfcGuidedWrite(
+      context,
+      title: title,
+      instruction: isEs
+          ? 'Acerque la manilla NUEVA (en blanco) para verificarla'
+          : 'Bring the NEW (blank) tag close to verify it',
+      write: () async {
+        final result = await NfcPayloadService(codec: codec).readHwbChip();
+        newUid = result.uid;
+        kind = result.kind;
+      },
+    );
+    if (!mounted) return null;
+    if (!readOk || newUid == null || newUid!.trim().isEmpty) return null;
+
+    if (kind != HwbChipKind.none) {
+      _showReassignSnack(
+        isEs
+            ? 'Esa manilla ya está en uso. Use una en blanco.'
+            : 'That tag is already in use. Use a blank one.',
+        error: true,
+      );
+      return null;
+    }
+
+    final normalizedNew = newUid!.trim();
+    if (_uidAlreadyOnRecord(record, normalizedNew)) {
+      _showReassignSnack(
+        isEs
+            ? 'Esa manilla ya pertenece a este paciente.'
+            : 'That tag already belongs to this patient.',
+        error: true,
+      );
+      return null;
+    }
+
+    // STEP 2 — write the payload to the new tag, built with the new UID so the
+    // guardian card's own backup is self-consistent.
+    final updated = _withNewUid(record, target, normalizedNew);
+    final writeOk = await showNfcGuidedWrite(
+      context,
+      title: title,
+      instruction: isEs
+          ? 'Acerque la MISMA manilla nueva para grabarla'
+          : 'Bring the SAME new tag close to write it',
+      write: () async {
+        final service = NfcPayloadService(codec: codec);
+        if (target == _ReassignTarget.patient) {
+          await service.writeTriagePayload(
+            NfcTriagePayload.buildPatientPayload(record: updated),
+            expectedUid: normalizedNew,
+          );
+        } else {
+          await service.writeGuardianRecord(
+            buildFit: guardianFitBuilder(record: updated, codec: codec),
+            expectedUid: normalizedNew,
+          );
+        }
+      },
+    );
+    if (!mounted) return null;
+    return writeOk ? updated : null;
+  }
+
+  bool _uidAlreadyOnRecord(PatientFullRecord r, String uid) {
+    final existing = <String>{
+      r.deviceUid.trim(),
+      (r.guardianInfo.deviceUid ?? '').trim(),
+      (r.guardian2Info?.deviceUid ?? '').trim(),
+    }..removeWhere((e) => e.isEmpty);
+    return existing.contains(uid);
+  }
+
+  PatientFullRecord _withNewUid(
+    PatientFullRecord r,
+    _ReassignTarget target,
+    String uid,
+  ) {
+    switch (target) {
+      case _ReassignTarget.patient:
+        return r.copyWith(deviceUid: uid);
+      case _ReassignTarget.guardian1:
+        return r.copyWith(
+          guardianInfo: r.guardianInfo.copyWith(deviceUid: uid),
+        );
+      case _ReassignTarget.guardian2:
+        final g2 = r.guardian2Info;
+        if (g2 == null) return r;
+        return r.copyWith(guardian2Info: g2.copyWith(deviceUid: uid));
+    }
+  }
+
+  String _reassignTitle(
+    _ReassignTarget target,
+    PatientFullRecord record,
+    bool isEs,
+  ) {
+    final hasTwo = (record.guardian2Info?.deviceUid ?? '').trim().isNotEmpty;
+    switch (target) {
+      case _ReassignTarget.patient:
+        return isEs ? 'Manilla del paciente' : 'Patient bracelet';
+      case _ReassignTarget.guardian1:
+        return hasTwo
+            ? (isEs ? 'Tarjeta del guardián 1' : 'Guardian card 1')
+            : (isEs ? 'Tarjeta del guardián' : 'Guardian card');
+      case _ReassignTarget.guardian2:
+        return isEs ? 'Tarjeta del guardián 2' : 'Guardian card 2';
+    }
+  }
+
+  Future<_ReassignSelection?> _showReassignDialog(bool isEs) {
+    final hasG1 = (_draft.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
+    final hasG2 = (_draft.guardian2Info?.deviceUid ?? '').trim().isNotEmpty;
+    final selected = <_ReassignTarget>{_ReassignTarget.patient};
+    String reason = 'lost';
+
+    return showDialog<_ReassignSelection>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            Widget deviceCheck(_ReassignTarget t, String label) {
+              return CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(label),
+                value: selected.contains(t),
+                onChanged: (v) => setLocal(() {
+                  if (v ?? false) {
+                    selected.add(t);
+                  } else {
+                    selected.remove(t);
+                  }
+                }),
+              );
+            }
+
+            Widget reasonSegments() {
+              return SegmentedButton<String>(
+                segments: [
+                  ButtonSegment<String>(
+                    value: 'lost',
+                    label: Text(isEs ? 'Perdida' : 'Lost'),
+                  ),
+                  ButtonSegment<String>(
+                    value: 'damaged',
+                    label: Text(isEs ? 'Dañada' : 'Damaged'),
+                  ),
+                ],
+                selected: <String>{reason},
+                onSelectionChanged: (Set<String> s) =>
+                    setLocal(() => reason = s.first),
+              );
+            }
+
+            return AlertDialog(
+              title: Text(isEs ? 'Reasignar manilla' : 'Reassign bracelet'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isEs
+                          ? '¿Qué dispositivo se va a reemplazar?'
+                          : 'Which device is being replaced?',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    deviceCheck(
+                      _ReassignTarget.patient,
+                      isEs ? 'Manilla del paciente' : 'Patient bracelet',
+                    ),
+                    if (hasG1)
+                      deviceCheck(
+                        _ReassignTarget.guardian1,
+                        hasG2
+                            ? (isEs
+                                  ? 'Tarjeta del guardián 1'
+                                  : 'Guardian card 1')
+                            : (isEs
+                                  ? 'Tarjeta del guardián'
+                                  : 'Guardian card'),
+                      ),
+                    if (hasG2)
+                      deviceCheck(
+                        _ReassignTarget.guardian2,
+                        isEs ? 'Tarjeta del guardián 2' : 'Guardian card 2',
+                      ),
+                    const SizedBox(height: 12),
+                    Text(
+                      isEs ? 'Motivo' : 'Reason',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    reasonSegments(),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: Text(AppStrings.of(ctx).cancel),
+                ),
+                ElevatedButton(
+                  onPressed: selected.isEmpty
+                      ? null
+                      : () {
+                          final ordered = <_ReassignTarget>[
+                            _ReassignTarget.patient,
+                            _ReassignTarget.guardian1,
+                            _ReassignTarget.guardian2,
+                          ].where(selected.contains).toList();
+                          Navigator.of(dialogCtx).pop(
+                            _ReassignSelection(
+                              targets: ordered,
+                              reason: reason,
+                            ),
+                          );
+                        },
+                  child: Text(isEs ? 'Continuar' : 'Continue'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showPartialCardNotice(
     ScaffoldMessengerState messenger,
     GuardianPayloadFit fit,
@@ -826,6 +1175,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                   lastSyncedAt: widget.lastSyncedAt,
                   onBack: () => _confirmExit(),
                   onSync: widget.readOnly ? null : () => _sync(silent: false),
+                  onReassignDevice: widget.readOnly ? null : _reassignDevices,
                 ),
                 ProfileTabsBar(controller: _tabController, draft: _draft),
                 if (widget.emergency) const EmergencyBanner(),
@@ -915,4 +1265,17 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     }
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
+}
+
+/// Which NFC device is being re-labeled in the reassign flow.
+enum _ReassignTarget { patient, guardian1, guardian2 }
+
+/// Result of the reassign selection dialog: which devices to replace and why.
+class _ReassignSelection {
+  const _ReassignSelection({required this.targets, required this.reason});
+
+  final List<_ReassignTarget> targets;
+
+  /// Retirement reason for this session — `'lost'` or `'damaged'`.
+  final String reason;
 }

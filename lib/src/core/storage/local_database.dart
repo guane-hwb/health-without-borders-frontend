@@ -533,7 +533,8 @@ class LocalDatabase {
         'revision': revision,
         'owner_user_id': ownerUserId ?? previous?['owner_user_id'],
         'organization_id': organizationId ?? previous?['organization_id'],
-        'pending_retired_reason': retiredDeviceReason,
+        'pending_retired_reason':
+            retiredDeviceReason ?? previous?['pending_retired_reason'],
       };
       _saveWebStore(store);
       return;
@@ -543,13 +544,20 @@ class LocalDatabase {
 
     final existing = await db!.query(
       _table,
-      columns: ['created_at', 'revision', 'owner_user_id', 'organization_id'],
+      columns: [
+        'created_at',
+        'revision',
+        'owner_user_id',
+        'organization_id',
+        'pending_retired_reason',
+      ],
       where: 'patient_id = ?',
       whereArgs: [record.patientId],
       limit: 1,
     );
     String? prevOwner = ownerUserId;
     String? prevOrg = organizationId;
+    String? reason = retiredDeviceReason;
 
     if (existing.isNotEmpty) {
       final prevCreatedAt = existing.first['created_at'] as String?;
@@ -557,6 +565,10 @@ class LocalDatabase {
       revision = ((existing.first['revision'] as int?) ?? 0) + 1;
       prevOwner ??= existing.first['owner_user_id'] as String?;
       prevOrg ??= existing.first['organization_id'] as String?;
+      // Keep a pending re-labeling reason set by an earlier save until the
+      // record actually syncs (which deletes the row), so an ordinary edit in
+      // between does not silently drop it.
+      reason ??= existing.first['pending_retired_reason'] as String?;
     }
 
     final row = <String, dynamic>{
@@ -572,7 +584,7 @@ class LocalDatabase {
       'revision': revision,
       'owner_user_id': prevOwner,
       'organization_id': prevOrg,
-      'pending_retired_reason': retiredDeviceReason,
+      'pending_retired_reason': reason,
     };
 
     await db.insert(_table, row, conflictAlgorithm: ConflictAlgorithm.replace);
