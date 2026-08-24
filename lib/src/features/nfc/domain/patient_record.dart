@@ -1394,10 +1394,12 @@ class MedicationRequestItem {
     required this.medicationName,
     this.dciCode,
     this.iumCode,
+    this.dosage,
     this.quantity,
     this.frequency,
     this.duration,
     this.route,
+    this.status = 'active',
     this.intent = 'order',
     this.notes,
   });
@@ -1407,10 +1409,12 @@ class MedicationRequestItem {
       medicationName: json['medicationName']?.toString() ?? '',
       dciCode: json['dciCode']?.toString(),
       iumCode: json['iumCode']?.toString(),
+      dosage: json['dosage']?.toString(),
       quantity: json['quantity']?.toString(),
       frequency: json['frequency']?.toString(),
       duration: json['duration']?.toString(),
       route: json['route']?.toString(),
+      status: json['status']?.toString() ?? 'active',
       intent: json['intent']?.toString() ?? 'order',
       notes: json['notes']?.toString(),
     );
@@ -1419,10 +1423,12 @@ class MedicationRequestItem {
   final String medicationName;
   final String? dciCode;
   final String? iumCode;
+  final String? dosage;
   final String? quantity;
   final String? frequency;
   final String? duration;
   final String? route;
+  final String status;
   final String intent;
   final String? notes;
 
@@ -1430,10 +1436,12 @@ class MedicationRequestItem {
     'medicationName': medicationName,
     if (dciCode != null) 'dciCode': dciCode,
     if (iumCode != null) 'iumCode': iumCode,
+    if (dosage != null) 'dosage': dosage,
     if (quantity != null) 'quantity': quantity,
     if (frequency != null) 'frequency': frequency,
     if (duration != null) 'duration': duration,
     if (route != null) 'route': route,
+    'status': status,
     'intent': intent,
     if (notes != null) 'notes': notes,
   };
@@ -1446,10 +1454,12 @@ class MedicationRequestItem {
           medicationName == other.medicationName &&
           dciCode == other.dciCode &&
           iumCode == other.iumCode &&
+          dosage == other.dosage &&
           quantity == other.quantity &&
           frequency == other.frequency &&
           duration == other.duration &&
           route == other.route &&
+          status == other.status &&
           intent == other.intent &&
           notes == other.notes;
 
@@ -1458,10 +1468,12 @@ class MedicationRequestItem {
     medicationName,
     dciCode,
     iumCode,
+    dosage,
     quantity,
     frequency,
     duration,
     route,
+    status,
     intent,
     notes,
   );

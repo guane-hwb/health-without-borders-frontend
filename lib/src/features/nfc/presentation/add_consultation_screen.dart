@@ -68,11 +68,22 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   // ── Discharge disposition (Elem. 41) ─────────────────────────────────────
   String? _dischargeDisposition;
 
+  // ── Prescriptions (MedicationRequestRDA) ─────────────────────────────────
+  final List<_PrescriptionDraft> _prescriptions = <_PrescriptionDraft>[];
+
   @override
   void initState() {
     super.initState();
     _patient = widget.patient;
     _historyCtrl.addListener(_onHistoryChanged);
+  }
+
+  void _addPrescription() {
+    setState(() => _prescriptions.add(_PrescriptionDraft()));
+  }
+
+  void _removePrescription(int index) {
+    setState(() => _prescriptions.removeAt(index).dispose());
   }
 
   @override
@@ -99,6 +110,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     _physicalExamCtrl.dispose();
     _systemsCtrl.dispose();
     _treatmentCtrl.dispose();
+    for (final p in _prescriptions) {
+      p.dispose();
+    }
     super.dispose();
   }
 
@@ -208,6 +222,8 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
         ? PayerInfo(name: payerName)
         : null;
 
+    final treatmentText = _treatmentCtrl.text.trim();
+
     final newConsultation = MedicalHistoryItem(
       encounterIdentifier: const Uuid().v4(),
       type: 'Consultation',
@@ -229,8 +245,8 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
         systemsExamination: _systemsCtrl.text.trim().isNotEmpty
             ? _systemsCtrl.text.trim()
             : null,
-        treatmentPlanObservations: _treatmentCtrl.text.trim().isNotEmpty
-            ? _treatmentCtrl.text.trim()
+        treatmentPlanObservations: treatmentText.isNotEmpty
+            ? treatmentText
             : null,
       ),
       diagnosis: <DiagnosisItem>[],
@@ -239,6 +255,31 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           ? null
           : _dischargeDisposition,
       riskFactors: <RiskFactor>[],
+      prescriptions: _prescriptions
+          .where((p) => p.nameCtrl.text.trim().isNotEmpty)
+          .map(
+            (p) => MedicationRequestItem(
+              medicationName: p.nameCtrl.text.trim(),
+              dosage: p.dosageCtrl.text.trim().isNotEmpty
+                  ? p.dosageCtrl.text.trim()
+                  : null,
+              frequency: p.frequencyCtrl.text.trim().isNotEmpty
+                  ? p.frequencyCtrl.text.trim()
+                  : null,
+              duration: p.durationCtrl.text.trim().isNotEmpty
+                  ? p.durationCtrl.text.trim()
+                  : null,
+              route: p.routeCtrl.text.trim().isNotEmpty
+                  ? p.routeCtrl.text.trim()
+                  : null,
+              notes: p.notesCtrl.text.trim().isNotEmpty
+                  ? p.notesCtrl.text.trim()
+                  : null,
+              status: 'active',
+              intent: 'order',
+            ),
+          )
+          .toList(),
     );
 
     final updatedRecord = PatientFullRecord(
@@ -674,6 +715,86 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                     : 'Acetaminophen 15mg/kg every 6h. Return in 72h...',
                 maxLines: 3,
                 onChanged: (_) {},
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          _SectionCard(
+            icon: Icons.medication_outlined,
+            title: isEs ? 'Prescripciones' : 'Prescriptions',
+            children: [
+              if (_patient?.allergies.any((a) => a.category == '01') ==
+                  true) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.error.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.warning,
+                        size: 16,
+                        color: AppColors.error,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          isEs
+                              ? 'Paciente con alergias registradas. Verifique antes de prescribir.'
+                              : 'Patient has recorded allergies. Check before prescribing.',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              if (_prescriptions.isEmpty)
+                Text(
+                  isEs
+                      ? 'Sin medicamentos prescritos en esta consulta.'
+                      : 'No medications prescribed in this encounter.',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              for (int i = 0; i < _prescriptions.length; i++) ...[
+                if (i > 0) const SizedBox(height: 14),
+                _PrescriptionCard(
+                  index: i,
+                  draft: _prescriptions[i],
+                  isEs: isEs,
+                  onRemove: () => _removePrescription(i),
+                  onChanged: () => setState(() {}),
+                ),
+              ],
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _addPrescription,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(isEs ? 'Agregar medicamento' : 'Add medication'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -1270,6 +1391,182 @@ class _StatusRow extends StatelessWidget {
           style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
         ),
       ],
+    );
+  }
+}
+
+/// One editable prescription row (MedicationRequestRDA). Holds its own
+/// controllers so the list can grow/shrink without losing what the
+/// clinician already typed in other rows.
+class _PrescriptionDraft {
+  final nameCtrl = TextEditingController();
+  final dosageCtrl = TextEditingController();
+  final frequencyCtrl = TextEditingController();
+  final durationCtrl = TextEditingController();
+  final routeCtrl = TextEditingController();
+  final notesCtrl = TextEditingController();
+
+  void dispose() {
+    nameCtrl.dispose();
+    dosageCtrl.dispose();
+    frequencyCtrl.dispose();
+    durationCtrl.dispose();
+    routeCtrl.dispose();
+    notesCtrl.dispose();
+  }
+}
+
+class _PrescriptionCard extends StatelessWidget {
+  const _PrescriptionCard({
+    required this.index,
+    required this.draft,
+    required this.isEs,
+    required this.onRemove,
+    required this.onChanged,
+  });
+
+  final int index;
+  final _PrescriptionDraft draft;
+  final bool isEs;
+  final VoidCallback onRemove;
+  final VoidCallback onChanged;
+
+  Widget _field(
+    String label,
+    TextEditingController ctrl, {
+    String? hint,
+    bool required = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          required ? '$label *' : label,
+          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 3),
+        TextField(
+          controller: ctrl,
+          onChanged: (_) => onChanged(),
+          style: const TextStyle(fontSize: 13),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: hint,
+            hintStyle: const TextStyle(fontSize: 12, color: AppColors.disabled),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 9,
+            ),
+            filled: true,
+            fillColor: AppColors.white,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(
+                color: Color(0xFFB0B8C4),
+                width: 1.2,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AppColors.primary, width: 2),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F7FA),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E6EC)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  isEs ? 'Medicamento ${index + 1}' : 'Medication ${index + 1}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.secondary,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: onRemove,
+                icon: const Icon(
+                  Icons.delete_outline,
+                  size: 18,
+                  color: AppColors.error,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _field(
+            isEs ? 'Nombre del medicamento' : 'Medication name',
+            draft.nameCtrl,
+            hint: isEs ? 'Amoxicilina 250mg/5ml' : 'Amoxicillin 250mg/5ml',
+            required: true,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _field(
+                  isEs ? 'Dosis' : 'Dosage',
+                  draft.dosageCtrl,
+                  hint: isEs ? '5 ml cada 8h' : '5 ml every 8h',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _field(
+                  isEs ? 'Duración' : 'Duration',
+                  draft.durationCtrl,
+                  hint: isEs ? '7 días' : '7 days',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _field(
+                  isEs ? 'Frecuencia' : 'Frequency',
+                  draft.frequencyCtrl,
+                  hint: isEs ? 'Cada 8 horas' : 'Every 8 hours',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _field(
+                  isEs ? 'Vía' : 'Route',
+                  draft.routeCtrl,
+                  hint: isEs ? 'Oral' : 'Oral',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _field(
+            isEs ? 'Notas' : 'Notes',
+            draft.notesCtrl,
+            hint: isEs ? 'Opcional' : 'Optional',
+          ),
+        ],
+      ),
     );
   }
 }

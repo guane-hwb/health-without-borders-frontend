@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
@@ -46,12 +47,14 @@ void main() {
   final Map<String, String> inMemoryStorage = {};
 
   setUpAll(() async {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
+    if (!kIsWeb) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
 
-    final dbPath = p.join(await getDatabasesPath(), 'hwb_patients.db');
-    if (await databaseExists(dbPath)) {
-      await deleteDatabase(dbPath);
+      final dbPath = p.join(await getDatabasesPath(), 'hwb_patients.db');
+      if (await databaseExists(dbPath)) {
+        await deleteDatabase(dbPath);
+      }
     }
   });
 
