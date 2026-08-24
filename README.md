@@ -3,6 +3,8 @@
 ![Flutter](https://img.shields.io/badge/Flutter-3.41.5-blue.svg)
 ![Dart](https://img.shields.io/badge/Dart-3.8.0-0175C2.svg)
 ![License](https://img.shields.io/badge/license-MIT-green)
+[![CI](https://github.com/guane-hwb/health-without-borders-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/guane-hwb/health-without-borders-frontend/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/guane-hwb/health-without-borders-frontend/graph/badge.svg)](https://codecov.io/gh/guane-hwb/health-without-borders-frontend)
 
 Cross-platform mobile and web client for the Health Without Borders initiative.
 
@@ -73,3 +75,13 @@ Implementation guidance lives in `docs/development/figma-to-flutter.md`.
 ## License
 
 This project is licensed under the MIT License.
+
+## Community
+
+Questions, ideas, or feedback? Join the conversation in our public [GitHub Discussions](https://github.com/guane-hwb/health-without-borders-frontend/discussions).
+
+* **Announcements** — project news and releases
+* **Q&A** — ask the development team
+* **Ideas** — propose features and improvements
+
+Please review our [Code of Conduct](CODE_OF_CONDUCT.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before participating.
