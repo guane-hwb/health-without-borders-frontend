@@ -37,6 +37,8 @@ class AuthRepository implements TokenProvider {
   static const String nfcKeyKey = _nfcKeyKey;
   @visibleForTesting
   static const String sessionKey = _sessionKey;
+  @visibleForTesting
+  static const String lastUserIdKey = _lastUserIdKey;
 
   static const String _tokenKey = 'hwb_access_token';
   static const String _refreshKey = 'hwb_refresh_token';
@@ -122,12 +124,18 @@ class AuthRepository implements TokenProvider {
     if (lastUserId != null &&
         lastUserId.isNotEmpty &&
         lastUserId != _session!.id) {
-      if (await _localDb.getUnsyncedCount(ownerUserId: lastUserId) == 0) {
+      final int pendingPatients = await _localDb.getUnsyncedCount();
+      final int pendingEmergencyLogs = await _localDb
+          .getUnsyncedEmergencyLogCount();
+      if (pendingPatients == 0 && pendingEmergencyLogs == 0) {
         await _localDb.clearAll();
         await _localDb.destroyEncryptionKey();
       } else {
         AppLogger.e(
-          'Cambio de usuario detectado. Quedan registros pendientes del usuario $lastUserId.',
+          'Cambio de usuario detectado (de $lastUserId a ${_session!.id}). '
+          'Quedan $pendingPatients registro(s) y $pendingEmergencyLogs '
+          'acceso(s) de emergencia pendiente(s) en el dispositivo: '
+          'se conservan sin borrar.',
         );
       }
     }
@@ -272,6 +280,7 @@ class AuthRepository implements TokenProvider {
     _cachedRefreshToken = null;
     _cachedNfcKey = null;
     _updateSession(null);
+
     try {
       await _secureStorage.delete(key: _tokenKey);
     } catch (_) {}
@@ -284,13 +293,26 @@ class AuthRepository implements TokenProvider {
     try {
       await _secureStorage.delete(key: _sessionKey);
     } catch (_) {}
+
+    try {
+      final int pendingPatients = await _localDb.getUnsyncedCount();
+      final int pendingEmergencyLogs = await _localDb
+          .getUnsyncedEmergencyLogCount();
+      if (pendingPatients == 0 && pendingEmergencyLogs == 0) {
+        await _localDb.destroyEncryptionKey();
+      }
+    } catch (_) {}
   }
 
   Future<bool> wipeLocalPhi({bool force = false}) async {
     try {
-      if (!force &&
-          await _localDb.getUnsyncedCount(ownerUserId: _session?.id) > 0) {
-        return false;
+      if (!force) {
+        final int pendingPatients = await _localDb.getUnsyncedCount();
+        final int pendingEmergencyLogs = await _localDb
+            .getUnsyncedEmergencyLogCount();
+        if (pendingPatients > 0 || pendingEmergencyLogs > 0) {
+          return false;
+        }
       }
       await _localDb.clearAll();
       await _localDb.destroyEncryptionKey();
