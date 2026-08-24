@@ -738,6 +738,61 @@ void main() {
 
       expect(await localDb.getChipStatus('p-p'), isNull);
     });
+
+    test(
+      'purgeStalePermanentErrors borra sólo los errores permanentes anteriores al umbral',
+      () async {
+        final db = await rawConnection();
+        final vieja = DateTime.now()
+            .subtract(const Duration(days: 40))
+            .toIso8601String();
+        final reciente = DateTime.now()
+            .subtract(const Duration(days: 29))
+            .toIso8601String();
+
+        Future<void> seed(String id, String createdAt, int code) async {
+          await localDb.savePatient(_buildRecord(patientId: id));
+          await db.update(
+            'local_patients',
+            {'created_at': createdAt, 'sync_error_code': code},
+            where: 'patient_id = ?',
+            whereArgs: [id],
+          );
+        }
+
+        await seed('p-409-vieja', vieja, 409);
+        await seed('p-422-vieja', vieja, 422);
+        await seed('p-409-reciente', reciente, 409);
+        await seed('p-500-vieja', vieja, 500);
+
+        await localDb.purgeStalePermanentErrors();
+
+        final ids = (await localDb.getAllRecords())
+            .map((e) => e.patientId)
+            .toSet();
+        expect(ids, {'p-409-reciente', 'p-500-vieja'});
+      },
+    );
+
+    test('purgeStalePermanentErrors respeta un maxAge explícito', () async {
+      final db = await rawConnection();
+      await localDb.savePatient(_buildRecord(patientId: 'p-409-10d'));
+      await db.update(
+        'local_patients',
+        {
+          'created_at': DateTime.now()
+              .subtract(const Duration(days: 10))
+              .toIso8601String(),
+          'sync_error_code': 409,
+        },
+        where: 'patient_id = ?',
+        whereArgs: ['p-409-10d'],
+      );
+
+      await localDb.purgeStalePermanentErrors(maxAge: const Duration(days: 5));
+
+      expect(await localDb.getAllRecords(), isEmpty);
+    });
   });
 
   // ── LocalDatabase — (localStorage/sessionStorage Web path) ────────────────
