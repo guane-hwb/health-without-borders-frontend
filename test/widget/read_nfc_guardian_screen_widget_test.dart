@@ -41,7 +41,10 @@ class _FakePatientRepository implements PatientRepository {
   Exception? throwOnSync;
 
   @override
-  Future<PatientSyncResponse> syncPatient(PatientFullRecord record) async {
+  Future<PatientSyncResponse> syncPatient(
+    PatientFullRecord record, {
+    String? retiredDeviceReason,
+  }) async {
     syncCalled = true;
     if (throwOnSync != null) throw throwOnSync!;
     return PatientSyncResponse.fromJson(<String, dynamic>{

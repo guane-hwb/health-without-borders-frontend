@@ -53,7 +53,7 @@ class LocalDatabase {
       FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: true));
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 6;
+  static const int _dbVersion = 7;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
@@ -325,7 +325,8 @@ class LocalDatabase {
             synced_at     TEXT,
             revision      INTEGER NOT NULL DEFAULT 0,
             owner_user_id TEXT,
-            organization_id TEXT
+            organization_id TEXT,
+            pending_retired_reason TEXT
           )
         ''');
         await db.execute('CREATE INDEX idx_synced ON $_table (is_synced)');
@@ -356,6 +357,14 @@ class LocalDatabase {
           await _addColumnIfMissing(db, _table, 'organization_id', 'TEXT');
           await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_owner ON $_table (owner_user_id)',
+          );
+        }
+        if (oldVersion < 7) {
+          await _addColumnIfMissing(
+            db,
+            _table,
+            'pending_retired_reason',
+            'TEXT',
           );
         }
       },
@@ -502,6 +511,7 @@ class LocalDatabase {
     PatientFullRecord record, {
     String? ownerUserId,
     String? organizationId,
+    String? retiredDeviceReason,
   }) async {
     final rawJson = jsonEncode(record.toJson());
     final encryptedJson = await _encryptPayload(rawJson);
@@ -531,6 +541,8 @@ class LocalDatabase {
         'revision': revision,
         'owner_user_id': ownerUserId ?? previous?['owner_user_id'],
         'organization_id': organizationId ?? previous?['organization_id'],
+        'pending_retired_reason':
+            retiredDeviceReason ?? previous?['pending_retired_reason'],
       };
       _saveWebStore(store);
       return;
@@ -540,13 +552,20 @@ class LocalDatabase {
 
     final existing = await db!.query(
       _table,
-      columns: ['created_at', 'revision', 'owner_user_id', 'organization_id'],
+      columns: [
+        'created_at',
+        'revision',
+        'owner_user_id',
+        'organization_id',
+        'pending_retired_reason',
+      ],
       where: 'patient_id = ?',
       whereArgs: [record.patientId],
       limit: 1,
     );
     String? prevOwner = ownerUserId;
     String? prevOrg = organizationId;
+    String? reason = retiredDeviceReason;
 
     if (existing.isNotEmpty) {
       final prevCreatedAt = existing.first['created_at'] as String?;
@@ -554,6 +573,10 @@ class LocalDatabase {
       revision = ((existing.first['revision'] as int?) ?? 0) + 1;
       prevOwner ??= existing.first['owner_user_id'] as String?;
       prevOrg ??= existing.first['organization_id'] as String?;
+      // Keep a pending re-labeling reason set by an earlier save until the
+      // record actually syncs (which deletes the row), so an ordinary edit in
+      // between does not silently drop it.
+      reason ??= existing.first['pending_retired_reason'] as String?;
     }
 
     final row = <String, dynamic>{
@@ -569,6 +592,7 @@ class LocalDatabase {
       'revision': revision,
       'owner_user_id': prevOwner,
       'organization_id': prevOrg,
+      'pending_retired_reason': reason,
     };
 
     await db.insert(_table, row, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -994,6 +1018,7 @@ class LocalPatientEntry {
     this.revision = 0,
     this.ownerUserId,
     this.organizationId,
+    this.retiredDeviceReason,
   });
 
   factory LocalPatientEntry.fromRow(Map<String, dynamic> row) {
@@ -1010,6 +1035,7 @@ class LocalPatientEntry {
       revision: (row['revision'] as int?) ?? 0,
       ownerUserId: row['owner_user_id'] as String?,
       organizationId: row['organization_id'] as String?,
+      retiredDeviceReason: row['pending_retired_reason'] as String?,
     );
   }
 
@@ -1025,6 +1051,13 @@ class LocalPatientEntry {
   final int revision;
   final String? ownerUserId;
   final String? organizationId;
+
+  /// Transport-only reason (`lost` | `damaged`) for a bracelet/guardian-card
+  /// re-labeling recorded on this pending record. Sent as `retiredDeviceReason`
+  /// on the next `/sync` (outside the record JSON, so it is never written to a
+  /// tag) and discarded with the row once the record syncs. Null for ordinary
+  /// records.
+  final String? retiredDeviceReason;
 
   PatientFullRecord? toPatientRecord() {
     if (recordJson.isEmpty || recordJson == '{}') return null;

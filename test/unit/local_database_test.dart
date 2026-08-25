@@ -439,6 +439,41 @@ void main() {
       },
     );
 
+    test('savePatient stores retiredDeviceReason and exposes it via '
+        'getUnsyncedRecords', () async {
+      await localDb.savePatient(
+        _buildRecord(patientId: 'p-reason'),
+        retiredDeviceReason: 'lost',
+      );
+
+      final pending = await localDb.getUnsyncedRecords();
+      final entry = pending.firstWhere((e) => e.patientId == 'p-reason');
+      expect(entry.retiredDeviceReason, equals('lost'));
+    });
+
+    test('savePatient leaves retiredDeviceReason null for ordinary records',
+        () async {
+      await localDb.savePatient(_buildRecord(patientId: 'p-plain'));
+
+      final pending = await localDb.getUnsyncedRecords();
+      final entry = pending.firstWhere((e) => e.patientId == 'p-plain');
+      expect(entry.retiredDeviceReason, isNull);
+    });
+
+    test('savePatient preserves an existing retiredDeviceReason when a later '
+        'save omits it', () async {
+      await localDb.savePatient(
+        _buildRecord(patientId: 'p-keep'),
+        retiredDeviceReason: 'damaged',
+      );
+      // An ordinary edit (no reason) must not drop the pending reason.
+      await localDb.savePatient(_buildRecord(patientId: 'p-keep'));
+
+      final pending = await localDb.getUnsyncedRecords();
+      final entry = pending.firstWhere((e) => e.patientId == 'p-keep');
+      expect(entry.retiredDeviceReason, equals('damaged'));
+    });
+
     test('getAllRecords orders rows by createdAt descending', () async {
       await localDb.savePatient(_buildRecord(patientId: 'p-first'));
       await Future<void>.delayed(const Duration(milliseconds: 5));

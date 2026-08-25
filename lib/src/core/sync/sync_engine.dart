@@ -210,9 +210,16 @@ class SyncEngine {
     }
 
     try {
-      final PatientSyncResponse response = await _patientRepo.syncPatient(
-        record,
-      );
+      // Pass the re-labeling reason only when present, so ordinary syncs keep
+      // calling syncPatient(record) unchanged.
+      final PatientSyncResponse response =
+          (entry.retiredDeviceReason != null &&
+              entry.retiredDeviceReason!.isNotEmpty)
+          ? await _patientRepo.syncPatient(
+              record,
+              retiredDeviceReason: entry.retiredDeviceReason,
+            )
+          : await _patientRepo.syncPatient(record);
 
       final bool fhirOk =
           response.fhirStatus == null ||
