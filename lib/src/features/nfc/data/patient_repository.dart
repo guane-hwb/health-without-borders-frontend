@@ -98,4 +98,15 @@ class PatientRepository {
     );
     return PatientFullRecord.fromJson(data);
   }
+
+  // ── POST /api/v1/patients/emergency-access ──────────────────────────────
+  /// Envía la bitácora de accesos break-glass registrados offline.
+  Future<void> reportEmergencyAccess(List<Map<String, Object?>> entries) async {
+    if (entries.isEmpty) return;
+    await _apiClient.postJson(
+      path: '/api/v1/patients/emergency-access',
+      body: <String, dynamic>{'entries': entries},
+      headers: await _authHeaders(),
+    );
+  }
 }

@@ -428,10 +428,11 @@ class LocalDatabase {
       final db = await _database;
       if (db == null) {
         final logs = _webEmergencyLog;
-        logs.add(<String, Object?>{
-          ...row,
-          'id': DateTime.now().microsecondsSinceEpoch,
-        });
+        final nextId = logs.isEmpty
+            ? 1
+            : ((logs.map((e) => (e['id'] as num?)?.toInt() ?? 0).reduce(max)) +
+                  1);
+        logs.add(<String, Object?>{...row, 'id': nextId});
         _saveWebEmergencyLog(logs);
         return;
       }
@@ -451,7 +452,10 @@ class LocalDatabase {
       final db = await _database;
       final rows = db == null
           ? _webEmergencyLog
-                .where((Map<String, Object?> r) => r['is_synced'] == 0)
+                .where(
+                  (Map<String, Object?> r) =>
+                      (r['is_synced'] as num?)?.toInt() == 0,
+                )
                 .toList()
           : await db.query(_emergencyLogTable, where: 'is_synced = 0');
 
@@ -481,8 +485,12 @@ class LocalDatabase {
     if (ids.isEmpty) return;
     if (_isWeb) {
       final logs = _webEmergencyLog;
+      final idSet = ids.toSet();
       for (final row in logs) {
-        if (ids.contains(row['id'])) row['is_synced'] = 1;
+        final rowId = (row['id'] as num?)?.toInt();
+        if (rowId != null && idSet.contains(rowId)) {
+          row['is_synced'] = 1;
+        }
       }
       _saveWebEmergencyLog(logs);
       return;
@@ -699,6 +707,19 @@ class LocalDatabase {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  Future<int> getUnsyncedEmergencyLogCount() async {
+    if (_isWeb) {
+      return _webEmergencyLog
+          .where((r) => ((r['is_synced'] as num?)?.toInt() ?? 0) == 0)
+          .length;
+    }
+    final db = await _database;
+    final result = await db!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $_emergencyLogTable WHERE is_synced = 0',
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
   Future<int> getRetryablePendingCount({String? ownerUserId}) async {
     if (_isWeb) {
       return _webStore.values.where((r) {
@@ -756,16 +777,20 @@ class LocalDatabase {
   Future<void> purgeStalePermanentErrors({
     Duration maxAge = const Duration(days: 30),
   }) async {
-    final threshold = DateTime.now().subtract(maxAge).toIso8601String();
+    final thresholdDateTime = DateTime.now().subtract(maxAge);
+    final threshold = thresholdDateTime.toIso8601String();
     if (_isWeb) {
       final store = _webStore;
       store.removeWhere((id, row) {
-        final code = row['sync_error_code'] as int?;
-        final createdAt = row['created_at'] as String?;
+        final code = (row['sync_error_code'] as num?)?.toInt();
+        final createdAtStr = row['created_at'] as String?;
         final isPermanent = code == 400 || code == 409 || code == 422;
-        return isPermanent &&
-            createdAt != null &&
-            createdAt.compareTo(threshold) < 0;
+        if (!isPermanent || createdAtStr == null) return false;
+
+        final createdAt = DateTime.tryParse(createdAtStr);
+        if (createdAt == null) return false;
+
+        return !createdAt.isAfter(thresholdDateTime);
       });
       _saveWebStore(store);
       return;
@@ -773,7 +798,7 @@ class LocalDatabase {
     final db = await _database;
     await db!.delete(
       _table,
-      where: 'sync_error_code IN (400, 409, 422) AND created_at < ?',
+      where: 'sync_error_code IN (400, 409, 422) AND created_at <= ?',
       whereArgs: [threshold],
     );
   }
@@ -959,11 +984,21 @@ class LocalDatabase {
     if (_isWeb) {
       _webRemove(_webStoreKey);
       _webRemove(_webChipKey);
+      final remainingLogs = _webEmergencyLog
+          .where(
+            (row) =>
+                row['is_synced'] == 0 ||
+                row['is_synced'] == '0' ||
+                (row['is_synced'] as num?)?.toInt() == 0,
+          )
+          .toList();
+      _saveWebEmergencyLog(remainingLogs);
       return;
     }
     final db = await _database;
     await db!.delete(_table);
     await db.delete(_chipStatusTable);
+    await db.delete(_emergencyLogTable, where: 'is_synced = 1');
   }
 }
 

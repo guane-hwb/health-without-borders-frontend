@@ -98,6 +98,9 @@ class FakeLocalDatabase implements LocalDatabase {
       <Map<String, Object?>>[];
 
   @override
+  Future<int> getUnsyncedEmergencyLogCount() async => 0;
+
+  @override
   Future<void> clearAll() async {}
 
   @override
