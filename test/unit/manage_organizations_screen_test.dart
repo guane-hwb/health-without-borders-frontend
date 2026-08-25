@@ -1,32 +1,8 @@
 // test/unit/manage_organizations_screen_test.dart
 
 import 'package:flutter_test/flutter_test.dart';
-
-class OrgSummary {
-  const OrgSummary({
-    required this.id,
-    required this.name,
-    required this.isActive,
-  });
-  final String id;
-  final String name;
-  final bool isActive;
-}
-
-const int _bgColorsLength = 5;
-int colorIndexFor(String name) => name.codeUnitAt(0) % _bgColorsLength;
-
-String initialsFor(String name) {
-  final words = name.trim().split(RegExp(r'\s+'));
-  if (words.length >= 2) {
-    return '${words[0][0]}${words[1][0]}'.toUpperCase();
-  }
-  return name.substring(0, name.length.clamp(0, 2)).toUpperCase();
-}
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+import 'package:health_without_borders_frontend/src/features/admin/presentation/manage_organizations_helpers.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 
 void main() {
   // ── OrgSummary ─────────────────────────────────────────────────────────
@@ -47,48 +23,47 @@ void main() {
 
   // ── (_OrgCard._initials) ────────────────────────────────────
 
-  group('initialsFor', () {
+  group('orgInitials', () {
     test('dos palabras → primera letra de cada una en mayúscula', () {
-      expect(initialsFor('Cruz Roja'), 'CR');
+      expect(orgInitials('Cruz Roja'), 'CR');
     });
 
     test('tres palabras → solo las dos primeras letras', () {
-      expect(initialsFor('Cruz Roja Norte'), 'CR');
+      expect(orgInitials('Cruz Roja Norte'), 'CR');
     });
 
     test('una sola palabra → hasta 2 chars en mayúscula', () {
-      expect(initialsFor('Omega'), 'OM');
+      expect(orgInitials('Omega'), 'OM');
     });
 
     test('una sola letra → devuelve esa letra', () {
-      expect(initialsFor('A'), 'A');
+      expect(orgInitials('A'), 'A');
     });
 
     test('una palabra de 2 chars → devuelve ambas en mayúscula', () {
-      expect(initialsFor('ab'), 'AB');
+      expect(orgInitials('ab'), 'AB');
     });
 
     test('spaces extra al inicio/fin se ignoran', () {
-      expect(initialsFor('  Cruz Roja  '), 'CR');
+      expect(orgInitials('  Cruz Roja  '), 'CR');
     });
 
     test('múltiples espacios entre palabras se normalizan', () {
-      expect(initialsFor('Cruz   Roja'), 'CR');
+      expect(orgInitials('Cruz   Roja'), 'CR');
     });
 
     test('nombre vacío → substring vacío (no lanza excepción)', () {
-      // name.length.clamp(0,2) = 0 → ''
-      expect(initialsFor(''), '');
+      expect(orgInitials(''), '');
     });
 
     test('resultado siempre en mayúsculas', () {
-      expect(initialsFor('open source'), 'OS');
+      expect(orgInitials('open source'), 'OS');
     });
   });
 
   // ── Color index (_OrgCard._ci) ────────────────────────────────────────
 
-  group('colorIndexFor', () {
+  group('orgColorIndex', () {
     test('siempre está en rango [0, 4]', () {
       final names = [
         'Alfa',
@@ -100,7 +75,7 @@ void main() {
         'Q',
       ];
       for (final n in names) {
-        final idx = colorIndexFor(n);
+        final idx = orgColorIndex(n) % 5;
         expect(
           idx,
           inInclusiveRange(0, 4),
@@ -110,15 +85,15 @@ void main() {
     });
 
     test('determinista: mismo nombre → mismo índice', () {
-      expect(colorIndexFor('Cruz Roja'), colorIndexFor('Cruz Roja'));
+      expect(orgColorIndex('Cruz Roja'), orgColorIndex('Cruz Roja'));
     });
 
     test('nombres distintos con mismo primer char → mismo índice', () {
-      expect(colorIndexFor('Cruz'), colorIndexFor('Corazón'));
+      expect(orgColorIndex('Cruz'), orgColorIndex('Corazón'));
     });
   });
 
-  // ──(_step) ────────────────────────────────────────────
+  // ── (_step) ────────────────────────────────────────────
 
   group('lógica de pasos del sheet', () {
     test('step inicial es 1', () {
@@ -219,7 +194,6 @@ void main() {
   // ── _StepIndicator ─────────────────────────────────────────────
 
   group('_StepIndicator logic', () {
-    /// Simula isDone / isActive para cada paso dado current y total.
     Map<String, bool> stepState(int stepNum, int current) => {
       'isDone': stepNum < current,
       'isActive': stepNum == current,
