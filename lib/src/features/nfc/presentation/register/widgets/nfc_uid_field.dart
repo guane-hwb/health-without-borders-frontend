@@ -32,7 +32,7 @@ class NfcUidField extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final hasValue = controller.text.trim().isNotEmpty;
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final deviceLinkedLabel = isEs ? 'Dispositivo vinculado' : 'Linked device';
 
     return Column(

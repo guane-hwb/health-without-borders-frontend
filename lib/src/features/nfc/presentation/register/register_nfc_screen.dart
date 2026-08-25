@@ -64,7 +64,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     }
 
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     if (_draft.firstName.isEmpty && _draft.documentNumber.isEmpty) {
       return true;
@@ -113,7 +113,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     } catch (_) {
       if (!mounted) return;
       final s = AppStrings.of(context);
-      final isEs = s.welcome == 'Bienvenido';
+      final isEs = s.isEs;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.error,
@@ -194,7 +194,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       if (!mounted) return;
       setState(() => _lastVaccineTime = _formatTimeNow(context));
       final s = AppStrings.of(context);
-      final isEs = s.welcome == 'Bienvenido';
+      final isEs = s.isEs;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -218,7 +218,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     } catch (_) {
       if (!mounted) return;
       final s = AppStrings.of(context);
-      final isEs = s.welcome == 'Bienvenido';
+      final isEs = s.isEs;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.error,
@@ -249,7 +249,8 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     }
 
     final codec = NfcPayloadCodec(hexKey: nfcKey);
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
 
     final patientOk = await showNfcGuidedWrite(
       context,

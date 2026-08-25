@@ -83,7 +83,7 @@ class _Step4State extends State<Step4Background> {
   Widget build(BuildContext context) {
     final d = widget.draft;
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Column(
       children: [

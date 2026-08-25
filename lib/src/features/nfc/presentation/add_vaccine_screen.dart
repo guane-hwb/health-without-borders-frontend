@@ -132,7 +132,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   Future<void> _save() async {
     if (_patient == null) return;
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     setState(() => _isSaving = true);
 
     final newVaccines = _entries
@@ -267,7 +267,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
 
   Widget _buildScanStep() {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -355,7 +355,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
 
   void _showManualSearchDialog() {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final uidCtrl = TextEditingController();
 
     showDialog<void>(
@@ -412,7 +412,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   Widget _buildFormStep() {
     final p = _patient!;
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     final List<Map<String, String>> commonVaccines = [
       {
@@ -780,7 +780,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
 
   Widget _buildSuccessStep() {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -924,7 +924,7 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final entry = widget.entry;
     final hasName = entry.nameCtrl.text.trim().isNotEmpty;
 

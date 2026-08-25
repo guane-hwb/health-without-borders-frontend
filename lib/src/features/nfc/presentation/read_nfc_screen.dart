@@ -116,7 +116,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     if (!mounted) return;
 
     if (chip != null && chip.kind == payload.HwbChipKind.guardian) {
-      final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+      final s = AppStrings.of(context);
+      final isEs = s.isEs;
       setState(() {
         _scanning = false;
         _errorMessage = isEs
@@ -191,7 +192,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         if (!mounted) return;
         await _openProfile(record, readOnly: true, offline: true);
       } else {
-        final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+        final s = AppStrings.of(context);
+        final isEs = s.isEs;
         setState(() {
           _scanning = false;
           _errorMessage = isEs
@@ -203,7 +205,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   }
 
   String _nfcAlert({required bool guardian}) {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
     if (guardian) {
       return isEs
           ? 'Acerque la tarjeta del guardián'
@@ -225,7 +228,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       _errorMessage = null;
     });
 
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
     try {
       final key = await AppScope.of(
         context,
@@ -302,7 +306,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   }
 
   Future<void> _confirmEmergencyAccess() async {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext ctx) => AlertDialog(
@@ -542,7 +547,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   }
 
   Widget _buildOfflineGuardianGate(AppStrings s) {
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final triage = _offlineTriage;
     final name = triage == null
         ? ''

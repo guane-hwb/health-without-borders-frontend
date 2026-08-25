@@ -10,7 +10,8 @@ class EmergencyBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
     return Container(
       width: double.infinity,
       color: const Color(0xFFFDE7E7),
@@ -48,7 +49,8 @@ class OfflineBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
     final String label = isDynamicDisconnect
         ? (isEs
               ? 'Sin conexión a Internet · Los cambios se guardarán localmente'
@@ -93,7 +95,8 @@ class NfcStaleBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
     return Container(
       width: double.infinity,
       color: const Color(0xFFFFF4E5),

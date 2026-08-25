@@ -91,7 +91,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     super.didChangeDependencies();
     if (_payerNameCtrl.text.isEmpty) {
       final s = AppStrings.of(context);
-      final isEs = s.welcome == 'Bienvenido';
+      final isEs = s.isEs;
       _payerNameCtrl.text = isEs ? 'No asegurado' : 'Uninsured';
     }
   }
@@ -147,7 +147,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   Future<void> _save() async {
     if (_patient == null) return;
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     final now = DateTime.now();
 
@@ -375,7 +375,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
   Widget _buildScanStep() {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -502,7 +502,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   Widget _buildFormStep() {
     final p = _patient!;
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     final careModalityOpts = {
       '01': s.modIntramural,
@@ -866,7 +866,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
   Widget _buildSuccessStep() {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -1074,7 +1074,7 @@ class _ManualSearchDialogState extends State<_ManualSearchDialog> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return AlertDialog(
       title: Text(isEs ? 'Buscar por UID' : 'Search by UID'),
@@ -1113,7 +1113,7 @@ class _PatientBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     final sexLabel =
         {
@@ -1266,7 +1266,7 @@ class _DateTimeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

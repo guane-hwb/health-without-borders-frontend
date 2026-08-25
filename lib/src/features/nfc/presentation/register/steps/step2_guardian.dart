@@ -304,7 +304,7 @@ class _Step2State extends State<Step2Guardian> {
     final s = AppStrings.of(context);
     final missing = <String>[];
 
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final bioSigLabel = isEs ? 'Firma biométrica' : 'Biometric signature';
     final privacyAuthLabel = isEs
         ? 'Autorización de política de privacidad'
@@ -456,7 +456,7 @@ class _Step2State extends State<Step2Guardian> {
   Widget build(BuildContext context) {
     final d = widget.draft;
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     final docTypes = {'CC': s.docTypeCC, 'CE': s.docTypeCE};
     final rels = {
@@ -986,7 +986,7 @@ class _AuthSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final signatureLabel = isEs ? 'Firma biométrica' : 'Biometric signature';
 
     return Container(
@@ -1047,7 +1047,7 @@ class _AuthCheckbox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1141,7 +1141,7 @@ class _SignaturePad extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1247,7 +1247,7 @@ class _PrivacyPolicyDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1659,7 +1659,7 @@ class _NfcField extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final hasValue = controller.text.trim().isNotEmpty;
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final deviceLinkedLabel = isEs ? 'Dispositivo vinculado' : 'Linked device';
 
     return Column(
@@ -1831,7 +1831,7 @@ class _Guardian2Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final deleteTooltip = isEs ? 'Eliminar guardián 2' : 'Remove guardian 2';
     final docTypes = {'CC': s.docTypeCC, 'CE': s.docTypeCE};
 

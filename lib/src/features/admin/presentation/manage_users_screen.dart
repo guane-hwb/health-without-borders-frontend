@@ -660,7 +660,7 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.save == 'Guardar';
+    final isEs = s.isEs;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
@@ -1058,7 +1058,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       return;
     }
     if (pass.length < 8) {
-      setState(() => _error = s.passwordTooShort.replaceAll('6', '8'));
+      setState(() => _error = s.passwordTooShort8);
       return;
     }
     setState(() {
