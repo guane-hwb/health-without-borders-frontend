@@ -170,7 +170,7 @@ class ApiClient {
       path,
       headers: <String, String>{...?headers},
       timeout: timeout,
-      send: (Map<String, String> h) => _client.get(uri, headers: h),
+      send: (Map<String, String> h) => _send('GET', uri, headers: h),
     );
 
     return _decodeListOrThrow(response);
@@ -187,7 +187,8 @@ class ApiClient {
       path,
       headers: <String, String>{...?headers},
       timeout: timeout,
-      send: (Map<String, String> h) => _client.patch(
+      send: (Map<String, String> h) => _send(
+        'PATCH',
         uri,
         headers: <String, String>{'Content-Type': 'application/json', ...h},
         body: jsonEncode(body),
@@ -207,7 +208,7 @@ class ApiClient {
       path,
       headers: <String, String>{...?headers},
       timeout: timeout,
-      send: (Map<String, String> h) => _client.delete(uri, headers: h),
+      send: (Map<String, String> h) => _send('DELETE', uri, headers: h),
     );
 
     final bool isSuccess =

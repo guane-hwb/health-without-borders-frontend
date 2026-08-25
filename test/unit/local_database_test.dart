@@ -408,6 +408,47 @@ void main() {
     });
 
     test(
+      'la columna de índice no guarda el nombre completo en claro',
+      () async {
+        await localDb.savePatient(
+          _buildRecord(
+            patientId: 'p-mask',
+            firstName: 'Ana',
+            lastName: 'García',
+          ),
+        );
+
+        final db = await rawConnection();
+        final rows = await db.query(
+          'local_patients',
+          columns: ['patient_name'],
+          where: 'patient_id = ?',
+          whereArgs: ['p-mask'],
+        );
+        await db.close();
+
+        expect(rows.single['patient_name'], isNot(contains('García')));
+        expect(rows.single['patient_name'], equals('Ana G.'));
+      },
+    );
+
+    test('el log de emergencia no guarda el nombre en claro', () async {
+      await localDb.logEmergencyAccess(
+        patientUid: '04:AA:BB',
+        patientName: 'Ana García',
+        userId: 'user-1',
+      );
+
+      final db = await rawConnection();
+      final raw = await db.query('emergency_access_log');
+
+      expect(raw.single['patient_name'], isNot(equals('Ana García')));
+
+      final pending = await localDb.pendingEmergencyAccessLogs();
+      expect(pending.single['patient_name'], equals('Ana García'));
+    });
+
+    test(
       'savePatient persists a record retrievable via getAllRecords',
       () async {
         await localDb.savePatient(_buildRecord(patientId: 'p-200'));
