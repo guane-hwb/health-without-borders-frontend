@@ -65,6 +65,9 @@ class _FakePatientRepository implements PatientRepository {
     required String lastName,
     String? guardianName,
   }) => throw UnimplementedError();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 
 class _FakeAppScope extends InheritedWidget {

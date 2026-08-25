@@ -31,6 +31,9 @@ class FakePatientRepository implements PatientRepository {
   bool shouldDelay = false;
 
   @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+
+  @override
   Future<PatientFullRecord> scanDevice(
     String deviceUid, {
     String? guardianDeviceUid,
