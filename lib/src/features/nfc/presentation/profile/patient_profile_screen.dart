@@ -363,8 +363,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       );
       if (!mounted) return;
       setState(() {
-        _draft = record;
-        _original = record;
+        _draftController.markSynced();
         _isUpdatingChips = false;
       });
       await _loadChipStatus(scope.localDatabase);
@@ -595,9 +594,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                             ? (isEs
                                   ? 'Tarjeta del guardián 1'
                                   : 'Guardian card 1')
-                            : (isEs
-                                  ? 'Tarjeta del guardián'
-                                  : 'Guardian card'),
+                            : (isEs ? 'Tarjeta del guardián' : 'Guardian card'),
                       ),
                     if (hasG2)
                       deviceCheck(
