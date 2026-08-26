@@ -5,10 +5,17 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiException implements Exception {
-  ApiException(this.message, {this.statusCode});
+  ApiException(this.message, {this.statusCode, this.detail});
 
   final String message;
   final int? statusCode;
+
+  /// The raw, decoded `detail` from the error body when it is structured
+  /// (e.g. the 410 retired-tag response `{code, reason, message}`). Null when
+  /// the body carried a plain string detail or no body at all. Callers that
+  /// need machine-readable error info should read this instead of parsing
+  /// [message].
+  final Object? detail;
 
   @override
   String toString() =>
@@ -221,11 +228,7 @@ class ApiClient {
     } catch (_) {
       decoded = null;
     }
-    final String message = (decoded is Map<String, dynamic>)
-        ? (decoded['detail']?.toString() ??
-              _httpErrorFallback(response.statusCode))
-        : _httpErrorFallback(response.statusCode);
-    throw ApiException(message, statusCode: response.statusCode);
+    _throwDecodedError(response, decoded);
   }
 
   Map<String, dynamic> _decodeMapOrThrow(http.Response response) {
@@ -249,11 +252,7 @@ class ApiClient {
       );
     }
 
-    final String message = (decoded is Map<String, dynamic>)
-        ? (decoded['detail']?.toString() ??
-              _httpErrorFallback(response.statusCode))
-        : _httpErrorFallback(response.statusCode);
-    throw ApiException(message, statusCode: response.statusCode);
+    _throwDecodedError(response, decoded);
   }
 
   List<dynamic> _decodeListOrThrow(http.Response response) {
@@ -275,11 +274,23 @@ class ApiClient {
       );
     }
 
-    final String message = (decoded is Map<String, dynamic>)
-        ? (decoded['detail']?.toString() ??
-              _httpErrorFallback(response.statusCode))
+    _throwDecodedError(response, decoded);
+  }
+
+  /// Builds and throws an [ApiException] from a non-2xx response, preserving
+  /// the structured `detail` when the body carried one.
+  Never _throwDecodedError(http.Response response, Object? decoded) {
+    final Object? detail = (decoded is Map<String, dynamic>)
+        ? decoded['detail']
+        : null;
+    final String message = detail != null
+        ? detail.toString()
         : _httpErrorFallback(response.statusCode);
-    throw ApiException(message, statusCode: response.statusCode);
+    throw ApiException(
+      message,
+      statusCode: response.statusCode,
+      detail: detail,
+    );
   }
 
   String _httpErrorFallback(int statusCode) {

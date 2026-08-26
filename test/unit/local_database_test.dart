@@ -358,6 +358,55 @@ void main() {
       expect(pending.single['is_synced'], 0);
       expect(pending.single['reason'], 'guardian_absent_offline');
       expect(pending.single['occurred_at'], isNotEmpty);
+      // Each entry carries a client-generated dedup id for the backend.
+      expect(pending.single['client_event_id'], isNotEmpty);
+    });
+
+    test('logEmergencyAccess assigns a distinct, stable client_event_id',
+        () async {
+      await localDb.logEmergencyAccess(patientUid: '04:E1');
+      await localDb.logEmergencyAccess(patientUid: '04:E2');
+
+      final first = await localDb.pendingEmergencyAccessLogs();
+      final second = await localDb.pendingEmergencyAccessLogs();
+
+      final ids =
+          first.map((e) => e['client_event_id'] as String).toSet();
+      expect(ids, hasLength(2)); // distinct per entry
+
+      // Stable across reads (not regenerated each call).
+      final byUidFirst = {
+        for (final e in first) e['patient_uid']: e['client_event_id'],
+      };
+      final byUidSecond = {
+        for (final e in second) e['patient_uid']: e['client_event_id'],
+      };
+      expect(byUidSecond, equals(byUidFirst));
+    });
+
+    test('pendingEmergencyAccessLogs backfills a legacy row missing '
+        'client_event_id', () async {
+      // Simulate a row written before the column existed.
+      final raw = await rawConnection();
+      await raw.insert('emergency_access_log', <String, Object?>{
+        'patient_uid': '04:LEGACY',
+        'reason': 'guardian_absent_offline',
+        'occurred_at': DateTime.now().toIso8601String(),
+        'is_synced': 0,
+      });
+
+      final pending = await localDb.pendingEmergencyAccessLogs();
+      final legacy =
+          pending.firstWhere((e) => e['patient_uid'] == '04:LEGACY');
+      final cid = legacy['client_event_id'] as String?;
+      expect(cid, isNotNull);
+      expect(cid, isNotEmpty);
+
+      // Persisted: a second read returns the same id, not a new one.
+      final again = await localDb.pendingEmergencyAccessLogs();
+      final legacyAgain =
+          again.firstWhere((e) => e['patient_uid'] == '04:LEGACY');
+      expect(legacyAgain['client_event_id'], equals(cid));
     });
 
     test('acumula varias entradas', () async {
@@ -479,6 +528,41 @@ void main() {
         expect(all.first.patientName, equals('Bea G.'));
       },
     );
+
+    test('savePatient stores retiredDeviceReason and exposes it via '
+        'getUnsyncedRecords', () async {
+      await localDb.savePatient(
+        _buildRecord(patientId: 'p-reason'),
+        retiredDeviceReason: 'lost',
+      );
+
+      final pending = await localDb.getUnsyncedRecords();
+      final entry = pending.firstWhere((e) => e.patientId == 'p-reason');
+      expect(entry.retiredDeviceReason, equals('lost'));
+    });
+
+    test('savePatient leaves retiredDeviceReason null for ordinary records',
+        () async {
+      await localDb.savePatient(_buildRecord(patientId: 'p-plain'));
+
+      final pending = await localDb.getUnsyncedRecords();
+      final entry = pending.firstWhere((e) => e.patientId == 'p-plain');
+      expect(entry.retiredDeviceReason, isNull);
+    });
+
+    test('savePatient preserves an existing retiredDeviceReason when a later '
+        'save omits it', () async {
+      await localDb.savePatient(
+        _buildRecord(patientId: 'p-keep'),
+        retiredDeviceReason: 'damaged',
+      );
+      // An ordinary edit (no reason) must not drop the pending reason.
+      await localDb.savePatient(_buildRecord(patientId: 'p-keep'));
+
+      final pending = await localDb.getUnsyncedRecords();
+      final entry = pending.firstWhere((e) => e.patientId == 'p-keep');
+      expect(entry.retiredDeviceReason, equals('damaged'));
+    });
 
     test('getAllRecords orders rows by createdAt descending', () async {
       await localDb.savePatient(_buildRecord(patientId: 'p-first'));

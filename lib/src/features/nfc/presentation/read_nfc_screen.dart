@@ -165,7 +165,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       } else {
         setState(() {
           _scanning = false;
-          _errorMessage = e.message;
+          _errorMessage = _retiredTagMessage(e) ?? e.message;
         });
       }
     } catch (e) {
@@ -305,6 +305,27 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     }
   }
 
+  /// If [e] is the backend's 410 "device retired" response, returns a localized
+  /// message naming the retirement reason (lost / damaged / replaced). Returns
+  /// null for any other error so the caller falls back to the generic text.
+  String? _retiredTagMessage(ApiException e) {
+    if (e.statusCode != 410) return null;
+    final Object? detail = e.detail;
+    if (detail is! Map || detail['code'] != 'device_retired') return null;
+
+    final bool isEs = AppStrings.of(context).isEs;
+    final String? reason = detail['reason']?.toString();
+    final String reasonLabel = switch (reason) {
+      'lost' => isEs ? 'perdida' : 'lost',
+      'damaged' => isEs ? 'dañada' : 'damaged',
+      'replaced' => isEs ? 'reemplazada' : 'replaced',
+      _ => isEs ? 'retirada' : 'retired',
+    };
+    return isEs
+        ? 'Esta manilla fue retirada ($reasonLabel) y ya no pertenece a HWB.'
+        : 'This bracelet was retired ($reasonLabel) and no longer belongs to HWB.';
+  }
+
   Future<void> _confirmEmergencyAccess() async {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
@@ -410,7 +431,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       if (!mounted) return;
       setState(() {
         _scanning = false;
-        _errorMessage = e.message;
+        _errorMessage = _retiredTagMessage(e) ?? e.message;
       });
     } catch (e) {
       if (!mounted) return;
