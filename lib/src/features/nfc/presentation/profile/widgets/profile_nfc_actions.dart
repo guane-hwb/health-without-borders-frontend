@@ -1,3 +1,5 @@
+// lib/src/features/nfc/presentation/profile/widgets/profile_nfc_actions.dart
+
 import 'package:flutter/material.dart';
 
 import '../../../../../core/i18n/app_strings.dart';
@@ -10,6 +12,7 @@ import '../../../domain/patient_record.dart';
 import '../../nfc_guided_write.dart';
 import 'reassign_device_dialog.dart';
 
+/// Ejecuta el flujo guiado de actualización de chips NFC (paciente y guardianes).
 Future<bool> executeUpdateNfcChips({
   required BuildContext context,
   required PatientFullRecord record,
@@ -18,6 +21,7 @@ Future<bool> executeUpdateNfcChips({
   required bool guardianChipDirty,
 }) async {
   final isEs = AppStrings.of(context).isEs;
+  final messenger = ScaffoldMessenger.of(context);
   final codec = NfcPayloadCodec(hexKey: nfcKey);
 
   if (patientChipDirty) {
@@ -35,11 +39,12 @@ Future<bool> executeUpdateNfcChips({
     if (!ok) return false;
   }
 
+  if (!context.mounted) return false;
+
   if (guardianChipDirty) {
     final guardian1Uid = (record.guardianInfo.deviceUid ?? '').trim();
     final guardian2Uid = (record.guardian2Info?.deviceUid ?? '').trim();
     final hasTwoGuardians = guardian1Uid.isNotEmpty && guardian2Uid.isNotEmpty;
-    final messenger = ScaffoldMessenger.of(context);
 
     Future<bool> writeGuardianCard({
       required String expectedUid,
@@ -91,6 +96,7 @@ Future<bool> executeUpdateNfcChips({
     }
 
     if (guardian2Uid.isNotEmpty) {
+      if (!context.mounted) return false;
       final ok = await writeGuardianCard(
         expectedUid: guardian2Uid,
         title: isEs ? 'Tarjeta del guardián 2' : 'Guardian card 2',
@@ -107,6 +113,7 @@ Future<bool> executeUpdateNfcChips({
   return true;
 }
 
+/// Ejecuta el proceso de reasignación de un dispositivo individual.
 Future<PatientFullRecord?> executeReassignOne({
   required BuildContext context,
   required ReassignTarget target,
@@ -193,6 +200,8 @@ Future<PatientFullRecord?> executeReassignOne({
             );
       break;
   }
+
+  if (!context.mounted) return null;
 
   final writeOk = await showNfcGuidedWrite(
     context,
