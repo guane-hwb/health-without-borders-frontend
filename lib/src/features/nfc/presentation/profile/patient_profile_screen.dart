@@ -32,6 +32,7 @@ import 'sheets/edit_address_sheet.dart';
 import 'sheets/edit_chronic_personal_sheet.dart';
 import 'sheets/edit_guardian_sheet.dart';
 import 'sheets/edit_vital_signs_sheet.dart';
+import 'state/patient_draft_controller.dart';
 import 'tabs/profile_tab_consultations.dart';
 import 'tabs/profile_tab_summary.dart';
 import 'tabs/profile_tab_vaccines.dart';
@@ -63,8 +64,9 @@ class PatientProfileScreen extends StatefulWidget {
 class _PatientProfileScreenState extends State<PatientProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late PatientFullRecord _draft;
-  late PatientFullRecord _original;
+  late PatientDraftController _draftController;
+  PatientFullRecord get _draft => _draftController.draft;
+  PatientFullRecord get _original => _draftController.original;
   bool _isSyncing = false;
   bool _hasInternet = true;
   NfcChipStatus? _chipStatus;
@@ -78,8 +80,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _draft = widget.patient;
-    _original = widget.patient;
+    _draftController = PatientDraftController(widget.patient)
+      ..addListener(_onDraftChanged);
 
     _checkInitialConnectivity();
     _subscribeToConnectivity();
@@ -98,7 +100,13 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   void dispose() {
     _tabController.dispose();
     _connectivitySubscription.cancel();
+    _draftController.removeListener(_onDraftChanged);
+    _draftController.dispose();
     super.dispose();
+  }
+
+  void _onDraftChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _checkInitialConnectivity() async {
@@ -342,200 +350,79 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   void _updateVitalSigns({double? weight, double? height, String? bloodType}) {
-    setState(() {
-      final info = _draft.patientInfo;
-      _draft = _replacePatientInfo(
-        PatientInfo(
-          identification: info.identification,
-          firstLastName: info.firstLastName,
-          secondLastName: info.secondLastName,
-          firstName: info.firstName,
-          secondName: info.secondName,
-          dob: info.dob,
-          nationalityCode: info.nationalityCode,
-          nationalityName: info.nationalityName,
-          biologicalSex: info.biologicalSex,
-          genderIdentity: info.genderIdentity,
-          ethnicity: info.ethnicity,
-          ethnicCommunity: info.ethnicCommunity,
-          disabilityCategory: info.disabilityCategory,
-          address: info.address,
-          bloodType: bloodType,
-          weight: weight ?? info.weight,
-          height: height ?? info.height,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.updateVitalSigns(
+      weight: weight,
+      height: height,
+      bloodType: bloodType,
+    );
+    unawaited(_saveAndPendingSync());
   }
 
   void _updateAddress(Address address) {
-    setState(() {
-      _draft = _replacePatientInfo(
-        _draft.patientInfo.copyWith(address: address),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.updateAddress(address);
+    unawaited(_saveAndPendingSync());
   }
 
   void _updateBackground({
     List<ChronicConditionItem>? chronicConditions,
     String? personalHistory,
   }) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: chronicConditions ?? old.chronicConditions,
-          personalHistory: personalHistory ?? old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.updateBackground(
+      chronicConditions: chronicConditions,
+      personalHistory: personalHistory,
+    );
+    unawaited(_saveAndPendingSync());
   }
 
   void _addChronicCondition(ChronicConditionItem item) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: [...old.chronicConditions, item],
-          personalHistory: old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addChronicCondition(item);
+    unawaited(_saveAndPendingSync());
   }
 
   void _removeChronicCondition(int index) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    final updated = [...old.chronicConditions]..removeAt(index);
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: updated,
-          personalHistory: old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.removeChronicCondition(index);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addMedication(MedicationStatementItem item) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: old.chronicConditions,
-          personalHistory: old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: [...old.medications, item],
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addMedication(item);
+    unawaited(_saveAndPendingSync());
   }
 
   void _removeMedication(int index) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    final updated = [...old.medications]..removeAt(index);
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: old.chronicConditions,
-          personalHistory: old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: updated,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.removeMedication(index);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addFamilyHistory(FamilyHistoryItem item) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: old.chronicConditions,
-          personalHistory: old.personalHistory,
-          familyHistory: [...old.familyHistory, item],
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addFamilyHistory(item);
+    unawaited(_saveAndPendingSync());
   }
 
   void _removeFamilyHistory(int index) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    final updated = [...old.familyHistory]..removeAt(index);
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: old.chronicConditions,
-          personalHistory: old.personalHistory,
-          familyHistory: updated,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.removeFamilyHistory(index);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addAllergy(AllergyInfo allergy) {
-    setState(() {
-      _draft = _draft.copyWith(allergies: [..._draft.allergies, allergy]);
-    });
-    _saveAndPendingSync();
+    _draftController.addAllergy(allergy);
+    unawaited(_saveAndPendingSync());
   }
 
   void _removeAllergy(int index) {
-    final updated = [..._draft.allergies]..removeAt(index);
-    setState(() {
-      _draft = _draft.copyWith(allergies: updated);
-    });
-    _saveAndPendingSync();
+    _draftController.removeAllergy(index);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addVaccines(List<VaccinationRecordItem> vaccines) {
-    setState(() {
-      _draft = _draft.copyWith(
-        vaccinationRecord: [..._draft.vaccinationRecord, ...vaccines],
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addVaccines(vaccines);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addConsultation(MedicalHistoryItem consultation) {
-    setState(() {
-      _draft = _draft.copyWith(
-        medicalHistory: [..._draft.medicalHistory, consultation],
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addConsultation(consultation);
+    unawaited(_saveAndPendingSync());
   }
-
-  // ── Helpers ──────────────────────────────────────────────────────────────
-
-  PatientFullRecord _replacePatientInfo(PatientInfo info) =>
-      _draft.copyWith(patientInfo: info);
-
-  PatientFullRecord _replaceBackground(BackgroundHistory bg) =>
-      _draft.copyWith(backgroundHistory: bg);
 
   // ── Sync ─────────────────────────────────────────────────────────────────
 
@@ -570,10 +457,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
       final bool ok = await scope.syncEngine.syncAll();
       if (!mounted) return;
+      if (ok) {
+        _draftController.markSynced();
+      }
       setState(() {
-        if (ok) {
-          _original = _draft;
-        }
         _isSyncing = false;
       });
       if (!silent) {
@@ -694,17 +581,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         guardian: current,
         guardianIndex: guardianIndex,
         onConfirm: (GuardianInfo updatedGuardian) {
-          setState(() {
-            _draft = _draft.copyWith(
-              guardianInfo: guardianIndex == 1
-                  ? updatedGuardian
-                  : _draft.guardianInfo,
-              guardian2Info: guardianIndex == 2
-                  ? updatedGuardian
-                  : _draft.guardian2Info,
-            );
-          });
-          _saveAndPendingSync();
+          _draftController.updateGuardian(guardianIndex, updatedGuardian);
+          unawaited(_saveAndPendingSync());
         },
       ),
     );

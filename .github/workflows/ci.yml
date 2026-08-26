@@ -35,6 +35,17 @@ jobs:
       - name: Analyze
         run: flutter analyze --fatal-infos --fatal-warnings
 
+      - name: Verificar que patient_profile_screen.dart no supere 900 líneas
+        run: |
+          MAX_LINES=900
+          FILE="lib/src/features/nfc/presentation/profile/patient_profile_screen.dart"
+          LINES=$(wc -l < "$FILE")
+          echo "Líneas en $FILE: $LINES"
+          if [ "$LINES" -gt "$MAX_LINES" ]; then
+            echo "Error: $FILE supera las $MAX_LINES líneas ($LINES líneas). Mantén la arquitectura modular."
+            exit 1
+          fi
+
       - name: Test with coverage
         run: flutter test --coverage
 
