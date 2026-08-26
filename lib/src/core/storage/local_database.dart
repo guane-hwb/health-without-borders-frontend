@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
 import '../utils/app_logger.dart';
@@ -53,7 +54,7 @@ class LocalDatabase {
       FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: true));
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 7;
+  static const int _dbVersion = 8;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
@@ -367,6 +368,14 @@ class LocalDatabase {
             'TEXT',
           );
         }
+        if (oldVersion < 8) {
+          await _addColumnIfMissing(
+            db,
+            _emergencyLogTable,
+            'client_event_id',
+            'TEXT',
+          );
+        }
       },
     );
   }
@@ -398,6 +407,7 @@ class LocalDatabase {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS $_emergencyLogTable (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_event_id TEXT,
         patient_uid   TEXT NOT NULL,
         patient_name  TEXT,
         user_id       TEXT,
@@ -415,6 +425,7 @@ class LocalDatabase {
     String reason = 'guardian_absent_offline',
   }) async {
     final row = <String, Object?>{
+      'client_event_id': const Uuid().v4(),
       'patient_uid': patientUid,
       'patient_name': patientName == null
           ? null
@@ -462,6 +473,17 @@ class LocalDatabase {
       final out = <Map<String, Object?>>[];
       for (final r in rows) {
         final mutable = Map<String, Object?>.from(r);
+        // Legacy rows (logged before client_event_id existed) must still get a
+        // stable dedup id, persisted so retries reuse the same one.
+        final existingCid = mutable['client_event_id'] as String?;
+        if (existingCid == null || existingCid.isEmpty) {
+          final cid = const Uuid().v4();
+          mutable['client_event_id'] = cid;
+          await _persistEmergencyClientEventId(
+            (mutable['id'] as num?)?.toInt(),
+            cid,
+          );
+        }
         final name = mutable['patient_name'] as String?;
         if (name != null && name.isNotEmpty) {
           mutable['patient_name'] = await _decryptPayload(name);
@@ -479,6 +501,27 @@ class LocalDatabase {
       );
       return const <Map<String, Object?>>[];
     }
+  }
+
+  Future<void> _persistEmergencyClientEventId(int? id, String cid) async {
+    if (id == null) return;
+    if (_isWeb) {
+      final logs = _webEmergencyLog;
+      for (final row in logs) {
+        if ((row['id'] as num?)?.toInt() == id) {
+          row['client_event_id'] = cid;
+        }
+      }
+      _saveWebEmergencyLog(logs);
+      return;
+    }
+    final db = await _database;
+    await db?.update(
+      _emergencyLogTable,
+      <String, Object?>{'client_event_id': cid},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<void> markEmergencyLogsSynced(List<int> ids) async {
