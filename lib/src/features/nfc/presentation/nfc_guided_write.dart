@@ -151,7 +151,8 @@ class _NfcGuidedWriteSheetState extends State<_NfcGuidedWriteSheet>
 
   @override
   Widget build(BuildContext context) {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
     // Back is allowed at every step, but while a chip is being waited on it has
     // to go through _cancel() rather than tearing the sheet down: popping used
     // to leave the radio's caller registered forever, so the *next* sheet — the

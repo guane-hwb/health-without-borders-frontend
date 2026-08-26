@@ -2,6 +2,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/register_draft.dart';
+import 'package:health_without_borders_frontend/src/core/validation/identity_validators.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helpers
@@ -42,36 +43,20 @@ List<String> validateGuardianForm({
     if (signatureStrokes.isEmpty) missing.add(bioSigLabel);
   }
 
-  final String cleanDoc = docNumber.trim();
-  if (cleanDoc.isNotEmpty) {
-    final docRegex = RegExp(r'^[a-zA-Z0-9-]{5,20}$');
-    if (!docRegex.hasMatch(cleanDoc)) {
-      missing.add(
-        isEs
-            ? 'Documento de guardián inválido'
-            : 'Invalid Guardian Document format',
-      );
-    }
-  }
-
-  final String cleanPhone = phone.trim();
-  if (cleanPhone.isNotEmpty) {
-    final phoneRegex = RegExp(r'^\+?[0-9]{7,15}$');
-    if (!phoneRegex.hasMatch(cleanPhone)) {
-      missing.add(isEs ? 'Teléfono inválido' : 'Invalid Phone format');
-    }
-  }
-
-  final String cleanEmail = email.trim();
-  if (cleanEmail.isNotEmpty) {
-    final emailRegex = RegExp(
-      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+  if (validateDocumentNumber(docNumber) != null) {
+    missing.add(
+      isEs
+          ? 'Documento de guardián inválido'
+          : 'Invalid Guardian Document format',
     );
-    if (!emailRegex.hasMatch(cleanEmail)) {
-      missing.add(
-        isEs ? 'Correo electrónico inválido' : 'Invalid Email format',
-      );
-    }
+  }
+
+  if (validatePhone(phone) != null) {
+    missing.add(isEs ? 'Teléfono inválido' : 'Invalid Phone format');
+  }
+
+  if (validateEmail(email) != null) {
+    missing.add(isEs ? 'Correo electrónico inválido' : 'Invalid Email format');
   }
 
   if (signatureStrokes.isNotEmpty) {
@@ -79,28 +64,19 @@ List<String> validateGuardianForm({
   }
 
   if (hasGuardian2 && name2.trim().isNotEmpty) {
-    final String cleanDoc2 = docNumber2.trim();
-    final String cleanPhone2 = phone2.trim();
-    final String cleanEmail2 = email2.trim();
-
-    if (cleanDoc2.isNotEmpty &&
-        !RegExp(r'^[a-zA-Z0-9-]{5,20}$').hasMatch(cleanDoc2)) {
+    if (validateDocumentNumber(docNumber2) != null) {
       missing.add(
         isEs
             ? 'Documento de Guardián 2 inválido'
             : 'Invalid Guardian 2 Document',
       );
     }
-    if (cleanPhone2.isNotEmpty &&
-        !RegExp(r'^\+?[0-9]{7,15}$').hasMatch(cleanPhone2)) {
+    if (validatePhone(phone2) != null) {
       missing.add(
         isEs ? 'Teléfono de Guardián 2 inválido' : 'Invalid Guardian 2 Phone',
       );
     }
-    if (cleanEmail2.isNotEmpty &&
-        !RegExp(
-          r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
-        ).hasMatch(cleanEmail2)) {
+    if (validateEmail(email2) != null) {
       missing.add(
         isEs ? 'Correo de Guardián 2 inválido' : 'Invalid Guardian 2 Email',
       );
@@ -632,5 +608,29 @@ void main() {
       }
       expect(pathsDrawn, 0);
     });
+
+    test(
+      '35. Documento con puntos (PPT venezolano) es válido para ambos '
+      'guardianes — regresión del bug narrado en v2-validacion-clinica-en-widgets '
+      '(antes, solo una de las cuatro copias de la regex admitía el punto)',
+      () {
+        final missingG1 = validateGuardianForm(
+          requiredForMinor: false,
+          name: '',
+          phone: '',
+          uid: '',
+          docNumber: 'PPT-1.234.567',
+          signatureStrokes: [],
+          authAccepted: false,
+          hasGuardian2: true,
+          name2: 'Carlos López',
+          signatureStrokes2: [],
+          auth2Accepted: false,
+          docNumber2: 'PPT-7.654.321',
+        );
+        expect(missingG1, isNot(contains('Documento de guardián inválido')));
+        expect(missingG1, isNot(contains('Documento de Guardián 2 inválido')));
+      },
+    );
   });
 }

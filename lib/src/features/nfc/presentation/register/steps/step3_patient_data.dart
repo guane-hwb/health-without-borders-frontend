@@ -190,7 +190,7 @@ class _Step3State extends State<Step3PatientData> {
 
   void _save() {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final missing = <String>[];
 
     if (_patientUid.text.trim().isEmpty) {
@@ -260,7 +260,7 @@ class _Step3State extends State<Step3PatientData> {
   Widget build(BuildContext context) {
     final d = widget.draft;
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     final docTypes = <String, String>{
       'RC': s.docTypeRC,

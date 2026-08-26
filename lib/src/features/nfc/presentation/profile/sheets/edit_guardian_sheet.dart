@@ -104,7 +104,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     final dynamicTitle = widget.guardianIndex == 1
         ? (isEs ? 'Editar Guardián Principal' : 'Edit Primary Guardian')

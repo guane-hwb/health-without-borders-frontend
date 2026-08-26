@@ -599,6 +599,90 @@ void main() {
         },
       );
 
+      testWidgets('Guardar conserva las listas clínicas del registro original '
+          '(v2-edit-patient-sin-verify)', (tester) async {
+        final dbMock = MockLocalDatabase();
+        final syncMock = MockSyncEngine();
+
+        when(
+          () => dbMock.savePatient(any<PatientFullRecord>()),
+        ).thenAnswer((_) async {});
+        when(
+          () => dbMock.markChipsDirty(
+            any<String>(),
+            guardian: any<bool>(named: 'guardian'),
+          ),
+        ).thenAnswer((_) async {});
+        when(() => syncMock.syncAll()).thenAnswer((_) async => true);
+
+        final original = PatientFullRecord(
+          patientId: 'uuid-widget-test',
+          deviceUid: 'NFC-WIDGET',
+          patientInfo: _makeRecord().patientInfo,
+          guardianInfo: _makeRecord().guardianInfo,
+          guardian2Info: GuardianInfo(
+            name: 'Segundo acudiente',
+            relationship: 'Madre',
+            phone: '3009998877',
+          ),
+          backgroundHistory: BackgroundHistory(
+            personalHistory:
+                'Antecedente relevante que no debe perderse al editar.',
+          ),
+          allergies: <AllergyInfo>[
+            AllergyInfo(category: '01', allergen: 'Penicilina'),
+          ],
+          medicalHistory: <MedicalHistoryItem>[
+            MedicalHistoryItem(startDateTime: '2026-07-30T10:00:00.000Z'),
+          ],
+          vaccinationRecord: <VaccinationRecordItem>[
+            VaccinationRecordItem(
+              date: '2026-07-30',
+              vaccineName: 'BCG',
+              vaccineCode: '19',
+              dose: 1,
+              administratedBy: 'Enfermera R.',
+              administratedAt: 'IPS Sur',
+            ),
+          ],
+        );
+
+        final spy = _PopSpy();
+        await _pumpViaRoute(
+          tester,
+          original,
+          spy,
+          dbMock: dbMock,
+          syncMock: syncMock,
+        );
+
+        final weightField = find.widgetWithText(TextFormField, '58.0');
+        await tester.tap(weightField);
+        await tester.pumpAndSettle();
+        await tester.enterText(weightField, '61.5');
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        final saved =
+            verify(() => dbMock.savePatient(captureAny())).captured.single
+                as PatientFullRecord;
+
+        expect(saved.patientInfo.weight, 61.5);
+        expect(saved.allergies, hasLength(1));
+        expect(saved.allergies.single.allergen, 'Penicilina');
+        expect(saved.medicalHistory, hasLength(1));
+        expect(saved.vaccinationRecord, hasLength(1));
+        expect(saved.vaccinationRecord.single.vaccineName, 'BCG');
+        expect(saved.backgroundHistory, original.backgroundHistory);
+        expect(saved.guardian2Info, original.guardian2Info);
+
+        verify(
+          () => dbMock.markChipsDirty('uuid-widget-test', guardian: true),
+        ).called(1);
+      });
+
       testWidgets('el botón Volver muestra la etiqueta i18n correcta', (
         tester,
       ) async {

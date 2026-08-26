@@ -77,7 +77,7 @@ class _Step5State extends State<Step5Review> {
   Widget build(BuildContext context) {
     final d = widget.draft;
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     final name = [
       d.firstName,

@@ -7,11 +7,8 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/di/app_scope.dart';
 import '../../../../core/i18n/app_strings.dart';
-import '../../../../core/nfc/nfc_guardian_payload.dart';
 import '../../../../core/nfc/nfc_payload_codec.dart';
-import '../../../../core/nfc/nfc_payload_service.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
-import '../../../../core/nfc/partial_card_notice.dart';
 import '../../../../core/storage/local_database.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../../design/tokens/app_colors.dart';
@@ -20,7 +17,6 @@ import '../../../auth/domain/user_session.dart';
 import '../../domain/patient_record.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
-import '../nfc_guided_write.dart';
 import 'patient_profile_helpers.dart';
 import 'sheets/add_allergy_sheet.dart';
 import 'sheets/add_chronic_condition_sheet.dart';
@@ -32,12 +28,15 @@ import 'sheets/edit_address_sheet.dart';
 import 'sheets/edit_chronic_personal_sheet.dart';
 import 'sheets/edit_guardian_sheet.dart';
 import 'sheets/edit_vital_signs_sheet.dart';
+import 'state/patient_draft_controller.dart';
 import 'tabs/profile_tab_consultations.dart';
 import 'tabs/profile_tab_summary.dart';
 import 'tabs/profile_tab_vaccines.dart';
 import 'widgets/profile_banners.dart';
 import 'widgets/profile_header.dart';
+import 'widgets/profile_nfc_actions.dart';
 import 'widgets/profile_tabs_bar.dart';
+import 'widgets/reassign_device_dialog.dart';
 
 /// Canonical patient profile screen.
 class PatientProfileScreen extends StatefulWidget {
@@ -63,8 +62,9 @@ class PatientProfileScreen extends StatefulWidget {
 class _PatientProfileScreenState extends State<PatientProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late PatientFullRecord _draft;
-  late PatientFullRecord _original;
+  late PatientDraftController _draftController;
+  PatientFullRecord get _draft => _draftController.draft;
+  PatientFullRecord get _original => _draftController.original;
   bool _isSyncing = false;
   bool _hasInternet = true;
   NfcChipStatus? _chipStatus;
@@ -78,8 +78,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _draft = widget.patient;
-    _original = widget.patient;
+    _draftController = PatientDraftController(widget.patient)
+      ..addListener(_onDraftChanged);
 
     _checkInitialConnectivity();
     _subscribeToConnectivity();
@@ -98,7 +98,13 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   void dispose() {
     _tabController.dispose();
     _connectivitySubscription.cancel();
+    _draftController.removeListener(_onDraftChanged);
+    _draftController.dispose();
     super.dispose();
+  }
+
+  void _onDraftChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _checkInitialConnectivity() async {
@@ -184,105 +190,24 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (status == null || !status.anyDirty) return;
 
     setState(() => _isUpdatingChips = true);
-    final codec = NfcPayloadCodec(hexKey: nfcKey);
-    final record = _draft;
 
-    if (status.patientChipDirty) {
-      final ok = await showNfcGuidedWrite(
-        context,
-        title: isEs ? 'Pulsera del paciente' : 'Patient wristband',
-        instruction: isEs
-            ? 'Acerque la pulsera del paciente al teléfono'
-            : 'Bring the patient wristband to the phone',
-        write: () => NfcPayloadService(codec: codec).writeTriagePayload(
-          NfcTriagePayload.buildPatientPayload(record: record),
-          expectedUid: record.deviceUid,
-        ),
+    final ok = await executeUpdateNfcChips(
+      context: context,
+      record: _draft,
+      nfcKey: nfcKey,
+      patientChipDirty: status.patientChipDirty,
+      guardianChipDirty: status.guardianChipDirty,
+    );
+
+    if (!mounted) return;
+    if (ok) {
+      await scope.localDatabase.clearChipsDirty(
+        _draft.patientId,
+        patient: status.patientChipDirty,
+        guardian: status.guardianChipDirty,
       );
-      if (!mounted) return;
-      if (ok) {
-        await scope.localDatabase.clearChipsDirty(
-          record.patientId,
-          patient: true,
-        );
-      }
-    }
-    if (!mounted) return;
-
-    if (status.guardianChipDirty) {
-      final guardian1Uid = (record.guardianInfo.deviceUid ?? '').trim();
-      final guardian2Uid = (record.guardian2Info?.deviceUid ?? '').trim();
-      final hasTwoGuardians =
-          guardian1Uid.isNotEmpty && guardian2Uid.isNotEmpty;
-      final messenger = ScaffoldMessenger.of(context);
-
-      Future<bool> writeGuardianCard({
-        required String expectedUid,
-        required String title,
-        required String instruction,
-      }) async {
-        GuardianPayloadFit? fit;
-        final written = await showNfcGuidedWrite(
-          context,
-          title: title,
-          instruction: instruction,
-          write: () async {
-            final result = await NfcPayloadService(codec: codec)
-                .writeGuardianRecord(
-                  buildFit: guardianFitBuilder(record: record, codec: codec),
-                  expectedUid: expectedUid,
-                );
-            fit = result.fit;
-          },
-        );
-        if (written && (fit?.isPartial ?? false)) {
-          _showPartialCardNotice(messenger, fit!, isEs);
-        }
-        return written;
-      }
-
-      var allWritten = true;
-
-      if (guardian1Uid.isNotEmpty) {
-        final ok = await writeGuardianCard(
-          expectedUid: guardian1Uid,
-          title: hasTwoGuardians
-              ? (isEs ? 'Tarjeta del guardián 1' : 'Guardian card 1')
-              : (isEs ? 'Tarjeta del guardián' : 'Guardian card'),
-          instruction: hasTwoGuardians
-              ? (isEs
-                    ? 'Acerque la tarjeta del guardián 1 al teléfono'
-                    : 'Bring guardian card 1 to the phone')
-              : (isEs
-                    ? 'Acerque la tarjeta del guardián al teléfono'
-                    : 'Bring the guardian card to the phone'),
-        );
-        if (!mounted) return;
-        allWritten = allWritten && ok;
-      }
-
-      if (guardian2Uid.isNotEmpty) {
-        final ok = await writeGuardianCard(
-          expectedUid: guardian2Uid,
-          title: isEs ? 'Tarjeta del guardián 2' : 'Guardian card 2',
-          instruction: isEs
-              ? 'Acerque la tarjeta del guardián 2 al teléfono'
-              : 'Bring guardian card 2 to the phone',
-        );
-        if (!mounted) return;
-        allWritten = allWritten && ok;
-      }
-
-      final hadAnyGuardian = guardian1Uid.isNotEmpty || guardian2Uid.isNotEmpty;
-      if (allWritten && hadAnyGuardian) {
-        await scope.localDatabase.clearChipsDirty(
-          record.patientId,
-          guardian: true,
-        );
-      }
     }
 
-    if (!mounted) return;
     await _loadChipStatus(scope.localDatabase);
     if (!mounted) return;
     setState(() => _isUpdatingChips = false);
@@ -295,7 +220,15 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     final scope = AppScope.of(context);
     final isEs = AppStrings.of(context).isEs;
 
-    final selection = await _showReassignDialog(isEs);
+    final hasG1 = (_draft.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
+    final hasG2 = (_draft.guardian2Info?.deviceUid ?? '').trim().isNotEmpty;
+
+    final selection = await showReassignDeviceDialog(
+      context,
+      isEs: isEs,
+      hasG1: hasG1,
+      hasG2: hasG2,
+    );
     if (!mounted || selection == null || selection.targets.isEmpty) return;
 
     final nfcKey = await scope.authRepository.getNfcEncryptionKey();
@@ -317,16 +250,18 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     var guardianDone = false;
 
     for (final target in selection.targets) {
-      final updated = await _reassignOne(
+      final updated = await executeReassignOne(
+        context: context,
         target: target,
         record: record,
         codec: codec,
         isEs: isEs,
+        showSnack: _showReassignSnack,
       );
       if (!mounted) return;
-      if (updated == null) break; // skipped or rejected — stop before saving
+      if (updated == null) break;
       record = updated;
-      if (target == _ReassignTarget.patient) {
+      if (target == ReassignTarget.patient) {
         patientDone = true;
       } else {
         guardianDone = true;
@@ -340,14 +275,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     }
 
     try {
-      // Persist with the reason (B1 carries it on the next /sync), then flush
-      // the queue directly. We call syncAll() rather than _sync(), because
-      // _sync() re-saves the draft without a reason and would clear it.
       await scope.localDatabase.savePatient(
         record,
         retiredDeviceReason: selection.reason,
       );
-      // The new chips were just written, so they are clean.
       await scope.localDatabase.clearChipsDirty(
         record.patientId,
         patient: patientDone,
@@ -355,8 +286,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       );
       if (!mounted) return;
       setState(() {
-        _draft = record;
-        _original = record;
+        _draftController.markSynced();
         _isUpdatingChips = false;
       });
       await _loadChipStatus(scope.localDatabase);
@@ -389,263 +319,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       SnackBar(
         content: Text(message),
         backgroundColor: error ? AppColors.error : null,
-      ),
-    );
-  }
-
-  /// Reads a fresh blank tag (verifying it is unassigned) and captures its UID,
-  /// then writes the re-labeled payload to it. Returns the updated record, or
-  /// null if the user skipped or the tag was rejected.
-  Future<PatientFullRecord?> _reassignOne({
-    required _ReassignTarget target,
-    required PatientFullRecord record,
-    required NfcPayloadCodec codec,
-    required bool isEs,
-  }) async {
-    final title = _reassignTitle(target, record, isEs);
-
-    // STEP 1 — read + verify the new tag is blank, capturing its UID.
-    String? newUid;
-    HwbChipKind? kind;
-    final readOk = await showNfcGuidedWrite(
-      context,
-      title: title,
-      instruction: isEs
-          ? 'Acerque la manilla NUEVA (en blanco) para verificarla'
-          : 'Bring the NEW (blank) tag close to verify it',
-      write: () async {
-        final result = await NfcPayloadService(codec: codec).readHwbChip();
-        newUid = result.uid;
-        kind = result.kind;
-      },
-    );
-    if (!mounted) return null;
-    if (!readOk || newUid == null || newUid!.trim().isEmpty) return null;
-
-    if (kind != HwbChipKind.none) {
-      _showReassignSnack(
-        isEs
-            ? 'Esa manilla ya está en uso. Use una en blanco.'
-            : 'That tag is already in use. Use a blank one.',
-        error: true,
-      );
-      return null;
-    }
-
-    final normalizedNew = newUid!.trim();
-    if (_uidAlreadyOnRecord(record, normalizedNew)) {
-      _showReassignSnack(
-        isEs
-            ? 'Esa manilla ya pertenece a este paciente.'
-            : 'That tag already belongs to this patient.',
-        error: true,
-      );
-      return null;
-    }
-
-    // STEP 2 — write the payload to the new tag, built with the new UID so the
-    // guardian card's own backup is self-consistent.
-    final updated = _withNewUid(record, target, normalizedNew);
-    final writeOk = await showNfcGuidedWrite(
-      context,
-      title: title,
-      instruction: isEs
-          ? 'Acerque la MISMA manilla nueva para grabarla'
-          : 'Bring the SAME new tag close to write it',
-      write: () async {
-        final service = NfcPayloadService(codec: codec);
-        if (target == _ReassignTarget.patient) {
-          await service.writeTriagePayload(
-            NfcTriagePayload.buildPatientPayload(record: updated),
-            expectedUid: normalizedNew,
-          );
-        } else {
-          await service.writeGuardianRecord(
-            buildFit: guardianFitBuilder(record: updated, codec: codec),
-            expectedUid: normalizedNew,
-          );
-        }
-      },
-    );
-    if (!mounted) return null;
-    return writeOk ? updated : null;
-  }
-
-  bool _uidAlreadyOnRecord(PatientFullRecord r, String uid) {
-    final existing = <String>{
-      r.deviceUid.trim(),
-      (r.guardianInfo.deviceUid ?? '').trim(),
-      (r.guardian2Info?.deviceUid ?? '').trim(),
-    }..removeWhere((e) => e.isEmpty);
-    return existing.contains(uid);
-  }
-
-  PatientFullRecord _withNewUid(
-    PatientFullRecord r,
-    _ReassignTarget target,
-    String uid,
-  ) {
-    switch (target) {
-      case _ReassignTarget.patient:
-        return r.copyWith(deviceUid: uid);
-      case _ReassignTarget.guardian1:
-        return r.copyWith(
-          guardianInfo: r.guardianInfo.copyWith(deviceUid: uid),
-        );
-      case _ReassignTarget.guardian2:
-        final g2 = r.guardian2Info;
-        if (g2 == null) return r;
-        return r.copyWith(guardian2Info: g2.copyWith(deviceUid: uid));
-    }
-  }
-
-  String _reassignTitle(
-    _ReassignTarget target,
-    PatientFullRecord record,
-    bool isEs,
-  ) {
-    final hasTwo = (record.guardian2Info?.deviceUid ?? '').trim().isNotEmpty;
-    switch (target) {
-      case _ReassignTarget.patient:
-        return isEs ? 'Manilla del paciente' : 'Patient bracelet';
-      case _ReassignTarget.guardian1:
-        return hasTwo
-            ? (isEs ? 'Tarjeta del guardián 1' : 'Guardian card 1')
-            : (isEs ? 'Tarjeta del guardián' : 'Guardian card');
-      case _ReassignTarget.guardian2:
-        return isEs ? 'Tarjeta del guardián 2' : 'Guardian card 2';
-    }
-  }
-
-  Future<_ReassignSelection?> _showReassignDialog(bool isEs) {
-    final hasG1 = (_draft.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
-    final hasG2 = (_draft.guardian2Info?.deviceUid ?? '').trim().isNotEmpty;
-    final selected = <_ReassignTarget>{_ReassignTarget.patient};
-    String reason = 'lost';
-
-    return showDialog<_ReassignSelection>(
-      context: context,
-      builder: (dialogCtx) {
-        return StatefulBuilder(
-          builder: (ctx, setLocal) {
-            Widget deviceCheck(_ReassignTarget t, String label) {
-              return CheckboxListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: Text(label),
-                value: selected.contains(t),
-                onChanged: (v) => setLocal(() {
-                  if (v ?? false) {
-                    selected.add(t);
-                  } else {
-                    selected.remove(t);
-                  }
-                }),
-              );
-            }
-
-            Widget reasonSegments() {
-              return SegmentedButton<String>(
-                segments: [
-                  ButtonSegment<String>(
-                    value: 'lost',
-                    label: Text(isEs ? 'Perdida' : 'Lost'),
-                  ),
-                  ButtonSegment<String>(
-                    value: 'damaged',
-                    label: Text(isEs ? 'Dañada' : 'Damaged'),
-                  ),
-                ],
-                selected: <String>{reason},
-                onSelectionChanged: (Set<String> s) =>
-                    setLocal(() => reason = s.first),
-              );
-            }
-
-            return AlertDialog(
-              title: Text(isEs ? 'Reasignar manilla' : 'Reassign bracelet'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isEs
-                          ? '¿Qué dispositivo se va a reemplazar?'
-                          : 'Which device is being replaced?',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    deviceCheck(
-                      _ReassignTarget.patient,
-                      isEs ? 'Manilla del paciente' : 'Patient bracelet',
-                    ),
-                    if (hasG1)
-                      deviceCheck(
-                        _ReassignTarget.guardian1,
-                        hasG2
-                            ? (isEs
-                                  ? 'Tarjeta del guardián 1'
-                                  : 'Guardian card 1')
-                            : (isEs
-                                  ? 'Tarjeta del guardián'
-                                  : 'Guardian card'),
-                      ),
-                    if (hasG2)
-                      deviceCheck(
-                        _ReassignTarget.guardian2,
-                        isEs ? 'Tarjeta del guardián 2' : 'Guardian card 2',
-                      ),
-                    const SizedBox(height: 12),
-                    Text(
-                      isEs ? 'Motivo' : 'Reason',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 6),
-                    reasonSegments(),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogCtx).pop(),
-                  child: Text(AppStrings.of(ctx).cancel),
-                ),
-                ElevatedButton(
-                  onPressed: selected.isEmpty
-                      ? null
-                      : () {
-                          final ordered = <_ReassignTarget>[
-                            _ReassignTarget.patient,
-                            _ReassignTarget.guardian1,
-                            _ReassignTarget.guardian2,
-                          ].where(selected.contains).toList();
-                          Navigator.of(dialogCtx).pop(
-                            _ReassignSelection(
-                              targets: ordered,
-                              reason: reason,
-                            ),
-                          );
-                        },
-                  child: Text(isEs ? 'Continuar' : 'Continue'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showPartialCardNotice(
-    ScaffoldMessengerState messenger,
-    GuardianPayloadFit fit,
-    bool isEs,
-  ) {
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(partialCardNoticeMessage(fit, isEs)),
-        duration: const Duration(seconds: 6),
       ),
     );
   }
@@ -691,200 +364,79 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   void _updateVitalSigns({double? weight, double? height, String? bloodType}) {
-    setState(() {
-      final info = _draft.patientInfo;
-      _draft = _replacePatientInfo(
-        PatientInfo(
-          identification: info.identification,
-          firstLastName: info.firstLastName,
-          secondLastName: info.secondLastName,
-          firstName: info.firstName,
-          secondName: info.secondName,
-          dob: info.dob,
-          nationalityCode: info.nationalityCode,
-          nationalityName: info.nationalityName,
-          biologicalSex: info.biologicalSex,
-          genderIdentity: info.genderIdentity,
-          ethnicity: info.ethnicity,
-          ethnicCommunity: info.ethnicCommunity,
-          disabilityCategory: info.disabilityCategory,
-          address: info.address,
-          bloodType: bloodType,
-          weight: weight ?? info.weight,
-          height: height ?? info.height,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.updateVitalSigns(
+      weight: weight,
+      height: height,
+      bloodType: bloodType,
+    );
+    unawaited(_saveAndPendingSync());
   }
 
   void _updateAddress(Address address) {
-    setState(() {
-      _draft = _replacePatientInfo(
-        _draft.patientInfo.copyWith(address: address),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.updateAddress(address);
+    unawaited(_saveAndPendingSync());
   }
 
   void _updateBackground({
     List<ChronicConditionItem>? chronicConditions,
     String? personalHistory,
   }) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: chronicConditions ?? old.chronicConditions,
-          personalHistory: personalHistory ?? old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.updateBackground(
+      chronicConditions: chronicConditions,
+      personalHistory: personalHistory,
+    );
+    unawaited(_saveAndPendingSync());
   }
 
   void _addChronicCondition(ChronicConditionItem item) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: [...old.chronicConditions, item],
-          personalHistory: old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addChronicCondition(item);
+    unawaited(_saveAndPendingSync());
   }
 
   void _removeChronicCondition(int index) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    final updated = [...old.chronicConditions]..removeAt(index);
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: updated,
-          personalHistory: old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.removeChronicCondition(index);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addMedication(MedicationStatementItem item) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: old.chronicConditions,
-          personalHistory: old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: [...old.medications, item],
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addMedication(item);
+    unawaited(_saveAndPendingSync());
   }
 
   void _removeMedication(int index) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    final updated = [...old.medications]..removeAt(index);
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: old.chronicConditions,
-          personalHistory: old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: updated,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.removeMedication(index);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addFamilyHistory(FamilyHistoryItem item) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: old.chronicConditions,
-          personalHistory: old.personalHistory,
-          familyHistory: [...old.familyHistory, item],
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addFamilyHistory(item);
+    unawaited(_saveAndPendingSync());
   }
 
   void _removeFamilyHistory(int index) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    final updated = [...old.familyHistory]..removeAt(index);
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: old.chronicConditions,
-          personalHistory: old.personalHistory,
-          familyHistory: updated,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.removeFamilyHistory(index);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addAllergy(AllergyInfo allergy) {
-    setState(() {
-      _draft = _draft.copyWith(allergies: [..._draft.allergies, allergy]);
-    });
-    _saveAndPendingSync();
+    _draftController.addAllergy(allergy);
+    unawaited(_saveAndPendingSync());
   }
 
   void _removeAllergy(int index) {
-    final updated = [..._draft.allergies]..removeAt(index);
-    setState(() {
-      _draft = _draft.copyWith(allergies: updated);
-    });
-    _saveAndPendingSync();
+    _draftController.removeAllergy(index);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addVaccines(List<VaccinationRecordItem> vaccines) {
-    setState(() {
-      _draft = _draft.copyWith(
-        vaccinationRecord: [..._draft.vaccinationRecord, ...vaccines],
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addVaccines(vaccines);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addConsultation(MedicalHistoryItem consultation) {
-    setState(() {
-      _draft = _draft.copyWith(
-        medicalHistory: [..._draft.medicalHistory, consultation],
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addConsultation(consultation);
+    unawaited(_saveAndPendingSync());
   }
-
-  // ── Helpers ──────────────────────────────────────────────────────────────
-
-  PatientFullRecord _replacePatientInfo(PatientInfo info) =>
-      _draft.copyWith(patientInfo: info);
-
-  PatientFullRecord _replaceBackground(BackgroundHistory bg) =>
-      _draft.copyWith(backgroundHistory: bg);
 
   // ── Sync ─────────────────────────────────────────────────────────────────
 
@@ -919,10 +471,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
       final bool ok = await scope.syncEngine.syncAll();
       if (!mounted) return;
+      if (ok) {
+        _draftController.markSynced();
+      }
       setState(() {
-        if (ok) {
-          _original = _draft;
-        }
         _isSyncing = false;
       });
       if (!silent) {
@@ -1043,17 +595,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         guardian: current,
         guardianIndex: guardianIndex,
         onConfirm: (GuardianInfo updatedGuardian) {
-          setState(() {
-            _draft = _draft.copyWith(
-              guardianInfo: guardianIndex == 1
-                  ? updatedGuardian
-                  : _draft.guardianInfo,
-              guardian2Info: guardianIndex == 2
-                  ? updatedGuardian
-                  : _draft.guardian2Info,
-            );
-          });
-          _saveAndPendingSync();
+          _draftController.updateGuardian(guardianIndex, updatedGuardian);
+          unawaited(_saveAndPendingSync());
         },
       ),
     );
@@ -1280,17 +823,4 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     }
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
-}
-
-/// Which NFC device is being re-labeled in the reassign flow.
-enum _ReassignTarget { patient, guardian1, guardian2 }
-
-/// Result of the reassign selection dialog: which devices to replace and why.
-class _ReassignSelection {
-  const _ReassignSelection({required this.targets, required this.reason});
-
-  final List<_ReassignTarget> targets;
-
-  /// Retirement reason for this session — `'lost'` or `'damaged'`.
-  final String reason;
 }

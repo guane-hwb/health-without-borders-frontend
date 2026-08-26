@@ -132,7 +132,7 @@ class _VaccineCard extends StatelessWidget {
     if (p.length != 3) return datePart;
 
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     if (isEs) {
       return '${p[2]}/${p[1]}/${p[0]}';

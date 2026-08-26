@@ -671,8 +671,45 @@ void main() {
           isA<ApiException>().having((e) => e.statusCode, 'statusCode', 401),
         ),
       );
-      expect(hits, 2); // original + exactly one replay
-      expect(provider.calls, 1); // refreshed once, no loop
+      expect(hits, 2);
+      expect(provider.calls, 1);
+    });
+  });
+
+  group('Redirecciones — el Bearer no debe salir del host del backend', () {
+    test('un 3xx cross-host aborta con ApiException', () async {
+      final capturedHosts = <String>[];
+
+      final client = ApiClient(
+        baseUrl: baseUrl,
+        client: MockClient((request) async {
+          capturedHosts.add(request.url.host);
+          if (request.url.host == 'api.example.com') {
+            return http.Response(
+              '',
+              302,
+              headers: {
+                'location': 'https://exfil.example/api/v1/patients/sync',
+              },
+            );
+          }
+          return http.Response(jsonEncode({'status': 'success'}), 200);
+        }),
+      );
+
+      await expectLater(
+        client.postJson(
+          path: '/api/v1/patients/sync',
+          body: const {'patientId': 'p-1'},
+          headers: const {'Authorization': 'Bearer jwt-del-clinico'},
+        ),
+        throwsA(
+          isA<ApiException>().having((e) => e.statusCode, 'statusCode', 302),
+        ),
+      );
+
+      expect(capturedHosts, ['api.example.com']);
+      expect(capturedHosts, isNot(contains('exfil.example')));
     });
   });
 }

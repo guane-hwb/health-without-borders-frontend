@@ -641,6 +641,7 @@ class AppStrings {
       _get('statsComparedTo').replaceAll('{from}', from).replaceAll('{to}', to);
   String statsGeneratedAt(String time) =>
       _get('statsGeneratedAt').replaceAll('{time}', time);
+  String get passwordTooShort8 => _get('passwordTooShort8');
 
   // ══════════════════════════════════════════════════════════════════════════
   // TRANSLATIONS
@@ -1217,6 +1218,7 @@ class AppStrings {
         'Esta acción eliminará permanentemente la organización {name} y todos sus datos asociados.',
     'statsComparedTo': 'Comparado con {from} – {to}',
     'statsGeneratedAt': 'Generado el {time}',
+    'passwordTooShort8': 'La contraseña debe tener al menos 8 caracteres',
   };
 
   static const Map<String, String> _en = {
@@ -1793,5 +1795,6 @@ class AppStrings {
         'This action will permanently delete the organization {name} and all its associated data.',
     'statsComparedTo': 'Compared to {from} – {to}',
     'statsGeneratedAt': 'Generated at {time}',
+    'passwordTooShort8': 'Password must be at least 8 characters long',
   };
 }
