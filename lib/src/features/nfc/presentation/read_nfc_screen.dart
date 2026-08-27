@@ -15,7 +15,6 @@ import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
 import 'profile/patient_profile_screen.dart';
-import 'read_nfc_guardian_screen.dart';
 import 'shared_read_nfc_header.dart';
 
 /// Read-NFC flow:
@@ -276,12 +275,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         patientDeviceUid: _patientDeviceUid ?? '',
       );
       if (!mounted) return;
-      setState(() => _scanning = false);
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => ReadNfcGuardianScreen(patient: record),
-        ),
-      );
+      await _openProfile(record, readOnly: true, offline: true);
     } on NfcNotAvailableException {
       if (!mounted) return;
       setState(() {

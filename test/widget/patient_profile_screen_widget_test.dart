@@ -252,6 +252,7 @@ Future<void> _pumpScreen(
   PatientFullRecord patient, {
   bool readOnly = false,
   bool offline = false,
+  bool allowReassign = false,
   UserRole role = UserRole.doctor,
   bool syncShouldThrow = false,
   String locale = 'es',
@@ -263,6 +264,7 @@ Future<void> _pumpScreen(
         patient: patient,
         readOnly: readOnly,
         offline: offline,
+        allowReassign: allowReassign,
       ),
       role: role,
       syncShouldThrow: syncShouldThrow,
@@ -1035,6 +1037,44 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Doc. Extranjero 987654'), findsOneWidget);
+      },
+    );
+  });
+
+  group('Botón "Reasignar manilla" — visibilidad por origen', () {
+    testWidgets(
+      'se muestra cuando allowReassign es true y no es readOnly '
+      '(entrada por Buscar paciente)',
+      (tester) async {
+        await _pumpScreen(tester, _record(), allowReassign: true);
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.published_with_changes), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'se oculta por defecto (entrada por Leer NFC)',
+      (tester) async {
+        await _pumpScreen(tester, _record());
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.published_with_changes), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'se oculta en readOnly aunque allowReassign sea true',
+      (tester) async {
+        await _pumpScreen(
+          tester,
+          _record(),
+          allowReassign: true,
+          readOnly: true,
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.published_with_changes), findsNothing);
       },
     );
   });
