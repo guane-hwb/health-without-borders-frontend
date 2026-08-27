@@ -47,6 +47,7 @@ class PatientProfileScreen extends StatefulWidget {
     this.readOnly = false,
     this.offline = false,
     this.emergency = false,
+    this.allowReassign = false,
   });
 
   final PatientFullRecord patient;
@@ -54,6 +55,11 @@ class PatientProfileScreen extends StatefulWidget {
   final bool readOnly;
   final bool offline;
   final bool emergency;
+
+  /// Whether to offer the "Reasignar manilla" action. Only the lost/damaged
+  /// recovery path (patient search) sets this; scanning via Read NFC does not,
+  /// since a successful scan means the tags are present and working.
+  final bool allowReassign;
 
   @override
   State<PatientProfileScreen> createState() => _PatientProfileScreenState();
@@ -733,7 +739,9 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                   lastSyncedAt: widget.lastSyncedAt,
                   onBack: () => _confirmExit(),
                   onSync: widget.readOnly ? null : () => _sync(silent: false),
-                  onReassignDevice: widget.readOnly ? null : _reassignDevices,
+                  onReassignDevice: (widget.allowReassign && !widget.readOnly)
+                      ? _reassignDevices
+                      : null,
                 ),
                 ProfileTabsBar(controller: _tabController, draft: _draft),
                 if (widget.emergency) const EmergencyBanner(),
