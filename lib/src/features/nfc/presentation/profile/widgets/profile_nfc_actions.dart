@@ -140,13 +140,13 @@ Future<PatientFullRecord?> executeReassignOne({
 
   String? newUid;
   HwbChipKind? kind;
-  final readOk = await showNfcGuidedWrite(
+  final readOk = await showNfcGuidedRead(
     context,
     title: title,
     instruction: isEs
         ? 'Acerque la manilla NUEVA (en blanco) para verificarla'
         : 'Bring the NEW (blank) tag close to verify it',
-    write: () async {
+    read: () async {
       final result = await NfcPayloadService(codec: codec).readHwbChip();
       newUid = result.uid;
       kind = result.kind;
