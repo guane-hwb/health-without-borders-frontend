@@ -6,10 +6,10 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/widgets/form_widgets.dart';
 import '../../../shared/widgets/hwb_async_state_view.dart';
 import '../../../shared/widgets/hwb_detail_row.dart';
 import '../../../shared/widgets/hwb_screen_header.dart';
-import '../../../shared/widgets/hwb_text_field.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../auth/domain/user_session.dart';
 
@@ -945,23 +945,23 @@ class _UserFormSheetState extends State<_UserFormSheet> {
               ),
             ),
             const SizedBox(height: 16),
-            HwbTextField(
+            LabeledTextField(
               label: s.userFormFullNameLabel,
               controller: _nameCtrl,
-              icon: Icons.person,
+              prefixIcon: Icons.person,
             ),
             const SizedBox(height: 12),
-            HwbTextField(
+            LabeledTextField(
               label: s.userFormEmailLabel,
               controller: _emailCtrl,
-              icon: Icons.email,
+              prefixIcon: Icons.email,
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 12),
-            HwbTextField(
+            LabeledTextField(
               label: s.userFormPasswordLabel,
               controller: _passCtrl,
-              icon: Icons.lock,
+              prefixIcon: Icons.lock,
             ),
             const SizedBox(height: 12),
             Text(s.userFormRoleLabel, style: const TextStyle(fontSize: 13)),

@@ -362,27 +362,27 @@ void main() {
       expect(pending.single['client_event_id'], isNotEmpty);
     });
 
-    test('logEmergencyAccess assigns a distinct, stable client_event_id',
-        () async {
-      await localDb.logEmergencyAccess(patientUid: '04:E1');
-      await localDb.logEmergencyAccess(patientUid: '04:E2');
+    test(
+      'logEmergencyAccess assigns a distinct, stable client_event_id',
+      () async {
+        await localDb.logEmergencyAccess(patientUid: '04:E1');
+        await localDb.logEmergencyAccess(patientUid: '04:E2');
 
-      final first = await localDb.pendingEmergencyAccessLogs();
-      final second = await localDb.pendingEmergencyAccessLogs();
+        final first = await localDb.pendingEmergencyAccessLogs();
+        final second = await localDb.pendingEmergencyAccessLogs();
 
-      final ids =
-          first.map((e) => e['client_event_id'] as String).toSet();
-      expect(ids, hasLength(2)); // distinct per entry
+        final ids = first.map((e) => e['client_event_id'] as String).toSet();
+        expect(ids, hasLength(2));
 
-      // Stable across reads (not regenerated each call).
-      final byUidFirst = {
-        for (final e in first) e['patient_uid']: e['client_event_id'],
-      };
-      final byUidSecond = {
-        for (final e in second) e['patient_uid']: e['client_event_id'],
-      };
-      expect(byUidSecond, equals(byUidFirst));
-    });
+        final byUidFirst = {
+          for (final e in first) e['patient_uid']: e['client_event_id'],
+        };
+        final byUidSecond = {
+          for (final e in second) e['patient_uid']: e['client_event_id'],
+        };
+        expect(byUidSecond, equals(byUidFirst));
+      },
+    );
 
     test('pendingEmergencyAccessLogs backfills a legacy row missing '
         'client_event_id', () async {
@@ -396,16 +396,16 @@ void main() {
       });
 
       final pending = await localDb.pendingEmergencyAccessLogs();
-      final legacy =
-          pending.firstWhere((e) => e['patient_uid'] == '04:LEGACY');
+      final legacy = pending.firstWhere((e) => e['patient_uid'] == '04:LEGACY');
       final cid = legacy['client_event_id'] as String?;
       expect(cid, isNotNull);
       expect(cid, isNotEmpty);
 
       // Persisted: a second read returns the same id, not a new one.
       final again = await localDb.pendingEmergencyAccessLogs();
-      final legacyAgain =
-          again.firstWhere((e) => e['patient_uid'] == '04:LEGACY');
+      final legacyAgain = again.firstWhere(
+        (e) => e['patient_uid'] == '04:LEGACY',
+      );
       expect(legacyAgain['client_event_id'], equals(cid));
     });
 
@@ -541,14 +541,16 @@ void main() {
       expect(entry.retiredDeviceReason, equals('lost'));
     });
 
-    test('savePatient leaves retiredDeviceReason null for ordinary records',
-        () async {
-      await localDb.savePatient(_buildRecord(patientId: 'p-plain'));
+    test(
+      'savePatient leaves retiredDeviceReason null for ordinary records',
+      () async {
+        await localDb.savePatient(_buildRecord(patientId: 'p-plain'));
 
-      final pending = await localDb.getUnsyncedRecords();
-      final entry = pending.firstWhere((e) => e.patientId == 'p-plain');
-      expect(entry.retiredDeviceReason, isNull);
-    });
+        final pending = await localDb.getUnsyncedRecords();
+        final entry = pending.firstWhere((e) => e.patientId == 'p-plain');
+        expect(entry.retiredDeviceReason, isNull);
+      },
+    );
 
     test('savePatient preserves an existing retiredDeviceReason when a later '
         'save omits it', () async {
@@ -1179,5 +1181,17 @@ void main() {
         expect(await localDb.getUnsyncedCount(), equals(0));
       },
     );
+
+    test('los contadores separan reintentables de bloqueados', () async {
+      await localDb.savePatient(_buildRecord(patientId: 'p-ok'));
+      await localDb.savePatient(_buildRecord(patientId: 'p-409'));
+      await localDb.markSyncError('p-409', 'duplicada', statusCode: 409);
+      await localDb.savePatient(_buildRecord(patientId: 'p-500'));
+      await localDb.markSyncError('p-500', 'server down', statusCode: 500);
+
+      expect(await localDb.getRetryablePendingCount(), equals(2));
+      expect(await localDb.getBlockedCount(), equals(1));
+      expect(await localDb.getUnsyncedCount(), equals(3));
+    });
   });
 }

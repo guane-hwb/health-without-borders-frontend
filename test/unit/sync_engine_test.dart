@@ -744,5 +744,39 @@ void main() {
             localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).called(1);
     });
+
+    test(
+      'abandona el lote tras 3 fallos de transporte (timeout) consecutivos',
+      () async {
+        final entries = List.generate(
+          10,
+          (i) => buildEntry('p-$i', record: MockPatientFullRecord()),
+        );
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => entries);
+        when(
+          () => localDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 10);
+        when(
+          () => localDb.markSyncError(
+            any(),
+            any(),
+            revision: any(named: 'revision'),
+          ),
+        ).thenAnswer((_) async {});
+        when(() => patientRepo.syncPatient(any())).thenThrow(
+          TimeoutException('timeout de red', const Duration(seconds: 10)),
+        );
+
+        await engine.syncAll();
+
+        verify(() => patientRepo.syncPatient(any())).called(3);
+      },
+    );
   });
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/di/app_scope.dart';
 import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/hwb_logo.dart';
+import '../../../../shared/widgets/locale_switcher.dart';
 import '../../../../shared/widgets/screen_bottom_handle.dart';
 import '../../domain/patient_record.dart';
 import '../../domain/register_draft.dart';
@@ -504,50 +505,9 @@ class _WizardHeader extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          _LocaleSwitcher(),
+          const LocaleSwitcher(),
           const SizedBox(width: 4),
         ],
-      ),
-    );
-  }
-}
-
-class _LocaleSwitcher extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final locale = AppLocale.of(context).locale;
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: ['es', 'en'].map((lang) {
-          final selected = locale == lang;
-          return GestureDetector(
-            onTap: () => AppLocale.of(context).setLocale(lang),
-            child: Container(
-              margin: const EdgeInsets.only(left: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: selected
-                    ? Colors.white.withValues(alpha: 0.95)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                lang.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? AppColors.primary : AppColors.white,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
       ),
     );
   }

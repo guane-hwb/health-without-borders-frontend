@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../design/tokens/app_colors.dart';
-import '../../../../../shared/widgets/hwb_text_field.dart';
+import '../../../../../shared/widgets/form_widgets.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/sheet_scaffold.dart';
 
@@ -110,6 +110,8 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
         ? (isEs ? 'Editar Guardián Principal' : 'Edit Primary Guardian')
         : (isEs ? 'Editar Guardián Secundario' : 'Edit Secondary Guardian');
 
+    final bool hasUid = _uidCtrl.text.trim().isNotEmpty;
+
     return SheetScaffold(
       title: dynamicTitle,
       onConfirm: () {
@@ -129,15 +131,17 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _label(s.guardianFullName),
-          HwbTextField(
+          _LabelText(text: s.guardianFullName),
+          const SizedBox(height: 4),
+          LabeledTextField(
             label: '',
             controller: _nameCtrl,
             hint: s.guardianFullNameHint,
-            icon: Icons.person_outline,
+            prefixIcon: Icons.person_outline,
           ),
           const SizedBox(height: 14),
-          _label(s.guardianRelationship),
+          _LabelText(text: s.guardianRelationship),
+          const SizedBox(height: 4),
           Wrap(
             spacing: 8,
             runSpacing: 6,
@@ -170,26 +174,69 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
             }).toList(),
           ),
           const SizedBox(height: 14),
-          _label(s.guardianPhoneLabel),
-          HwbTextField(
+          _LabelText(text: s.guardianPhoneLabel),
+          const SizedBox(height: 4),
+          LabeledTextField(
             label: '',
             controller: _phoneCtrl,
             hint: s.guardianPhoneHint,
-            icon: Icons.phone_outlined,
+            prefixIcon: Icons.phone_outlined,
             keyboardType: TextInputType.phone,
           ),
           const SizedBox(height: 14),
-          _label(s.guardianNfcDevice),
+          _LabelText(text: s.guardianNfcDevice),
+          const SizedBox(height: 4),
           Row(
             children: [
               Expanded(
-                child: HwbTextField(
-                  label: '',
-                  controller: _uidCtrl,
-                  hint: s.guardianNfcUidHint,
-                  icon: _uidCtrl.text.trim().isNotEmpty
-                      ? Icons.check_circle_outline
-                      : Icons.family_restroom,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _uidCtrl,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: s.guardianNfcUidHint,
+                        hintStyle: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textSecondary,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.white,
+                        prefixIcon: Icon(
+                          hasUid
+                              ? Icons.check_circle_outline
+                              : Icons.family_restroom,
+                          size: 18,
+                          color: hasUid
+                              ? AppColors.success
+                              : AppColors.secondary,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFB0B8C4),
+                            width: 1.5,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: AppColors.primary,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
@@ -223,16 +270,21 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
       ),
     );
   }
+}
 
-  Widget _label(String t) => Padding(
-    padding: const EdgeInsets.only(bottom: 4),
-    child: Text(
-      t,
+class _LabelText extends StatelessWidget {
+  const _LabelText({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
       style: const TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
-    ),
-  );
+    );
+  }
 }

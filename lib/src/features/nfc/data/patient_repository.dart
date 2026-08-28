@@ -42,6 +42,7 @@ class PatientRepository {
       path: '/api/v1/patients/sync',
       body: body,
       headers: await _authHeaders(),
+      timeout: const Duration(seconds: 10),
     );
     return PatientSyncResponse.fromJson(data);
   }
@@ -81,20 +82,20 @@ class PatientRepository {
     required String lastName,
     String? guardianName,
   }) async {
-    final Map<String, dynamic> body = <String, dynamic>{
+    final Map<String, dynamic> searchBody = <String, dynamic>{
       'document_number': documentNumber,
       'birth_date': birthDate,
       'first_name': firstName,
       'last_name': lastName,
     };
     if (guardianName != null && guardianName.isNotEmpty) {
-      body['guardian_name'] = guardianName;
+      searchBody['guardian_name'] = guardianName;
     }
 
     final Map<String, dynamic> data = await _apiClient.postJson(
       path: '/api/v1/patients/search',
       headers: await _authHeaders(),
-      body: body,
+      body: searchBody,
     );
     return PatientFullRecord.fromJson(data);
   }
