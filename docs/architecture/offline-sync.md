@@ -21,8 +21,16 @@ CREATE TABLE local_patients (
 )
 ```
 
-!!! note "Fallback web"
-    `sqflite` is not available in Flutter Web. `LocalDatabase` uses an in-memory `Map<String, Map<String, dynamic>>` as a fallback for Chrome development. For web production, `sqflite_common_ffi_web` would be required.
+!!! note "Almacenamiento en Web"
+    `sqflite` is not available in Flutter Web. `LocalDatabase` uses a
+    `localStorage`-backed store as its persistence layer on Web, **not just a
+    development fallback** — it is the production storage path for this
+    platform. Clinical payloads (`record_json`) are encrypted with AES-256-GCM
+    before being written, the index `patient_name` column is masked (e.g.
+    "Ana G.") rather than stored in full, and the break-glass emergency log
+    encrypts `patient_name`/`user_id` the same way. See
+    `web/index.html`'s Content-Security-Policy for the defense-in-depth layer
+    that protects this storage against script-injection exfiltration.
 
 ## Synchronization Engine — `SyncEngine`
 

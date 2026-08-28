@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step3_patient_data.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/register_draft.dart';
+import 'package:health_without_borders_frontend/src/shared/country_display.dart';
 
 String _formatDate(DateTime? value) {
   if (value == null) return '';
@@ -297,5 +298,33 @@ void main() {
     test('Multiple en', () => expect(mul(false), 'Multiple'));
     test('AS con sexo M es', () => expect(asM(true), 'Adulto s/ID'));
     test('AS con sexo M en', () => expect(asM(false), 'Adult w/o ID'));
+  });
+
+  group('Vocabulario de nacionalidad', () {
+    test('todos los códigos ofrecidos son alfa-3 de tres letras', () {
+      for (final String code in kSupportedNationalityCodes) {
+        if (code == 'OTHER') continue;
+        expect(
+          RegExp(r'^[A-Z]{3}$').hasMatch(code),
+          isTrue,
+          reason: '"$code" no es un ISO 3166-1 alfa-3 válido',
+        );
+      }
+    });
+
+    test('no se ofrece el centinela UNK', () {
+      expect(kSupportedNationalityCodes, isNot(contains('UNK')));
+    });
+
+    test('todo código ofrecido tiene presentación en el catálogo', () {
+      for (final String code in kSupportedNationalityCodes) {
+        if (code == 'OTHER') continue;
+        expect(
+          countryDisplay(code).flag,
+          isNot('🌍'),
+          reason: '"$code" cae al globo: falta en countryDisplay',
+        );
+      }
+    });
   });
 }

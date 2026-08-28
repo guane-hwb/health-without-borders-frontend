@@ -8,14 +8,15 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
-import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/add_consultation_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/add_vaccine_screen.dart';
@@ -25,7 +26,6 @@ import 'package:health_without_borders_frontend/src/features/nfc/presentation/re
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step4_background.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step5_review.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step6_success.dart';
-import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ─────────────────────────────────────────────────────────────────────────
 //  Mocks
@@ -126,6 +126,7 @@ void main() {
     ).thenAnswer((_) async {});
     when(() => sync.syncAll()).thenAnswer((_) async => true);
     when(() => sync.pendingCount).thenReturn(ValueNotifier<int>(0));
+    when(() => sync.blockedCount).thenReturn(ValueNotifier<int>(0));
     when(() => sync.refreshPendingCount()).thenAnswer((_) async {});
   }
 
@@ -226,6 +227,16 @@ void main() {
         expect(backButton, findsOneWidget);
         await tester.tap(backButton);
         await tester.pumpAndSettle();
+
+        if (find.byType(AlertDialog).evaluate().isNotEmpty) {
+          final confirmBtn = find.text('Descartar');
+          if (confirmBtn.evaluate().isNotEmpty) {
+            await tester.tap(confirmBtn);
+          } else {
+            await tester.tap(find.text('Discard'));
+          }
+          await tester.pumpAndSettle();
+        }
 
         expect(find.byType(HomeScreen), findsOneWidget);
         expect(find.byType(RegisterNfcScreen), findsNothing);

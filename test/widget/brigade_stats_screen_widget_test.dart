@@ -775,4 +775,41 @@ void main() {
       },
     );
   });
+
+  group('generatedAt label', () {
+    testWidgets('la pantalla estampa la fecha de generación del servidor', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_stats()),
+        ),
+      );
+
+      await _expectAfterScroll(tester, find.textContaining('Generado el'));
+    });
+
+    testWidgets(
+      'la fecha de generación también se muestra en el estado vacío',
+      (tester) async {
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+            statsRepo: FakeStatsRepository(
+              _stats(patients: 0, vaccineDoses: 0, allergies: 0, encounters: 0),
+            ),
+          ),
+        );
+
+        expect(
+          find.text('Aún no hay datos para este período.'),
+          findsOneWidget,
+        );
+        await _expectAfterScroll(tester, find.textContaining('Generado el'));
+      },
+    );
+  });
 }

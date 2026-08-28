@@ -1,9 +1,10 @@
 // lib/src/features/nfc/presentation/edit_medical_staff_screen.dart
+
 import 'package:flutter/material.dart';
 
 import '../../../core/i18n/app_strings.dart';
 import '../../../design/tokens/app_colors.dart';
-import '../../../shared/widgets/hwb_text_field.dart';
+import '../../../shared/widgets/form_widgets.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
@@ -109,44 +110,53 @@ class _EditMedicalStaffScreenState extends State<EditMedicalStaffScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _sec(s.practitioner),
+                        FormSectionHeader(
+                          icon: Icons.person_outline,
+                          title: s.practitioner,
+                        ),
                         const SizedBox(height: 12),
-                        HwbTextField(
+                        LabeledTextField(
                           label: s.name,
                           controller: _practNameCtrl,
-                          icon: Icons.person,
+                          prefixIcon: Icons.person,
                         ),
                         const SizedBox(height: 12),
                         _dd(s.documentType, _practDocType, _docTypes, (v) {
                           if (v != null) setState(() => _practDocType = v);
                         }),
                         const SizedBox(height: 12),
-                        HwbTextField(
+                        LabeledTextField(
                           label: s.documentNumber,
                           controller: _practDocNumberCtrl,
-                          icon: Icons.badge,
+                          prefixIcon: Icons.badge,
                         ),
                         const SizedBox(height: 20),
-                        _sec(s.healthcareProvider),
+                        FormSectionHeader(
+                          icon: Icons.apartment_outlined,
+                          title: s.healthcareProvider,
+                        ),
                         const SizedBox(height: 12),
-                        HwbTextField(
+                        LabeledTextField(
                           label: s.providerName,
                           controller: _providerNameCtrl,
-                          icon: Icons.apartment,
+                          prefixIcon: Icons.apartment,
                         ),
                         const SizedBox(height: 12),
-                        HwbTextField(
+                        LabeledTextField(
                           label: s.repsCode,
                           controller: _providerRepsCodeCtrl,
-                          icon: Icons.qr_code,
+                          prefixIcon: Icons.qr_code,
                         ),
                         const SizedBox(height: 20),
-                        _sec(s.encounter),
+                        FormSectionHeader(
+                          icon: Icons.event_available_outlined,
+                          title: s.encounter,
+                        ),
                         const SizedBox(height: 12),
-                        HwbTextField(
+                        LabeledTextField(
                           label: s.dateTime,
                           controller: _dateCtrl,
-                          icon: Icons.calendar_today,
+                          prefixIcon: Icons.calendar_today,
                         ),
                         const SizedBox(height: 12),
                         _dd(s.diagnosisType, _diagnosisType, _diagTypes, (v) {
@@ -244,15 +254,6 @@ class _EditMedicalStaffScreenState extends State<EditMedicalStaffScreen> {
       ),
     );
   }
-
-  Widget _sec(String t) => Text(
-    t,
-    style: const TextStyle(
-      fontSize: 18,
-      fontWeight: FontWeight.w700,
-      color: AppColors.primary,
-    ),
-  );
 
   Widget _dd(
     String label,

@@ -7,6 +7,7 @@ import '../../../core/i18n/app_strings.dart';
 import '../../../core/nfc/nfc_service.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/widgets/form_widgets.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
@@ -170,8 +171,6 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
     try {
       final scope = AppScope.of(context);
       await scope.localDatabase.savePatient(updatedRecord);
-      // Adding a vaccine changes the full record (guardian card) but not the
-      // triage on the wristband.
       await scope.localDatabase.markChipsDirty(
         updatedRecord.patientId,
         guardian: true,
@@ -579,7 +578,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
             children: [
               _FieldLabel(
                 label: isEs ? 'Fecha de administración' : 'Administration date',
-                required: true,
+                requiredField: true,
               ),
               const SizedBox(height: 6),
               InkWell(
@@ -639,25 +638,25 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
               ),
               const SizedBox(height: 12),
 
-              _StyledTextField(
+              LabeledTextField(
                 label: s.administeredBy,
                 controller: _byCtrl,
                 hint: isEs ? 'Ej: Enf. Ana Ruiz' : 'e.g. Nurse Ana Ruiz',
-                required: true,
-                icon: Icons.person_outline,
-                onChanged: () => setState(() {}),
+                requiredField: true,
+                prefixIcon: Icons.person_outline,
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 12),
 
-              _StyledTextField(
+              LabeledTextField(
                 label: s.administeredAt,
                 controller: _atCtrl,
                 hint: isEs
                     ? 'Ej: Brigada Frontera Cúcuta'
                     : 'e.g. Cucuta Border Campaign',
-                required: true,
-                icon: Icons.location_on_outlined,
-                onChanged: () => setState(() {}),
+                requiredField: true,
+                prefixIcon: Icons.location_on_outlined,
+                onChanged: (_) => setState(() {}),
               ),
             ],
           ),
@@ -1073,12 +1072,12 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
                 const SizedBox(height: 12),
 
                 // ── Vaccine name ───────────────────────────────────────
-                _StyledTextField(
+                LabeledTextField(
                   label: s.vaccineName,
                   controller: entry.nameCtrl,
                   hint: isEs ? 'Ej: Triple Viral (SRP)' : 'e.g. MMR Vaccine',
-                  required: true,
-                  onChanged: () {
+                  requiredField: true,
+                  onChanged: (_) {
                     setState(() {});
                     widget.onChanged();
                   },
@@ -1086,13 +1085,13 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
                 const SizedBox(height: 10),
 
                 // ── CVX Code ──────────────────────────────────────────
-                _StyledTextField(
+                LabeledTextField(
                   label: s.cvxCode,
                   controller: entry.cvxCtrl,
                   hint: 'Ej: 03',
-                  required: true,
+                  requiredField: true,
                   keyboardType: TextInputType.number,
-                  onChanged: () {
+                  onChanged: (_) {
                     setState(() {});
                     widget.onChanged();
                   },
@@ -1165,9 +1164,9 @@ class _VaccineEntryCardState extends State<_VaccineEntryCard> {
 }
 
 class _FieldLabel extends StatelessWidget {
-  const _FieldLabel({required this.label, this.required = false});
+  const _FieldLabel({required this.label, this.requiredField = false});
   final String label;
-  final bool required;
+  final bool requiredField;
 
   @override
   Widget build(BuildContext context) {
@@ -1181,7 +1180,7 @@ class _FieldLabel extends StatelessWidget {
             color: AppColors.textPrimary,
           ),
         ),
-        if (required)
+        if (requiredField)
           const Text(
             ' *',
             style: TextStyle(
@@ -1190,74 +1189,6 @@ class _FieldLabel extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-      ],
-    );
-  }
-}
-
-class _StyledTextField extends StatelessWidget {
-  const _StyledTextField({
-    required this.label,
-    required this.controller,
-    this.hint,
-    this.required = false,
-    this.icon,
-    this.keyboardType = TextInputType.text,
-    this.onChanged,
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final String? hint;
-  final bool required;
-  final IconData? icon;
-  final TextInputType keyboardType;
-  final VoidCallback? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _FieldLabel(label: label, required: required),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          onChanged: onChanged != null ? (_) => onChanged!() : null,
-          style: const TextStyle(
-            fontSize: 15,
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w500,
-          ),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-            ),
-            filled: true,
-            fillColor: AppColors.white,
-            prefixIcon: icon != null
-                ? Icon(icon, size: 18, color: AppColors.textSecondary)
-                : null,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 13,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                color: Color(0xFFB0B8C4),
-                width: 1.5,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.primary, width: 2),
-            ),
-          ),
-        ),
       ],
     );
   }

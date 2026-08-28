@@ -237,9 +237,13 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen>
             )
           else if (_failure != null)
             _buildFailureView()
-          else if (_stats!.isEmpty)
-            HwbEmptyStateView(message: s.statsEmpty)
-          else ...[
+          else if (_stats!.isEmpty) ...[
+            if (_stats?.generatedAt != null) ...[
+              _GeneratedAtLabel(generatedAt: _stats!.generatedAt!),
+              const SizedBox(height: 10),
+            ],
+            HwbEmptyStateView(message: s.statsEmpty),
+          ] else ...[
             if (_stats?.generatedAt != null) ...[
               _GeneratedAtLabel(generatedAt: _stats!.generatedAt!),
               const SizedBox(height: 10),

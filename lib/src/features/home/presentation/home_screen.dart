@@ -7,6 +7,7 @@ import '../../../core/i18n/app_strings.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/hwb_logo.dart';
+import '../../../shared/widgets/locale_switcher.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../auth/domain/user_session.dart';
 import '../../../core/sync/sync_engine.dart';
@@ -273,7 +274,7 @@ class _Header extends StatelessWidget {
                   ),
                 ),
               ),
-              _LocaleSwitcher(),
+              const LocaleSwitcher(),
             ],
           ),
           const SizedBox(height: 16),
@@ -318,47 +319,6 @@ class _Header extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _LocaleSwitcher extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final locale = AppLocale.of(context).locale;
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: ['es', 'en'].map((lang) {
-          final selected = locale == lang;
-          return GestureDetector(
-            onTap: () => AppLocale.of(context).setLocale(lang),
-            child: Container(
-              margin: const EdgeInsets.only(left: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: selected
-                    ? Colors.white.withValues(alpha: 0.95)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                lang.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? AppColors.primary : AppColors.white,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
       ),
     );
   }
@@ -471,6 +431,7 @@ class _SyncCard extends StatefulWidget {
 
 class _SyncCardState extends State<_SyncCard> {
   int _pendingCount = 0;
+  int _blockedCount = 0;
   bool _initialized = false;
   SyncEngine? _engineRef;
 
@@ -506,6 +467,7 @@ class _SyncCardState extends State<_SyncCard> {
     };
 
     _engineRef!.pendingCount.addListener(_fetchCount);
+    _engineRef!.blockedCount.addListener(_fetchCount);
     _fetchCount();
   }
 
@@ -513,6 +475,7 @@ class _SyncCardState extends State<_SyncCard> {
   void dispose() {
     if (_engineRef != null) {
       _engineRef!.pendingCount.removeListener(_fetchCount);
+      _engineRef!.blockedCount.removeListener(_fetchCount);
       _engineRef!.onSyncStatusChanged = _previousSyncStatusCallback;
       _engineRef!.onRecordSynced = _previousRecordSyncedCallback;
     }
@@ -522,16 +485,18 @@ class _SyncCardState extends State<_SyncCard> {
   Future<void> _fetchCount() async {
     if (!mounted) return;
     final scope = AppScope.of(context);
-    int count = scope.syncEngine.pendingCount.value;
+    int pending = scope.syncEngine.pendingCount.value;
+    int blocked = scope.syncEngine.blockedCount.value;
 
     try {
-      final dbCount = await scope.localDatabase.getUnsyncedCount();
-      count = dbCount;
+      pending = await scope.localDatabase.getRetryablePendingCount();
+      blocked = await scope.localDatabase.getBlockedCount();
     } catch (_) {}
 
     if (mounted) {
       setState(() {
-        _pendingCount = count;
+        _pendingCount = pending;
+        _blockedCount = blocked;
       });
     }
   }
@@ -540,10 +505,17 @@ class _SyncCardState extends State<_SyncCard> {
   Widget build(BuildContext context) {
     final scope = AppScope.of(context);
     final s = AppStrings.of(context);
-    final hasPending = _pendingCount > 0;
-    final subtitle = hasPending
-        ? s.actionPendingSyncCount(_pendingCount)
-        : s.actionPendingSyncEmpty;
+
+    final String subtitle = switch ((_pendingCount, _blockedCount)) {
+      (0, 0) => s.actionPendingSyncEmpty,
+      (0, _) => '$_blockedCount requieren intervención',
+      (_, 0) => s.actionPendingSyncCount(_pendingCount),
+      _ =>
+        '${s.actionPendingSyncCount(_pendingCount)} · $_blockedCount requieren intervención',
+    };
+
+    final hasTotalPending = _pendingCount > 0 || _blockedCount > 0;
+    final totalBadge = _pendingCount + _blockedCount;
 
     return Material(
       color: AppColors.white,
@@ -579,15 +551,19 @@ class _SyncCardState extends State<_SyncCard> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
+                  color: _blockedCount > 0
+                      ? AppColors.error.withValues(alpha: 0.12)
+                      : const Color(0xFFE8F5E9),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
-                  hasPending
+                  hasTotalPending
                       ? Icons.cloud_upload_outlined
                       : Icons.cloud_done_outlined,
                   size: 24,
-                  color: const Color(0xFF4CAF50),
+                  color: _blockedCount > 0
+                      ? AppColors.error
+                      : const Color(0xFF4CAF50),
                 ),
               ),
               const SizedBox(width: 14),
@@ -608,25 +584,29 @@ class _SyncCardState extends State<_SyncCard> {
                       subtitle,
                       style: TextStyle(
                         fontSize: 13,
-                        color: hasPending
-                            ? const Color(0xFFB8860B)
-                            : AppColors.textSecondary,
+                        color: _blockedCount > 0
+                            ? AppColors.error
+                            : (_pendingCount > 0
+                                  ? const Color(0xFFB8860B)
+                                  : AppColors.textSecondary),
                       ),
                     ),
                   ],
                 ),
               ),
-              if (hasPending)
+              if (hasTotalPending)
                 Container(
                   width: 28,
                   height: 28,
                   alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFD4A017),
+                  decoration: BoxDecoration(
+                    color: _blockedCount > 0
+                        ? AppColors.error
+                        : const Color(0xFFD4A017),
                     shape: BoxShape.circle,
                   ),
                   child: Text(
-                    '$_pendingCount',
+                    '$totalBadge',
                     style: const TextStyle(
                       color: AppColors.white,
                       fontSize: 12,
