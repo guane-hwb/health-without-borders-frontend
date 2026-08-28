@@ -66,7 +66,6 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
     final s = AppStrings.of(context);
     final isEs = s.isEs;
-    ;
 
     if (_draft.firstName.isEmpty && _draft.documentNumber.isEmpty) {
       return true;
