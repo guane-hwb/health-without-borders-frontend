@@ -452,7 +452,7 @@ void main() {
     });
 
     test(
-      'ApiException 409 marca conflicto de manilla y no reintenta',
+      'ApiException 409 marca conflicto de dispositivo y no reintenta',
       () async {
         final entry = buildEntry('A', record: MockPatientFullRecord());
         when(

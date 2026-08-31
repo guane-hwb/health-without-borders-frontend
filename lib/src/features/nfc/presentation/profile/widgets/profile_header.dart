@@ -14,21 +14,12 @@ class ProfileHeader extends StatelessWidget {
     required this.hasUnsyncedChanges,
     required this.onBack,
     this.lastSyncedAt,
-    this.isSyncing = false,
-    this.onSync,
-    this.onReassignDevice,
   });
 
   final PatientFullRecord patient;
   final bool hasUnsyncedChanges;
   final VoidCallback onBack;
   final String? lastSyncedAt;
-  final bool isSyncing;
-  final VoidCallback? onSync;
-
-  /// Opens the lost/damaged bracelet re-labeling flow. Null hides the action
-  /// (e.g. in read-only mode).
-  final VoidCallback? onReassignDevice;
 
   int? get _age => helpers.computeAge(patient.patientInfo.dob, DateTime.now());
 
@@ -62,35 +53,6 @@ class ProfileHeader extends StatelessWidget {
                 icon: const Icon(Icons.arrow_back, color: AppColors.white),
               ),
               const Spacer(),
-              if (onReassignDevice != null)
-                IconButton(
-                  onPressed: onReassignDevice,
-                  tooltip: AppStrings.of(context).isEs
-                      ? 'Reasignar manilla'
-                      : 'Reassign bracelet',
-                  icon: const Icon(
-                    Icons.published_with_changes,
-                    color: AppColors.white,
-                  ),
-                ),
-              if (onSync != null)
-                IconButton(
-                  onPressed: isSyncing ? null : onSync,
-                  tooltip: isSyncing ? s.syncingBtn : s.syncBtn,
-                  icon: isSyncing
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.white,
-                          ),
-                        )
-                      : const Icon(
-                          Icons.cloud_upload_outlined,
-                          color: AppColors.white,
-                        ),
-                ),
               const LanguageToggle(),
               const SizedBox(width: 4),
             ],
@@ -138,7 +100,6 @@ class ProfileHeader extends StatelessWidget {
               ],
             ),
           ),
-
           if (hasUnsyncedChanges) ...[
             const SizedBox(height: 12),
             Padding(

@@ -56,7 +56,7 @@ class PatientProfileScreen extends StatefulWidget {
   final bool offline;
   final bool emergency;
 
-  /// Whether to offer the "Reasignar manilla" action. Only the lost/damaged
+  /// Whether to offer the "Reasignar dispositivo" action. Only the lost/damaged
   /// recovery path (patient search) sets this; scanning via Read NFC does not,
   /// since a successful scan means the tags are present and working.
   final bool allowReassign;
@@ -301,10 +301,12 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         await scope.syncEngine.syncAll();
       }
       if (!mounted) return;
-      _showReassignSnack(isEs ? 'Manilla reasignada.' : 'Bracelet reassigned.');
+      _showReassignSnack(
+        isEs ? 'dispositivo reasignado.' : 'Device reassigned.',
+      );
     } catch (e, stack) {
       AppLogger.e(
-        'Fallo al guardar la reasignación de manilla',
+        'Fallo al guardar la reasignación del dispositivo ',
         error: e,
         stackTrace: stack,
       );
@@ -738,10 +740,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                   hasUnsyncedChanges: !_hasInternet && _hasUnsyncedChanges,
                   lastSyncedAt: widget.lastSyncedAt,
                   onBack: () => _confirmExit(),
-                  onSync: widget.readOnly ? null : () => _sync(silent: false),
-                  onReassignDevice: (widget.allowReassign && !widget.readOnly)
-                      ? _reassignDevices
-                      : null,
                 ),
                 ProfileTabsBar(controller: _tabController, draft: _draft),
                 if (widget.emergency) const EmergencyBanner(),
@@ -768,6 +766,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                         onEditGuardian: _openGuardianSheet,
                         onOpenAllergies: _openAllergiesSheet,
                         onOpenBackground: _openBackgroundSheet,
+                        onReassignDevice:
+                            (widget.allowReassign && !widget.readOnly)
+                            ? _reassignDevices
+                            : null,
                       ),
                       ProfileTabConsultations(
                         draft: _draft,

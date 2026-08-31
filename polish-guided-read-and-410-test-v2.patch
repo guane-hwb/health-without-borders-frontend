@@ -108,7 +108,7 @@ index a1130b4..3f222c5 100644
      context,
      title: title,
      instruction: isEs
-         ? 'Acerque la manilla NUEVA (en blanco) para verificarla'
+         ? 'Acerque el dispositivo NUEVO (en blanco) para verificarlo'
          : 'Bring the NEW (blank) tag close to verify it',
 -    write: () async {
 +    read: () async {
@@ -150,7 +150,7 @@ index eca2b5f..994d6af 100644
      });
  
 +    testWidgets(
-+      '410 device_retired: muestra el mensaje de manilla retirada con el motivo '
++      '410 device_retired: muestra el mensaje del dispositivo retirada con el motivo '
 +      'y NO avanza a Paso 2',
 +      (tester) async {
 +        await tester.pumpWidget(
@@ -171,7 +171,7 @@ index eca2b5f..994d6af 100644
 +        expect(find.byIcon(Icons.error_outline), findsOneWidget);
 +        expect(
 +          find.text(
-+            'Esta manilla fue retirada (perdida) y ya no pertenece a HWB.',
++            'Este dispositivo fue retirado (perdido) y ya no pertenece a HWB.',
 +          ),
 +          findsOneWidget,
 +        );

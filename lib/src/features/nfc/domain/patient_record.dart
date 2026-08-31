@@ -450,6 +450,8 @@ class GuardianInfo {
     required this.relationship,
     required this.phone,
     this.deviceUid,
+    this.docType,
+    this.docNumber,
     this.documentType,
     this.documentNumber,
     this.consent,
@@ -461,8 +463,13 @@ class GuardianInfo {
       relationship: json['relationship']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
       deviceUid: json['device_uid']?.toString(),
-      documentType: json['documentType']?.toString(),
-      documentNumber: json['documentNumber']?.toString(),
+      docType: json['docType']?.toString() ?? json['documentType']?.toString(),
+      docNumber:
+          json['docNumber']?.toString() ?? json['documentNumber']?.toString(),
+      documentType:
+          json['documentType']?.toString() ?? json['docType']?.toString(),
+      documentNumber:
+          json['documentNumber']?.toString() ?? json['docNumber']?.toString(),
       consent: json['consent'] is Map<String, dynamic>
           ? GuardianConsent.fromJson(json['consent'] as Map<String, dynamic>)
           : null,
@@ -473,6 +480,8 @@ class GuardianInfo {
   final String relationship;
   final String phone;
   final String? deviceUid; // NFC UID of the guardian's wristband
+  final String? docType;
+  final String? docNumber;
   final String? documentType;
   final String? documentNumber;
   final GuardianConsent? consent;
@@ -482,6 +491,8 @@ class GuardianInfo {
     'relationship': relationship,
     'phone': phone,
     if (deviceUid != null) 'device_uid': deviceUid,
+    if (docType != null) 'docType': docType,
+    if (docNumber != null) 'docNumber': docNumber,
     if (documentType != null) 'documentType': documentType,
     if (documentNumber != null) 'documentNumber': documentNumber,
     if (consent != null) 'consent': consent!.toJson(),
@@ -492,6 +503,8 @@ class GuardianInfo {
     String? relationship,
     String? phone,
     String? deviceUid,
+    String? docType,
+    String? docNumber,
     String? documentType,
     String? documentNumber,
     GuardianConsent? consent,
@@ -501,6 +514,8 @@ class GuardianInfo {
       relationship: relationship ?? this.relationship,
       phone: phone ?? this.phone,
       deviceUid: deviceUid ?? this.deviceUid,
+      docType: docType ?? this.docType,
+      docNumber: docNumber ?? this.docNumber,
       documentType: documentType ?? this.documentType,
       documentNumber: documentNumber ?? this.documentNumber,
       consent: consent ?? this.consent,
@@ -516,6 +531,8 @@ class GuardianInfo {
           relationship == other.relationship &&
           phone == other.phone &&
           deviceUid == other.deviceUid &&
+          docType == other.docType &&
+          docNumber == other.docNumber &&
           documentType == other.documentType &&
           documentNumber == other.documentNumber &&
           consent == other.consent;
@@ -526,6 +543,8 @@ class GuardianInfo {
     relationship,
     phone,
     deviceUid,
+    docType,
+    docNumber,
     documentType,
     documentNumber,
     consent,

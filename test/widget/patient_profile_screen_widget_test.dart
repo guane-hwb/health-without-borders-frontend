@@ -1041,41 +1041,42 @@ void main() {
     );
   });
 
-  group('Botón "Reasignar manilla" — visibilidad por origen', () {
-    testWidgets(
-      'se muestra cuando allowReassign es true y no es readOnly '
-      '(entrada por Buscar paciente)',
-      (tester) async {
-        await _pumpScreen(tester, _record(), allowReassign: true);
-        await tester.pumpAndSettle();
+  group('Botón "Reasignar dispositivo" — visibilidad por origen', () {
+    testWidgets('se muestra cuando allowReassign es true y no es readOnly '
+        '(entrada por Buscar paciente)', (tester) async {
+      await _pumpScreen(tester, _record(), allowReassign: true);
+      await tester.pumpAndSettle();
 
-        expect(find.byIcon(Icons.published_with_changes), findsOneWidget);
-      },
-    );
+      // Hacemos scroll manual arrastrando la lista hacia arriba
+      await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+      await tester.pumpAndSettle();
 
-    testWidgets(
-      'se oculta por defecto (entrada por Leer NFC)',
-      (tester) async {
-        await _pumpScreen(tester, _record());
-        await tester.pumpAndSettle();
+      expect(find.text('Reasignar dispositivo'), findsOneWidget);
+      expect(find.byIcon(Icons.published_with_changes), findsOneWidget);
+    });
 
-        expect(find.byIcon(Icons.published_with_changes), findsNothing);
-      },
-    );
+    testWidgets('se oculta por defecto (entrada por Leer NFC)', (tester) async {
+      await _pumpScreen(tester, _record());
+      await tester.pumpAndSettle();
 
-    testWidgets(
-      'se oculta en readOnly aunque allowReassign sea true',
-      (tester) async {
-        await _pumpScreen(
-          tester,
-          _record(),
-          allowReassign: true,
-          readOnly: true,
-        );
-        await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+      await tester.pumpAndSettle();
 
-        expect(find.byIcon(Icons.published_with_changes), findsNothing);
-      },
-    );
+      expect(find.text('Reasignar dispositivo'), findsNothing);
+      expect(find.byIcon(Icons.published_with_changes), findsNothing);
+    });
+
+    testWidgets('se oculta en readOnly aunque allowReassign sea true', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record(), allowReassign: true, readOnly: true);
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reasignar dispositivo'), findsNothing);
+      expect(find.byIcon(Icons.published_with_changes), findsNothing);
+    });
   });
 }
