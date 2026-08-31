@@ -120,9 +120,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       setState(() {
         _scanning = false;
         _errorMessage = isEs
-            ? 'Esta es la tarjeta del guardián. Escanee primero la manilla '
+            ? 'Esta es la tarjeta del guardián. Escanee primero el dispositivo '
                   'del paciente.'
-            : 'This is the guardian card. Scan the patient wristband first.';
+            : 'This is the guardian card. Scan the patient device first.';
       });
       return;
     }
@@ -212,8 +212,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
           : 'Hold the guardian card near the phone';
     }
     return isEs
-        ? 'Acerque la manilla del paciente'
-        : 'Hold the patient wristband near the phone';
+        ? 'Acerque el dispositivo del paciente'
+        : 'Hold the patient device near the phone';
   }
 
   // ── Offline guardian gate ─────────────────────────────────────────────────
@@ -316,8 +316,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       _ => isEs ? 'retirada' : 'retired',
     };
     return isEs
-        ? 'Esta manilla fue retirada ($reasonLabel) y ya no pertenece a HWB.'
-        : 'This bracelet was retired ($reasonLabel) and no longer belongs to HWB.';
+        ? 'Este dispositivo fue retirado ($reasonLabel) y ya no pertenece a HWB.'
+        : 'This device was retired ($reasonLabel) and no longer belongs to HWB.';
   }
 
   Future<void> _confirmEmergencyAccess() async {

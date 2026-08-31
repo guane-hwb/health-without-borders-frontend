@@ -351,7 +351,7 @@ void main() {
     });
 
     testWidgets(
-      '410 device_retired: muestra el mensaje de manilla retirada con el motivo '
+      '410 device_retired: muestra el mensaje de dispositivo retirado con el motivo '
       'y NO avanza a Paso 2',
       (tester) async {
         await tester.pumpWidget(
@@ -372,7 +372,7 @@ void main() {
         expect(find.byIcon(Icons.error_outline), findsOneWidget);
         expect(
           find.text(
-            'Esta manilla fue retirada (perdida) y ya no pertenece a HWB.',
+            'Este dispositivo fue retirado (perdido) y ya no pertenece a HWB.',
           ),
           findsOneWidget,
         );

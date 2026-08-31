@@ -126,7 +126,7 @@ Future<PatientFullRecord?> executeReassignOne({
   String title;
   switch (target) {
     case ReassignTarget.patient:
-      title = isEs ? 'Manilla del paciente' : 'Patient bracelet';
+      title = isEs ? 'dispositivo del paciente' : 'Patient device';
       break;
     case ReassignTarget.guardian1:
       title = hasTwo
@@ -144,8 +144,8 @@ Future<PatientFullRecord?> executeReassignOne({
     context,
     title: title,
     instruction: isEs
-        ? 'Acerque la manilla NUEVA (en blanco) para verificarla'
-        : 'Bring the NEW (blank) tag close to verify it',
+        ? 'Acerque el dispositivo NUEVO (en blanco) para verificarlo'
+        : 'Bring the NEW (blank) device close to verify it',
     read: () async {
       final result = await NfcPayloadService(codec: codec).readHwbChip();
       newUid = result.uid;
@@ -157,8 +157,8 @@ Future<PatientFullRecord?> executeReassignOne({
   if (kind != HwbChipKind.none) {
     showSnack(
       isEs
-          ? 'Esa manilla ya está en uso. Use una en blanco.'
-          : 'That tag is already in use. Use a blank one.',
+          ? 'Ese dispositivo ya está en uso. Use uno en blanco.'
+          : 'That device is already in use. Use a blank one.',
       error: true,
     );
     return null;
@@ -174,8 +174,8 @@ Future<PatientFullRecord?> executeReassignOne({
   if (existingUids.contains(normalizedNew)) {
     showSnack(
       isEs
-          ? 'Esa manilla ya pertenece a este paciente.'
-          : 'That tag already belongs to this patient.',
+          ? 'Ese dispositivo ya pertenece a este paciente.'
+          : 'That device already belongs to this patient.',
       error: true,
     );
     return null;
@@ -207,8 +207,8 @@ Future<PatientFullRecord?> executeReassignOne({
     context,
     title: title,
     instruction: isEs
-        ? 'Acerque la MISMA manilla nueva para grabarla'
-        : 'Bring the SAME new tag close to write it',
+        ? 'Acerque el MISMO dispositivo nuevo para grabarlo'
+        : 'Bring the SAME new device close to write it',
     write: () async {
       final service = NfcPayloadService(codec: codec);
       if (target == ReassignTarget.patient) {

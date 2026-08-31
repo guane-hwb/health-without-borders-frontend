@@ -381,8 +381,8 @@ class _SyncCard extends StatelessWidget {
     if (hasErr) {
       if (isConflict) {
         errorMessage = isEs
-            ? 'Esta manilla ya está registrada para otro paciente. Registra al paciente con una manilla nueva.'
-            : 'This bracelet is already registered to another patient. Register the patient with a new bracelet.';
+            ? 'Este dispositivo ya está registrado para otro paciente. Registra al paciente con un dispositivo nuevo.'
+            : 'This device is already registered to another patient. Register the patient with a new device.';
       } else if (entry.syncErrorCode == 403) {
         errorMessage = isEs
             ? 'Acceso denegado (403): Tu rol no permite registrar historia médica completa.'
