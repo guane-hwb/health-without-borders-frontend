@@ -6,7 +6,6 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
-import '../../../shared/widgets/form_widgets.dart';
 import '../../../shared/widgets/hwb_async_state_view.dart';
 import '../../../shared/widgets/hwb_detail_row.dart';
 import '../../../shared/widgets/hwb_screen_header.dart';
@@ -885,6 +884,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   final _passCtrl = TextEditingController();
   late String _role;
   bool _saving = false;
+  bool _obscurePass = true;
   String? _error;
 
   List<MapEntry<String, String>> _getRoleOptions(AppStrings s) {
@@ -945,23 +945,42 @@ class _UserFormSheetState extends State<_UserFormSheet> {
               ),
             ),
             const SizedBox(height: 16),
-            LabeledTextField(
-              label: s.userFormFullNameLabel,
+            _fieldLabel(s.userFormFullNameLabel),
+            TextField(
               controller: _nameCtrl,
-              prefixIcon: Icons.person,
+              textCapitalization: TextCapitalization.words,
+              style: const TextStyle(fontSize: 14),
+              decoration: _inputDeco(hint: '', icon: Icons.person),
             ),
             const SizedBox(height: 12),
-            LabeledTextField(
-              label: s.userFormEmailLabel,
+            _fieldLabel(s.userFormEmailLabel),
+            TextField(
               controller: _emailCtrl,
-              prefixIcon: Icons.email,
               keyboardType: TextInputType.emailAddress,
+              style: const TextStyle(fontSize: 14),
+              decoration: _inputDeco(
+                hint: 'usuario@organizacion.com',
+                icon: Icons.email,
+              ),
             ),
             const SizedBox(height: 12),
-            LabeledTextField(
-              label: s.userFormPasswordLabel,
+            _fieldLabel(s.userFormPasswordLabel),
+            TextField(
               controller: _passCtrl,
-              prefixIcon: Icons.lock,
+              obscureText: _obscurePass,
+              style: const TextStyle(fontSize: 14),
+              decoration: _inputDeco(hint: '••••••••', icon: Icons.lock)
+                  .copyWith(
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePass ? Icons.visibility_off : Icons.visibility,
+                        size: 20,
+                        color: AppColors.textSecondary,
+                      ),
+                      onPressed: () =>
+                          setState(() => _obscurePass = !_obscurePass),
+                    ),
+                  ),
             ),
             const SizedBox(height: 12),
             Text(s.userFormRoleLabel, style: const TextStyle(fontSize: 13)),
@@ -1019,6 +1038,25 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       ),
     );
   }
+
+  Widget _fieldLabel(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(
+      text,
+      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+    ),
+  );
+
+  InputDecoration _inputDeco({required String hint, required IconData icon}) =>
+      InputDecoration(
+        hintText: hint,
+        isDense: true,
+        prefixIcon: Icon(icon, size: 18, color: AppColors.secondary),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
+      );
 
   Widget _roleOption(String label, String value) {
     final sel = _role == value;
