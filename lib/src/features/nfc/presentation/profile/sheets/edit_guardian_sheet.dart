@@ -3,11 +3,24 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../core/i18n/app_strings.dart';
-import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../shared/widgets/form_widgets.dart';
 import '../../../domain/patient_record.dart';
 import '../shared/sheet_scaffold.dart';
+
+const _kEnabledBorder = OutlineInputBorder(
+  borderRadius: BorderRadius.all(Radius.circular(10)),
+  borderSide: BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
+);
+const _kFocusedBorder = OutlineInputBorder(
+  borderRadius: BorderRadius.all(Radius.circular(10)),
+  borderSide: BorderSide(color: AppColors.primary, width: 2),
+);
+const _kInputStyle = TextStyle(
+  fontSize: 15,
+  color: AppColors.textPrimary,
+  fontWeight: FontWeight.w500,
+);
 
 class EditGuardianSheet extends StatefulWidget {
   const EditGuardianSheet({
@@ -28,9 +41,9 @@ class EditGuardianSheet extends StatefulWidget {
 class _EditGuardianSheetState extends State<EditGuardianSheet> {
   late TextEditingController _nameCtrl;
   late TextEditingController _phoneCtrl;
-  late TextEditingController _uidCtrl;
+  late TextEditingController _docNumberCtrl;
   late String _relationship;
-  bool _scanning = false;
+  late String _selectedDocType;
 
   static const List<String> _relationshipCodes = ['01', '02', '03', '04'];
 
@@ -54,51 +67,20 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.guardian.name);
     _phoneCtrl = TextEditingController(text: widget.guardian.phone);
-    _uidCtrl = TextEditingController(text: widget.guardian.deviceUid ?? '');
+    _docNumberCtrl = TextEditingController(
+      text: widget.guardian.docNumber ?? widget.guardian.documentNumber ?? '',
+    );
     _relationship = widget.guardian.relationship;
-    _uidCtrl.addListener(_onUidChanged);
-  }
-
-  void _onUidChanged() {
-    if (mounted) setState(() {});
+    _selectedDocType =
+        widget.guardian.docType ?? widget.guardian.documentType ?? 'CC';
   }
 
   @override
   void dispose() {
-    _uidCtrl.removeListener(_onUidChanged);
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
-    _uidCtrl.dispose();
+    _docNumberCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _scanGuardianNfc() async {
-    setState(() => _scanning = true);
-    try {
-      final uid = await NfcService.readDeviceUid();
-      if (mounted) {
-        setState(() {
-          _uidCtrl.text = uid;
-          _scanning = false;
-        });
-      }
-    } on NfcNotAvailableException {
-      if (mounted) {
-        setState(() => _scanning = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppStrings.of(context).guardianNfcUnavailable),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _scanning = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppStrings.of(context).guardianNfcError)),
-        );
-      }
-    }
   }
 
   @override
@@ -106,11 +88,11 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
 
+    final docTypes = {'CC': s.docTypeCC, 'CE': s.docTypeCE};
+
     final dynamicTitle = widget.guardianIndex == 1
         ? (isEs ? 'Editar Guardián Principal' : 'Edit Primary Guardian')
         : (isEs ? 'Editar Guardián Secundario' : 'Edit Secondary Guardian');
-
-    final bool hasUid = _uidCtrl.text.trim().isNotEmpty;
 
     return SheetScaffold(
       title: dynamicTitle,
@@ -120,9 +102,11 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
             name: _nameCtrl.text.trim(),
             relationship: _relationship,
             phone: _phoneCtrl.text.trim(),
-            deviceUid: _uidCtrl.text.trim().isEmpty
+            docType: _selectedDocType,
+            docNumber: _docNumberCtrl.text.trim().isEmpty
                 ? null
-                : _uidCtrl.text.trim(),
+                : _docNumberCtrl.text.trim(),
+            deviceUid: widget.guardian.deviceUid,
             consent: widget.guardian.consent,
           ),
         );
@@ -131,10 +115,8 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _LabelText(text: s.guardianFullName),
-          const SizedBox(height: 4),
           LabeledTextField(
-            label: '',
+            label: s.guardianFullName,
             controller: _nameCtrl,
             hint: s.guardianFullNameHint,
             prefixIcon: Icons.person_outline,
@@ -174,100 +156,172 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
             }).toList(),
           ),
           const SizedBox(height: 14),
-          _LabelText(text: s.guardianPhoneLabel),
-          const SizedBox(height: 4),
           LabeledTextField(
-            label: '',
+            label: s.guardianPhoneLabel,
             controller: _phoneCtrl,
             hint: s.guardianPhoneHint,
             prefixIcon: Icons.phone_outlined,
             keyboardType: TextInputType.phone,
           ),
           const SizedBox(height: 14),
-          _LabelText(text: s.guardianNfcDevice),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: _uidCtrl,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: s.guardianNfcUidHint,
-                        hintStyle: const TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textSecondary,
-                        ),
-                        filled: true,
-                        fillColor: AppColors.white,
-                        prefixIcon: Icon(
-                          hasUid
-                              ? Icons.check_circle_outline
-                              : Icons.family_restroom,
-                          size: 18,
-                          color: hasUid
-                              ? AppColors.success
-                              : AppColors.secondary,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFB0B8C4),
-                            width: 1.5,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: AppColors.primary,
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 42,
-                child: ElevatedButton(
-                  onPressed: _scanning ? null : _scanGuardianNfc,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    disabledBackgroundColor: AppColors.disabled,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                  ),
-                  child: _scanning
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.white,
-                          ),
-                        )
-                      : const Icon(Icons.nfc, size: 22, color: AppColors.white),
-                ),
-              ),
-            ],
+          _DocTypeSelector(
+            label: s.documentTypeLabel,
+            value: _selectedDocType,
+            options: docTypes,
+            onChanged: (v) => setState(() => _selectedDocType = v),
+          ),
+          const SizedBox(height: 14),
+          LabeledTextField(
+            label: s.documentNumberLabel,
+            controller: _docNumberCtrl,
+            hint: 'Ej. 1234567890',
+            prefixIcon: Icons.badge_outlined,
+            keyboardType: TextInputType.number,
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DocTypeSelector extends StatefulWidget {
+  const _DocTypeSelector({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final Map<String, String> options;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_DocTypeSelector> createState() => _DocTypeSelectorState();
+}
+
+class _DocTypeSelectorState extends State<_DocTypeSelector> {
+  final MenuController _menuController = MenuController();
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedLabel = widget.options[widget.value] ?? '';
+    final itemHeight = 48.0;
+    final calculatedHeight = (widget.options.length * itemHeight).clamp(
+      itemHeight,
+      250.0,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _LabelText(text: widget.label),
+        const SizedBox(height: 4),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            return MenuAnchor(
+              controller: _menuController,
+              style: MenuStyle(
+                fixedSize: WidgetStateProperty.all(
+                  Size(constraints.maxWidth, calculatedHeight),
+                ),
+                maximumSize: WidgetStateProperty.all(
+                  Size(constraints.maxWidth, calculatedHeight),
+                ),
+                backgroundColor: WidgetStateProperty.all(AppColors.white),
+                elevation: WidgetStateProperty.all(4),
+                shape: WidgetStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              builder: (context, controller, child) {
+                return InkWell(
+                  onTap: () {
+                    if (controller.isOpen) {
+                      controller.close();
+                    } else {
+                      controller.open();
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: AppColors.white,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      enabledBorder: _kEnabledBorder,
+                      focusedBorder: _kFocusedBorder,
+                      border: _kEnabledBorder,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.credit_card_outlined,
+                                size: 20,
+                                color: AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  selectedLabel,
+                                  style: _kInputStyle,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          Icons.expand_more,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              menuChildren: widget.options.entries.map((e) {
+                return SizedBox(
+                  width: constraints.maxWidth,
+                  height: itemHeight,
+                  child: MenuItemButton(
+                    onPressed: () {
+                      widget.onChanged(e.key);
+                      _menuController.close();
+                    },
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.credit_card_outlined,
+                          size: 20,
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            e.value,
+                            style: _kInputStyle,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+      ],
     );
   }
 }

@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
-import 'package:health_without_borders_frontend/src/design/tokens/app_colors.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/edit_guardian_sheet.dart';
 
@@ -39,13 +38,15 @@ GuardianInfo _sampleGuardian({
   String name = 'María García',
   String relationship = '01',
   String phone = '3001234567',
-  String? deviceUid = 'HWB-AA:BB:CC',
+  String? docType = 'CC',
+  String? docNumber = '1234567890',
   GuardianConsent? consent,
 }) => GuardianInfo(
   name: name,
   relationship: relationship,
   phone: phone,
-  deviceUid: deviceUid,
+  docType: docType,
+  docNumber: docNumber,
   consent: consent,
 );
 
@@ -146,39 +147,33 @@ void main() {
     );
 
     testWidgets(
-      'Pre-populates deviceUid entry fields using parameters from baseline models',
+      'Pre-populates document number entry fields using parameters from baseline models',
       (tester) async {
         await tester.pumpWidget(
           _buildSubject(
             guardian: _sampleGuardian(
-              deviceUid: 'HWB-01:23:45',
+              docNumber: '987654321',
               consent: fakeConsent,
             ),
             guardianIndex: 1,
             onConfirm: (_) {},
           ),
         );
-        expect(find.text('HWB-01:23:45'), findsOneWidget);
+        expect(find.text('987654321'), findsOneWidget);
       },
     );
 
     testWidgets(
-      'Leaves deviceUid text controllers blank when initialized with null references',
+      'Pre-populates document type selection matching baseline model',
       (tester) async {
         await tester.pumpWidget(
           _buildSubject(
-            guardian: _sampleGuardian(deviceUid: null, consent: fakeConsent),
+            guardian: _sampleGuardian(docType: 'CE', consent: fakeConsent),
             guardianIndex: 1,
             onConfirm: (_) {},
           ),
         );
-        final uidField = tester.widget<TextField>(
-          find.byWidgetPredicate(
-            (w) => w is TextField && w.controller?.text == '',
-            description: 'Empty UID TextField',
-          ),
-        );
-        expect(uidField.controller?.text, '');
+        expect(find.text(sEs.docTypeCE), findsOneWidget);
       },
     );
 
@@ -196,21 +191,6 @@ void main() {
         expect(find.text(sEs.relSiblings), findsOneWidget);
         expect(find.text(sEs.relUncles), findsOneWidget);
         expect(find.text(sEs.relGrandparents), findsOneWidget);
-      },
-    );
-
-    testWidgets(
-      'Hardware interaction trigger button defaults to baseline NFC icons initially',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(
-            guardian: _sampleGuardian(consent: fakeConsent),
-            guardianIndex: 1,
-            onConfirm: (_) {},
-          ),
-        );
-        expect(find.byIcon(Icons.nfc), findsOneWidget);
-        expect(find.byType(CircularProgressIndicator), findsNothing);
       },
     );
   });
@@ -254,7 +234,7 @@ void main() {
 
   group('Form Action Pipelines and Payload Assembly Constraints', () {
     testWidgets(
-      'Applies trim transformations to name and phone text entries upon execution',
+      'Applies trim transformations to name, phone and document number entries upon execution',
       (tester) async {
         GuardianInfo? received;
 
@@ -263,6 +243,7 @@ void main() {
             guardian: _sampleGuardian(
               name: 'Viejo',
               phone: '000',
+              docNumber: '111',
               consent: fakeConsent,
             ),
             guardianIndex: 1,
@@ -280,79 +261,81 @@ void main() {
         );
         await tester.enterText(phoneField, ' 3001111111 ');
 
+        final docField = find.byWidgetPredicate(
+          (w) => w is TextField && w.controller?.text == '111',
+        );
+        await tester.enterText(docField, ' 1234567890 ');
+
         await tester.tap(find.text(sEs.confirmChanges));
         await tester.pump();
 
         expect(received?.name, 'Nuevo Nombre');
         expect(received?.phone, '3001111111');
+        expect(received?.docNumber, '1234567890');
       },
     );
 
     testWidgets(
-      'Preserves manually typed string contents into the deviceUid destination payload properties',
+      'Updates docType correctly in payload when selected from menu selector',
       (tester) async {
-        NavigatorState? navigatorState;
-        GuardianInfo? received;
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-        await tester.pumpWidget(
-          _wrap(
-            Builder(
-              builder: (ctx) {
-                navigatorState = Navigator.of(ctx);
-                return ElevatedButton(
-                  onPressed: () {
-                    navigatorState!.push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => Scaffold(
-                          body: EditGuardianSheet(
-                            guardian: _sampleGuardian(
-                              deviceUid: null,
-                              consent: fakeConsent,
-                            ),
-                            guardianIndex: 1,
-                            onConfirm: (g) => received = g,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                  child: const Text('Abrir'),
-                );
-              },
-            ),
-          ),
-        );
-
-        await tester.tap(find.text('Abrir'));
-        await tester.pumpAndSettle();
-
-        final uidFields = find.byType(TextField);
-        await tester.enterText(uidFields.last, 'HWB-FF:EE:DD');
-
-        await tester.tap(find.text(sEs.confirmChanges));
-        await tester.pumpAndSettle();
-
-        expect(received?.deviceUid, 'HWB-FF:EE:DD');
-      },
-    );
-
-    testWidgets(
-      'Wiping deviceUid input field down maps into explicit null references downstream',
-      (tester) async {
         GuardianInfo? received;
 
         await tester.pumpWidget(
           _buildSubject(
-            guardian: _sampleGuardian(deviceUid: null, consent: fakeConsent),
+            guardian: _sampleGuardian(docType: 'CC', consent: fakeConsent),
             guardianIndex: 1,
             onConfirm: (g) => received = g,
           ),
         );
 
+        final docTypeFinder = find.text(sEs.docTypeCC);
+        await tester.ensureVisible(docTypeFinder);
+        await tester.tap(docTypeFinder);
+        await tester.pumpAndSettle();
+
+        final optionFinder = find.text(sEs.docTypeCE);
+        await tester.tap(optionFinder.last);
+        await tester.pumpAndSettle();
+
+        final saveBtnFinder = find.text(sEs.confirmChanges);
+        await tester.ensureVisible(saveBtnFinder);
+        await tester.tap(saveBtnFinder);
+        await tester.pump();
+
+        expect(received?.docType, 'CE');
+      },
+    );
+
+    testWidgets(
+      'Wiping document number input field maps into explicit null references downstream',
+      (tester) async {
+        GuardianInfo? received;
+
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(
+              docNumber: '123456789',
+              consent: fakeConsent,
+            ),
+            guardianIndex: 1,
+            onConfirm: (g) => received = g,
+          ),
+        );
+
+        final docField = find.byWidgetPredicate(
+          (w) => w is TextField && w.controller?.text == '123456789',
+        );
+        await tester.enterText(docField, '');
+
         await tester.tap(find.text(sEs.confirmChanges));
         await tester.pump();
 
-        expect(received?.deviceUid, isNull);
+        expect(received?.docNumber, isNull);
       },
     );
 
@@ -418,60 +401,6 @@ void main() {
     );
   });
 
-  group('Visual Layout Asset Color Evaluation Rules', () {
-    testWidgets(
-      'family_restroom prefix icon utilizes AppColors.secondary parameters when text fields are blank',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(
-            guardian: _sampleGuardian(deviceUid: null, consent: fakeConsent),
-            guardianIndex: 1,
-            onConfirm: (_) {},
-          ),
-        );
-
-        final icon = tester.widget<Icon>(find.byIcon(Icons.family_restroom));
-        expect(icon.color, AppColors.secondary);
-      },
-    );
-
-    testWidgets(
-      'family_restroom prefix icon updates into check_circle_outline icon when valid parameters exist',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(
-            guardian: _sampleGuardian(
-              deviceUid: 'HWB-01:02:03',
-              consent: fakeConsent,
-            ),
-            guardianIndex: 1,
-            onConfirm: (_) {},
-          ),
-        );
-
-        expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
-      },
-    );
-
-    testWidgets(
-      'Prefix icon signals context switches into check_circle_outline instantly upon typing',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(
-            guardian: _sampleGuardian(deviceUid: null, consent: fakeConsent),
-            guardianIndex: 1,
-            onConfirm: (_) {},
-          ),
-        );
-
-        await tester.enterText(find.byType(TextField).last, 'HWB-AA');
-        await tester.pump();
-
-        expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
-      },
-    );
-  });
-
   group('Memory Lifecycle and Instance Cleanup Routine Validations', () {
     testWidgets(
       'Destroys active controller instances cleanly without background exceptions leaky traces',
@@ -486,25 +415,6 @@ void main() {
 
         await tester.pumpWidget(const MaterialApp(home: SizedBox()));
         expect(tester.takeException(), isNull);
-      },
-    );
-  });
-
-  group('Structural Typography Styling Parameter Checks', () {
-    testWidgets(
-      'Label components explicitly configure text sizes to 13 along w600 weight bounds',
-      (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(
-            guardian: _sampleGuardian(consent: fakeConsent),
-            guardianIndex: 1,
-            onConfirm: (_) {},
-          ),
-        );
-
-        final labelText = tester.widget<Text>(find.text(sEs.guardianFullName));
-        expect(labelText.style?.fontSize, 13);
-        expect(labelText.style?.fontWeight, FontWeight.w600);
       },
     );
   });
@@ -530,6 +440,29 @@ void main() {
           ),
         );
         expect(phoneField.keyboardType, TextInputType.phone);
+      },
+    );
+
+    testWidgets(
+      'Document number field sets active virtual layouts into TextInputType.number',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(
+              docNumber: '1234567890',
+              consent: fakeConsent,
+            ),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+          ),
+        );
+
+        final docField = tester.widget<TextField>(
+          find.byWidgetPredicate(
+            (w) => w is TextField && w.controller?.text == '1234567890',
+          ),
+        );
+        expect(docField.keyboardType, TextInputType.number);
       },
     );
 
