@@ -455,34 +455,38 @@ void main() {
       expect(find.text('Sync ahora'), findsOneWidget);
     });
 
-    testWidgets('un conflicto 409 muestra el estado de manilla duplicada', (
-      tester,
-    ) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer(
-        (_) async => [
-          makeEntry(
-            syncError: 'A patient is already registered with this device tag.',
-            syncErrorCode: 409,
+    testWidgets(
+      'un conflicto 409 muestra el estado del dispositivo duplicado',
+      (tester) async {
+        when(() => db.getUnsyncedRecords()).thenAnswer(
+          (_) async => [
+            makeEntry(
+              syncError:
+                  'A patient is already registered with this device tag.',
+              syncErrorCode: 409,
+            ),
+          ],
+        );
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+            reachability: reachability,
           ),
-        ],
-      );
+        );
+        await tester.pumpAndSettle();
 
-      await tester.pumpWidget(
-        buildTestApp(
-          child: const SyncQueueScreen(),
-          db: db,
-          syncEngine: syncEngine,
-          reachability: reachability,
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Duplicado'), findsOneWidget);
-      expect(
-        find.textContaining('ya está registrada para otro paciente'),
-        findsOneWidget,
-      );
-    });
+        expect(find.text('Duplicado'), findsOneWidget);
+        expect(
+          find.textContaining(
+            'Este dispositivo ya está registrado para otro paciente',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
 
     testWidgets('un conflicto 409 oculta el botón Sync ahora', (tester) async {
       when(() => db.getUnsyncedRecords()).thenAnswer(

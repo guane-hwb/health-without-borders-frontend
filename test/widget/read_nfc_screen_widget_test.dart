@@ -372,11 +372,10 @@ void main() {
         expect(find.byIcon(Icons.error_outline), findsOneWidget);
         expect(
           find.text(
-            'Este dispositivo fue retirado (perdido) y ya no pertenece a HWB.',
+            'Este dispositivo fue retirado (perdida) y ya no pertenece a HWB.',
           ),
           findsOneWidget,
         );
-        // Stays on step 1 (manual UID field still present).
         expect(find.byType(TextField), findsOneWidget);
       },
     );
