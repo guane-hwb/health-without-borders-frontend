@@ -20,6 +20,7 @@ class ProfileTabSummary extends StatelessWidget {
     required this.onEditGuardian,
     required this.onOpenAllergies,
     required this.onOpenBackground,
+    this.onReassignDevice,
   });
 
   final PatientFullRecord draft;
@@ -30,6 +31,7 @@ class ProfileTabSummary extends StatelessWidget {
   final void Function(int guardianIndex) onEditGuardian;
   final VoidCallback onOpenAllergies;
   final VoidCallback onOpenBackground;
+  final VoidCallback? onReassignDevice;
 
   bool get _allergiesChanged =>
       draft.allergies.length != original.allergies.length;
@@ -358,6 +360,32 @@ class ProfileTabSummary extends StatelessWidget {
             ],
           ),
         ),
+
+        if (onReassignDevice != null) ...[
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onReassignDevice,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.published_with_changes, size: 20),
+              label: Text(
+                isEs ? 'Reasignar dispositivo' : 'Reassign device',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
 
         const SizedBox(height: 18),
 
