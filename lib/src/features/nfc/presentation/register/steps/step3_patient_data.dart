@@ -5,6 +5,7 @@ import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../core/validation/identity_validators.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../shared/country_display.dart';
+import '../../../../../shared/widgets/form_widgets.dart';
 import '../../../domain/register_draft.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../widgets/nfc_uid_field.dart';
@@ -12,10 +13,6 @@ import '../widgets/nfc_uid_field.dart';
 const _kEnabledBorder = OutlineInputBorder(
   borderRadius: BorderRadius.all(Radius.circular(10)),
   borderSide: BorderSide(color: Color(0xFFB0B8C4), width: 1.5),
-);
-const _kErrorBorder = OutlineInputBorder(
-  borderRadius: BorderRadius.all(Radius.circular(10)),
-  borderSide: BorderSide(color: AppColors.error, width: 1.5),
 );
 const _kFocusedBorder = OutlineInputBorder(
   borderRadius: BorderRadius.all(Radius.circular(10)),
@@ -190,7 +187,7 @@ class _Step3State extends State<Step3PatientData> {
 
   void _save() {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final missing = <String>[];
 
     if (_patientUid.text.trim().isEmpty) {
@@ -260,7 +257,7 @@ class _Step3State extends State<Step3PatientData> {
   Widget build(BuildContext context) {
     final d = widget.draft;
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     final docTypes = <String, String>{
       'RC': s.docTypeRC,
@@ -445,7 +442,9 @@ class _Step3State extends State<Step3PatientData> {
                     title: s.identification,
                   ),
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    // Al usar .end, las cajas de entrada se alinean exactamente
+                    // en la misma línea base, corrigiendo el desfase visual.
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       SizedBox(
                         width: 130,
@@ -461,18 +460,29 @@ class _Step3State extends State<Step3PatientData> {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _StyledTextField(
-                          label: s.documentNumberLabel,
-                          controller: _docNum,
-                          hint: 'Ej. 1098765432',
-                          required: true,
-                          isError: _isDocInvalid,
-                          helperText: _isDocInvalid
-                              ? (isEs
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            LabeledTextField(
+                              label: s.documentNumberLabel,
+                              controller: _docNum,
+                              hint: 'Ej. 1098765432',
+                              requiredField: true,
+                              keyboardType: TextInputType.text,
+                            ),
+                            if (_isDocInvalid) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                isEs
                                     ? 'Mínimo 5 caracteres alfanuméricos'
-                                    : 'Min 5 alphanumeric chars')
-                              : null,
-                          keyboardType: TextInputType.text,
+                                    : 'Min 5 alphanumeric chars',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.error,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ],
@@ -482,21 +492,19 @@ class _Step3State extends State<Step3PatientData> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: _StyledTextField(
+                        child: LabeledTextField(
                           label: s.firstNameLabel,
                           controller: _firstName,
                           hint: 'Ej. Carmen',
-                          required: true,
-                          textCapitalization: TextCapitalization.words,
+                          requiredField: true,
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _StyledTextField(
+                        child: LabeledTextField(
                           label: isEs ? 'Segundo nombre' : 'Second name',
                           controller: _secondName,
                           hint: optionalLabel,
-                          textCapitalization: TextCapitalization.words,
                         ),
                       ),
                     ],
@@ -506,21 +514,19 @@ class _Step3State extends State<Step3PatientData> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: _StyledTextField(
+                        child: LabeledTextField(
                           label: s.lastNameLabel,
                           controller: _firstLast,
                           hint: 'Ej. Vargas',
-                          required: true,
-                          textCapitalization: TextCapitalization.words,
+                          requiredField: true,
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _StyledTextField(
+                        child: LabeledTextField(
                           label: isEs ? 'Segundo apellido' : 'Second last name',
                           controller: _secondLast,
                           hint: optionalLabel,
-                          textCapitalization: TextCapitalization.words,
                         ),
                       ),
                     ],
@@ -583,11 +589,23 @@ class _Step3State extends State<Step3PatientData> {
                   ),
                   if (_hasEthnicity) ...[
                     const SizedBox(height: 12),
-                    _StyledTextField(
-                      label: isEs ? 'Comunidad étnica' : 'Ethnic community',
-                      controller: _ethnicComm,
-                      hint: ethnicCommHint,
-                      helperText: ethnicCommHelper,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LabeledTextField(
+                          label: isEs ? 'Comunidad étnica' : 'Ethnic community',
+                          controller: _ethnicComm,
+                          hint: ethnicCommHint,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          ethnicCommHelper,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                   const SizedBox(height: 12),
@@ -631,7 +649,7 @@ class _Step3State extends State<Step3PatientData> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: _StyledTextField(
+                        child: LabeledTextField(
                           label: s.weightKg,
                           controller: _weight,
                           hint: 'Ej: 39.2',
@@ -642,7 +660,7 @@ class _Step3State extends State<Step3PatientData> {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _StyledTextField(
+                        child: LabeledTextField(
                           label: s.heightCm,
                           controller: _height,
                           hint: 'Ej: 148',
@@ -661,7 +679,7 @@ class _Step3State extends State<Step3PatientData> {
               _SectionCard(
                 children: [
                   _SectionHeader(icon: Icons.home_outlined, title: s.address),
-                  _StyledTextField(
+                  LabeledTextField(
                     label: s.street,
                     controller: _street,
                     hint: s.streetHint,
@@ -671,22 +689,20 @@ class _Step3State extends State<Step3PatientData> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: _StyledTextField(
+                        child: LabeledTextField(
                           label: s.municipality,
                           controller: _city,
                           hint: s.cityHint,
-                          required: true,
-                          textCapitalization: TextCapitalization.words,
+                          requiredField: true,
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _StyledTextField(
+                        child: LabeledTextField(
                           label: s.department,
                           controller: _stateCtrl,
                           hint: s.stateHint,
-                          required: true,
-                          textCapitalization: TextCapitalization.words,
+                          requiredField: true,
                         ),
                       ),
                     ],
@@ -778,60 +794,6 @@ class _SectionHeader extends StatelessWidget {
   );
 }
 
-class _StyledTextField extends StatelessWidget {
-  const _StyledTextField({
-    required this.label,
-    required this.controller,
-    required this.hint,
-    this.required = false,
-    this.isError = false,
-    this.keyboardType = TextInputType.text,
-    this.textCapitalization = TextCapitalization.none,
-    this.helperText,
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final String hint;
-  final bool required;
-  final bool isError;
-  final TextInputType keyboardType;
-  final TextCapitalization textCapitalization;
-  final String? helperText;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      _buildLabel(label, required),
-      const SizedBox(height: 6),
-      TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        textCapitalization: textCapitalization,
-        style: _kInputStyle,
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: _kHintStyle,
-          filled: true,
-          fillColor: AppColors.white,
-          helperText: helperText,
-          helperStyle: TextStyle(
-            fontSize: 11,
-            color: isError ? AppColors.error : AppColors.textSecondary,
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 14,
-          ),
-          enabledBorder: isError ? _kErrorBorder : _kEnabledBorder,
-          focusedBorder: isError ? _kErrorBorder : _kFocusedBorder,
-        ),
-      ),
-    ],
-  );
-}
-
 class _StyledDropdown<T> extends StatefulWidget {
   const _StyledDropdown({
     super.key,
@@ -862,7 +824,13 @@ class _StyledDropdownState<T> extends State<_StyledDropdown<T>> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildLabel(widget.label, widget.required),
+        SizedBox(
+          height: 20,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _buildLabel(widget.label, widget.required),
+          ),
+        ),
         const SizedBox(height: 6),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -896,9 +864,10 @@ class _StyledDropdownState<T> extends State<_StyledDropdown<T>> {
                     decoration: const InputDecoration(
                       filled: true,
                       fillColor: AppColors.white,
+                      isDense: true,
                       contentPadding: EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 14,
+                        horizontal: 12,
+                        vertical: 12,
                       ),
                       enabledBorder: _kEnabledBorder,
                       focusedBorder: _kFocusedBorder,

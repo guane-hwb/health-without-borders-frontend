@@ -1,41 +1,7 @@
 // test/unit/read_nfc_guardian_screen_test.dart
 
 import 'package:flutter_test/flutter_test.dart';
-
-class PractitionerInfo {
-  final String documentType;
-  final String documentNumber;
-  final String name;
-  PractitionerInfo({
-    required this.documentType,
-    required this.documentNumber,
-    required this.name,
-  });
-}
-
-class ProviderInfo {
-  final String repsCode;
-  final String name;
-  ProviderInfo({required this.repsCode, required this.name});
-}
-
-class MedicalHistoryItem {
-  final String startDateTime;
-  final String type;
-  final PractitionerInfo? practitioner;
-  final String? physician;
-  final ProviderInfo? provider;
-  final String? location;
-
-  MedicalHistoryItem({
-    required this.startDateTime,
-    this.type = 'Consultation',
-    this.practitioner,
-    this.physician,
-    this.provider,
-    this.location,
-  });
-}
+import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 
 String vDate(dynamic input) {
   String? d;

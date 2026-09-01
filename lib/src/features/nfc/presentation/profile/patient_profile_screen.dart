@@ -7,11 +7,8 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/di/app_scope.dart';
 import '../../../../core/i18n/app_strings.dart';
-import '../../../../core/nfc/nfc_guardian_payload.dart';
 import '../../../../core/nfc/nfc_payload_codec.dart';
-import '../../../../core/nfc/nfc_payload_service.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
-import '../../../../core/nfc/partial_card_notice.dart';
 import '../../../../core/storage/local_database.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../../design/tokens/app_colors.dart';
@@ -20,7 +17,6 @@ import '../../../auth/domain/user_session.dart';
 import '../../domain/patient_record.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
-import '../nfc_guided_write.dart';
 import 'patient_profile_helpers.dart';
 import 'sheets/add_allergy_sheet.dart';
 import 'sheets/add_chronic_condition_sheet.dart';
@@ -32,12 +28,15 @@ import 'sheets/edit_address_sheet.dart';
 import 'sheets/edit_chronic_personal_sheet.dart';
 import 'sheets/edit_guardian_sheet.dart';
 import 'sheets/edit_vital_signs_sheet.dart';
+import 'state/patient_draft_controller.dart';
 import 'tabs/profile_tab_consultations.dart';
 import 'tabs/profile_tab_summary.dart';
 import 'tabs/profile_tab_vaccines.dart';
 import 'widgets/profile_banners.dart';
 import 'widgets/profile_header.dart';
+import 'widgets/profile_nfc_actions.dart';
 import 'widgets/profile_tabs_bar.dart';
+import 'widgets/reassign_device_dialog.dart';
 
 /// Canonical patient profile screen.
 class PatientProfileScreen extends StatefulWidget {
@@ -48,6 +47,7 @@ class PatientProfileScreen extends StatefulWidget {
     this.readOnly = false,
     this.offline = false,
     this.emergency = false,
+    this.allowReassign = false,
   });
 
   final PatientFullRecord patient;
@@ -56,6 +56,49 @@ class PatientProfileScreen extends StatefulWidget {
   final bool offline;
   final bool emergency;
 
+  /// Whether to offer the "Reasignar dispositivo" action. Only the lost/damaged
+  /// recovery path (patient search) sets this; scanning via Read NFC does not,
+  /// since a successful scan means the tags are present and working.
+  final bool allowReassign;
+
+  @visibleForTesting
+  static Future<List<ConnectivityResult>> Function() checkConnectivityImpl =
+      () => Connectivity().checkConnectivity();
+
+  @visibleForTesting
+  static Stream<List<ConnectivityResult>> Function() connectivityStreamImpl =
+      () => Connectivity().onConnectivityChanged;
+
+  @visibleForTesting
+  static Future<ReassignSelection?> Function(
+    BuildContext context, {
+    required bool isEs,
+    required bool hasG1,
+    required bool hasG2,
+  })
+  showReassignDeviceDialogImpl = showReassignDeviceDialog;
+
+  @visibleForTesting
+  static Future<bool> Function({
+    required BuildContext context,
+    required PatientFullRecord record,
+    required String nfcKey,
+    required bool patientChipDirty,
+    required bool guardianChipDirty,
+  })
+  executeUpdateNfcChipsImpl = executeUpdateNfcChips;
+
+  @visibleForTesting
+  static Future<PatientFullRecord?> Function({
+    required BuildContext context,
+    required ReassignTarget target,
+    required PatientFullRecord record,
+    required NfcPayloadCodec codec,
+    required bool isEs,
+    required void Function(String message, {bool error}) showSnack,
+  })
+  executeReassignOneImpl = executeReassignOne;
+
   @override
   State<PatientProfileScreen> createState() => _PatientProfileScreenState();
 }
@@ -63,8 +106,9 @@ class PatientProfileScreen extends StatefulWidget {
 class _PatientProfileScreenState extends State<PatientProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late PatientFullRecord _draft;
-  late PatientFullRecord _original;
+  late PatientDraftController _draftController;
+  PatientFullRecord get _draft => _draftController.draft;
+  PatientFullRecord get _original => _draftController.original;
   bool _isSyncing = false;
   bool _hasInternet = true;
   NfcChipStatus? _chipStatus;
@@ -78,8 +122,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _draft = widget.patient;
-    _original = widget.patient;
+    _draftController = PatientDraftController(widget.patient)
+      ..addListener(_onDraftChanged);
 
     _checkInitialConnectivity();
     _subscribeToConnectivity();
@@ -98,22 +142,27 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   void dispose() {
     _tabController.dispose();
     _connectivitySubscription.cancel();
+    _draftController.removeListener(_onDraftChanged);
+    _draftController.dispose();
     super.dispose();
   }
 
+  void _onDraftChanged() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _checkInitialConnectivity() async {
-    final result = await Connectivity().checkConnectivity();
+    final result = await PatientProfileScreen.checkConnectivityImpl();
     if (!mounted) return;
     _updateConnectivityStatus(result);
   }
 
   void _subscribeToConnectivity() {
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      List<ConnectivityResult> results,
-    ) {
-      if (!mounted) return;
-      _updateConnectivityStatus(results);
-    });
+    _connectivitySubscription = PatientProfileScreen.connectivityStreamImpl()
+        .listen((List<ConnectivityResult> results) {
+          if (!mounted) return;
+          _updateConnectivityStatus(results);
+        });
   }
 
   void _updateConnectivityStatus(List<ConnectivityResult> results) {
@@ -184,119 +233,137 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (status == null || !status.anyDirty) return;
 
     setState(() => _isUpdatingChips = true);
-    final codec = NfcPayloadCodec(hexKey: nfcKey);
-    final record = _draft;
 
-    if (status.patientChipDirty) {
-      final ok = await showNfcGuidedWrite(
-        context,
-        title: isEs ? 'Pulsera del paciente' : 'Patient wristband',
-        instruction: isEs
-            ? 'Acerque la pulsera del paciente al teléfono'
-            : 'Bring the patient wristband to the phone',
-        write: () => NfcPayloadService(codec: codec).writeTriagePayload(
-          NfcTriagePayload.buildPatientPayload(record: record),
-          expectedUid: record.deviceUid,
-        ),
+    final ok = await PatientProfileScreen.executeUpdateNfcChipsImpl(
+      context: context,
+      record: _draft,
+      nfcKey: nfcKey,
+      patientChipDirty: status.patientChipDirty,
+      guardianChipDirty: status.guardianChipDirty,
+    );
+
+    if (!mounted) return;
+    if (ok) {
+      await scope.localDatabase.clearChipsDirty(
+        _draft.patientId,
+        patient: status.patientChipDirty,
+        guardian: status.guardianChipDirty,
       );
-      if (!mounted) return;
-      if (ok) {
-        await scope.localDatabase.clearChipsDirty(
-          record.patientId,
-          patient: true,
-        );
-      }
-    }
-    if (!mounted) return;
-
-    if (status.guardianChipDirty) {
-      final guardian1Uid = (record.guardianInfo.deviceUid ?? '').trim();
-      final guardian2Uid = (record.guardian2Info?.deviceUid ?? '').trim();
-      final hasTwoGuardians =
-          guardian1Uid.isNotEmpty && guardian2Uid.isNotEmpty;
-      final messenger = ScaffoldMessenger.of(context);
-
-      Future<bool> writeGuardianCard({
-        required String expectedUid,
-        required String title,
-        required String instruction,
-      }) async {
-        GuardianPayloadFit? fit;
-        final written = await showNfcGuidedWrite(
-          context,
-          title: title,
-          instruction: instruction,
-          write: () async {
-            final result = await NfcPayloadService(codec: codec)
-                .writeGuardianRecord(
-                  buildFit: guardianFitBuilder(record: record, codec: codec),
-                  expectedUid: expectedUid,
-                );
-            fit = result.fit;
-          },
-        );
-        if (written && (fit?.isPartial ?? false)) {
-          _showPartialCardNotice(messenger, fit!, isEs);
-        }
-        return written;
-      }
-
-      var allWritten = true;
-
-      if (guardian1Uid.isNotEmpty) {
-        final ok = await writeGuardianCard(
-          expectedUid: guardian1Uid,
-          title: hasTwoGuardians
-              ? (isEs ? 'Tarjeta del guardián 1' : 'Guardian card 1')
-              : (isEs ? 'Tarjeta del guardián' : 'Guardian card'),
-          instruction: hasTwoGuardians
-              ? (isEs
-                    ? 'Acerque la tarjeta del guardián 1 al teléfono'
-                    : 'Bring guardian card 1 to the phone')
-              : (isEs
-                    ? 'Acerque la tarjeta del guardián al teléfono'
-                    : 'Bring the guardian card to the phone'),
-        );
-        if (!mounted) return;
-        allWritten = allWritten && ok;
-      }
-
-      if (guardian2Uid.isNotEmpty) {
-        final ok = await writeGuardianCard(
-          expectedUid: guardian2Uid,
-          title: isEs ? 'Tarjeta del guardián 2' : 'Guardian card 2',
-          instruction: isEs
-              ? 'Acerque la tarjeta del guardián 2 al teléfono'
-              : 'Bring guardian card 2 to the phone',
-        );
-        if (!mounted) return;
-        allWritten = allWritten && ok;
-      }
-
-      final hadAnyGuardian = guardian1Uid.isNotEmpty || guardian2Uid.isNotEmpty;
-      if (allWritten && hadAnyGuardian) {
-        await scope.localDatabase.clearChipsDirty(
-          record.patientId,
-          guardian: true,
-        );
-      }
     }
 
-    if (!mounted) return;
     await _loadChipStatus(scope.localDatabase);
     if (!mounted) return;
     setState(() => _isUpdatingChips = false);
   }
 
-  void _showPartialCardNotice(
-    ScaffoldMessengerState messenger,
-    GuardianPayloadFit fit,
-    bool isEs,
-  ) {
-    messenger.showSnackBar(
+  // ── Lost / damaged bracelet re-labeling ───────────────────────────────────
+
+  Future<void> _reassignDevices() async {
+    if (_isUpdatingChips || widget.readOnly) return;
+    final scope = AppScope.of(context);
+    final isEs = AppStrings.of(context).isEs;
+
+    final hasG1 = (_draft.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
+    final hasG2 = (_draft.guardian2Info?.deviceUid ?? '').trim().isNotEmpty;
+
+    final selection = await PatientProfileScreen.showReassignDeviceDialogImpl(
+      context,
+      isEs: isEs,
+      hasG1: hasG1,
+      hasG2: hasG2,
+    );
+    if (!mounted || selection == null || selection.targets.isEmpty) return;
+
+    final nfcKey = await scope.authRepository.getNfcEncryptionKey();
+    if (!mounted) return;
+    if (nfcKey == null || nfcKey.isEmpty) {
+      _showReassignSnack(
+        isEs
+            ? 'No hay clave NFC disponible para grabar.'
+            : 'No NFC key available to write.',
+        error: true,
+      );
+      return;
+    }
+    final codec = NfcPayloadCodec(hexKey: nfcKey);
+
+    setState(() => _isUpdatingChips = true);
+    var record = _draft;
+    var patientDone = false;
+    var guardianDone = false;
+
+    for (final target in selection.targets) {
+      final updated = await PatientProfileScreen.executeReassignOneImpl(
+        context: context,
+        target: target,
+        record: record,
+        codec: codec,
+        isEs: isEs,
+        showSnack: _showReassignSnack,
+      );
+      if (!mounted) return;
+      if (updated == null) break;
+      record = updated;
+      if (target == ReassignTarget.patient) {
+        patientDone = true;
+      } else {
+        guardianDone = true;
+      }
+    }
+
+    if (!mounted) return;
+    if (!patientDone && !guardianDone) {
+      setState(() => _isUpdatingChips = false);
+      return;
+    }
+
+    try {
+      await scope.localDatabase.savePatient(
+        record,
+        retiredDeviceReason: selection.reason,
+      );
+      await scope.localDatabase.clearChipsDirty(
+        record.patientId,
+        patient: patientDone,
+        guardian: guardianDone,
+      );
+      if (!mounted) return;
+      setState(() {
+        _draftController.markSynced();
+        _isUpdatingChips = false;
+      });
+      await _loadChipStatus(scope.localDatabase);
+      if (!mounted) return;
+      if (_hasInternet) {
+        await scope.syncEngine.syncAll();
+      }
+      if (!mounted) return;
+      _showReassignSnack(
+        isEs ? 'dispositivo reasignado.' : 'Device reassigned.',
+      );
+    } catch (e, stack) {
+      AppLogger.e(
+        'Fallo al guardar la reasignación del dispositivo ',
+        error: e,
+        stackTrace: stack,
+      );
+      if (!mounted) return;
+      setState(() => _isUpdatingChips = false);
+      _showReassignSnack(
+        isEs
+            ? 'No se pudo guardar la reasignación.'
+            : 'Could not save the reassignment.',
+        error: true,
+      );
+    }
+  }
+
+  void _showReassignSnack(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(partialCardNoticeMessage(fit, isEs)),
-        duration: const Duration(seconds: 6),
+        content: Text(message),
+        backgroundColor: error ? AppColors.error : null,
       ),
     );
   }
@@ -342,185 +409,79 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   void _updateVitalSigns({double? weight, double? height, String? bloodType}) {
-    setState(() {
-      _draft = _replacePatientInfo(
-        _draft.patientInfo.copyWith(
-          bloodType: bloodType,
-          weight: weight ?? _draft.patientInfo.weight,
-          height: height ?? _draft.patientInfo.height,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.updateVitalSigns(
+      weight: weight,
+      height: height,
+      bloodType: bloodType,
+    );
+    unawaited(_saveAndPendingSync());
   }
 
   void _updateAddress(Address address) {
-    setState(() {
-      _draft = _replacePatientInfo(
-        _draft.patientInfo.copyWith(address: address),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.updateAddress(address);
+    unawaited(_saveAndPendingSync());
   }
 
   void _updateBackground({
     List<ChronicConditionItem>? chronicConditions,
     String? personalHistory,
   }) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: chronicConditions ?? old.chronicConditions,
-          personalHistory: personalHistory ?? old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.updateBackground(
+      chronicConditions: chronicConditions,
+      personalHistory: personalHistory,
+    );
+    unawaited(_saveAndPendingSync());
   }
 
   void _addChronicCondition(ChronicConditionItem item) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: [...old.chronicConditions, item],
-          personalHistory: old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addChronicCondition(item);
+    unawaited(_saveAndPendingSync());
   }
 
   void _removeChronicCondition(int index) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    final updated = [...old.chronicConditions]..removeAt(index);
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: updated,
-          personalHistory: old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.removeChronicCondition(index);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addMedication(MedicationStatementItem item) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: old.chronicConditions,
-          personalHistory: old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: [...old.medications, item],
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addMedication(item);
+    unawaited(_saveAndPendingSync());
   }
 
   void _removeMedication(int index) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    final updated = [...old.medications]..removeAt(index);
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: old.chronicConditions,
-          personalHistory: old.personalHistory,
-          familyHistory: old.familyHistory,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: updated,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.removeMedication(index);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addFamilyHistory(FamilyHistoryItem item) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: old.chronicConditions,
-          personalHistory: old.personalHistory,
-          familyHistory: [...old.familyHistory, item],
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addFamilyHistory(item);
+    unawaited(_saveAndPendingSync());
   }
 
   void _removeFamilyHistory(int index) {
-    final old = _draft.backgroundHistory ?? BackgroundHistory();
-    final updated = [...old.familyHistory]..removeAt(index);
-    setState(() {
-      _draft = _replaceBackground(
-        BackgroundHistory(
-          chronicConditions: old.chronicConditions,
-          personalHistory: old.personalHistory,
-          familyHistory: updated,
-          familyHistoryNotes: old.familyHistoryNotes,
-          medications: old.medications,
-        ),
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.removeFamilyHistory(index);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addAllergy(AllergyInfo allergy) {
-    setState(() {
-      _draft = _draft.copyWith(allergies: [..._draft.allergies, allergy]);
-    });
-    _saveAndPendingSync();
+    _draftController.addAllergy(allergy);
+    unawaited(_saveAndPendingSync());
   }
 
   void _removeAllergy(int index) {
-    final updated = [..._draft.allergies]..removeAt(index);
-    setState(() {
-      _draft = _draft.copyWith(allergies: updated);
-    });
-    _saveAndPendingSync();
+    _draftController.removeAllergy(index);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addVaccines(List<VaccinationRecordItem> vaccines) {
-    setState(() {
-      _draft = _draft.copyWith(
-        vaccinationRecord: [..._draft.vaccinationRecord, ...vaccines],
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addVaccines(vaccines);
+    unawaited(_saveAndPendingSync());
   }
 
   void _addConsultation(MedicalHistoryItem consultation) {
-    setState(() {
-      _draft = _draft.copyWith(
-        medicalHistory: [..._draft.medicalHistory, consultation],
-      );
-    });
-    _saveAndPendingSync();
+    _draftController.addConsultation(consultation);
+    unawaited(_saveAndPendingSync());
   }
-
-  // ── Helpers ──────────────────────────────────────────────────────────────
-
-  PatientFullRecord _replacePatientInfo(PatientInfo info) =>
-      _draft.copyWith(patientInfo: info);
-
-  PatientFullRecord _replaceBackground(BackgroundHistory bg) =>
-      _draft.copyWith(backgroundHistory: bg);
 
   // ── Sync ─────────────────────────────────────────────────────────────────
 
@@ -555,10 +516,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
       final bool ok = await scope.syncEngine.syncAll();
       if (!mounted) return;
+      if (ok) {
+        _draftController.markSynced();
+      }
       setState(() {
-        if (ok) {
-          _original = _draft;
-        }
         _isSyncing = false;
       });
       if (!silent) {
@@ -679,17 +640,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         guardian: current,
         guardianIndex: guardianIndex,
         onConfirm: (GuardianInfo updatedGuardian) {
-          setState(() {
-            _draft = _draft.copyWith(
-              guardianInfo: guardianIndex == 1
-                  ? updatedGuardian
-                  : _draft.guardianInfo,
-              guardian2Info: guardianIndex == 2
-                  ? updatedGuardian
-                  : _draft.guardian2Info,
-            );
-          });
-          _saveAndPendingSync();
+          _draftController.updateGuardian(guardianIndex, updatedGuardian);
+          unawaited(_saveAndPendingSync());
         },
       ),
     );
@@ -825,7 +777,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                   hasUnsyncedChanges: !_hasInternet && _hasUnsyncedChanges,
                   lastSyncedAt: widget.lastSyncedAt,
                   onBack: () => _confirmExit(),
-                  onSync: widget.readOnly ? null : () => _sync(silent: false),
                 ),
                 ProfileTabsBar(controller: _tabController, draft: _draft),
                 if (widget.emergency) const EmergencyBanner(),
@@ -852,6 +803,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                         onEditGuardian: _openGuardianSheet,
                         onOpenAllergies: _openAllergiesSheet,
                         onOpenBackground: _openBackgroundSheet,
+                        onReassignDevice:
+                            (widget.allowReassign && !widget.readOnly)
+                            ? _reassignDevices
+                            : null,
                       ),
                       ProfileTabConsultations(
                         draft: _draft,

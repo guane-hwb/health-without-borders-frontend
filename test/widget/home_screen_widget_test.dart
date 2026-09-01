@@ -104,6 +104,9 @@ class FakeLocalDatabase implements LocalDatabase {
       <Map<String, Object?>>[];
 
   @override
+  Future<int> getUnsyncedEmergencyLogCount() async => pendingCount;
+
+  @override
   Future<void> clearAll() async {}
 
   @override
@@ -148,6 +151,7 @@ class FakeLocalDatabase implements LocalDatabase {
     PatientFullRecord record, {
     String? ownerUserId,
     String? organizationId,
+    String? retiredDeviceReason,
   }) async {}
 
   @override

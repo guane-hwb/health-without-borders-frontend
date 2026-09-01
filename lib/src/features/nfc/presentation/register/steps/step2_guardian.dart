@@ -8,7 +8,7 @@ import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../core/validation/identity_validators.dart';
-import '../../../../../shared/widgets/hwb_text_field.dart';
+import '../../../../../shared/widgets/form_widgets.dart';
 import '../../../domain/register_draft.dart';
 
 const _kEnabledBorder = OutlineInputBorder(
@@ -304,7 +304,7 @@ class _Step2State extends State<Step2Guardian> {
     final s = AppStrings.of(context);
     final missing = <String>[];
 
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final bioSigLabel = isEs ? 'Firma biométrica' : 'Biometric signature';
     final privacyAuthLabel = isEs
         ? 'Autorización de política de privacidad'
@@ -456,7 +456,7 @@ class _Step2State extends State<Step2Guardian> {
   Widget build(BuildContext context) {
     final d = widget.draft;
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     final docTypes = {'CC': s.docTypeCC, 'CE': s.docTypeCE};
     final rels = {
@@ -575,12 +575,12 @@ class _Step2State extends State<Step2Guardian> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _CustomTextField(
+                          LabeledTextField(
                             label: s.guardianFullName,
                             controller: _name,
                             hint: s.guardianFullNameHint,
-                            icon: Icons.person_outline,
-                            required: true,
+                            prefixIcon: Icons.person_outline,
+                            requiredField: true,
                             keyboardType: TextInputType.name,
                           ),
                           const SizedBox(height: 12),
@@ -593,12 +593,12 @@ class _Step2State extends State<Step2Guardian> {
                                 setState(() => d.guardianRelationship = v),
                           ),
                           const SizedBox(height: 12),
-                          _CustomTextField(
+                          LabeledTextField(
                             label: s.guardianPhoneLabel,
                             controller: _phone,
                             hint: s.guardianPhoneHint,
-                            icon: Icons.phone_outlined,
-                            required: true,
+                            prefixIcon: Icons.phone_outlined,
+                            requiredField: true,
                             keyboardType: TextInputType.phone,
                           ),
                           const SizedBox(height: 12),
@@ -611,12 +611,12 @@ class _Step2State extends State<Step2Guardian> {
                                 setState(() => _selectedDocType = v),
                           ),
                           const SizedBox(height: 12),
-                          _CustomTextField(
+                          LabeledTextField(
                             label: s.documentNumberLabel,
                             controller: _docNumber,
                             hint: 'Ej. 1234567890',
-                            icon: Icons.badge_outlined,
-                            required: true,
+                            prefixIcon: Icons.badge_outlined,
+                            requiredField: true,
                             keyboardType: TextInputType.number,
                           ),
                           const SizedBox(height: 16),
@@ -739,42 +739,6 @@ class _Step2State extends State<Step2Guardian> {
           ),
         ),
         _NavButtons(onBack: _onBackAction, onContinue: _save),
-      ],
-    );
-  }
-}
-
-class _CustomTextField extends StatelessWidget {
-  const _CustomTextField({
-    required this.label,
-    required this.controller,
-    required this.hint,
-    required this.icon,
-    this.required = false,
-    this.keyboardType = TextInputType.text,
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final String hint;
-  final IconData icon;
-  final bool required;
-  final TextInputType keyboardType;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel(label, required),
-        const SizedBox(height: 6),
-        HwbTextField(
-          label: '',
-          controller: controller,
-          hint: hint,
-          icon: icon,
-          keyboardType: keyboardType,
-        ),
       ],
     );
   }
@@ -986,7 +950,7 @@ class _AuthSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final signatureLabel = isEs ? 'Firma biométrica' : 'Biometric signature';
 
     return Container(
@@ -1009,11 +973,11 @@ class _AuthSection extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          HwbTextField(
+          LabeledTextField(
             label: s.email,
             controller: emailController,
             hint: s.emailHint,
-            icon: Icons.email_outlined,
+            prefixIcon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
           ),
           const SizedBox(height: 16),
@@ -1047,7 +1011,7 @@ class _AuthCheckbox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1141,7 +1105,7 @@ class _SignaturePad extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1247,7 +1211,7 @@ class _PrivacyPolicyDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1659,7 +1623,7 @@ class _NfcField extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final hasValue = controller.text.trim().isNotEmpty;
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final deviceLinkedLabel = isEs ? 'Dispositivo vinculado' : 'Linked device';
 
     return Column(
@@ -1831,7 +1795,7 @@ class _Guardian2Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final deleteTooltip = isEs ? 'Eliminar guardián 2' : 'Remove guardian 2';
     final docTypes = {'CC': s.docTypeCC, 'CE': s.docTypeCE};
 
@@ -1901,12 +1865,12 @@ class _Guardian2Section extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _CustomTextField(
+                LabeledTextField(
                   label: s.guardianFullName,
                   controller: nameCtrl,
                   hint: s.guardianFullNameHint,
-                  icon: Icons.person_outline,
-                  required: true,
+                  prefixIcon: Icons.person_outline,
+                  requiredField: true,
                   keyboardType: TextInputType.name,
                 ),
                 const SizedBox(height: 12),
@@ -1917,12 +1881,12 @@ class _Guardian2Section extends StatelessWidget {
                   onChanged: onRelationshipChanged,
                 ),
                 const SizedBox(height: 12),
-                _CustomTextField(
+                LabeledTextField(
                   label: s.guardianPhoneLabel,
                   controller: phoneCtrl,
                   hint: s.guardianPhoneHint,
-                  icon: Icons.phone_outlined,
-                  required: true,
+                  prefixIcon: Icons.phone_outlined,
+                  requiredField: true,
                   keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 12),
@@ -1933,12 +1897,12 @@ class _Guardian2Section extends StatelessWidget {
                   onChanged: onDocTypeChanged,
                 ),
                 const SizedBox(height: 12),
-                _CustomTextField(
+                LabeledTextField(
                   label: s.documentNumberLabel,
                   controller: docNumberCtrl,
                   hint: 'Ej. 1234567890',
-                  icon: Icons.badge_outlined,
-                  required: true,
+                  prefixIcon: Icons.badge_outlined,
+                  requiredField: true,
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),

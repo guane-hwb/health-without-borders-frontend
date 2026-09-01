@@ -129,6 +129,7 @@ class SyncEngine {
 
   Future<bool> syncAll() async {
     await refreshPendingCount();
+    await _syncEmergencyLogs();
 
     if (_isSyncing) return false;
     _isSyncing = true;
@@ -209,9 +210,16 @@ class SyncEngine {
     }
 
     try {
-      final PatientSyncResponse response = await _patientRepo.syncPatient(
-        record,
-      );
+      // Pass the re-labeling reason only when present, so ordinary syncs keep
+      // calling syncPatient(record) unchanged.
+      final PatientSyncResponse response =
+          (entry.retiredDeviceReason != null &&
+              entry.retiredDeviceReason!.isNotEmpty)
+          ? await _patientRepo.syncPatient(
+              record,
+              retiredDeviceReason: entry.retiredDeviceReason,
+            )
+          : await _patientRepo.syncPatient(record);
 
       final bool fhirOk =
           response.fhirStatus == null ||
@@ -316,6 +324,28 @@ class SyncEngine {
     } finally {
       _isSyncing = false;
       await refreshPendingCount();
+    }
+  }
+
+  Future<void> _syncEmergencyLogs() async {
+    try {
+      final pending = await _localDb.pendingEmergencyAccessLogs();
+      if (pending.isEmpty) return;
+
+      await _patientRepo.reportEmergencyAccess(pending);
+
+      final ids = pending
+          .map((r) => (r['id'] as num?)?.toInt())
+          .whereType<int>()
+          .toList();
+      await _localDb.markEmergencyLogsSynced(ids);
+      AppLogger.d('Logs de emergencia sincronizados: ${ids.length}');
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error sincronizando logs de acceso de emergencia',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 }

@@ -20,6 +20,7 @@ class ProfileTabSummary extends StatelessWidget {
     required this.onEditGuardian,
     required this.onOpenAllergies,
     required this.onOpenBackground,
+    this.onReassignDevice,
   });
 
   final PatientFullRecord draft;
@@ -30,6 +31,7 @@ class ProfileTabSummary extends StatelessWidget {
   final void Function(int guardianIndex) onEditGuardian;
   final VoidCallback onOpenAllergies;
   final VoidCallback onOpenBackground;
+  final VoidCallback? onReassignDevice;
 
   bool get _allergiesChanged =>
       draft.allergies.length != original.allergies.length;
@@ -85,7 +87,10 @@ class ProfileTabSummary extends StatelessWidget {
         dg1.name != og1.name ||
         dg1.phone != og1.phone ||
         dg1.relationship != og1.relationship ||
-        dg1.deviceUid != og1.deviceUid;
+        dg1.docType != og1.docType ||
+        dg1.docNumber != og1.docNumber ||
+        dg1.documentType != og1.documentType ||
+        dg1.documentNumber != og1.documentNumber;
 
     final dg2 = draft.guardian2Info;
     final og2 = original.guardian2Info;
@@ -97,7 +102,10 @@ class ProfileTabSummary extends StatelessWidget {
         dg2.name != og2.name ||
         dg2.phone != og2.phone ||
         dg2.relationship != og2.relationship ||
-        dg2.deviceUid != og2.deviceUid;
+        dg2.docType != og2.docType ||
+        dg2.docNumber != og2.docNumber ||
+        dg2.documentType != og2.documentType ||
+        dg2.documentNumber != og2.documentNumber;
 
     return g1Changed || g2Changed;
   }
@@ -358,6 +366,32 @@ class ProfileTabSummary extends StatelessWidget {
             ],
           ),
         ),
+
+        if (onReassignDevice != null) ...[
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onReassignDevice,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.published_with_changes, size: 20),
+              label: Text(
+                isEs ? 'Reasignar dispositivo' : 'Reassign device',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
 
         const SizedBox(height: 18),
 
@@ -780,6 +814,7 @@ class _IdCell extends StatelessWidget {
 class _GuardianContent extends StatelessWidget {
   const _GuardianContent({required this.guardian});
   final GuardianInfo guardian;
+
   String get _initials {
     final p = guardian.name.trim().split(RegExp(r'\s+'));
     return p.length >= 2
@@ -789,8 +824,9 @@ class _GuardianContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isUidValid =
-        guardian.deviceUid != null && guardian.deviceUid!.isNotEmpty;
+    final docType = guardian.docType ?? guardian.documentType ?? 'CC';
+    final docNum = guardian.docNumber ?? guardian.documentNumber;
+    final hasDocNumber = docNum != null && docNum.trim().isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -834,21 +870,20 @@ class _GuardianContent extends StatelessWidget {
                       color: AppColors.textSecondary,
                     ),
                   ),
-                  if (isUidValid) ...[
+                  if (hasDocNumber) ...[
                     const SizedBox(height: 4),
                     Row(
                       children: [
                         const Icon(
-                          Icons.nfc_outlined,
-                          size: 12,
+                          Icons.badge_outlined,
+                          size: 13,
                           color: AppColors.success,
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'UID: ${guardian.deviceUid}',
+                          '$docType: ${docNum.trim()}',
                           style: const TextStyle(
                             fontSize: 11,
-                            fontFamily: 'monospace',
                             color: AppColors.success,
                             fontWeight: FontWeight.w600,
                           ),

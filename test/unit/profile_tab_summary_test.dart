@@ -358,21 +358,6 @@ void main() {
       );
       expect(w.testGuardianChanged, isTrue);
     });
-
-    test('devuelve true cuando el deviceUid cambia', () {
-      final w = _makeWidget(
-        draft: _makeRecord(
-          guardian: GuardianInfo(
-            name: baseGuardian.name,
-            phone: baseGuardian.phone,
-            relationship: baseGuardian.relationship,
-            deviceUid: 'uid-xyz',
-          ),
-        ),
-        original: _makeRecord(guardian: baseGuardian),
-      );
-      expect(w.testGuardianChanged, isTrue);
-    });
   });
 
   // ── Static helpers ─────────────────────────────────────────────────────

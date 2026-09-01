@@ -1,10 +1,4 @@
 // test/widget/brigade_stats_screen_widget_test.dart
-//
-// Widget tests for BrigadeStatsScreen against a fake StatsRepository.
-//
-// The screen previously fell back to hard-coded figures whenever the API threw,
-// which meant a 403 rendered 1,284 imaginary patients. These tests pin the
-// failure paths so that can never come back.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,13 +53,10 @@ class FakeUserRepository extends UserRepository {
   }
 }
 
-/// Extends rather than implements, so a new method on [StatsRepository] does
-/// not silently leave this fake unimplemented.
 class FakeStatsRepository extends StatsRepository {
   FakeStatsRepository(this.result)
     : super(apiClient: _NoOpApiClient(), authRepository: _FakeAuthRepository());
 
-  /// A [BrigadeStats] to return, or an [Object] to throw.
   final Object result;
 
   int callCount = 0;
@@ -83,8 +74,28 @@ class FakeStatsRepository extends StatsRepository {
     requestedOrgIds.add(organizationId);
     requestedFrom.add(dateFrom);
     requestedTo.add(dateTo);
+
     final r = result;
-    if (r is BrigadeStats) return r;
+    if (r is BrigadeStats) {
+      if (dateFrom != null) {
+        return BrigadeStats(
+          scope: r.scope,
+          generatedAt: r.generatedAt,
+          window: StatsWindow(
+            dateFrom: dateFrom,
+            dateTo: dateTo ?? DateTime.now(),
+          ),
+          totals: r.totals,
+          trend: r.trend,
+          vaccines: r.vaccines,
+          allergies: r.allergies,
+          allergiesOthers: r.allergiesOthers,
+          nationalities: r.nationalities,
+          nationalitiesOthers: r.nationalitiesOthers,
+        );
+      }
+      return r;
+    }
     throw r;
   }
 }
@@ -159,10 +170,11 @@ BrigadeStats _stats({
   int encounters = 512,
   int allergiesOthers = 0,
   int nationalitiesOthers = 0,
+  Map<String, dynamic>? window,
 }) => BrigadeStats.fromJson(<String, dynamic>{
   'scope': {'organization_id': null, 'organization_name': null},
   'generated_at': '2026-07-09T14:22:01-05:00',
-  'window': {'date_from': null, 'date_to': null},
+  'window': window ?? {'date_from': null, 'date_to': null},
   'totals': {
     'patients': patients,
     'patients_with_birth_date': 1240,
@@ -200,8 +212,6 @@ BrigadeStats _emptyStats() => BrigadeStats.fromJson(<String, dynamic>{});
 // HELPERS
 // ============================================================================
 
-/// Widening the surface is what makes "does this render" assertions mean what
-/// they say, but a ListView is still lazy — see [_settle] for the rest.
 Future<void> _pump(WidgetTester tester, Widget screen) async {
   await tester.binding.setSurfaceSize(const Size(800, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -209,14 +219,7 @@ Future<void> _pump(WidgetTester tester, Widget screen) async {
   await tester.pumpAndSettle();
 }
 
-/// Scrolls the screen's ListView until [finder] is on screen, then asserts it.
-///
-/// A ListView is lazy: widening the test surface is not enough, because the
-/// viewport height comes from the Scaffold, not the surface, so off-screen
-/// rows are never built. This drives the scrollable the way a user would.
 Future<void> _expectAfterScroll(WidgetTester tester, Finder finder) async {
-  // If the row is already on screen, scrollUntilVisible would have nothing to
-  // do and can throw; only scroll when it is genuinely off screen.
   if (finder.evaluate().isEmpty) {
     await tester.scrollUntilVisible(
       finder,
@@ -271,10 +274,8 @@ void main() {
 
       expect(statsRepo.callCount, 1);
       expect(statsRepo.requestedOrgIds, [null]);
-      // Above the fold.
-      expect(find.text('1.3K'), findsOneWidget); // 1284 patients
-      expect(find.text('31%'), findsOneWidget); // minors_pct
-      // Further down the ListView; scroll each into view before asserting.
+      expect(find.text('1.3K'), findsOneWidget);
+      expect(find.text('31%'), findsOneWidget);
       await _expectAfterScroll(tester, find.text('Influenza Trivalente'));
       await _expectAfterScroll(tester, find.text('Ibuprofeno (41)'));
       await _expectAfterScroll(tester, find.text('Colombia'));
@@ -319,7 +320,6 @@ void main() {
       await tester.tap(find.byType(DropdownButton<String>));
       await tester.pumpAndSettle();
 
-      // Pulsar la opción 'Org B' dentro del menú desplegado
       await tester.tap(find.text('Org B'));
       await tester.pumpAndSettle();
 
@@ -367,7 +367,6 @@ void main() {
         ),
       );
 
-      // listOrganizations is superadmin-only; calling it would answer 403.
       expect(userRepo.callCount, 0);
       expect(find.text('Todas'), findsNothing);
       expect(statsRepo.requestedOrgIds, [null]);
@@ -453,7 +452,6 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Reintentar'), findsNothing);
-      // The mock must never resurface.
       expect(find.text('1.3K'), findsNothing);
     });
 
@@ -472,7 +470,6 @@ void main() {
 
       expect(find.textContaining('requieren conexión'), findsOneWidget);
       expect(find.text('Reintentar'), findsOneWidget);
-      // The mock must never resurface.
       expect(find.text('1.3K'), findsNothing);
     });
 
@@ -679,7 +676,6 @@ void main() {
         ),
       );
 
-      // "Todo" shows no caption.
       expect(find.textContaining('–'), findsNothing);
 
       await tester.tap(find.text('Últimos 30 días'));
@@ -755,6 +751,64 @@ void main() {
 
         expect(from, equals(DateTime(2026, 7, 1)));
         expect(to, equals(DateTime(2026, 7, 15)));
+      },
+    );
+
+    testWidgets(
+      'con ventana activa, el subtítulo de menores indica que la edad es a hoy',
+      (tester) async {
+        final statsRepo = FakeStatsRepository(_stats());
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+            statsRepo: statsRepo,
+          ),
+        );
+
+        expect(find.text('384 pacientes'), findsOneWidget);
+
+        await tester.tap(find.text('Este mes'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('menores a día de hoy'), findsOneWidget);
+      },
+    );
+  });
+
+  group('generatedAt label', () {
+    testWidgets('la pantalla estampa la fecha de generación del servidor', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(_stats()),
+        ),
+      );
+
+      await _expectAfterScroll(tester, find.textContaining('Generado el'));
+    });
+
+    testWidgets(
+      'la fecha de generación también se muestra en el estado vacío',
+      (tester) async {
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+            statsRepo: FakeStatsRepository(
+              _stats(patients: 0, vaccineDoses: 0, allergies: 0, encounters: 0),
+            ),
+          ),
+        );
+
+        expect(
+          find.text('Aún no hay datos para este período.'),
+          findsOneWidget,
+        );
+        await _expectAfterScroll(tester, find.textContaining('Generado el'));
       },
     );
   });

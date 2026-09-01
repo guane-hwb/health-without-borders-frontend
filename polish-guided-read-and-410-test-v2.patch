@@ -1,0 +1,185 @@
+diff --git a/lib/src/features/nfc/presentation/nfc_guided_write.dart b/lib/src/features/nfc/presentation/nfc_guided_write.dart
+index 26474c8..c4438bb 100644
+--- a/lib/src/features/nfc/presentation/nfc_guided_write.dart
++++ b/lib/src/features/nfc/presentation/nfc_guided_write.dart
+@@ -39,6 +39,37 @@ Future<bool> showNfcGuidedWrite(
+   return ok ?? false;
+ }
+ 
++/// Shows the same guided bottom sheet as [showNfcGuidedWrite], but labeled for a
++/// *read* (verify) step: "Reading… / Read / Could not read" instead of the
++/// write wording. Use for steps that only inspect a tag (e.g. verifying a new
++/// blank tag before writing).
++///
++/// Returns true if the read completed, false if the user skipped or dismissed.
++Future<bool> showNfcGuidedRead(
++  BuildContext context, {
++  required String title,
++  required String instruction,
++  required ChipWriteAction read,
++}) async {
++  final ok = await showModalBottomSheet<bool>(
++    context: context,
++    isDismissible: false,
++    enableDrag: false,
++    isScrollControlled: true,
++    backgroundColor: AppColors.white,
++    shape: const RoundedRectangleBorder(
++      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
++    ),
++    builder: (_) => _NfcGuidedWriteSheet(
++      title: title,
++      instruction: instruction,
++      write: read,
++      readMode: true,
++    ),
++  );
++  return ok ?? false;
++}
++
+ enum _Step { prompt, writing, success, error }
+ 
+ /// Why a write failed, so the sheet can say something the clinician can act on.
+@@ -72,12 +103,16 @@ class _NfcGuidedWriteSheet extends StatefulWidget {
+     required this.title,
+     required this.instruction,
+     required this.write,
++    this.readMode = false,
+   });
+ 
+   final String title;
+   final String instruction;
+   final ChipWriteAction write;
+ 
++  /// When true, the sheet is labeled for a read/verify step rather than a write.
++  final bool readMode;
++
+   @override
+   State<_NfcGuidedWriteSheet> createState() => _NfcGuidedWriteSheetState();
+ }
+@@ -277,9 +312,13 @@ class _NfcGuidedWriteSheetState extends State<_NfcGuidedWriteSheet>
+       ),
+       const SizedBox(height: 20),
+       Text(
+-        isEs
+-            ? 'Grabando… mantenga el dispositivo cerca'
+-            : 'Writing… keep the device close',
++        widget.readMode
++            ? (isEs
++                  ? 'Leyendo… mantenga el dispositivo cerca'
++                  : 'Reading… keep the device close')
++            : (isEs
++                  ? 'Grabando… mantenga el dispositivo cerca'
++                  : 'Writing… keep the device close'),
+         textAlign: TextAlign.center,
+         style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+       ),
+@@ -300,7 +339,9 @@ class _NfcGuidedWriteSheetState extends State<_NfcGuidedWriteSheet>
+       const Icon(Icons.check_circle, size: 72, color: AppColors.success),
+       const SizedBox(height: 14),
+       Text(
+-        isEs ? 'Grabado' : 'Written',
++        widget.readMode
++            ? (isEs ? 'Leído' : 'Read')
++            : (isEs ? 'Grabado' : 'Written'),
+         style: const TextStyle(
+           fontSize: 16,
+           fontWeight: FontWeight.w600,
+@@ -341,6 +382,9 @@ class _NfcGuidedWriteSheetState extends State<_NfcGuidedWriteSheet>
+             ? 'El NFC está apagado. Actívelo en los ajustes del teléfono.'
+             : 'NFC is turned off. Enable it in system settings.';
+       case _Failure.generic:
++        if (widget.readMode) {
++          return isEs ? 'No se pudo leer' : 'Could not read';
++        }
+         return isEs ? 'No se pudo grabar' : 'Could not write';
+     }
+   }
+diff --git a/lib/src/features/nfc/presentation/profile/widgets/profile_nfc_actions.dart b/lib/src/features/nfc/presentation/profile/widgets/profile_nfc_actions.dart
+index a1130b4..3f222c5 100644
+--- a/lib/src/features/nfc/presentation/profile/widgets/profile_nfc_actions.dart
++++ b/lib/src/features/nfc/presentation/profile/widgets/profile_nfc_actions.dart
+@@ -140,13 +140,13 @@ Future<PatientFullRecord?> executeReassignOne({
+ 
+   String? newUid;
+   HwbChipKind? kind;
+-  final readOk = await showNfcGuidedWrite(
++  final readOk = await showNfcGuidedRead(
+     context,
+     title: title,
+     instruction: isEs
+         ? 'Acerque el dispositivo NUEVO (en blanco) para verificarlo'
+         : 'Bring the NEW (blank) tag close to verify it',
+-    write: () async {
++    read: () async {
+       final result = await NfcPayloadService(codec: codec).readHwbChip();
+       newUid = result.uid;
+       kind = result.kind;
+diff --git a/test/widget/read_nfc_screen_widget_test.dart b/test/widget/read_nfc_screen_widget_test.dart
+index eca2b5f..994d6af 100644
+--- a/test/widget/read_nfc_screen_widget_test.dart
++++ b/test/widget/read_nfc_screen_widget_test.dart
+@@ -27,6 +27,7 @@ class FakePatientRepository implements PatientRepository {
+   bool throwGuardianError = false;
+ 
+   bool throwNonApiError = false;
++  bool throwRetired410 = false;
+   String? lastCapturedGuardianUid;
+   bool shouldDelay = false;
+ 
+@@ -52,6 +53,17 @@ class FakePatientRepository implements PatientRepository {
+       throw ApiException('Error de base de datos', statusCode: 500);
+     }
+ 
++    if (throwRetired410) {
++      throw ApiException(
++        'Gone',
++        statusCode: 410,
++        detail: const <String, dynamic>{
++          'code': 'device_retired',
++          'reason': 'lost',
++        },
++      );
++    }
++
+     if (throw403ForGuardian && guardianDeviceUid == null) {
+       throw ApiException(
+         'Guardian bracelet scan required for minors.',
+@@ -338,6 +350,37 @@ void main() {
+       expect(find.byType(TextField), findsOneWidget);
+     });
+ 
++    testWidgets(
++      '410 device_retired: muestra el mensaje del dispositivo retirada con el motivo '
++      'y NO avanza a Paso 2',
++      (tester) async {
++        await tester.pumpWidget(
++          _buildTestableWidget(
++            child: const ReadNfcScreen(),
++            repo: fakeRepo,
++            authRepo: fakeAuth,
++          ),
++        );
++        await tester.pump();
++
++        fakeRepo.throwRetired410 = true;
++        await tester.enterText(find.byType(TextField), 'HWB-RETIRED-1');
++        await tester.tap(find.byType(OutlinedButton));
++        await tester.pump();
++        await tester.pump(const Duration(milliseconds: 10));
++
++        expect(find.byIcon(Icons.error_outline), findsOneWidget);
++        expect(
++          find.text(
++            'Este dispositivo fue retirado (perdido) y ya no pertenece a HWB.',
++          ),
++          findsOneWidget,
++        );
++        // Stays on step 1 (manual UID field still present).
++        expect(find.byType(TextField), findsOneWidget);
++      },
++    );
++
+     testWidgets(
+       'Error NO-ApiException (offline real) sin chip de respaldo: muestra '
+       'mensaje "Sin conexión..." (locale ES)',

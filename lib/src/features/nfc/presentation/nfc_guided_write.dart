@@ -39,6 +39,37 @@ Future<bool> showNfcGuidedWrite(
   return ok ?? false;
 }
 
+/// Shows the same guided bottom sheet as [showNfcGuidedWrite], but labeled for a
+/// *read* (verify) step: "Reading… / Read / Could not read" instead of the
+/// write wording. Use for steps that only inspect a tag (e.g. verifying a new
+/// blank tag before writing).
+///
+/// Returns true if the read completed, false if the user skipped or dismissed.
+Future<bool> showNfcGuidedRead(
+  BuildContext context, {
+  required String title,
+  required String instruction,
+  required ChipWriteAction read,
+}) async {
+  final ok = await showModalBottomSheet<bool>(
+    context: context,
+    isDismissible: false,
+    enableDrag: false,
+    isScrollControlled: true,
+    backgroundColor: AppColors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (_) => _NfcGuidedWriteSheet(
+      title: title,
+      instruction: instruction,
+      write: read,
+      readMode: true,
+    ),
+  );
+  return ok ?? false;
+}
+
 enum _Step { prompt, writing, success, error }
 
 /// Why a write failed, so the sheet can say something the clinician can act on.
@@ -72,11 +103,15 @@ class _NfcGuidedWriteSheet extends StatefulWidget {
     required this.title,
     required this.instruction,
     required this.write,
+    this.readMode = false,
   });
 
   final String title;
   final String instruction;
   final ChipWriteAction write;
+
+  /// When true, the sheet is labeled for a read/verify step rather than a write.
+  final bool readMode;
 
   @override
   State<_NfcGuidedWriteSheet> createState() => _NfcGuidedWriteSheetState();
@@ -151,7 +186,8 @@ class _NfcGuidedWriteSheetState extends State<_NfcGuidedWriteSheet>
 
   @override
   Widget build(BuildContext context) {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
     // Back is allowed at every step, but while a chip is being waited on it has
     // to go through _cancel() rather than tearing the sheet down: popping used
     // to leave the radio's caller registered forever, so the *next* sheet — the
@@ -276,9 +312,13 @@ class _NfcGuidedWriteSheetState extends State<_NfcGuidedWriteSheet>
       ),
       const SizedBox(height: 20),
       Text(
-        isEs
-            ? 'Grabando… mantenga el dispositivo cerca'
-            : 'Writing… keep the device close',
+        widget.readMode
+            ? (isEs
+                  ? 'Leyendo… mantenga el dispositivo cerca'
+                  : 'Reading… keep the device close')
+            : (isEs
+                  ? 'Grabando… mantenga el dispositivo cerca'
+                  : 'Writing… keep the device close'),
         textAlign: TextAlign.center,
         style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
       ),
@@ -299,7 +339,9 @@ class _NfcGuidedWriteSheetState extends State<_NfcGuidedWriteSheet>
       const Icon(Icons.check_circle, size: 72, color: AppColors.success),
       const SizedBox(height: 14),
       Text(
-        isEs ? 'Grabado' : 'Written',
+        widget.readMode
+            ? (isEs ? 'Leído' : 'Read')
+            : (isEs ? 'Grabado' : 'Written'),
         style: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w600,
@@ -340,6 +382,9 @@ class _NfcGuidedWriteSheetState extends State<_NfcGuidedWriteSheet>
             ? 'El NFC está apagado. Actívelo en los ajustes del teléfono.'
             : 'NFC is turned off. Enable it in system settings.';
       case _Failure.generic:
+        if (widget.readMode) {
+          return isEs ? 'No se pudo leer' : 'Could not read';
+        }
         return isEs ? 'No se pudo grabar' : 'Could not write';
     }
   }

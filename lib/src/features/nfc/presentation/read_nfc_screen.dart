@@ -15,7 +15,6 @@ import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
 import 'profile/patient_profile_screen.dart';
-import 'read_nfc_guardian_screen.dart';
 import 'shared_read_nfc_header.dart';
 
 /// Read-NFC flow:
@@ -116,13 +115,14 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     if (!mounted) return;
 
     if (chip != null && chip.kind == payload.HwbChipKind.guardian) {
-      final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+      final s = AppStrings.of(context);
+      final isEs = s.isEs;
       setState(() {
         _scanning = false;
         _errorMessage = isEs
-            ? 'Esta es la tarjeta del guardián. Escanee primero la manilla '
+            ? 'Esta es la tarjeta del guardián. Escanee primero el dispositivo '
                   'del paciente.'
-            : 'This is the guardian card. Scan the patient wristband first.';
+            : 'This is the guardian card. Scan the patient device first.';
       });
       return;
     }
@@ -164,7 +164,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       } else {
         setState(() {
           _scanning = false;
-          _errorMessage = e.message;
+          _errorMessage = _retiredTagMessage(e) ?? e.message;
         });
       }
     } catch (e) {
@@ -191,7 +191,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         if (!mounted) return;
         await _openProfile(record, readOnly: true, offline: true);
       } else {
-        final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+        final s = AppStrings.of(context);
+        final isEs = s.isEs;
         setState(() {
           _scanning = false;
           _errorMessage = isEs
@@ -203,15 +204,16 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   }
 
   String _nfcAlert({required bool guardian}) {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
     if (guardian) {
       return isEs
           ? 'Acerque la tarjeta del guardián'
           : 'Hold the guardian card near the phone';
     }
     return isEs
-        ? 'Acerque la manilla del paciente'
-        : 'Hold the patient wristband near the phone';
+        ? 'Acerque el dispositivo del paciente'
+        : 'Hold the patient device near the phone';
   }
 
   // ── Offline guardian gate ─────────────────────────────────────────────────
@@ -225,7 +227,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       _errorMessage = null;
     });
 
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
     try {
       final key = await AppScope.of(
         context,
@@ -272,12 +275,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         patientDeviceUid: _patientDeviceUid ?? '',
       );
       if (!mounted) return;
-      setState(() => _scanning = false);
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => ReadNfcGuardianScreen(patient: record),
-        ),
-      );
+      await _openProfile(record, readOnly: true, offline: true);
     } on NfcNotAvailableException {
       if (!mounted) return;
       setState(() {
@@ -301,8 +299,30 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     }
   }
 
+  /// If [e] is the backend's 410 "device retired" response, returns a localized
+  /// message naming the retirement reason (lost / damaged / replaced). Returns
+  /// null for any other error so the caller falls back to the generic text.
+  String? _retiredTagMessage(ApiException e) {
+    if (e.statusCode != 410) return null;
+    final Object? detail = e.detail;
+    if (detail is! Map || detail['code'] != 'device_retired') return null;
+
+    final bool isEs = AppStrings.of(context).isEs;
+    final String? reason = detail['reason']?.toString();
+    final String reasonLabel = switch (reason) {
+      'lost' => isEs ? 'perdida' : 'lost',
+      'damaged' => isEs ? 'dañada' : 'damaged',
+      'replaced' => isEs ? 'reemplazada' : 'replaced',
+      _ => isEs ? 'retirada' : 'retired',
+    };
+    return isEs
+        ? 'Este dispositivo fue retirado ($reasonLabel) y ya no pertenece a HWB.'
+        : 'This device was retired ($reasonLabel) and no longer belongs to HWB.';
+  }
+
   Future<void> _confirmEmergencyAccess() async {
-    final isEs = AppStrings.of(context).welcome == 'Bienvenido';
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext ctx) => AlertDialog(
@@ -405,7 +425,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       if (!mounted) return;
       setState(() {
         _scanning = false;
-        _errorMessage = e.message;
+        _errorMessage = _retiredTagMessage(e) ?? e.message;
       });
     } catch (e) {
       if (!mounted) return;
@@ -542,7 +562,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   }
 
   Widget _buildOfflineGuardianGate(AppStrings s) {
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     final triage = _offlineTriage;
     final name = triage == null
         ? ''

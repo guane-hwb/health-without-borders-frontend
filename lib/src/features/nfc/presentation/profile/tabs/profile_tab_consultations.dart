@@ -135,7 +135,7 @@ class _ConsultationCard extends StatelessWidget {
 
   String _formattedDate(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     try {
       final dt = DateTime.parse(item.startDateTime);
       final d = [
@@ -500,7 +500,7 @@ class _ConsultationDetailScreen extends StatelessWidget {
   static MapEntry<String, String> _kv(String k, String v) => MapEntry(k, v);
   static String _fmtDt(String dt, BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
     try {
       final d = DateTime.parse(dt);
       final timeStr = '${d.hour}:${d.minute.toString().padLeft(2, '0')}';

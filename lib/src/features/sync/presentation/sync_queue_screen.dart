@@ -8,6 +8,7 @@ import '../../../core/i18n/app_strings.dart';
 import '../../../core/storage/local_database.dart';
 import '../../../core/sync/sync_engine.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/widgets/locale_switcher.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../nfc/presentation/profile/patient_profile_screen.dart';
 
@@ -245,7 +246,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      _LocaleSwitcher(),
+                      const LocaleSwitcher(),
                     ],
                   ),
                 ),
@@ -358,47 +359,6 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
   }
 }
 
-class _LocaleSwitcher extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final locale = AppLocale.of(context).locale;
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: ['es', 'en'].map((lang) {
-          final selected = locale == lang;
-          return GestureDetector(
-            onTap: () => AppLocale.of(context).setLocale(lang),
-            child: Container(
-              margin: const EdgeInsets.only(left: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: selected
-                    ? Colors.white.withValues(alpha: 0.95)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                lang.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? AppColors.primary : AppColors.white,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-
 class _SyncCard extends StatelessWidget {
   const _SyncCard({
     required this.entry,
@@ -421,8 +381,8 @@ class _SyncCard extends StatelessWidget {
     if (hasErr) {
       if (isConflict) {
         errorMessage = isEs
-            ? 'Esta manilla ya está registrada para otro paciente. Registra al paciente con una manilla nueva.'
-            : 'This bracelet is already registered to another patient. Register the patient with a new bracelet.';
+            ? 'Este dispositivo ya está registrado para otro paciente. Registra al paciente con un dispositivo nuevo.'
+            : 'This device is already registered to another patient. Register the patient with a new device.';
       } else if (entry.syncErrorCode == 403) {
         errorMessage = isEs
             ? 'Acceso denegado (403): Tu rol no permite registrar historia médica completa.'

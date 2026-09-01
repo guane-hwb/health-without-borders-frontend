@@ -88,7 +88,7 @@ class _VoiceTextAreaState extends State<VoiceTextArea>
 
   Future<void> _toggleListening() async {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     if (_isListening) {
       await _speech.stop();
@@ -159,7 +159,7 @@ class _VoiceTextAreaState extends State<VoiceTextArea>
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.welcome == 'Bienvenido';
+    final isEs = s.isEs;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

@@ -24,11 +24,25 @@ class PatientRepository {
   /// Returns [PatientSyncResponse] on 201.
   /// Throws [ApiException] on 401 (expired token), 403 (nurse adding
   /// medical history), 422 (validation), or 500.
-  Future<PatientSyncResponse> syncPatient(PatientFullRecord record) async {
+  Future<PatientSyncResponse> syncPatient(
+    PatientFullRecord record, {
+    String? retiredDeviceReason,
+  }) async {
+    final Map<String, dynamic> body = Map<String, dynamic>.from(
+      record.toJson(),
+    );
+    // Transport-only signal for bracelet/guardian re-labeling. Injected here
+    // rather than in PatientFullRecord.toJson() so it never gets written to an
+    // NFC tag (toJson also feeds the tag payload). The backend consumes it to
+    // record the retirement reason and drops it from the stored record.
+    if (retiredDeviceReason != null && retiredDeviceReason.isNotEmpty) {
+      body['retiredDeviceReason'] = retiredDeviceReason;
+    }
     final Map<String, dynamic> data = await _apiClient.postJson(
       path: '/api/v1/patients/sync',
-      body: record.toJson(),
+      body: body,
       headers: await _authHeaders(),
+      timeout: const Duration(seconds: 10),
     );
     return PatientSyncResponse.fromJson(data);
   }
@@ -68,21 +82,32 @@ class PatientRepository {
     required String lastName,
     String? guardianName,
   }) async {
-    final Map<String, dynamic> body = <String, dynamic>{
+    final Map<String, dynamic> searchBody = <String, dynamic>{
       'document_number': documentNumber,
       'birth_date': birthDate,
       'first_name': firstName,
       'last_name': lastName,
     };
     if (guardianName != null && guardianName.isNotEmpty) {
-      body['guardian_name'] = guardianName;
+      searchBody['guardian_name'] = guardianName;
     }
 
     final Map<String, dynamic> data = await _apiClient.postJson(
       path: '/api/v1/patients/search',
       headers: await _authHeaders(),
-      body: body,
+      body: searchBody,
     );
     return PatientFullRecord.fromJson(data);
+  }
+
+  // ── POST /api/v1/patients/emergency-access ──────────────────────────────
+  /// Envía la bitácora de accesos break-glass registrados offline.
+  Future<void> reportEmergencyAccess(List<Map<String, Object?>> entries) async {
+    if (entries.isEmpty) return;
+    await _apiClient.postJson(
+      path: '/api/v1/patients/emergency-access',
+      body: <String, dynamic>{'entries': entries},
+      headers: await _authHeaders(),
+    );
   }
 }

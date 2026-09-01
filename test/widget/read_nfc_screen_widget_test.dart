@@ -27,8 +27,12 @@ class FakePatientRepository implements PatientRepository {
   bool throwGuardianError = false;
 
   bool throwNonApiError = false;
+  bool throwRetired410 = false;
   String? lastCapturedGuardianUid;
   bool shouldDelay = false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 
   @override
   Future<PatientFullRecord> scanDevice(
@@ -47,6 +51,17 @@ class FakePatientRepository implements PatientRepository {
 
     if (throwGenericError) {
       throw ApiException('Error de base de datos', statusCode: 500);
+    }
+
+    if (throwRetired410) {
+      throw ApiException(
+        'Gone',
+        statusCode: 410,
+        detail: const <String, dynamic>{
+          'code': 'device_retired',
+          'reason': 'lost',
+        },
+      );
     }
 
     if (throw403ForGuardian && guardianDeviceUid == null) {
@@ -83,8 +98,10 @@ class FakePatientRepository implements PatientRepository {
   }
 
   @override
-  Future<PatientSyncResponse> syncPatient(PatientFullRecord record) =>
-      throw UnimplementedError();
+  Future<PatientSyncResponse> syncPatient(
+    PatientFullRecord record, {
+    String? retiredDeviceReason,
+  }) => throw UnimplementedError();
 
   @override
   Future<PatientFullRecord> searchPatient({
@@ -332,6 +349,36 @@ void main() {
       expect(find.text('Error de base de datos'), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
     });
+
+    testWidgets(
+      '410 device_retired: muestra el mensaje de dispositivo retirado con el motivo '
+      'y NO avanza a Paso 2',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: const ReadNfcScreen(),
+            repo: fakeRepo,
+            authRepo: fakeAuth,
+          ),
+        );
+        await tester.pump();
+
+        fakeRepo.throwRetired410 = true;
+        await tester.enterText(find.byType(TextField), 'HWB-RETIRED-1');
+        await tester.tap(find.byType(OutlinedButton));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 10));
+
+        expect(find.byIcon(Icons.error_outline), findsOneWidget);
+        expect(
+          find.text(
+            'Este dispositivo fue retirado (perdida) y ya no pertenece a HWB.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.byType(TextField), findsOneWidget);
+      },
+    );
 
     testWidgets(
       'Error NO-ApiException (offline real) sin chip de respaldo: muestra '

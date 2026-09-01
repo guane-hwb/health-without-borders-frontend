@@ -6,7 +6,7 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/country_display.dart';
-import '../../../shared/widgets/hwb_text_field.dart';
+import '../../../shared/widgets/form_widgets.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
@@ -66,32 +66,50 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
     super.dispose();
   }
 
-  String? _validateWeight(String? val) {
-    if (val == null || val.trim().isEmpty) return null;
-    final parsed = double.tryParse(val.replaceAll(',', '.'));
-    if (parsed == null || parsed <= 0.5 || parsed > 250) {
-      final isEs = AppStrings.of(context).isEs;
-      return isEs
-          ? 'Peso fuera de rango (0.5 - 250 kg)'
-          : 'Weight out of range (0.5 - 250 kg)';
+  bool _validateMeasurements() {
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
+    final wVal = _weightCtrl.text.trim();
+    if (wVal.isNotEmpty) {
+      final parsedW = double.tryParse(wVal.replaceAll(',', '.'));
+      if (parsedW == null || parsedW <= 0.5 || parsedW > 250) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isEs
+                  ? 'Peso fuera de rango (0.5 - 250 kg)'
+                  : 'Weight out of range (0.5 - 250 kg)',
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return false;
+      }
     }
-    return null;
-  }
 
-  String? _validateHeight(String? val) {
-    if (val == null || val.trim().isEmpty) return null;
-    final parsed = double.tryParse(val.replaceAll(',', '.'));
-    if (parsed == null || parsed <= 20 || parsed > 220) {
-      final isEs = AppStrings.of(context).isEs;
-      return isEs
-          ? 'Talla fuera de rango (20 - 220 cm)'
-          : 'Height out of range (20 - 220 cm)';
+    final hVal = _heightCtrl.text.trim();
+    if (hVal.isNotEmpty) {
+      final parsedH = double.tryParse(hVal.replaceAll(',', '.'));
+      if (parsedH == null || parsedH <= 20 || parsedH > 220) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isEs
+                  ? 'Talla fuera de rango (20 - 220 cm)'
+                  : 'Height out of range (20 - 220 cm)',
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return false;
+      }
     }
-    return null;
+    return true;
   }
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!_validateMeasurements()) return;
 
     setState(() => _isSaving = true);
     final s = AppStrings.of(context);
@@ -222,7 +240,10 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _sec(s.patientInfoReadOnly),
+                          FormSectionHeader(
+                            icon: Icons.lock_outline,
+                            title: s.patientInfoReadOnly,
+                          ),
                           const SizedBox(height: 4),
                           Text(
                             s.fieldsProtected,
@@ -258,7 +279,10 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
                           const SizedBox(height: 10),
                           _ro(s.bloodType, _bloodType, Icons.bloodtype),
                           const SizedBox(height: 20),
-                          _sec(s.editableInfo),
+                          FormSectionHeader(
+                            icon: Icons.edit_note,
+                            title: s.editableInfo,
+                          ),
                           const SizedBox(height: 12),
                           _dd(s.nationality, _nationalityCode, nationCodes, (
                             v,
@@ -266,44 +290,45 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
                             if (v != null) setState(() => _nationalityCode = v);
                           }),
                           const SizedBox(height: 12),
-                          HwbTextField(
+                          LabeledTextField(
                             label: s.weight,
                             controller: _weightCtrl,
-                            icon: Icons.monitor_weight,
+                            prefixIcon: Icons.monitor_weight,
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
-                            validator: _validateWeight,
                           ),
                           const SizedBox(height: 12),
-                          HwbTextField(
+                          LabeledTextField(
                             label: s.height,
                             controller: _heightCtrl,
-                            icon: Icons.open_in_full,
+                            prefixIcon: Icons.open_in_full,
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
-                            validator: _validateHeight,
                           ),
                           const SizedBox(height: 20),
-                          _sec(s.address),
+                          FormSectionHeader(
+                            icon: Icons.home_outlined,
+                            title: s.address,
+                          ),
                           const SizedBox(height: 12),
-                          HwbTextField(
+                          LabeledTextField(
                             label: s.street,
                             controller: _streetCtrl,
-                            icon: Icons.location_on,
+                            prefixIcon: Icons.location_on,
                           ),
                           const SizedBox(height: 12),
-                          HwbTextField(
+                          LabeledTextField(
                             label: s.city,
                             controller: _cityCtrl,
-                            icon: Icons.location_city,
+                            prefixIcon: Icons.location_city,
                           ),
                           const SizedBox(height: 12),
-                          HwbTextField(
+                          LabeledTextField(
                             label: s.state,
                             controller: _stateCtrl,
-                            icon: Icons.map,
+                            prefixIcon: Icons.map,
                           ),
                           const SizedBox(height: 24),
                           _btns(context, s),
@@ -325,15 +350,6 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
       ),
     );
   }
-
-  Widget _sec(String t) => Text(
-    t,
-    style: const TextStyle(
-      fontSize: 18,
-      fontWeight: FontWeight.w700,
-      color: AppColors.primary,
-    ),
-  );
 
   Widget _ro(String label, String val, IconData icon) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,

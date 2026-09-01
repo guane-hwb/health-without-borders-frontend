@@ -27,6 +27,10 @@ class _FakePatientFullRecord implements PatientFullRecord {
 }
 
 void main() {
+  setUpAll(() {
+    registerFallbackValue(const Duration(seconds: 1));
+  });
+
   late MockApiClient apiClient;
   late MockAuthRepository authRepository;
   late PatientRepository repository;
@@ -63,9 +67,10 @@ void main() {
 
       when(
         () => apiClient.postJson(
-          path: '/api/v1/patients/sync',
+          path: any(named: 'path'),
           body: any(named: 'body'),
           headers: any(named: 'headers'),
+          timeout: any(named: 'timeout'),
         ),
       ).thenAnswer((_) async => responseJson);
 
@@ -77,9 +82,44 @@ void main() {
           path: '/api/v1/patients/sync',
           body: record.toJson(),
           headers: expectedAuthHeader,
+          timeout: const Duration(seconds: 10),
         ),
       ).called(1);
       verify(() => authRepository.getAccessToken()).called(1);
+    });
+
+    test('injects retiredDeviceReason into the body when provided, '
+        'preserving the record fields', () async {
+      final record = const _FakePatientFullRecord(<String, dynamic>{
+        'device_uid': 'TAG-NEW',
+      });
+
+      when(
+        () => apiClient.postJson(
+          path: any(named: 'path'),
+          body: any(named: 'body'),
+          headers: any(named: 'headers'),
+          timeout: any(named: 'timeout'),
+        ),
+      ).thenAnswer((_) async => <String, dynamic>{'status': 'synced'});
+
+      await repository.syncPatient(
+        record as PatientFullRecord,
+        retiredDeviceReason: 'lost',
+      );
+
+      final captured =
+          verify(
+                () => apiClient.postJson(
+                  path: '/api/v1/patients/sync',
+                  body: captureAny(named: 'body'),
+                  headers: any(named: 'headers'),
+                  timeout: any(named: 'timeout'),
+                ),
+              ).captured.single
+              as Map<String, dynamic>;
+      expect(captured['retiredDeviceReason'], 'lost');
+      expect(captured['device_uid'], 'TAG-NEW');
     });
 
     test('propagates ApiException on 401 (expired token)', () async {
@@ -87,9 +127,10 @@ void main() {
 
       when(
         () => apiClient.postJson(
-          path: '/api/v1/patients/sync',
+          path: any(named: 'path'),
           body: any(named: 'body'),
           headers: any(named: 'headers'),
+          timeout: any(named: 'timeout'),
         ),
       ).thenThrow(ApiException('Token expired', statusCode: 401));
 
@@ -106,9 +147,10 @@ void main() {
 
         when(
           () => apiClient.postJson(
-            path: '/api/v1/patients/sync',
+            path: any(named: 'path'),
             body: any(named: 'body'),
             headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
           ),
         ).thenThrow(
           ApiException('Nurse cannot add medical history', statusCode: 403),
@@ -126,9 +168,10 @@ void main() {
 
       when(
         () => apiClient.postJson(
-          path: '/api/v1/patients/sync',
+          path: any(named: 'path'),
           body: any(named: 'body'),
           headers: any(named: 'headers'),
+          timeout: any(named: 'timeout'),
         ),
       ).thenThrow(ApiException('Validation failed', statusCode: 422));
 
@@ -143,9 +186,10 @@ void main() {
 
       when(
         () => apiClient.postJson(
-          path: '/api/v1/patients/sync',
+          path: any(named: 'path'),
           body: any(named: 'body'),
           headers: any(named: 'headers'),
+          timeout: any(named: 'timeout'),
         ),
       ).thenThrow(ApiException('Internal error', statusCode: 500));
 

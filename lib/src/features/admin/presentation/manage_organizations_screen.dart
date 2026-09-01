@@ -289,7 +289,7 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final isEs = s.save == 'Guardar';
+    final isEs = s.isEs;
     final canDelete = _org.patientCount == 0;
 
     return Padding(
@@ -467,7 +467,7 @@ class _OrgDetailSheetState extends State<_OrgDetailSheet> {
 
   Future<void> _confirmAndDelete() async {
     final s = AppStrings.of(context);
-    final isEs = s.save == 'Guardar';
+    final isEs = s.isEs;
     final cascadeNote = _org.userCount > 0
         ? (isEs
               ? '\n\nSe eliminarán también sus usuarios.'
@@ -579,11 +579,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
       return;
     }
     if (pass.length < 8) {
-      setState(
-        () => _error = AppStrings.of(
-          context,
-        ).passwordTooShort.replaceAll('6', '8'),
-      );
+      setState(() => _error = AppStrings.of(context).passwordTooShort8);
       return;
     }
     setState(() {
@@ -784,7 +780,7 @@ class _CreateOrgSheetState extends State<_CreateOrgSheet> {
 
   Widget _buildSuccess() {
     final s = AppStrings.of(context);
-    final isEs = s.save == 'Guardar';
+    final isEs = s.isEs;
     return Column(
       children: [
         const SizedBox(height: 8),

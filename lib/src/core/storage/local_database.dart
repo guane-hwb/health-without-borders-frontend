@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
 import '../utils/app_logger.dart';
@@ -53,7 +54,7 @@ class LocalDatabase {
       FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: true));
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 6;
+  static const int _dbVersion = 8;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
@@ -325,7 +326,8 @@ class LocalDatabase {
             synced_at     TEXT,
             revision      INTEGER NOT NULL DEFAULT 0,
             owner_user_id TEXT,
-            organization_id TEXT
+            organization_id TEXT,
+            pending_retired_reason TEXT
           )
         ''');
         await db.execute('CREATE INDEX idx_synced ON $_table (is_synced)');
@@ -356,6 +358,22 @@ class LocalDatabase {
           await _addColumnIfMissing(db, _table, 'organization_id', 'TEXT');
           await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_owner ON $_table (owner_user_id)',
+          );
+        }
+        if (oldVersion < 7) {
+          await _addColumnIfMissing(
+            db,
+            _table,
+            'pending_retired_reason',
+            'TEXT',
+          );
+        }
+        if (oldVersion < 8) {
+          await _addColumnIfMissing(
+            db,
+            _emergencyLogTable,
+            'client_event_id',
+            'TEXT',
           );
         }
       },
@@ -389,6 +407,7 @@ class LocalDatabase {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS $_emergencyLogTable (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_event_id TEXT,
         patient_uid   TEXT NOT NULL,
         patient_name  TEXT,
         user_id       TEXT,
@@ -406,6 +425,7 @@ class LocalDatabase {
     String reason = 'guardian_absent_offline',
   }) async {
     final row = <String, Object?>{
+      'client_event_id': const Uuid().v4(),
       'patient_uid': patientUid,
       'patient_name': patientName == null
           ? null
@@ -419,10 +439,11 @@ class LocalDatabase {
       final db = await _database;
       if (db == null) {
         final logs = _webEmergencyLog;
-        logs.add(<String, Object?>{
-          ...row,
-          'id': DateTime.now().microsecondsSinceEpoch,
-        });
+        final nextId = logs.isEmpty
+            ? 1
+            : ((logs.map((e) => (e['id'] as num?)?.toInt() ?? 0).reduce(max)) +
+                  1);
+        logs.add(<String, Object?>{...row, 'id': nextId});
         _saveWebEmergencyLog(logs);
         return;
       }
@@ -442,13 +463,27 @@ class LocalDatabase {
       final db = await _database;
       final rows = db == null
           ? _webEmergencyLog
-                .where((Map<String, Object?> r) => r['is_synced'] == 0)
+                .where(
+                  (Map<String, Object?> r) =>
+                      (r['is_synced'] as num?)?.toInt() == 0,
+                )
                 .toList()
           : await db.query(_emergencyLogTable, where: 'is_synced = 0');
 
       final out = <Map<String, Object?>>[];
       for (final r in rows) {
         final mutable = Map<String, Object?>.from(r);
+        // Legacy rows (logged before client_event_id existed) must still get a
+        // stable dedup id, persisted so retries reuse the same one.
+        final existingCid = mutable['client_event_id'] as String?;
+        if (existingCid == null || existingCid.isEmpty) {
+          final cid = const Uuid().v4();
+          mutable['client_event_id'] = cid;
+          await _persistEmergencyClientEventId(
+            (mutable['id'] as num?)?.toInt(),
+            cid,
+          );
+        }
         final name = mutable['patient_name'] as String?;
         if (name != null && name.isNotEmpty) {
           mutable['patient_name'] = await _decryptPayload(name);
@@ -468,12 +503,37 @@ class LocalDatabase {
     }
   }
 
+  Future<void> _persistEmergencyClientEventId(int? id, String cid) async {
+    if (id == null) return;
+    if (_isWeb) {
+      final logs = _webEmergencyLog;
+      for (final row in logs) {
+        if ((row['id'] as num?)?.toInt() == id) {
+          row['client_event_id'] = cid;
+        }
+      }
+      _saveWebEmergencyLog(logs);
+      return;
+    }
+    final db = await _database;
+    await db?.update(
+      _emergencyLogTable,
+      <String, Object?>{'client_event_id': cid},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> markEmergencyLogsSynced(List<int> ids) async {
     if (ids.isEmpty) return;
     if (_isWeb) {
       final logs = _webEmergencyLog;
+      final idSet = ids.toSet();
       for (final row in logs) {
-        if (ids.contains(row['id'])) row['is_synced'] = 1;
+        final rowId = (row['id'] as num?)?.toInt();
+        if (rowId != null && idSet.contains(rowId)) {
+          row['is_synced'] = 1;
+        }
       }
       _saveWebEmergencyLog(logs);
       return;
@@ -494,6 +554,7 @@ class LocalDatabase {
     PatientFullRecord record, {
     String? ownerUserId,
     String? organizationId,
+    String? retiredDeviceReason,
   }) async {
     final rawJson = jsonEncode(record.toJson());
     final encryptedJson = await _encryptPayload(rawJson);
@@ -523,6 +584,8 @@ class LocalDatabase {
         'revision': revision,
         'owner_user_id': ownerUserId ?? previous?['owner_user_id'],
         'organization_id': organizationId ?? previous?['organization_id'],
+        'pending_retired_reason':
+            retiredDeviceReason ?? previous?['pending_retired_reason'],
       };
       _saveWebStore(store);
       return;
@@ -532,13 +595,20 @@ class LocalDatabase {
 
     final existing = await db!.query(
       _table,
-      columns: ['created_at', 'revision', 'owner_user_id', 'organization_id'],
+      columns: [
+        'created_at',
+        'revision',
+        'owner_user_id',
+        'organization_id',
+        'pending_retired_reason',
+      ],
       where: 'patient_id = ?',
       whereArgs: [record.patientId],
       limit: 1,
     );
     String? prevOwner = ownerUserId;
     String? prevOrg = organizationId;
+    String? reason = retiredDeviceReason;
 
     if (existing.isNotEmpty) {
       final prevCreatedAt = existing.first['created_at'] as String?;
@@ -546,6 +616,10 @@ class LocalDatabase {
       revision = ((existing.first['revision'] as int?) ?? 0) + 1;
       prevOwner ??= existing.first['owner_user_id'] as String?;
       prevOrg ??= existing.first['organization_id'] as String?;
+      // Keep a pending re-labeling reason set by an earlier save until the
+      // record actually syncs (which deletes the row), so an ordinary edit in
+      // between does not silently drop it.
+      reason ??= existing.first['pending_retired_reason'] as String?;
     }
 
     final row = <String, dynamic>{
@@ -561,6 +635,7 @@ class LocalDatabase {
       'revision': revision,
       'owner_user_id': prevOwner,
       'organization_id': prevOrg,
+      'pending_retired_reason': reason,
     };
 
     await db.insert(_table, row, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -675,6 +750,19 @@ class LocalDatabase {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  Future<int> getUnsyncedEmergencyLogCount() async {
+    if (_isWeb) {
+      return _webEmergencyLog
+          .where((r) => ((r['is_synced'] as num?)?.toInt() ?? 0) == 0)
+          .length;
+    }
+    final db = await _database;
+    final result = await db!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $_emergencyLogTable WHERE is_synced = 0',
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
   Future<int> getRetryablePendingCount({String? ownerUserId}) async {
     if (_isWeb) {
       return _webStore.values.where((r) {
@@ -732,16 +820,20 @@ class LocalDatabase {
   Future<void> purgeStalePermanentErrors({
     Duration maxAge = const Duration(days: 30),
   }) async {
-    final threshold = DateTime.now().subtract(maxAge).toIso8601String();
+    final thresholdDateTime = DateTime.now().subtract(maxAge);
+    final threshold = thresholdDateTime.toIso8601String();
     if (_isWeb) {
       final store = _webStore;
       store.removeWhere((id, row) {
-        final code = row['sync_error_code'] as int?;
-        final createdAt = row['created_at'] as String?;
+        final code = (row['sync_error_code'] as num?)?.toInt();
+        final createdAtStr = row['created_at'] as String?;
         final isPermanent = code == 400 || code == 409 || code == 422;
-        return isPermanent &&
-            createdAt != null &&
-            createdAt.compareTo(threshold) < 0;
+        if (!isPermanent || createdAtStr == null) return false;
+
+        final createdAt = DateTime.tryParse(createdAtStr);
+        if (createdAt == null) return false;
+
+        return !createdAt.isAfter(thresholdDateTime);
       });
       _saveWebStore(store);
       return;
@@ -749,7 +841,7 @@ class LocalDatabase {
     final db = await _database;
     await db!.delete(
       _table,
-      where: 'sync_error_code IN (400, 409, 422) AND created_at < ?',
+      where: 'sync_error_code IN (400, 409, 422) AND created_at <= ?',
       whereArgs: [threshold],
     );
   }
@@ -935,11 +1027,21 @@ class LocalDatabase {
     if (_isWeb) {
       _webRemove(_webStoreKey);
       _webRemove(_webChipKey);
+      final remainingLogs = _webEmergencyLog
+          .where(
+            (row) =>
+                row['is_synced'] == 0 ||
+                row['is_synced'] == '0' ||
+                (row['is_synced'] as num?)?.toInt() == 0,
+          )
+          .toList();
+      _saveWebEmergencyLog(remainingLogs);
       return;
     }
     final db = await _database;
     await db!.delete(_table);
     await db.delete(_chipStatusTable);
+    await db.delete(_emergencyLogTable, where: 'is_synced = 1');
   }
 }
 
@@ -959,6 +1061,7 @@ class LocalPatientEntry {
     this.revision = 0,
     this.ownerUserId,
     this.organizationId,
+    this.retiredDeviceReason,
   });
 
   factory LocalPatientEntry.fromRow(Map<String, dynamic> row) {
@@ -975,6 +1078,7 @@ class LocalPatientEntry {
       revision: (row['revision'] as int?) ?? 0,
       ownerUserId: row['owner_user_id'] as String?,
       organizationId: row['organization_id'] as String?,
+      retiredDeviceReason: row['pending_retired_reason'] as String?,
     );
   }
 
@@ -990,6 +1094,13 @@ class LocalPatientEntry {
   final int revision;
   final String? ownerUserId;
   final String? organizationId;
+
+  /// Transport-only reason (`lost` | `damaged`) for a bracelet/guardian-card
+  /// re-labeling recorded on this pending record. Sent as `retiredDeviceReason`
+  /// on the next `/sync` (outside the record JSON, so it is never written to a
+  /// tag) and discarded with the row once the record syncs. Null for ordinary
+  /// records.
+  final String? retiredDeviceReason;
 
   PatientFullRecord? toPatientRecord() {
     if (recordJson.isEmpty || recordJson == '{}') return null;

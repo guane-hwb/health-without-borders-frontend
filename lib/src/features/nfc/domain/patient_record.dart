@@ -369,7 +369,10 @@ class PatientInfo {
     'biologicalSex': biologicalSex,
     if (genderIdentity != null) 'genderIdentity': genderIdentity,
     if (ethnicity != null) 'ethnicity': ethnicity,
-    if (ethnicCommunity != null) 'ethnicCommunity': ethnicCommunity,
+    if (ethnicCommunity != null) ...<String, dynamic>{
+      'ethnicCommunity': ethnicCommunity,
+      'ethnic_community': ethnicCommunity,
+    },
     if (disabilityCategory != null) 'disabilityCategory': disabilityCategory,
     'address': address.toJson(),
     if (bloodType != null) 'bloodType': bloodType,
@@ -447,6 +450,8 @@ class GuardianInfo {
     required this.relationship,
     required this.phone,
     this.deviceUid,
+    this.docType,
+    this.docNumber,
     this.documentType,
     this.documentNumber,
     this.consent,
@@ -458,8 +463,13 @@ class GuardianInfo {
       relationship: json['relationship']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
       deviceUid: json['device_uid']?.toString(),
-      documentType: json['documentType']?.toString(),
-      documentNumber: json['documentNumber']?.toString(),
+      docType: json['docType']?.toString() ?? json['documentType']?.toString(),
+      docNumber:
+          json['docNumber']?.toString() ?? json['documentNumber']?.toString(),
+      documentType:
+          json['documentType']?.toString() ?? json['docType']?.toString(),
+      documentNumber:
+          json['documentNumber']?.toString() ?? json['docNumber']?.toString(),
       consent: json['consent'] is Map<String, dynamic>
           ? GuardianConsent.fromJson(json['consent'] as Map<String, dynamic>)
           : null,
@@ -470,6 +480,8 @@ class GuardianInfo {
   final String relationship;
   final String phone;
   final String? deviceUid; // NFC UID of the guardian's wristband
+  final String? docType;
+  final String? docNumber;
   final String? documentType;
   final String? documentNumber;
   final GuardianConsent? consent;
@@ -479,6 +491,8 @@ class GuardianInfo {
     'relationship': relationship,
     'phone': phone,
     if (deviceUid != null) 'device_uid': deviceUid,
+    if (docType != null) 'docType': docType,
+    if (docNumber != null) 'docNumber': docNumber,
     if (documentType != null) 'documentType': documentType,
     if (documentNumber != null) 'documentNumber': documentNumber,
     if (consent != null) 'consent': consent!.toJson(),
@@ -489,6 +503,8 @@ class GuardianInfo {
     String? relationship,
     String? phone,
     String? deviceUid,
+    String? docType,
+    String? docNumber,
     String? documentType,
     String? documentNumber,
     GuardianConsent? consent,
@@ -498,6 +514,8 @@ class GuardianInfo {
       relationship: relationship ?? this.relationship,
       phone: phone ?? this.phone,
       deviceUid: deviceUid ?? this.deviceUid,
+      docType: docType ?? this.docType,
+      docNumber: docNumber ?? this.docNumber,
       documentType: documentType ?? this.documentType,
       documentNumber: documentNumber ?? this.documentNumber,
       consent: consent ?? this.consent,
@@ -513,6 +531,8 @@ class GuardianInfo {
           relationship == other.relationship &&
           phone == other.phone &&
           deviceUid == other.deviceUid &&
+          docType == other.docType &&
+          docNumber == other.docNumber &&
           documentType == other.documentType &&
           documentNumber == other.documentNumber &&
           consent == other.consent;
@@ -523,6 +543,8 @@ class GuardianInfo {
     relationship,
     phone,
     deviceUid,
+    docType,
+    docNumber,
     documentType,
     documentNumber,
     consent,
@@ -1391,10 +1413,12 @@ class MedicationRequestItem {
     required this.medicationName,
     this.dciCode,
     this.iumCode,
+    this.dosage,
     this.quantity,
     this.frequency,
     this.duration,
     this.route,
+    this.status = 'active',
     this.intent = 'order',
     this.notes,
   });
@@ -1404,10 +1428,12 @@ class MedicationRequestItem {
       medicationName: json['medicationName']?.toString() ?? '',
       dciCode: json['dciCode']?.toString(),
       iumCode: json['iumCode']?.toString(),
+      dosage: json['dosage']?.toString(),
       quantity: json['quantity']?.toString(),
       frequency: json['frequency']?.toString(),
       duration: json['duration']?.toString(),
       route: json['route']?.toString(),
+      status: json['status']?.toString() ?? 'active',
       intent: json['intent']?.toString() ?? 'order',
       notes: json['notes']?.toString(),
     );
@@ -1416,10 +1442,12 @@ class MedicationRequestItem {
   final String medicationName;
   final String? dciCode;
   final String? iumCode;
+  final String? dosage;
   final String? quantity;
   final String? frequency;
   final String? duration;
   final String? route;
+  final String status;
   final String intent;
   final String? notes;
 
@@ -1427,10 +1455,12 @@ class MedicationRequestItem {
     'medicationName': medicationName,
     if (dciCode != null) 'dciCode': dciCode,
     if (iumCode != null) 'iumCode': iumCode,
+    if (dosage != null) 'dosage': dosage,
     if (quantity != null) 'quantity': quantity,
     if (frequency != null) 'frequency': frequency,
     if (duration != null) 'duration': duration,
     if (route != null) 'route': route,
+    'status': status,
     'intent': intent,
     if (notes != null) 'notes': notes,
   };
@@ -1443,10 +1473,12 @@ class MedicationRequestItem {
           medicationName == other.medicationName &&
           dciCode == other.dciCode &&
           iumCode == other.iumCode &&
+          dosage == other.dosage &&
           quantity == other.quantity &&
           frequency == other.frequency &&
           duration == other.duration &&
           route == other.route &&
+          status == other.status &&
           intent == other.intent &&
           notes == other.notes;
 
@@ -1455,10 +1487,12 @@ class MedicationRequestItem {
     medicationName,
     dciCode,
     iumCode,
+    dosage,
     quantity,
     frequency,
     duration,
     route,
+    status,
     intent,
     notes,
   );

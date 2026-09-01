@@ -5,6 +5,7 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/widgets/locale_switcher.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import 'profile/patient_profile_screen.dart';
 
@@ -109,7 +110,10 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => PatientProfileScreen(patient: patient),
+          builder: (_) => PatientProfileScreen(
+            patient: patient,
+            allowReassign: true,
+          ),
         ),
       );
     } on ApiException catch (e) {
@@ -170,7 +174,7 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      _LocaleSwitcher(),
+                      const LocaleSwitcher(),
                     ],
                   ),
                 ),
@@ -369,47 +373,6 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _LocaleSwitcher extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final locale = AppLocale.of(context).locale;
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: ['es', 'en'].map((lang) {
-          final selected = locale == lang;
-          return GestureDetector(
-            onTap: () => AppLocale.of(context).setLocale(lang),
-            child: Container(
-              margin: const EdgeInsets.only(left: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: selected
-                    ? Colors.white.withValues(alpha: 0.95)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                lang.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? AppColors.primary : AppColors.white,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
       ),
     );
   }
