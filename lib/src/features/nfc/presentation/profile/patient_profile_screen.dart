@@ -61,6 +61,44 @@ class PatientProfileScreen extends StatefulWidget {
   /// since a successful scan means the tags are present and working.
   final bool allowReassign;
 
+  @visibleForTesting
+  static Future<List<ConnectivityResult>> Function() checkConnectivityImpl =
+      () => Connectivity().checkConnectivity();
+
+  @visibleForTesting
+  static Stream<List<ConnectivityResult>> Function() connectivityStreamImpl =
+      () => Connectivity().onConnectivityChanged;
+
+  @visibleForTesting
+  static Future<ReassignSelection?> Function(
+    BuildContext context, {
+    required bool isEs,
+    required bool hasG1,
+    required bool hasG2,
+  })
+  showReassignDeviceDialogImpl = showReassignDeviceDialog;
+
+  @visibleForTesting
+  static Future<bool> Function({
+    required BuildContext context,
+    required PatientFullRecord record,
+    required String nfcKey,
+    required bool patientChipDirty,
+    required bool guardianChipDirty,
+  })
+  executeUpdateNfcChipsImpl = executeUpdateNfcChips;
+
+  @visibleForTesting
+  static Future<PatientFullRecord?> Function({
+    required BuildContext context,
+    required ReassignTarget target,
+    required PatientFullRecord record,
+    required NfcPayloadCodec codec,
+    required bool isEs,
+    required void Function(String message, {bool error}) showSnack,
+  })
+  executeReassignOneImpl = executeReassignOne;
+
   @override
   State<PatientProfileScreen> createState() => _PatientProfileScreenState();
 }
@@ -114,18 +152,17 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   Future<void> _checkInitialConnectivity() async {
-    final result = await Connectivity().checkConnectivity();
+    final result = await PatientProfileScreen.checkConnectivityImpl();
     if (!mounted) return;
     _updateConnectivityStatus(result);
   }
 
   void _subscribeToConnectivity() {
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      List<ConnectivityResult> results,
-    ) {
-      if (!mounted) return;
-      _updateConnectivityStatus(results);
-    });
+    _connectivitySubscription = PatientProfileScreen.connectivityStreamImpl()
+        .listen((List<ConnectivityResult> results) {
+          if (!mounted) return;
+          _updateConnectivityStatus(results);
+        });
   }
 
   void _updateConnectivityStatus(List<ConnectivityResult> results) {
@@ -197,7 +234,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
     setState(() => _isUpdatingChips = true);
 
-    final ok = await executeUpdateNfcChips(
+    final ok = await PatientProfileScreen.executeUpdateNfcChipsImpl(
       context: context,
       record: _draft,
       nfcKey: nfcKey,
@@ -229,7 +266,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     final hasG1 = (_draft.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
     final hasG2 = (_draft.guardian2Info?.deviceUid ?? '').trim().isNotEmpty;
 
-    final selection = await showReassignDeviceDialog(
+    final selection = await PatientProfileScreen.showReassignDeviceDialogImpl(
       context,
       isEs: isEs,
       hasG1: hasG1,
@@ -256,7 +293,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     var guardianDone = false;
 
     for (final target in selection.targets) {
-      final updated = await executeReassignOne(
+      final updated = await PatientProfileScreen.executeReassignOneImpl(
         context: context,
         target: target,
         record: record,

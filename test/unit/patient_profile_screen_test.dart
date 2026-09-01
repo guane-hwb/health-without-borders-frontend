@@ -3,7 +3,8 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart'
+    hide tryParsePatientDate;
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/patient_profile_helpers.dart';
 
 PatientFullRecord _buildRecord({
@@ -329,5 +330,80 @@ void main() {
         true,
       ),
     );
+  });
+
+  group('tryParsePatientDate (7 tests)', () {
+    test('60. formato ISO válido se parsea correctamente', () {
+      final d = tryParsePatientDate('1990-06-15');
+      expect(d, DateTime(1990, 6, 15));
+    });
+
+    test('61. formato ISO con hora también se parsea', () {
+      final d = tryParsePatientDate('1990-06-15T00:00:00');
+      expect(d, isNotNull);
+      expect(d!.year, 1990);
+    });
+
+    test('62. cadena vacía devuelve null', () {
+      expect(tryParsePatientDate(''), isNull);
+    });
+
+    test('63. formato no reconocido devuelve null', () {
+      expect(tryParsePatientDate('YYYY-MM-DD'), isNull);
+    });
+
+    test('64. formato dd/mm/aaaa NO se reconoce con la expresión regular '
+        'actual (bug conocido)', () {
+      expect(tryParsePatientDate('15/06/1990'), isNull);
+      expect(tryParsePatientDate('15-06-1990'), isNull);
+    });
+
+    test('65. formato dd/mm/aaaa SÍ coincide si termina con un signo "\$" '
+        'literal (cubre la rama tal como está escrita hoy)', () {
+      final d = tryParsePatientDate(r'15/06/1990$');
+      expect(d, DateTime(1990, 6, 15));
+    });
+
+    test('66. mes no numérico dentro del formato con "\$" devuelve null', () {
+      expect(tryParsePatientDate(r'15/AA/1990$'), isNull);
+    });
+  });
+
+  group('allergyCategoryLabel (8 tests)', () {
+    final es = AppStrings.forTesting('es');
+    final en = AppStrings.forTesting('en');
+    test(
+      '67. 01 → categoría de medicamento',
+      () => expect(allergyCategoryLabel(es, '01'), es.allergyShortMedication),
+    );
+    test(
+      '68. 02 → categoría de alimento',
+      () => expect(allergyCategoryLabel(es, '02'), es.allergyShortFood),
+    );
+    test(
+      '69. 03 → categoría de ambiente',
+      () => expect(allergyCategoryLabel(es, '03'), es.allergyShortEnvironment),
+    );
+    test(
+      '70. 04 → categoría de piel',
+      () => expect(allergyCategoryLabel(es, '04'), es.allergyShortSkin),
+    );
+    test(
+      '71. 05 → categoría de insectos',
+      () => expect(allergyCategoryLabel(es, '05'), es.allergyShortInsect),
+    );
+    test(
+      '72. 06 → categoría "otra"',
+      () => expect(allergyCategoryLabel(es, '06'), es.allergyShortOther),
+    );
+    test('73. código desconocido → mismo valor', () {
+      expect(allergyCategoryLabel(es, 'XX'), 'XX');
+    });
+    test('74. cadena vacía en español → "Otra"', () {
+      expect(allergyCategoryLabel(es, ''), 'Otra');
+    });
+    test('75. cadena vacía en inglés → "Other"', () {
+      expect(allergyCategoryLabel(en, ''), 'Other');
+    });
   });
 }

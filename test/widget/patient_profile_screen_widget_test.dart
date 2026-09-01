@@ -1,4 +1,8 @@
 // test/widget/patient_profile_screen_widget_test.dart
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -12,8 +16,25 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/add_consultation_screen.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/add_vaccine_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/patient_profile_screen.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/add_allergy_sheet.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/add_chronic_condition_sheet.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/add_family_history_sheet.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/add_medication_sheet.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/allergies_manage_sheet.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/background_manage_sheet.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/edit_address_sheet.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/edit_chronic_personal_sheet.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/edit_guardian_sheet.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/edit_vital_signs_sheet.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/tabs/profile_tab_consultations.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/tabs/profile_tab_summary.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/tabs/profile_tab_vaccines.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/profile_banners.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/profile_header.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/reassign_device_dialog.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
@@ -74,25 +95,117 @@ class _NullApiClient implements ApiClient {
 }
 
 class _FakeAuthRepository extends AuthRepository {
-  _FakeAuthRepository({UserRole role = UserRole.doctor, this.key})
-    : _fakeUser = UserSession(
-        id: 'u-test',
-        email: 'test@example.com',
-        fullName: 'Test User',
-        role: role,
-        organizationId: 'org-test',
-      ),
-      super(apiClient: const _NullApiClient());
+  _FakeAuthRepository({
+    UserRole role = UserRole.doctor,
+    this.key,
+    this.keyDelay,
+  }) : _fakeUser = UserSession(
+         id: 'u-test',
+         email: 'test@example.com',
+         fullName: 'Test User',
+         role: role,
+         organizationId: 'org-test',
+       ),
+       super(apiClient: const _NullApiClient());
 
   final UserSession _fakeUser;
   final String? key;
+  final Duration? keyDelay;
+
+  int getNfcEncryptionKeyCallCount = 0;
 
   @override
   UserSession? get currentUser => _fakeUser;
 
   @override
-  Future<String?> getNfcEncryptionKey() async =>
-      key ?? '0123456789ABCDEF0123456789ABCDEF';
+  Future<String?> getNfcEncryptionKey() async {
+    getNfcEncryptionKeyCallCount++;
+    if (keyDelay != null) await Future<void>.delayed(keyDelay!);
+    return key ??
+        '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF';
+  }
+}
+
+class _FaultyLocalDatabase extends LocalDatabase {
+  factory _FaultyLocalDatabase() {
+    final store = <String, String>{};
+    return _FaultyLocalDatabase._(store);
+  }
+
+  _FaultyLocalDatabase._(Map<String, String> store)
+    : _memoryStore = store,
+      super.forTesting(
+        forceWeb: true,
+        webGet: (key) => store[key],
+        webSet: (key, value) => store[key] = value,
+        webRemove: (key) => store.remove(key),
+      );
+
+  final Map<String, String> _memoryStore;
+
+  bool throwOnGetChipStatus = false;
+  bool throwOnSavePatient = false;
+  bool throwOnMarkChipsDirty = false;
+  bool throwOnClearChipsDirty = false;
+
+  int savePatientCallCount = 0;
+  int clearChipsDirtyCallCount = 0;
+
+  @override
+  Future<NfcChipStatus?> getChipStatus(String patientId) async {
+    if (throwOnGetChipStatus) {
+      throw Exception('Simulated getChipStatus failure');
+    }
+    return super.getChipStatus(patientId);
+  }
+
+  @override
+  Future<void> savePatient(
+    PatientFullRecord record, {
+    String? ownerUserId,
+    String? organizationId,
+    String? retiredDeviceReason,
+  }) async {
+    savePatientCallCount++;
+    if (throwOnSavePatient) {
+      throw Exception('Simulated savePatient failure');
+    }
+    final key = 'patient_${record.patientId}';
+    _memoryStore[key] = jsonEncode(record.toJson());
+  }
+
+  @override
+  Future<void> markChipsDirty(
+    String patientId, {
+    bool patient = false,
+    bool guardian = false,
+  }) async {
+    if (throwOnMarkChipsDirty) {
+      throw Exception('Simulated markChipsDirty failure');
+    }
+    return super.markChipsDirty(
+      patientId,
+      patient: patient,
+      guardian: guardian,
+    );
+  }
+
+  @override
+  Future<void> clearChipsDirty(
+    String patientId, {
+    bool patient = false,
+    bool guardian = false,
+  }) async {
+    clearChipsDirtyCallCount++;
+    if (throwOnClearChipsDirty) {
+      throw Exception('Simulated clearChipsDirty failure');
+    }
+    return super.clearChipsDirty(
+      patientId,
+      patient: patient,
+      guardian: guardian,
+    );
+  }
 }
 
 class _FakeSyncEngine extends SyncEngine {
@@ -142,6 +255,13 @@ class _LocaleWrapperState extends State<_LocaleWrapper> {
   );
 }
 
+class _Fakes {
+  _Fakes({required this.auth, required this.syncEngine, required this.db});
+  final _FakeAuthRepository auth;
+  final _FakeSyncEngine syncEngine;
+  final _FaultyLocalDatabase db;
+}
+
 Widget _wrap(
   Widget child, {
   UserRole role = UserRole.doctor,
@@ -149,42 +269,81 @@ Widget _wrap(
   _FakeSyncEngine? syncEng,
   String locale = 'es',
   String? nfcKey,
+  Duration? nfcKeyDelay,
+  LocalDatabase? localDatabase,
+  void Function(_Fakes fakes)? onFakesReady,
 }) {
-  final fakeAuth = _FakeAuthRepository(role: role, key: nfcKey);
+  final fakeAuth = _FakeAuthRepository(
+    role: role,
+    key: nfcKey,
+    keyDelay: nfcKeyDelay,
+  );
   final fakeSyncEngine =
       syncEng ?? _FakeSyncEngine(shouldThrow: syncShouldThrow);
+  final db = localDatabase ?? _FaultyLocalDatabase();
+
+  if (onFakesReady != null && db is _FaultyLocalDatabase) {
+    onFakesReady(_Fakes(auth: fakeAuth, syncEngine: fakeSyncEngine, db: db));
+  }
 
   return _LocaleWrapper(
     locale: locale,
     child: MaterialApp(
-      builder: (context, navigatorChild) {
-        return AppScope(
+      home: AppScope(
+        authRepository: fakeAuth,
+        userRepository: UserRepository(
+          apiClient: const _NullApiClient(),
           authRepository: fakeAuth,
-          userRepository: UserRepository(
-            apiClient: const _NullApiClient(),
-            authRepository: fakeAuth,
-          ),
-          reachability: Reachability(baseUrl: 'http://localhost'),
-          patientRepository: PatientRepository(
-            apiClient: const _NullApiClient(),
-            authRepository: fakeAuth,
-          ),
-          localDatabase: LocalDatabase.instance,
-          syncEngine: fakeSyncEngine,
-          statsRepository: StatsRepository(
-            apiClient: ApiClient(baseUrl: 'http://localhost'),
-            authRepository: fakeAuth,
-          ),
-          child: navigatorChild!,
-        );
-      },
-      home: child,
+        ),
+        reachability: Reachability(baseUrl: 'http://localhost'),
+        patientRepository: PatientRepository(
+          apiClient: const _NullApiClient(),
+          authRepository: fakeAuth,
+        ),
+        localDatabase: db,
+        syncEngine: fakeSyncEngine,
+        statsRepository: StatsRepository(
+          apiClient: ApiClient(baseUrl: 'http://localhost'),
+          authRepository: fakeAuth,
+        ),
+        child: child,
+      ),
     ),
   );
 }
 
 Widget buildTestApp({required Widget child}) {
   return _wrap(child);
+}
+
+final _originalCheckConnectivity = PatientProfileScreen.checkConnectivityImpl;
+final _originalConnectivityStream = PatientProfileScreen.connectivityStreamImpl;
+final _originalShowReassignDialog =
+    PatientProfileScreen.showReassignDeviceDialogImpl;
+final _originalExecuteUpdateNfcChips =
+    PatientProfileScreen.executeUpdateNfcChipsImpl;
+final _originalExecuteReassignOne = PatientProfileScreen.executeReassignOneImpl;
+
+void _resetScreenSeams() {
+  PatientProfileScreen.checkConnectivityImpl = () async => [
+    ConnectivityResult.wifi,
+  ];
+  PatientProfileScreen.connectivityStreamImpl = () =>
+      Stream.value([ConnectivityResult.wifi]);
+  PatientProfileScreen.showReassignDeviceDialogImpl =
+      _originalShowReassignDialog;
+  PatientProfileScreen.executeUpdateNfcChipsImpl =
+      _originalExecuteUpdateNfcChips;
+  PatientProfileScreen.executeReassignOneImpl = _originalExecuteReassignOne;
+}
+
+StreamController<List<ConnectivityResult>> _setConnectivity(
+  List<ConnectivityResult> initial,
+) {
+  final controller = StreamController<List<ConnectivityResult>>.broadcast();
+  PatientProfileScreen.checkConnectivityImpl = () async => initial;
+  PatientProfileScreen.connectivityStreamImpl = () => controller.stream;
+  return controller;
 }
 
 PatientInfo _info({
@@ -255,8 +414,12 @@ Future<void> _pumpScreen(
   bool allowReassign = false,
   UserRole role = UserRole.doctor,
   bool syncShouldThrow = false,
+  _FakeSyncEngine? syncEng,
   String locale = 'es',
   String? nfcKey,
+  Duration? nfcKeyDelay,
+  LocalDatabase? localDatabase,
+  void Function(_Fakes fakes)? onFakesReady,
 }) async {
   await tester.pumpWidget(
     _wrap(
@@ -268,8 +431,12 @@ Future<void> _pumpScreen(
       ),
       role: role,
       syncShouldThrow: syncShouldThrow,
+      syncEng: syncEng,
       locale: locale,
       nfcKey: nfcKey,
+      nfcKeyDelay: nfcKeyDelay,
+      localDatabase: localDatabase,
+      onFakesReady: onFakesReady,
     ),
   );
   await tester.pump();
@@ -277,6 +444,20 @@ Future<void> _pumpScreen(
 }
 
 void main() {
+  setUp(() {
+    _resetScreenSeams();
+  });
+
+  tearDown(() {
+    PatientProfileScreen.checkConnectivityImpl = _originalCheckConnectivity;
+    PatientProfileScreen.connectivityStreamImpl = _originalConnectivityStream;
+    PatientProfileScreen.showReassignDeviceDialogImpl =
+        _originalShowReassignDialog;
+    PatientProfileScreen.executeUpdateNfcChipsImpl =
+        _originalExecuteUpdateNfcChips;
+    PatientProfileScreen.executeReassignOneImpl = _originalExecuteReassignOne;
+  });
+
   group('PatientProfileScreen - Tests 1 a 20 (Render y Banners)', () {
     testWidgets('1. Renderiza pantalla base', (tester) async {
       await _pumpScreen(tester, _record());
@@ -292,12 +473,12 @@ void main() {
       tester,
     ) async {
       await _pumpScreen(tester, _record(), offline: true);
-      expect(find.textContaining('sin conexión'), findsOneWidget);
+      expect(find.byType(OfflineBanner), findsOneWidget);
     });
 
     testWidgets('4. Banner offline en inglés', (tester) async {
       await _pumpScreen(tester, _record(), offline: true, locale: 'en');
-      expect(find.textContaining('Offline view'), findsOneWidget);
+      expect(find.byType(OfflineBanner), findsOneWidget);
     });
 
     testWidgets('5. Tab bar con badge de consultas', (tester) async {
@@ -1003,7 +1184,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(PatientProfileScreen), findsOneWidget);
-
       expect(find.textContaining('años'), findsAtLeastNWidgets(1));
     });
 
@@ -1015,7 +1195,7 @@ void main() {
           deviceUid: 'uid-test-02',
           patientInfo: PatientInfo(
             identification: PatientIdentification(
-              documentType: 'DE', // Documento Extranjero
+              documentType: 'DE',
               documentNumber: '987654',
             ),
             firstLastName: 'Gómez',
@@ -1042,12 +1222,12 @@ void main() {
   });
 
   group('Botón "Reasignar dispositivo" — visibilidad por origen', () {
-    testWidgets('se muestra cuando allowReassign es true y no es readOnly '
-        '(entrada por Buscar paciente)', (tester) async {
+    testWidgets('se muestra cuando allowReassign es true y no es readOnly', (
+      tester,
+    ) async {
       await _pumpScreen(tester, _record(), allowReassign: true);
       await tester.pumpAndSettle();
 
-      // Hacemos scroll manual arrastrando la lista hacia arriba
       await tester.drag(find.byType(ListView).first, const Offset(0, -500));
       await tester.pumpAndSettle();
 
@@ -1077,6 +1257,1189 @@ void main() {
 
       expect(find.text('Reasignar dispositivo'), findsNothing);
       expect(find.byIcon(Icons.published_with_changes), findsNothing);
+    });
+  });
+
+  group('Conectividad dinámica y sincronización automática al reconectar', () {
+    testWidgets('73. Inicia sin conexión → banner offline dinámico visible', (
+      tester,
+    ) async {
+      _setConnectivity([ConnectivityResult.none]);
+      await _pumpScreen(tester, _record());
+      await tester.pumpAndSettle();
+      expect(find.byType(OfflineBanner), findsOneWidget);
+    });
+
+    testWidgets(
+      '74. Reconectar con cambios pendientes dispara sincronización automática',
+      (tester) async {
+        final controller = _setConnectivity([ConnectivityResult.none]);
+        late _Fakes fakes;
+        await _pumpScreen(tester, _record(), onFakesReady: (f) => fakes = f);
+        await tester.pumpAndSettle();
+
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onEditAddress();
+        await tester.pumpAndSettle();
+        final addressSheet = tester.widget<EditAddressSheet>(
+          find.byType(EditAddressSheet),
+        );
+        addressSheet.onConfirm(Address(city: 'Cali', state: 'Valle'));
+        await tester.pumpAndSettle();
+
+        expect(fakes.syncEngine.callCount, 0);
+
+        await tester.runAsync(() async {
+          controller.add([ConnectivityResult.wifi]);
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        });
+        await tester.pumpAndSettle();
+
+        expect(fakes.syncEngine.callCount, greaterThanOrEqualTo(1));
+        expect(find.byType(OfflineBanner), findsNothing);
+        await controller.close();
+      },
+    );
+
+    testWidgets(
+      '75. Reconectar sin cambios pendientes NO dispara sincronización',
+      (tester) async {
+        final controller = _setConnectivity([ConnectivityResult.none]);
+        late _Fakes fakes;
+        await _pumpScreen(tester, _record(), onFakesReady: (f) => fakes = f);
+        await tester.pumpAndSettle();
+
+        controller.add([ConnectivityResult.wifi]);
+        await tester.pumpAndSettle();
+
+        expect(fakes.syncEngine.callCount, 0);
+        await controller.close();
+      },
+    );
+
+    testWidgets('76. Transición conectado → desconectado actualiza el banner', (
+      tester,
+    ) async {
+      final controller = _setConnectivity([ConnectivityResult.wifi]);
+      await _pumpScreen(tester, _record());
+      await tester.pumpAndSettle();
+      expect(find.byType(OfflineBanner), findsNothing);
+
+      controller.add([ConnectivityResult.none]);
+      await tester.pumpAndSettle();
+      expect(find.byType(OfflineBanner), findsOneWidget);
+      await controller.close();
+    });
+  });
+
+  group('Estado del chip NFC y banner de chip desactualizado', () {
+    testWidgets(
+      '77. Chip marcado como sucio muestra el banner de actualización',
+      (tester) async {
+        final db = _FaultyLocalDatabase();
+        await db.markChipsDirty('pid-001', patient: true, guardian: true);
+        await _pumpScreen(tester, _record(), localDatabase: db);
+        await tester.pumpAndSettle();
+        expect(find.byType(NfcStaleBanner), findsOneWidget);
+      },
+    );
+
+    testWidgets('78. Chip sucio pero en modo readOnly NO muestra el banner', (
+      tester,
+    ) async {
+      final db = _FaultyLocalDatabase();
+      await db.markChipsDirty('pid-001', patient: true, guardian: true);
+      await _pumpScreen(tester, _record(), localDatabase: db, readOnly: true);
+      await tester.pumpAndSettle();
+      expect(find.byType(NfcStaleBanner), findsNothing);
+    });
+
+    testWidgets('79. Chip limpio no muestra el banner de actualización', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record());
+      await tester.pumpAndSettle();
+      expect(find.byType(NfcStaleBanner), findsNothing);
+    });
+
+    testWidgets('80. Fallo al cargar el estado del chip no rompe la pantalla', (
+      tester,
+    ) async {
+      final db = _FaultyLocalDatabase()..throwOnGetChipStatus = true;
+      await _pumpScreen(tester, _record(), localDatabase: db);
+      await tester.pumpAndSettle();
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+      expect(find.byType(NfcStaleBanner), findsNothing);
+    });
+
+    testWidgets(
+      '81. Editar con patientId vacío no marca ningún chip como sucio',
+      (tester) async {
+        final db = _FaultyLocalDatabase();
+        await _pumpScreen(
+          tester,
+          PatientFullRecord(
+            patientId: '',
+            deviceUid: 'dev-001',
+            patientInfo: _info(),
+            guardianInfo: GuardianInfo(name: '', relationship: '', phone: ''),
+            backgroundHistory: BackgroundHistory(),
+          ),
+          localDatabase: db,
+        );
+        await tester.pumpAndSettle();
+
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onEditAddress();
+        await tester.pumpAndSettle();
+        tester
+            .widget<EditAddressSheet>(find.byType(EditAddressSheet))
+            .onConfirm(Address(city: 'Cali', state: 'Valle'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(NfcStaleBanner), findsNothing);
+      },
+    );
+  });
+
+  group('_updateNfcChips — actualización de chips vía banner', () {
+    Future<_Fakes> pumpDirty(
+      WidgetTester tester, {
+      String? nfcKey,
+      Duration? nfcKeyDelay,
+      String locale = 'es',
+    }) async {
+      late _Fakes fakes;
+      final db = _FaultyLocalDatabase();
+      await db.markChipsDirty('pid-001', patient: true, guardian: true);
+      await _pumpScreen(
+        tester,
+        _record(),
+        localDatabase: db,
+        nfcKey: nfcKey,
+        nfcKeyDelay: nfcKeyDelay,
+        locale: locale,
+        onFakesReady: (f) => fakes = f,
+      );
+      await tester.pumpAndSettle();
+      return fakes;
+    }
+
+    testWidgets('82. Sin clave NFC (vacía) muestra snackbar en español', (
+      tester,
+    ) async {
+      await pumpDirty(tester, nfcKey: '');
+      tester.widget<NfcStaleBanner>(find.byType(NfcStaleBanner)).onUpdate();
+      await tester.pumpAndSettle();
+      expect(
+        find.text('No hay clave NFC disponible para grabar.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('83. Sin clave NFC (vacía) muestra snackbar en inglés', (
+      tester,
+    ) async {
+      await pumpDirty(tester, nfcKey: '', locale: 'en');
+      tester.widget<NfcStaleBanner>(find.byType(NfcStaleBanner)).onUpdate();
+      await tester.pumpAndSettle();
+      expect(find.text('No NFC key available to write.'), findsOneWidget);
+    });
+
+    testWidgets(
+      '84. executeUpdateNfcChips exitoso limpia el chip y oculta el banner',
+      (tester) async {
+        final fakes = await pumpDirty(tester);
+        PatientProfileScreen.executeUpdateNfcChipsImpl =
+            ({
+              required context,
+              required record,
+              required nfcKey,
+              required patientChipDirty,
+              required guardianChipDirty,
+            }) async => true;
+
+        tester.widget<NfcStaleBanner>(find.byType(NfcStaleBanner)).onUpdate();
+        await tester.pumpAndSettle();
+
+        expect(fakes.db.clearChipsDirtyCallCount, greaterThanOrEqualTo(1));
+        expect(find.byType(NfcStaleBanner), findsNothing);
+      },
+    );
+
+    testWidgets('85. executeUpdateNfcChips fallido conserva el banner', (
+      tester,
+    ) async {
+      await pumpDirty(tester);
+      PatientProfileScreen.executeUpdateNfcChipsImpl =
+          ({
+            required context,
+            required record,
+            required nfcKey,
+            required patientChipDirty,
+            required guardianChipDirty,
+          }) async => false;
+
+      tester.widget<NfcStaleBanner>(find.byType(NfcStaleBanner)).onUpdate();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NfcStaleBanner), findsOneWidget);
+    });
+
+    testWidgets(
+      '86. Doble toque rápido en "Actualizar" sólo dispara una actualización',
+      (tester) async {
+        var callCount = 0;
+        final gate = Completer<void>();
+        await pumpDirty(tester);
+        PatientProfileScreen.executeUpdateNfcChipsImpl =
+            ({
+              required context,
+              required record,
+              required nfcKey,
+              required patientChipDirty,
+              required guardianChipDirty,
+            }) async {
+              callCount++;
+              await gate.future;
+              return true;
+            };
+
+        final banner = tester.widget<NfcStaleBanner>(
+          find.byType(NfcStaleBanner),
+        );
+        banner.onUpdate();
+        await tester.pump();
+        await tester.pump();
+
+        banner.onUpdate();
+
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(callCount, 1);
+      },
+    );
+  });
+
+  group('_reassignDevices — flujo de reasignación de dispositivo', () {
+    testWidgets('87. Cancelar el diálogo no realiza ninguna acción', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record(), allowReassign: true);
+      PatientProfileScreen.showReassignDeviceDialogImpl =
+          (context, {required isEs, required hasG1, required hasG2}) async =>
+              null;
+
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onReassignDevice!();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets(
+      '88. Selección sin objetivos (caso límite) no realiza ninguna acción',
+      (tester) async {
+        var executeCalls = 0;
+        await _pumpScreen(tester, _record(), allowReassign: true);
+        PatientProfileScreen.showReassignDeviceDialogImpl =
+            (context, {required isEs, required hasG1, required hasG2}) async =>
+                const ReassignSelection(targets: [], reason: 'lost');
+        PatientProfileScreen.executeReassignOneImpl =
+            ({
+              required context,
+              required target,
+              required record,
+              required codec,
+              required isEs,
+              required showSnack,
+            }) async {
+              executeCalls++;
+              return null;
+            };
+
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onReassignDevice!();
+        await tester.pumpAndSettle();
+
+        expect(executeCalls, 0);
+      },
+    );
+
+    testWidgets(
+      '89. Sin clave NFC tras confirmar el diálogo muestra snackbar',
+      (tester) async {
+        await _pumpScreen(tester, _record(), allowReassign: true, nfcKey: '');
+        PatientProfileScreen.showReassignDeviceDialogImpl =
+            (context, {required isEs, required hasG1, required hasG2}) async =>
+                const ReassignSelection(
+                  targets: [ReassignTarget.patient],
+                  reason: 'lost',
+                );
+
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onReassignDevice!();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('No hay clave NFC disponible para grabar.'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      '90. Reasignación exitosa de un solo objetivo guarda y sincroniza',
+      (tester) async {
+        late _Fakes fakes;
+        await _pumpScreen(
+          tester,
+          _record(),
+          allowReassign: true,
+          onFakesReady: (f) => fakes = f,
+        );
+        PatientProfileScreen.showReassignDeviceDialogImpl =
+            (context, {required isEs, required hasG1, required hasG2}) async =>
+                const ReassignSelection(
+                  targets: [ReassignTarget.patient],
+                  reason: 'lost',
+                );
+        PatientProfileScreen.executeReassignOneImpl =
+            ({
+              required context,
+              required target,
+              required record,
+              required codec,
+              required isEs,
+              required showSnack,
+            }) async => record.copyWith(deviceUid: 'dev-NEW');
+
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+
+        await tester.runAsync(() async {
+          summary.onReassignDevice!();
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        });
+        await tester.pumpAndSettle();
+
+        expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
+        expect(fakes.syncEngine.callCount, greaterThanOrEqualTo(1));
+      },
+    );
+
+    testWidgets(
+      '91. Reasignación exitosa de paciente + guardián 1 (dos objetivos)',
+      (tester) async {
+        final calledTargets = <ReassignTarget>[];
+        await _pumpScreen(tester, _record(), allowReassign: true);
+        PatientProfileScreen.showReassignDeviceDialogImpl =
+            (context, {required isEs, required hasG1, required hasG2}) async =>
+                const ReassignSelection(
+                  targets: [ReassignTarget.patient, ReassignTarget.guardian1],
+                  reason: 'damaged',
+                );
+        PatientProfileScreen.executeReassignOneImpl =
+            ({
+              required context,
+              required target,
+              required record,
+              required codec,
+              required isEs,
+              required showSnack,
+            }) async {
+              calledTargets.add(target);
+              return record;
+            };
+
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onReassignDevice!();
+        await tester.pumpAndSettle();
+
+        expect(calledTargets, [
+          ReassignTarget.patient,
+          ReassignTarget.guardian1,
+        ]);
+      },
+    );
+
+    testWidgets(
+      '92. Si el segundo objetivo falla, el ciclo corta pero conserva lo ya reasignado',
+      (tester) async {
+        var calls = 0;
+        late _Fakes fakes;
+        await _pumpScreen(
+          tester,
+          _record(),
+          allowReassign: true,
+          onFakesReady: (f) => fakes = f,
+        );
+        PatientProfileScreen.showReassignDeviceDialogImpl =
+            (context, {required isEs, required hasG1, required hasG2}) async =>
+                const ReassignSelection(
+                  targets: [ReassignTarget.patient, ReassignTarget.guardian1],
+                  reason: 'lost',
+                );
+        PatientProfileScreen.executeReassignOneImpl =
+            ({
+              required context,
+              required target,
+              required record,
+              required codec,
+              required isEs,
+              required showSnack,
+            }) async {
+              calls++;
+              if (target == ReassignTarget.patient) return record;
+              return null;
+            };
+
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onReassignDevice!();
+        await tester.pumpAndSettle();
+
+        expect(calls, 2);
+        expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
+      },
+    );
+
+    testWidgets('93. Si todos los objetivos fallan, no se guarda nada', (
+      tester,
+    ) async {
+      late _Fakes fakes;
+      await _pumpScreen(
+        tester,
+        _record(),
+        allowReassign: true,
+        onFakesReady: (f) => fakes = f,
+      );
+      PatientProfileScreen.showReassignDeviceDialogImpl =
+          (context, {required isEs, required hasG1, required hasG2}) async =>
+              const ReassignSelection(
+                targets: [ReassignTarget.patient],
+                reason: 'lost',
+              );
+      PatientProfileScreen.executeReassignOneImpl =
+          ({
+            required context,
+            required target,
+            required record,
+            required codec,
+            required isEs,
+            required showSnack,
+          }) async => null;
+
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onReassignDevice!();
+      await tester.pumpAndSettle();
+
+      expect(fakes.db.savePatientCallCount, 0);
+    });
+
+    testWidgets(
+      '94. Reasignación exitosa sin conexión no sincroniza pero sí notifica',
+      (tester) async {
+        final controller = _setConnectivity([ConnectivityResult.none]);
+        late _Fakes fakes;
+        await _pumpScreen(
+          tester,
+          _record(),
+          allowReassign: true,
+          onFakesReady: (f) => fakes = f,
+        );
+        await tester.pumpAndSettle();
+        PatientProfileScreen.showReassignDeviceDialogImpl =
+            (context, {required isEs, required hasG1, required hasG2}) async =>
+                const ReassignSelection(
+                  targets: [ReassignTarget.patient],
+                  reason: 'lost',
+                );
+        PatientProfileScreen.executeReassignOneImpl =
+            ({
+              required context,
+              required target,
+              required record,
+              required codec,
+              required isEs,
+              required showSnack,
+            }) async => record;
+
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onReassignDevice!();
+        await tester.pumpAndSettle();
+
+        expect(fakes.syncEngine.callCount, 0);
+        await controller.close();
+      },
+    );
+
+    testWidgets(
+      '95. Fallo al guardar la reasignación muestra snackbar de error (ES)',
+      (tester) async {
+        final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+        await _pumpScreen(
+          tester,
+          _record(),
+          allowReassign: true,
+          localDatabase: db,
+        );
+        PatientProfileScreen.showReassignDeviceDialogImpl =
+            (context, {required isEs, required hasG1, required hasG2}) async =>
+                const ReassignSelection(
+                  targets: [ReassignTarget.patient],
+                  reason: 'lost',
+                );
+        PatientProfileScreen.executeReassignOneImpl =
+            ({
+              required context,
+              required target,
+              required record,
+              required codec,
+              required isEs,
+              required showSnack,
+            }) async => record;
+
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onReassignDevice!();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('No se pudo guardar la reasignación.'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      '96. Fallo al guardar la reasignación muestra snackbar de error (EN)',
+      (tester) async {
+        final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+        await _pumpScreen(
+          tester,
+          _record(),
+          allowReassign: true,
+          localDatabase: db,
+          locale: 'en',
+        );
+        PatientProfileScreen.showReassignDeviceDialogImpl =
+            (context, {required isEs, required hasG1, required hasG2}) async =>
+                const ReassignSelection(
+                  targets: [ReassignTarget.patient],
+                  reason: 'lost',
+                );
+        PatientProfileScreen.executeReassignOneImpl =
+            ({
+              required context,
+              required target,
+              required record,
+              required codec,
+              required isEs,
+              required showSnack,
+            }) async => record;
+
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onReassignDevice!();
+        await tester.pumpAndSettle();
+
+        expect(find.text('Could not save the reassignment.'), findsOneWidget);
+      },
+    );
+  });
+
+  group('_saveAndPendingSync — guardado local y reintento', () {
+    testWidgets('97. Guardado exitoso no muestra snackbar de error', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record());
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onEditAddress();
+      await tester.pumpAndSettle();
+      tester
+          .widget<EditAddressSheet>(find.byType(EditAddressSheet))
+          .onConfirm(Address(city: 'Cali', state: 'Valle'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('No se pudo guardar en el dispositivo'),
+        findsNothing,
+      );
+    });
+
+    testWidgets(
+      '98. Guardado exitoso con conexión dispara sincronización silenciosa',
+      (tester) async {
+        late _Fakes fakes;
+        await _pumpScreen(tester, _record(), onFakesReady: (f) => fakes = f);
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onEditAddress();
+        await tester.pumpAndSettle();
+
+        await tester.runAsync(() async {
+          tester
+              .widget<EditAddressSheet>(find.byType(EditAddressSheet))
+              .onConfirm(Address(city: 'Cali', state: 'Valle'));
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        });
+        await tester.pumpAndSettle();
+
+        expect(fakes.syncEngine.callCount, greaterThanOrEqualTo(1));
+      },
+    );
+
+    testWidgets(
+      '99. Fallo al guardar localmente muestra snackbar con acción Reintentar',
+      (tester) async {
+        final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+        await _pumpScreen(tester, _record(), localDatabase: db);
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onEditAddress();
+        await tester.pumpAndSettle();
+        tester
+            .widget<EditAddressSheet>(find.byType(EditAddressSheet))
+            .onConfirm(Address(city: 'Cali', state: 'Valle'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('El cambio NO está a salvo'),
+          findsOneWidget,
+        );
+        expect(find.byType(SnackBarAction), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '100. Fallo al guardar localmente en inglés muestra el mensaje en inglés',
+      (tester) async {
+        final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+        await _pumpScreen(tester, _record(), localDatabase: db, locale: 'en');
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onEditAddress();
+        await tester.pumpAndSettle();
+        tester
+            .widget<EditAddressSheet>(find.byType(EditAddressSheet))
+            .onConfirm(Address(city: 'Cali', state: 'Valle'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('is NOT safe'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '101. Tocar "Reintentar" vuelve a intentar el guardado y retira la marca de fallo',
+      (tester) async {
+        final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+        await _pumpScreen(tester, _record(), localDatabase: db);
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onEditAddress();
+        await tester.pumpAndSettle();
+        tester
+            .widget<EditAddressSheet>(find.byType(EditAddressSheet))
+            .onConfirm(Address(city: 'Cali', state: 'Valle'));
+        await tester.pumpAndSettle();
+
+        db.throwOnSavePatient = false;
+        final action = tester.widget<SnackBarAction>(
+          find.byType(SnackBarAction),
+        );
+        action.onPressed();
+
+        ScaffoldMessenger.of(
+          tester.element(find.byType(PatientProfileScreen)),
+        ).hideCurrentSnackBar();
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('El cambio NO está a salvo'), findsNothing);
+      },
+    );
+  });
+
+  group('_confirmExit — confirmación de salida tras un guardado fallido', () {
+    testWidgets(
+      '102. Muestra diálogo de confirmación si el último guardado falló',
+      (tester) async {
+        final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+        await _pumpScreen(tester, _record(), localDatabase: db);
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onEditAddress();
+        await tester.pumpAndSettle();
+        tester
+            .widget<EditAddressSheet>(find.byType(EditAddressSheet))
+            .onConfirm(Address(city: 'Cali', state: 'Valle'));
+        await tester.pumpAndSettle();
+
+        final header = tester.widget<ProfileHeader>(find.byType(ProfileHeader));
+        header.onBack();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '103. "Cancelar" en el diálogo mantiene al usuario en la pantalla',
+      (tester) async {
+        final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+        await _pumpScreen(tester, _record(), localDatabase: db);
+        final summary = tester.widget<ProfileTabSummary>(
+          find.byType(ProfileTabSummary),
+        );
+        summary.onEditAddress();
+        await tester.pumpAndSettle();
+        tester
+            .widget<EditAddressSheet>(find.byType(EditAddressSheet))
+            .onConfirm(Address(city: 'Cali', state: 'Valle'));
+        await tester.pumpAndSettle();
+
+        final header = tester.widget<ProfileHeader>(find.byType(ProfileHeader));
+        header.onBack();
+        await tester.pumpAndSettle();
+
+        final dialog = tester.widget<AlertDialog>(find.byType(AlertDialog));
+        (dialog.actions![0] as TextButton).onPressed!();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsNothing);
+        expect(find.byType(PatientProfileScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets('104. "Salir" en el diálogo abandona la pantalla', (
+      tester,
+    ) async {
+      final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+      await _pumpScreen(tester, _record(), localDatabase: db);
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onEditAddress();
+      await tester.pumpAndSettle();
+      tester
+          .widget<EditAddressSheet>(find.byType(EditAddressSheet))
+          .onConfirm(Address(city: 'Cali', state: 'Valle'));
+      await tester.pumpAndSettle();
+
+      final header = tester.widget<ProfileHeader>(find.byType(ProfileHeader));
+      header.onBack();
+      await tester.pumpAndSettle();
+
+      final dialog = tester.widget<AlertDialog>(find.byType(AlertDialog));
+      (dialog.actions![1] as TextButton).onPressed!();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+  });
+
+  group('Confirmación de sheets — actualizan el draft y disparan guardado', () {
+    testWidgets('105. Confirmar signos vitales actualiza el draft', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record());
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onEditVitalSigns();
+      await tester.pumpAndSettle();
+      tester
+          .widget<EditVitalSignsSheet>(find.byType(EditVitalSignsSheet))
+          .onConfirm(weight: 72.5, height: 171, bloodType: 'A+');
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('72.5'), findsWidgets);
+    });
+
+    testWidgets('106. Confirmar guardián 1 actualiza el draft', (tester) async {
+      await _pumpScreen(tester, _record());
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onEditGuardian(1);
+      await tester.pumpAndSettle();
+      tester
+          .widget<EditGuardianSheet>(find.byType(EditGuardianSheet))
+          .onConfirm(
+            GuardianInfo(
+              name: 'Nuevo Guardián',
+              relationship: '02',
+              phone: '3111111111',
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ProfileTabSummary), findsOneWidget);
+    });
+
+    testWidgets('107. Confirmar guardián 2 actualiza el draft', (tester) async {
+      await _pumpScreen(tester, _record());
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onEditGuardian(2);
+      await tester.pumpAndSettle();
+      tester
+          .widget<EditGuardianSheet>(find.byType(EditGuardianSheet))
+          .onConfirm(
+            GuardianInfo(
+              name: 'Guardián Dos Nuevo',
+              relationship: '03',
+              phone: '3222222222',
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ProfileTabSummary), findsOneWidget);
+    });
+
+    testWidgets('108. Confirmar antecedentes personales actualiza el draft', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record());
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onOpenBackground();
+      await tester.pumpAndSettle();
+      final bg = tester.widget<BackgroundManageSheet>(
+        find.byType(BackgroundManageSheet),
+      );
+      bg.onEditPersonal();
+      await tester.pumpAndSettle();
+      tester
+          .widget<EditChronicPersonalSheet>(
+            find.byType(EditChronicPersonalSheet),
+          )
+          .onConfirm('Sin antecedentes personales relevantes');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('109. Agregar condición crónica desde antecedentes', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record());
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onOpenBackground();
+      await tester.pumpAndSettle();
+      final bg = tester.widget<BackgroundManageSheet>(
+        find.byType(BackgroundManageSheet),
+      );
+      bg.onAddChronic();
+      await tester.pumpAndSettle();
+      tester
+          .widget<AddChronicConditionSheet>(
+            find.byType(AddChronicConditionSheet),
+          )
+          .onAdd(ChronicConditionItem(chronicDescription: 'Asma'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('110. Eliminar condición crónica desde antecedentes', (
+      tester,
+    ) async {
+      await _pumpScreen(
+        tester,
+        _record(
+          background: BackgroundHistory(
+            chronicConditions: [
+              ChronicConditionItem(chronicDescription: 'HTA'),
+            ],
+          ),
+        ),
+      );
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onOpenBackground();
+      await tester.pumpAndSettle();
+      tester
+          .widget<BackgroundManageSheet>(find.byType(BackgroundManageSheet))
+          .onRemoveChronic(0);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('111. Agregar medicamento desde antecedentes', (tester) async {
+      await _pumpScreen(tester, _record());
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onOpenBackground();
+      await tester.pumpAndSettle();
+      tester
+          .widget<BackgroundManageSheet>(find.byType(BackgroundManageSheet))
+          .onAddMedication();
+      await tester.pumpAndSettle();
+      tester
+          .widget<AddMedicationSheet>(find.byType(AddMedicationSheet))
+          .onAdd(
+            MedicationStatementItem(
+              medicationName: 'Ibuprofeno',
+              status: 'active',
+            ),
+          );
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('112. Eliminar medicamento desde antecedentes', (tester) async {
+      await _pumpScreen(
+        tester,
+        _record(
+          background: BackgroundHistory(
+            medications: [
+              MedicationStatementItem(
+                medicationName: 'Metformina',
+                status: 'active',
+              ),
+            ],
+          ),
+        ),
+      );
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onOpenBackground();
+      await tester.pumpAndSettle();
+      tester
+          .widget<BackgroundManageSheet>(find.byType(BackgroundManageSheet))
+          .onRemoveMedication(0);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('113. Agregar antecedente familiar', (tester) async {
+      await _pumpScreen(tester, _record());
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onOpenBackground();
+      await tester.pumpAndSettle();
+      tester
+          .widget<BackgroundManageSheet>(find.byType(BackgroundManageSheet))
+          .onAddFamily();
+      await tester.pumpAndSettle();
+      tester
+          .widget<AddFamilyHistorySheet>(find.byType(AddFamilyHistorySheet))
+          .onAdd(
+            FamilyHistoryItem(
+              conditionDescription: 'Hipertensión',
+              relationship: '01',
+            ),
+          );
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('114. Eliminar antecedente familiar', (tester) async {
+      await _pumpScreen(
+        tester,
+        _record(
+          background: BackgroundHistory(
+            familyHistory: [
+              FamilyHistoryItem(
+                conditionDescription: 'Diabetes',
+                relationship: '01',
+              ),
+            ],
+          ),
+        ),
+      );
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onOpenBackground();
+      await tester.pumpAndSettle();
+      tester
+          .widget<BackgroundManageSheet>(find.byType(BackgroundManageSheet))
+          .onRemoveFamily(0);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('115. Agregar alergia desde el modal de alergias', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record());
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onOpenAllergies();
+      await tester.pumpAndSettle();
+      tester
+          .widget<AllergiesManageSheet>(find.byType(AllergiesManageSheet))
+          .onAdd();
+      await tester.pumpAndSettle();
+      tester
+          .widget<AddAllergySheet>(find.byType(AddAllergySheet))
+          .onAdd(AllergyInfo(category: '02', allergen: 'Maní'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('116. Eliminar alergia desde el modal de alergias', (
+      tester,
+    ) async {
+      await _pumpScreen(
+        tester,
+        _record(
+          allergies: [AllergyInfo(allergen: 'Aspirina', category: '01')],
+        ),
+      );
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onOpenAllergies();
+      await tester.pumpAndSettle();
+      tester
+          .widget<AllergiesManageSheet>(find.byType(AllergiesManageSheet))
+          .onRemove(0);
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('Navegación a agregar consulta / vacuna', () {
+    testWidgets(
+      '117. Agregar consulta exitosamente actualiza el historial médico',
+      (tester) async {
+        await _pumpScreen(tester, _record(), role: UserRole.doctor);
+        await tester.tap(find.textContaining('Consultas'));
+        await tester.pumpAndSettle();
+
+        final tab = tester.widget<ProfileTabConsultations>(
+          find.byType(ProfileTabConsultations),
+        );
+        tab.onAdd();
+        await tester.pumpAndSettle();
+        expect(find.byType(AddConsultationScreen), findsOneWidget);
+
+        Navigator.of(
+          tester.element(find.byType(AddConsultationScreen)),
+        ).pop(MedicalHistoryItem(startDateTime: '2026-01-01T00:00:00'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddConsultationScreen), findsNothing);
+      },
+    );
+
+    testWidgets('118. Rol sin permiso para agregar consulta muestra snackbar', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record(), role: UserRole.nurse);
+      await tester.tap(find.textContaining('Consultas'));
+      await tester.pumpAndSettle();
+
+      final tab = tester.widget<ProfileTabConsultations>(
+        find.byType(ProfileTabConsultations),
+      );
+      tab.onAdd();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AddConsultationScreen), findsNothing);
+      expect(find.byType(SnackBar), findsOneWidget);
+    });
+
+    testWidgets('119. Agregar vacuna(s) exitosamente actualiza el registro', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record(), role: UserRole.nurse);
+      await tester.tap(find.textContaining('Vacunas'));
+      await tester.pumpAndSettle();
+
+      final tab = tester.widget<ProfileTabVaccines>(
+        find.byType(ProfileTabVaccines),
+      );
+      tab.onAdd();
+      await tester.pumpAndSettle();
+      expect(find.byType(AddVaccineScreen), findsOneWidget);
+
+      Navigator.of(tester.element(find.byType(AddVaccineScreen))).pop([
+        VaccinationRecordItem(
+          date: '2026',
+          vaccineName: 'BCG',
+          vaccineCode: 'BCG',
+          dose: 1,
+          administratedBy: 'Enfermera',
+          administratedAt: '2026',
+        ),
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AddVaccineScreen), findsNothing);
+    });
+
+    testWidgets('120. Cancelar la pantalla de agregar vacuna no agrega nada', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record(), role: UserRole.nurse);
+      await tester.tap(find.textContaining('Vacunas'));
+      await tester.pumpAndSettle();
+
+      final tab = tester.widget<ProfileTabVaccines>(
+        find.byType(ProfileTabVaccines),
+      );
+      tab.onAdd();
+      await tester.pumpAndSettle();
+
+      Navigator.of(tester.element(find.byType(AddVaccineScreen))).pop(null);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AddVaccineScreen), findsNothing);
+    });
+
+    testWidgets('121. readOnly impide navegar a agregar consulta o vacuna', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record(), readOnly: true);
+      await tester.tap(find.textContaining('Consultas'));
+      await tester.pumpAndSettle();
+
+      final consultTab = tester.widget<ProfileTabConsultations>(
+        find.byType(ProfileTabConsultations),
+      );
+      consultTab.onAdd();
+      await tester.pumpAndSettle();
+      expect(find.byType(AddConsultationScreen), findsNothing);
+
+      await tester.tap(find.textContaining('Vacunas'));
+      await tester.pumpAndSettle();
+
+      final vaccineTab = tester.widget<ProfileTabVaccines>(
+        find.byType(ProfileTabVaccines),
+      );
+      vaccineTab.onAdd();
+      await tester.pumpAndSettle();
+      expect(find.byType(AddVaccineScreen), findsNothing);
     });
   });
 }
