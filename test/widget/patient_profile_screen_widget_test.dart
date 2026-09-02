@@ -136,9 +136,13 @@ class _FaultyLocalDatabase extends LocalDatabase {
     : _memoryStore = store,
       super.forTesting(
         forceWeb: true,
-        webGet: (key) => store[key],
-        webSet: (key, value) => store[key] = value,
-        webRemove: (key) => store.remove(key),
+        webGet: (key) async => store[key],
+        webSet: (key, value) async {
+          store[key] = value;
+        },
+        webRemove: (key) async {
+          store.remove(key);
+        },
       );
 
   final Map<String, String> _memoryStore;
@@ -1906,7 +1910,8 @@ void main() {
           tester
               .widget<EditAddressSheet>(find.byType(EditAddressSheet))
               .onConfirm(Address(city: 'Cali', state: 'Valle'));
-          await Future<void>.delayed(const Duration(milliseconds: 200));
+          // Permite que la pila asíncrona (Future) complete las operaciones de DB y SyncEngine
+          await Future<void>.delayed(const Duration(milliseconds: 500));
         });
         await tester.pumpAndSettle();
 

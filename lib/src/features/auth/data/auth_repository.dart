@@ -25,7 +25,7 @@ class AuthRepository implements TokenProvider {
                accessibility: KeychainAccessibility.first_unlock_this_device,
              ),
              aOptions: AndroidOptions(),
-             webOptions: WebOptions(useSessionStorage: true),
+             webOptions: WebOptions(useSessionStorage: false),
            ),
        _localDb = localDatabase ?? LocalDatabase.instance;
 

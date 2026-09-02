@@ -117,6 +117,13 @@ class FakeLocalDatabase implements LocalDatabase {
       <LocalPatientEntry>[];
 
   @override
+  Future<List<MapEntry<String, String>>> getWebQuarantinedEntries() async =>
+      <MapEntry<String, String>>[];
+
+  @override
+  List<String> get webQuarantinedKeysForTesting => <String>[];
+
+  @override
   Future<int> getUnsyncedCount({String? ownerUserId}) async => pendingCount;
 
   @override
