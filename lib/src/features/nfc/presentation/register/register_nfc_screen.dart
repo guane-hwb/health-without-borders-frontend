@@ -241,15 +241,15 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       return;
     }
 
-    final nfcKey = await scope.authRepository.getNfcEncryptionKey();
+    final keyring = await scope.authRepository.getNfcKeyring();
     if (!mounted) return;
 
-    if (nfcKey == null || nfcKey.isEmpty) {
+    if (keyring == null || !keyring.canWrite) {
       _completeFinalize();
       return;
     }
 
-    final codec = NfcPayloadCodec(hexKey: nfcKey);
+    final codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
     final s = AppStrings.of(context);
     final isEs = s.isEs;
 

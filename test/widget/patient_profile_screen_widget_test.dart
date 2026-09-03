@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
@@ -123,6 +124,13 @@ class _FakeAuthRepository extends AuthRepository {
     if (keyDelay != null) await Future<void>.delayed(keyDelay!);
     return key ??
         '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF';
+  }
+
+  @override
+  Future<NfcKeyring?> getNfcKeyring() async {
+    final String? hex = await getNfcEncryptionKey();
+    if (hex == null || hex.isEmpty) return null;
+    return NfcKeyring.single(hex);
   }
 }
 
@@ -1458,7 +1466,7 @@ void main() {
             ({
               required context,
               required record,
-              required nfcKey,
+              required keyring,
               required patientChipDirty,
               required guardianChipDirty,
             }) async => true;
@@ -1479,7 +1487,7 @@ void main() {
           ({
             required context,
             required record,
-            required nfcKey,
+            required keyring,
             required patientChipDirty,
             required guardianChipDirty,
           }) async => false;
@@ -1500,7 +1508,7 @@ void main() {
             ({
               required context,
               required record,
-              required nfcKey,
+              required keyring,
               required patientChipDirty,
               required guardianChipDirty,
             }) async {
