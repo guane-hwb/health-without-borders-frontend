@@ -8,6 +8,8 @@ import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/hwb_logo.dart';
 import '../../home/presentation/home_screen.dart';
+import '../data/auth_repository.dart';
+import 'foreign_data_reconciliation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.showSessionExpired = false});
@@ -324,6 +326,16 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
+      );
+    } on ForeignPendingDataException catch (e) {
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ForeignDataReconciliationScreen(
+            authRepository: AppScope.of(context).authRepository,
+            exception: e,
+          ),
+        ),
       );
     } on ApiException catch (e) {
       if (!mounted) return;

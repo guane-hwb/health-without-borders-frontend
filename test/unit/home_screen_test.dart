@@ -1,4 +1,4 @@
-// test/unit/features/home/home_screen_test.dart
+// test/unit/home_screen_test.dart
 //
 // Unit tests for HomeScreen.
 // Covers the pure logic that does NOT require the widget tree:
@@ -74,6 +74,9 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   bool get hasToken => session != null;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

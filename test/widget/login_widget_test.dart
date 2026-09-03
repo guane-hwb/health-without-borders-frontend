@@ -87,6 +87,9 @@ class FakeAuthRepository implements AuthRepository {
   @override
   ValueNotifier<UserSession?> get sessionNotifier =>
       ValueNotifier<UserSession?>(_session);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

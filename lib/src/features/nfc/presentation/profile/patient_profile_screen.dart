@@ -370,38 +370,64 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   Future<void> _saveAndPendingSync() async {
     final scope = AppScope.of(context);
+
+    var currentUser = scope.authRepository.currentUser;
+    currentUser ??= await scope.authRepository.restoreSession();
+
+    if (currentUser == null) {
+      AppLogger.e(
+        'No se pudo guardar ni sincronizar: no hay usuario autenticado.',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Sesión no activa. Por favor, vuelve a iniciar sesión.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     try {
-      await scope.localDatabase.savePatient(_draft);
+      await scope.localDatabase.savePatient(
+        _draft,
+        ownerUserId: currentUser.id,
+        organizationId: currentUser.organizationId,
+      );
+
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
-      if (mounted && _lastSaveFailed) {
-        setState(() => _lastSaveFailed = false);
-      }
 
       if (_hasInternet) {
         await _sync(silent: true);
       }
     } catch (e, stack) {
       AppLogger.e(
-        'Fallo al persistir localmente el borrador del paciente',
+        'Error guardando en local_database',
         error: e,
         stackTrace: stack,
       );
       if (!mounted) return;
+
       setState(() => _lastSaveFailed = true);
+
       final isEs = AppStrings.of(context).isEs;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             isEs
-                ? 'No se pudo guardar en el dispositivo. El cambio NO está a salvo.'
-                : 'Could not save on this device. The change is NOT safe.',
+                ? 'El cambio NO está a salvo en este dispositivo. Si sale, se perderá.'
+                : 'The change is NOT safe on this device. If you exit, it will be lost.',
           ),
           backgroundColor: AppColors.error,
-          duration: const Duration(seconds: 10),
           action: SnackBarAction(
-            label: AppStrings.of(context).retry,
-            textColor: AppColors.white,
-            onPressed: _saveAndPendingSync,
+            label: isEs ? 'Reintentar' : 'Retry',
+            textColor: Colors.white,
+            onPressed: () {
+              setState(() => _lastSaveFailed = false);
+              _saveAndPendingSync();
+            },
           ),
         ),
       );
@@ -512,7 +538,15 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     }
     try {
       final scope = AppScope.of(context);
-      await scope.localDatabase.savePatient(_draft);
+      final currentUser = scope.authRepository.currentUser;
+
+      // Incluir ownerUserId y organizationId para evitar desatribución
+      await scope.localDatabase.savePatient(
+        _draft,
+        ownerUserId: currentUser?.id,
+        organizationId: currentUser?.organizationId,
+      );
+
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
       final bool ok = await scope.syncEngine.syncAll();
       if (!mounted) return;

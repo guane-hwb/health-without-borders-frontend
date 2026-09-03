@@ -128,6 +128,18 @@ class SyncEngine {
   // ── Sync logic ────────────────────────────────────────────────────────────
 
   Future<bool> syncAll() async {
+    // getUnsyncedRecords/pendingEmergencyAccessLogs treat ownerUserId: null
+    // as "no filter — return everything", which is meant for admin/export
+    // tooling, not for an unauthenticated sync cycle. Without a resolved
+    // user there is no safe scope to sync under, so bail out rather than
+    // risk uploading another user's still-pending queue under no identity
+    // (or a stale cached token) — see
+    // v3-cola-sin-propietario-se-sincroniza-con-otro-usuario.
+    if (_currentUserId == null) {
+      AppLogger.d('syncAll omitido: no hay sesión activa.');
+      return false;
+    }
+
     await refreshPendingCount();
     await _syncEmergencyLogs();
 
@@ -328,8 +340,12 @@ class SyncEngine {
   }
 
   Future<void> _syncEmergencyLogs() async {
+    final ownerUserId = _currentUserId;
+    if (ownerUserId == null) return;
     try {
-      final pending = await _localDb.pendingEmergencyAccessLogs();
+      final pending = await _localDb.pendingEmergencyAccessLogs(
+        ownerUserId: ownerUserId,
+      );
       if (pending.isEmpty) return;
 
       await _patientRepo.reportEmergencyAccess(pending);

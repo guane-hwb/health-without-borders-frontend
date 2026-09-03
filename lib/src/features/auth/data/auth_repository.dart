@@ -9,6 +9,26 @@ import '../../../core/storage/local_database.dart';
 import '../../../core/utils/app_logger.dart';
 import '../domain/user_session.dart';
 
+class ForeignPendingDataException implements Exception {
+  ForeignPendingDataException({
+    required this.previousOwnerUserId,
+    required this.newUserId,
+    required this.pendingPatients,
+    required this.pendingEmergencyLogs,
+  });
+
+  final String previousOwnerUserId;
+  final String newUserId;
+  final int pendingPatients;
+  final int pendingEmergencyLogs;
+
+  @override
+  String toString() =>
+      'ForeignPendingDataException(previousOwner: $previousOwnerUserId, '
+      'newUser: $newUserId, pendingPatients: $pendingPatients, '
+      'pendingEmergencyLogs: $pendingEmergencyLogs)';
+}
+
 class AuthRepository implements TokenProvider {
   AuthRepository({
     required ApiClient apiClient,
@@ -66,6 +86,8 @@ class AuthRepository implements TokenProvider {
 
   UserSession? get currentUser => _session;
 
+  VoidCallback? onSessionInvalidated;
+
   void _updateSession(UserSession? session) {
     _session = session;
     _sessionNotifier.value = session;
@@ -87,6 +109,38 @@ class AuthRepository implements TokenProvider {
     final String? accessToken = tokenData['access_token']?.toString();
     if (accessToken == null || accessToken.isEmpty) {
       throw ApiException('Login did not return an access token.');
+    }
+
+    final UserSession fetchedSession = await _fetchMe(accessToken);
+
+    String? lastUserId;
+    try {
+      lastUserId = await _secureStorage.read(key: _lastUserIdKey);
+    } catch (_) {}
+
+    if (lastUserId != null &&
+        lastUserId.isNotEmpty &&
+        lastUserId != fetchedSession.id) {
+      final int pendingPatients = await _localDb.getUnsyncedCount();
+      final int pendingEmergencyLogs = await _localDb
+          .getUnsyncedEmergencyLogCount();
+      if (pendingPatients == 0 && pendingEmergencyLogs == 0) {
+        await _localDb.clearAll();
+        await _localDb.destroyEncryptionKey();
+      } else {
+        AppLogger.e(
+          'Login bloqueado: cambio de usuario detectado (de $lastUserId a '
+          '${fetchedSession.id}) con $pendingPatients registro(s) y '
+          '$pendingEmergencyLogs acceso(s) de emergencia pendientes de '
+          '$lastUserId aún en el dispositivo.',
+        );
+        throw ForeignPendingDataException(
+          previousOwnerUserId: lastUserId,
+          newUserId: fetchedSession.id,
+          pendingPatients: pendingPatients,
+          pendingEmergencyLogs: pendingEmergencyLogs,
+        );
+      }
     }
 
     _cachedToken = accessToken;
@@ -113,32 +167,7 @@ class AuthRepository implements TokenProvider {
       }
     }
 
-    String? lastUserId;
-    try {
-      lastUserId = await _secureStorage.read(key: _lastUserIdKey);
-    } catch (_) {}
-
-    final fetchedSession = await _fetchMe(accessToken);
     _updateSession(fetchedSession);
-
-    if (lastUserId != null &&
-        lastUserId.isNotEmpty &&
-        lastUserId != _session!.id) {
-      final int pendingPatients = await _localDb.getUnsyncedCount();
-      final int pendingEmergencyLogs = await _localDb
-          .getUnsyncedEmergencyLogCount();
-      if (pendingPatients == 0 && pendingEmergencyLogs == 0) {
-        await _localDb.clearAll();
-        await _localDb.destroyEncryptionKey();
-      } else {
-        AppLogger.e(
-          'Cambio de usuario detectado (de $lastUserId a ${_session!.id}). '
-          'Quedan $pendingPatients registro(s) y $pendingEmergencyLogs '
-          'acceso(s) de emergencia pendiente(s) en el dispositivo: '
-          'se conservan sin borrar.',
-        );
-      }
-    }
 
     if (_session!.id.isNotEmpty) {
       await _persistSession(_session!);
@@ -148,6 +177,20 @@ class AuthRepository implements TokenProvider {
     }
 
     return _session!;
+  }
+
+  Future<List<LocalPatientEntry>> pendingForeignRecordsForReview() =>
+      _localDb.getUnsyncedRecords();
+
+  Future<List<Map<String, Object?>>> pendingForeignEmergencyLogsForReview() =>
+      _localDb.pendingEmergencyAccessLogs();
+
+  Future<void> discardForeignPendingData() async {
+    await _localDb.clearAll();
+    await _localDb.destroyEncryptionKey();
+    try {
+      await _secureStorage.delete(key: _lastUserIdKey);
+    } catch (_) {}
   }
 
   // ── Session ───────────────────────────────────────────────────────────────
@@ -276,6 +319,16 @@ class AuthRepository implements TokenProvider {
   }
 
   Future<void> clearSession() async {
+    try {
+      onSessionInvalidated?.call();
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error deteniendo el motor de sync al invalidar la sesión',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+
     _cachedToken = null;
     _cachedRefreshToken = null;
     _cachedNfcKey = null;

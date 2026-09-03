@@ -231,6 +231,12 @@ class _FakeSyncEngine extends SyncEngine {
     if (shouldThrow) throw Exception('Error de sincronización simulado');
     return true;
   }
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  void stop() {}
 }
 
 class _LocaleWrapper extends StatefulWidget {
@@ -1899,23 +1905,37 @@ void main() {
       '98. Guardado exitoso con conexión dispara sincronización silenciosa',
       (tester) async {
         late _Fakes fakes;
+
         await _pumpScreen(tester, _record(), onFakesReady: (f) => fakes = f);
+        await tester.pumpAndSettle();
+
+        final initialCalls = fakes.syncEngine.callCount;
+
+        // Abrir modal de dirección
         final summary = tester.widget<ProfileTabSummary>(
           find.byType(ProfileTabSummary),
         );
         summary.onEditAddress();
         await tester.pumpAndSettle();
 
-        await tester.runAsync(() async {
-          tester
-              .widget<EditAddressSheet>(find.byType(EditAddressSheet))
-              .onConfirm(Address(city: 'Cali', state: 'Valle'));
-          // Permite que la pila asíncrona (Future) complete las operaciones de DB y SyncEngine
-          await Future<void>.delayed(const Duration(milliseconds: 500));
-        });
+        // Confirmar formulario con datos nuevos
+        final sheet = tester.widget<EditAddressSheet>(
+          find.byType(EditAddressSheet),
+        );
+        sheet.onConfirm(
+          Address(
+            street: 'Calle Nueva 123',
+            city: 'Medellín',
+            state: 'Antioquia',
+          ),
+        );
+
+        // Bombeo directo de microtareas de Flutter para resolver _saveAndPendingSync
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
         await tester.pumpAndSettle();
 
-        expect(fakes.syncEngine.callCount, greaterThanOrEqualTo(1));
+        expect(fakes.syncEngine.callCount, greaterThan(initialCalls));
       },
     );
 

@@ -57,6 +57,7 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
   late final LocalDatabase _localDatabase = LocalDatabase.instance;
   late final SyncEngine _syncEngine = SyncEngine(
     patientRepository: _patientRepository,
+    authRepository: _authRepository,
     localDatabase: _localDatabase,
     reachability: _reachability,
   );
@@ -66,8 +67,13 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _apiClient.tokenProvider = _authRepository;
+    _authRepository.onSessionInvalidated = _syncEngine.stop;
     _authRepository.sessionExpired.addListener(_onSessionExpired);
-    _syncEngine.start();
+
+    _authRepository.restoreSession().then((_) {
+      _syncEngine.start();
+    });
+
     unawaited(NfcSessionManager.instance.attach());
   }
 

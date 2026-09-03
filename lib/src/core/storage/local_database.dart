@@ -76,26 +76,29 @@ class LocalDatabase {
   final Future<List<MapEntry<String, String>>> Function(String prefix) _webList;
   final Future<void> Function(String prefix) _webDeleteByPrefix;
 
+  static final Symbol _webLockZoneKey = const Symbol('LocalDatabase._webLock');
   Future<void> _webIoLock = Future<void>.value();
 
-  Future<T> _withWebLock<T>(Future<T> Function() action) {
-    final completer = Completer<T>();
+  Future<T> _withWebLock<T>(Future<T> Function() action) async {
+    if (Zone.current[_webLockZoneKey] == this) {
+      return await action();
+    }
+    final completer = Completer<void>();
     final previous = _webIoLock;
-    _webIoLock = previous.catchError((_) {}).then((_) async {
-      try {
-        completer.complete(await action());
-      } catch (e, stack) {
-        completer.completeError(e, stack);
-      }
-    });
-    return completer.future;
+    _webIoLock = completer.future;
+    try {
+      await previous.catchError((_) {});
+      return await runZoned(action, zoneValues: {_webLockZoneKey: this});
+    } finally {
+      completer.complete();
+    }
   }
 
   static const FlutterSecureStorage _defaultSecureStorage =
       FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: false));
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 8;
+  static const int _dbVersion = 9;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
@@ -589,6 +592,26 @@ class LocalDatabase {
             'TEXT',
           );
         }
+        if (oldVersion < 9) {
+          await _addColumnIfMissing(db, _table, 'owner_user_id', 'TEXT');
+          await _addColumnIfMissing(db, _table, 'organization_id', 'TEXT');
+          await _addColumnIfMissing(
+            db,
+            _emergencyLogTable,
+            'owner_user_id',
+            'TEXT',
+          );
+          await _addColumnIfMissing(
+            db,
+            _emergencyLogTable,
+            'organization_id',
+            'TEXT',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_emlog_owner ON '
+            '$_emergencyLogTable (owner_user_id)',
+          );
+        }
       },
     );
   }
@@ -626,9 +649,15 @@ class LocalDatabase {
         user_id       TEXT,
         reason        TEXT NOT NULL,
         occurred_at   TEXT NOT NULL,
-        is_synced     INTEGER NOT NULL DEFAULT 0
+        is_synced     INTEGER NOT NULL DEFAULT 0,
+        owner_user_id TEXT,
+        organization_id TEXT
       )
     ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_emlog_owner ON '
+      '$_emergencyLogTable (owner_user_id)',
+    );
   }
 
   Future<void> logEmergencyAccess({
@@ -636,6 +665,8 @@ class LocalDatabase {
     String? patientName,
     String? userId,
     String reason = 'guardian_absent_offline',
+    String? ownerUserId,
+    String? organizationId,
   }) async {
     final row = <String, Object?>{
       'client_event_id': const Uuid().v4(),
@@ -647,6 +678,8 @@ class LocalDatabase {
       'reason': reason,
       'occurred_at': DateTime.now().toIso8601String(),
       'is_synced': 0,
+      'owner_user_id': ownerUserId,
+      'organization_id': organizationId,
     };
     try {
       final db = await _database;
@@ -668,47 +701,68 @@ class LocalDatabase {
     }
   }
 
-  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs() async {
-    try {
-      final db = await _database;
-      final rows = db == null
-          ? (await _webAllLogRows())
-                .where(
-                  (Map<String, Object?> r) =>
-                      (r['is_synced'] as num?)?.toInt() == 0,
-                )
-                .toList()
-          : await db.query(_emergencyLogTable, where: 'is_synced = 0');
-
-      final out = <Map<String, Object?>>[];
-      for (final r in rows) {
-        final mutable = Map<String, Object?>.from(r);
-        final existingCid = mutable['client_event_id'] as String?;
-        if (existingCid == null || existingCid.isEmpty) {
-          final cid = const Uuid().v4();
-          mutable['client_event_id'] = cid;
-          await _persistEmergencyClientEventId(
-            (mutable['id'] as num?)?.toInt(),
-            cid,
+  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs({
+    String? ownerUserId,
+  }) async {
+    final db = await _database;
+    final rows = db == null
+        ? (await _webAllLogRows())
+              .where(
+                (Map<String, Object?> r) =>
+                    (r['is_synced'] as num?)?.toInt() == 0 &&
+                    (ownerUserId == null || r['owner_user_id'] == ownerUserId),
+              )
+              .toList()
+        : await db.query(
+            _emergencyLogTable,
+            where: ownerUserId != null
+                ? 'is_synced = 0 AND owner_user_id = ?'
+                : 'is_synced = 0',
+            whereArgs: ownerUserId != null ? [ownerUserId] : null,
           );
-        }
-        final name = mutable['patient_name'] as String?;
-        if (name != null && name.isNotEmpty) {
-          mutable['patient_name'] = await _decryptPayload(name);
-        }
-        final uId = mutable['user_id'] as String?;
-        if (uId != null && uId.isNotEmpty) {
-          mutable['user_id'] = await _decryptPayload(uId);
-        }
-        out.add(mutable);
+
+    final out = <Map<String, Object?>>[];
+    for (final r in rows) {
+      final mutable = Map<String, Object?>.from(r);
+      final existingCid = mutable['client_event_id'] as String?;
+      if (existingCid == null || existingCid.isEmpty) {
+        final cid = const Uuid().v4();
+        mutable['client_event_id'] = cid;
+        await _persistEmergencyClientEventId(
+          (mutable['id'] as num?)?.toInt(),
+          cid,
+        );
       }
-      return out;
-    } catch (e) {
-      AppLogger.e(
-        'Error obteniendo registros de emergencia no sincronizados: $e',
-      );
-      return const <Map<String, Object?>>[];
+      final name = mutable['patient_name'] as String?;
+      if (name != null && name.isNotEmpty) {
+        mutable['patient_name'] = await _decryptPayload(name);
+      }
+      final uId = mutable['user_id'] as String?;
+      if (uId != null && uId.isNotEmpty) {
+        mutable['user_id'] = await _decryptPayload(uId);
+      }
+      out.add(mutable);
     }
+    return out;
+  }
+
+  Future<int> getOrphanedEmergencyLogCount() async {
+    if (_isWeb) {
+      final logs = await _webAllLogRows();
+      return logs
+          .where(
+            (r) =>
+                ((r['is_synced'] as num?)?.toInt() ?? 0) == 0 &&
+                r['owner_user_id'] == null,
+          )
+          .length;
+    }
+    final db = await _database;
+    final result = await db!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $_emergencyLogTable '
+      'WHERE is_synced = 0 AND owner_user_id IS NULL',
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
   }
 
   Future<void> _persistEmergencyClientEventId(int? id, String cid) async {
@@ -773,6 +827,14 @@ class LocalDatabase {
     if (_isWeb) {
       await _withWebLock(() async {
         final previous = await _webGetPatient(record.patientId);
+        final effectiveOwner = ownerUserId ?? previous?['owner_user_id'];
+        if (effectiveOwner == null) {
+          AppLogger.e(
+            'savePatient(${record.patientId}) llamado sin ownerUserId: la fila '
+            'quedará sin propietario y no se sincronización ni se mostrará en '
+            'ninguna consulta filtrada por usuario hasta que se reconcilie.',
+          );
+        }
         if (previous != null) {
           createdAt = previous['created_at'] as String;
           revision = ((previous['revision'] as int?) ?? 0) + 1;
@@ -788,7 +850,7 @@ class LocalDatabase {
           'created_at': createdAt,
           'synced_at': null,
           'revision': revision,
-          'owner_user_id': ownerUserId ?? previous?['owner_user_id'],
+          'owner_user_id': effectiveOwner,
           'organization_id': organizationId ?? previous?['organization_id'],
           'pending_retired_reason':
               retiredDeviceReason ?? previous?['pending_retired_reason'],
@@ -824,6 +886,14 @@ class LocalDatabase {
       prevOwner ??= existing.first['owner_user_id'] as String?;
       prevOrg ??= existing.first['organization_id'] as String?;
       reason ??= existing.first['pending_retired_reason'] as String?;
+    }
+
+    if (prevOwner == null) {
+      AppLogger.e(
+        'savePatient(${record.patientId}) llamado sin ownerUserId: la fila '
+        'quedará sin propietario y no se sincronizará ni se mostrará en '
+        'ninguna consulta filtrada por usuario hasta que se reconcilie.',
+      );
     }
 
     final row = <String, dynamic>{
@@ -957,16 +1027,43 @@ class LocalDatabase {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
-  Future<int> getUnsyncedEmergencyLogCount() async {
+  Future<int> getUnsyncedEmergencyLogCount({String? ownerUserId}) async {
     if (_isWeb) {
       final logs = await _webAllLogRows();
       return logs
-          .where((r) => ((r['is_synced'] as num?)?.toInt() ?? 0) == 0)
+          .where(
+            (r) =>
+                ((r['is_synced'] as num?)?.toInt() ?? 0) == 0 &&
+                (ownerUserId == null ||
+                    r['owner_user_id'] == null ||
+                    r['owner_user_id'] == ownerUserId),
+          )
           .length;
     }
     final db = await _database;
     final result = await db!.rawQuery(
-      'SELECT COUNT(*) as cnt FROM $_emergencyLogTable WHERE is_synced = 0',
+      ownerUserId != null
+          ? 'SELECT COUNT(*) as cnt FROM $_emergencyLogTable '
+                'WHERE is_synced = 0 AND (owner_user_id = ? OR owner_user_id IS NULL)'
+          : 'SELECT COUNT(*) as cnt FROM $_emergencyLogTable WHERE is_synced = 0',
+      ownerUserId != null ? [ownerUserId] : [],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<int> getOrphanedPendingCount() async {
+    if (_isWeb) {
+      final store = await _webAllPatients();
+      return store
+          .where(
+            (r) => (r['is_synced'] as int) == 0 && r['owner_user_id'] == null,
+          )
+          .length;
+    }
+    final db = await _database;
+    final result = await db!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $_table '
+      'WHERE is_synced = 0 AND owner_user_id IS NULL',
     );
     return Sqflite.firstIntValue(result) ?? 0;
   }

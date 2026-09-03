@@ -689,9 +689,7 @@ void main() {
         () async {
           await localDb.savePatient(_buildRecord(patientId: 'p-legacy'));
 
-          final forAnyUser = await localDb.getAllRecords(
-            ownerUserId: 'cualquier-usuario',
-          );
+          final forAnyUser = await localDb.getAllRecords();
 
           expect(forAnyUser.map((e) => e.patientId), contains('p-legacy'));
         },
@@ -1462,13 +1460,15 @@ void main() {
     });
 
     test(
-      'pendingEmergencyAccessLogs devuelve lista vacía si la tabla falla',
+      'pendingEmergencyAccessLogs propaga el error si la tabla no existe',
       () async {
         final db = await rawConnection();
         await db.execute('DROP TABLE emergency_access_log');
 
-        final result = await localDb.pendingEmergencyAccessLogs();
-        expect(result, isEmpty);
+        await expectLater(
+          localDb.pendingEmergencyAccessLogs(),
+          throwsA(anything),
+        );
       },
     );
   });
@@ -1663,9 +1663,12 @@ void main() {
     );
 
     test(
-      'getUnsyncedRecords(ownerUserId) en Web incluye registros heredados sin owner',
+      'getUnsyncedRecords(ownerUserId) en Web no incluye registros de otro owner',
       () async {
-        await localDb.savePatient(_buildRecord(patientId: 'w-unsync-legacy'));
+        await localDb.savePatient(
+          _buildRecord(patientId: 'w-unsync-legacy'),
+          ownerUserId: 'cualquier-usuario',
+        );
         await localDb.savePatient(
           _buildRecord(patientId: 'w-unsync-other'),
           ownerUserId: 'otro-usuario',
@@ -1762,11 +1765,6 @@ void main() {
 
     test('lectura sobre store Web corrupto lanza WebStoreCorruptionException y '
         'previene sobrescritura', () async {
-      // webGet devuelve el mismo blob corrupto para cualquier clave
-      // (incluida la del propio paciente). webSet nunca debe recibir la
-      // clave original del paciente: sólo se le permite escribir la copia
-      // de cuarentena; si se le pide sobreescribir la clave real, la
-      // prueba debe fallar.
       final quarantineWrites = <String, String>{};
       final db = LocalDatabase.forTesting(
         secureStorage: mockStorage,
@@ -1785,8 +1783,6 @@ void main() {
         throwsA(isA<WebStoreCorruptionException>()),
       );
 
-      // El blob original se preservó intacto bajo una clave de cuarentena
-      // en vez de perderse.
       expect(quarantineWrites.values, contains('NOT_VALID_JSON{{{'));
     });
 
@@ -1807,15 +1803,10 @@ void main() {
 
         await db.savePatient(_buildRecord(patientId: 'w-ok-1'));
         await db.savePatient(_buildRecord(patientId: 'w-ok-2'));
-        // Simula corrupción de un único registro ya guardado (p. ej. un
-        // fallo de escritura a medias en IndexedDB).
         webBackend['hwb_web_patient::w-ok-1'] = 'NOT_VALID_JSON{{{';
 
         final all = await db.getAllRecords();
 
-        // El registro sano sigue disponible; el corrupto se excluye de la
-        // lista pero su blob original NO se borra ni se sobrescribe: queda
-        // preservado (bajo su clave original y/o una copia de cuarentena).
         expect(all.map((e) => e.patientId), equals(['w-ok-2']));
         expect(
           webBackend['hwb_web_patient::w-ok-1'],

@@ -22,15 +22,15 @@ class _Step5State extends State<Step5Review> {
   bool _saving = false;
 
   Future<void> _confirm() async {
+    if (_saving) return;
     setState(() => _saving = true);
     try {
       await widget.onConfirm();
-    } catch (e) {
+    } catch (_) {
+      rethrow;
+    } finally {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     }
   }

@@ -82,6 +82,20 @@ class FakeAuthRepository implements AuthRepository {
   @override
   ValueNotifier<UserSession?> get sessionNotifier =>
       ValueNotifier<UserSession?>(null);
+
+  @override
+  VoidCallback? onSessionInvalidated;
+
+  @override
+  Future<void> discardForeignPendingData() async {}
+
+  @override
+  Future<List<Map<String, Object?>>>
+  pendingForeignEmergencyLogsForReview() async => <Map<String, Object?>>[];
+
+  @override
+  Future<List<LocalPatientEntry>> pendingForeignRecordsForReview() async =>
+      <LocalPatientEntry>[];
 }
 
 class FakeLocalDatabase implements LocalDatabase {
@@ -91,14 +105,23 @@ class FakeLocalDatabase implements LocalDatabase {
     String? patientName,
     String? userId,
     String reason = 'guardian_absent_offline',
+    String? ownerUserId,
+    String? organizationId,
   }) async {}
 
   @override
-  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs() async =>
-      <Map<String, Object?>>[];
+  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs({
+    String? ownerUserId,
+  }) async => <Map<String, Object?>>[];
 
   @override
-  Future<int> getUnsyncedEmergencyLogCount() async => 0;
+  Future<int> getUnsyncedEmergencyLogCount({String? ownerUserId}) async => 0;
+
+  @override
+  Future<int> getOrphanedEmergencyLogCount() async => 0;
+
+  @override
+  Future<int> getOrphanedPendingCount() async => 0;
 
   @override
   Future<void> clearAll() async {}
@@ -611,7 +634,7 @@ void main() {
     });
   });
 
-  // ── Group 6: Location (ES / EN)3456 ────────────────────────────────────
+  // ── Group 6: Location (ES / EN) ──────────────────────────────────────────
   group('EditGuardianScreen — localización', () {
     testWidgets('en locale ES muestra "Guardar"', (tester) async {
       await tester.pumpWidget(

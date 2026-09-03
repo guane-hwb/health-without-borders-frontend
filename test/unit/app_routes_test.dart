@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
+import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 import 'package:health_without_borders_frontend/src/core/routes/app_routes.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
@@ -53,17 +54,21 @@ Widget buildTestableApp({
   final syncEngine = MockSyncEngine();
   final reachability = MockReachability();
 
-  return AppScope(
-    authRepository: authRepository,
-    userRepository: userRepo,
-    patientRepository: patientRepo,
-    statsRepository: statsRepo,
-    localDatabase: localDb,
-    syncEngine: syncEngine,
-    reachability: reachability,
-    child: MaterialApp(
-      initialRoute: initialRoute,
-      onGenerateRoute: AppRoutes.onGenerateRoute,
+  return AppLocale(
+    locale: 'es',
+    setLocale: (_) {},
+    child: AppScope(
+      authRepository: authRepository,
+      userRepository: userRepo,
+      patientRepository: patientRepo,
+      statsRepository: statsRepo,
+      localDatabase: localDb,
+      syncEngine: syncEngine,
+      reachability: reachability,
+      child: MaterialApp(
+        initialRoute: initialRoute,
+        onGenerateRoute: AppRoutes.onGenerateRoute,
+      ),
     ),
   );
 }
@@ -73,6 +78,9 @@ void main() {
 
   setUp(() {
     mockAuthRepository = MockAuthRepository();
+    when(
+      () => mockAuthRepository.sessionNotifier,
+    ).thenReturn(ValueNotifier<UserSession?>(null));
   });
 
   group('AppRoutes Guard Tests', () {
@@ -80,6 +88,9 @@ void main() {
       tester,
     ) async {
       when(() => mockAuthRepository.currentUser).thenReturn(null);
+      when(
+        () => mockAuthRepository.sessionNotifier,
+      ).thenReturn(ValueNotifier<UserSession?>(null));
 
       await tester.pumpWidget(
         buildTestableApp(
@@ -98,6 +109,9 @@ void main() {
       (tester) async {
         final session = _createSession(UserRole.doctor);
         when(() => mockAuthRepository.currentUser).thenReturn(session);
+        when(
+          () => mockAuthRepository.sessionNotifier,
+        ).thenReturn(ValueNotifier<UserSession?>(session));
 
         await tester.pumpWidget(
           buildTestableApp(
@@ -117,6 +131,9 @@ void main() {
     ) async {
       final session = _createSession(UserRole.orgAdmin);
       when(() => mockAuthRepository.currentUser).thenReturn(session);
+      when(
+        () => mockAuthRepository.sessionNotifier,
+      ).thenReturn(ValueNotifier<UserSession?>(session));
 
       await tester.pumpWidget(
         buildTestableApp(
@@ -134,6 +151,9 @@ void main() {
       (tester) async {
         final session = _createSession(UserRole.superadmin);
         when(() => mockAuthRepository.currentUser).thenReturn(session);
+        when(
+          () => mockAuthRepository.sessionNotifier,
+        ).thenReturn(ValueNotifier<UserSession?>(session));
 
         await tester.pumpWidget(
           buildTestableApp(

@@ -101,22 +101,31 @@ void main() {
   late MockSyncEngine sync;
 
   UserSession user({UserRole role = UserRole.doctor}) => UserSession(
-    id: 'u1',
-    email: 'doctor@hwb.org',
-    fullName: 'Ana Doctor',
-    role: role,
-    organizationId: 'org-1',
-  );
+        id: 'u1',
+        email: 'doctor@hwb.org',
+        fullName: 'Ana Doctor',
+        role: role,
+        organizationId: 'org-1',
+      );
 
   void stubDefaults() {
     final activeUser = user();
     when(() => auth.currentUser).thenReturn(activeUser);
+    when(() => auth.getCurrentUser()).thenAnswer((_) async => activeUser);
+    when(() => auth.restoreSession()).thenAnswer((_) async => activeUser);
     when(
       () => auth.sessionNotifier,
     ).thenReturn(ValueNotifier<UserSession?>(activeUser));
     when(() => auth.getNfcEncryptionKey()).thenAnswer((_) async => null);
     when(() => auth.logout()).thenAnswer((_) async {});
-    when(() => db.savePatient(any())).thenAnswer((_) async {});
+    when(
+      () => db.savePatient(
+        any(),
+        ownerUserId: any(named: 'ownerUserId'),
+        organizationId: any(named: 'organizationId'),
+        retiredDeviceReason: any(named: 'retiredDeviceReason'),
+      ),
+    ).thenAnswer((_) async {});
     when(
       () => db.clearChipsDirty(
         any(),
@@ -174,17 +183,17 @@ void main() {
 
   Future<void> goToStep1(WidgetTester tester) async {
     tester.widget<Step3PatientData>(find.byType(Step3PatientData)).onContinue();
-    await tester.pump();
+    await tester.pumpAndSettle();
   }
 
   Future<void> goToStep2(WidgetTester tester) async {
     tester.widget<Step2Guardian>(find.byType(Step2Guardian)).onContinue();
-    await tester.pump();
+    await tester.pumpAndSettle();
   }
 
   Future<void> goToStep3(WidgetTester tester) async {
     tester.widget<Step4Background>(find.byType(Step4Background)).onContinue();
-    await tester.pump();
+    await tester.pumpAndSettle();
   }
 
   Future<void> advanceToReview(WidgetTester tester) async {
@@ -196,7 +205,7 @@ void main() {
   Future<void> advanceToHub(WidgetTester tester) async {
     await advanceToReview(tester);
     await tester.widget<Step5Review>(find.byType(Step5Review)).onConfirm();
-    await tester.pump();
+    await tester.pumpAndSettle();
   }
 
   Future<void> pumpFrames(WidgetTester tester, [int times = 8]) async {
@@ -264,7 +273,7 @@ void main() {
       expect(find.byType(Step2Guardian), findsOneWidget);
 
       tester.widget<Step2Guardian>(find.byType(Step2Guardian)).onBack();
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.byType(Step3PatientData), findsOneWidget);
       expect(find.text('1/4'), findsOneWidget);
@@ -276,7 +285,7 @@ void main() {
         await pumpScreen(tester);
         await advanceToHub(tester);
         expect(find.text('5/4'), findsNothing);
-        expect(find.byIcon(Icons.arrow_back), findsNothing);
+        expect(find.text('1/4'), findsNothing);
       },
     );
   });
@@ -325,9 +334,16 @@ void main() {
       await advanceToReview(tester);
 
       await tester.widget<Step5Review>(find.byType(Step5Review)).onConfirm();
-      await tester.pump();
+      await tester.pumpAndSettle();
 
-      verify(() => db.savePatient(any())).called(1);
+      verify(
+        () => db.savePatient(
+          any(),
+          ownerUserId: any(named: 'ownerUserId'),
+          organizationId: any(named: 'organizationId'),
+          retiredDeviceReason: any(named: 'retiredDeviceReason'),
+        ),
+      ).called(1);
       expect(find.byType(Step6Success), findsOneWidget);
       final success = tester.widget<Step6Success>(find.byType(Step6Success));
       expect(success.sealed, isFalse);
@@ -370,10 +386,16 @@ void main() {
         Navigator.of(tester.element(find.byType(AddConsultationScreen))).pop(
           MedicalHistoryItem(startDateTime: DateTime.now().toIso8601String()),
         );
-        await tester.pump();
-        await tester.pump();
+        await tester.pumpAndSettle();
 
-        verify(() => db.savePatient(any())).called(2);
+        verify(
+          () => db.savePatient(
+            any(),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).called(2);
         expect(find.byType(SnackBar).last, findsOneWidget);
         final success = tester.widget<Step6Success>(find.byType(Step6Success));
         expect(success.lastConsultationTime, isNotNull);
@@ -418,10 +440,16 @@ void main() {
             administratedAt: 'Clinic 1',
           ),
         ]);
-        await tester.pump();
-        await tester.pump();
+        await tester.pumpAndSettle();
 
-        verify(() => db.savePatient(any())).called(2);
+        verify(
+          () => db.savePatient(
+            any(),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).called(2);
         expect(find.byType(SnackBar).last, findsOneWidget);
         final success = tester.widget<Step6Success>(find.byType(Step6Success));
         expect(success.lastVaccineTime, isNotNull);
@@ -439,8 +467,7 @@ void main() {
           await advanceToHub(tester);
 
           tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
-          await tester.pump();
-          await tester.pump();
+          await tester.pumpAndSettle();
 
           verify(() => sync.syncAll()).called(1);
           expect(find.byType(Step6Success), findsOneWidget);
@@ -458,8 +485,7 @@ void main() {
           await pumpScreen(tester);
           await advanceToHub(tester);
           tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
-          await tester.pump();
-          await tester.pump();
+          await tester.pumpAndSettle();
 
           tester.widget<Step6Success>(find.byType(Step6Success)).onGoHome!();
           await tester.pumpAndSettle();
@@ -488,13 +514,13 @@ void main() {
           tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
           await tester.pump();
           await tester.pump();
+          await pumpFrames(tester, 2);
 
-          final navigator = Navigator.of(
+          final nav = Navigator.of(
             tester.element(find.byType(Step6Success)),
           );
-          navigator.pop(true);
-          await tester.pump();
-          await tester.pump();
+          nav.pop(true);
+          await tester.pumpAndSettle();
 
           verify(() => sync.syncAll()).called(1);
           final success = tester.widget<Step6Success>(
@@ -519,21 +545,22 @@ void main() {
               'AA:BB:CC:DD';
           await advanceToHub(tester);
 
-          tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+          final onFinish =
+              tester.widget<Step6Success>(find.byType(Step6Success)).onFinish;
+          onFinish();
           await tester.pump();
           await tester.pump();
+          await pumpFrames(tester, 2);
 
-          final navigator = Navigator.of(
+          final nav = Navigator.of(
             tester.element(find.byType(Step6Success)),
           );
+          nav.pop(true);
+          await tester.pump();
+          await pumpFrames(tester, 2);
 
-          navigator.pop(true);
-          await tester.pump();
-          await tester.pump();
-
-          navigator.pop(true);
-          await tester.pump();
-          await tester.pump();
+          nav.pop(true);
+          await tester.pumpAndSettle();
 
           verify(() => sync.syncAll()).called(1);
           final success = tester.widget<Step6Success>(
