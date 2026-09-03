@@ -4,8 +4,10 @@
 // Pipeline: JSON → CBOR → DEFLATE → AES-256-GCM  (encode)
 //           AES-256-GCM → INFLATE → CBOR → JSON   (decode)
 //
-// The AES-256 key is provided by the backend (per-organization)
-// and stored in FlutterSecureStorage on the device.
+// The AES-256 keys are provided by the backend as a versioned keyring (see
+// NfcKeyring). Encoded payloads carry a short header naming the key version
+// they were encrypted with, so a reader can pick the right key out of the ring
+// and old tags stay readable while a rotation is in progress.
 
 import 'dart:io' show ZLibEncoder, ZLibDecoder;
 import 'dart:math';
@@ -14,31 +16,96 @@ import 'dart:typed_data';
 import 'package:cbor/cbor.dart' as cbor;
 import 'package:cryptography/cryptography.dart' as crypto;
 
+import 'nfc_keyring.dart';
+
 /// Overhead added by AES-256-GCM: 12-byte nonce + 16-byte auth tag = 28 bytes.
 const int _kAesGcmOverhead = 28;
 const int _kNonceLength = 12;
 const int _kTagLength = 16;
 
+/// Magic bytes that open a versioned payload: ASCII 'H','W'.
+const int _kMagic0 = 0x48;
+const int _kMagic1 = 0x57;
+
+/// Versioned wire header: two magic bytes plus one key-version byte.
+const int _kHeaderLength = 3;
+
+/// Highest key version representable in the single-byte header.
+const int kMaxNfcKeyVersion = 255;
+
 /// Encodes and decodes NFC payloads using the HWB pipeline:
 ///   JSON Map → CBOR → DEFLATE (zlib level 9) → AES-256-GCM
 ///
+/// Wire format written by [encode]:
+///   ['H']['W'][key_version][12-byte nonce][ciphertext][16-byte auth tag]
+///
+/// [decode] also reads the pre-versioning format (no header, single global
+/// key), so wristbands written before key versioning keep working.
+///
 /// Usage:
 /// ```dart
-/// final codec = NfcPayloadCodec(hexKey: 'abcdef0123456789...');
+/// final codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
 /// final encrypted = await codec.encode(patientTriageMap);
 /// final decrypted = await codec.decode(encrypted);
 /// ```
 class NfcPayloadCodec {
-  NfcPayloadCodec({required String hexKey}) : _keyBytes = _hexToBytes(hexKey) {
-    if (_keyBytes.length != 32) {
-      throw ArgumentError(
-        'AES-256 key must be exactly 32 bytes (64 hex chars). '
-        'Got ${_keyBytes.length} bytes.',
-      );
+  /// Single-key codec. Retained for the legacy call path and tests; equivalent
+  /// to a keyring holding just [keyVersion].
+  NfcPayloadCodec({
+    required String hexKey,
+    int keyVersion = kLegacyNfcKeyVersion,
+  }) : this.fromKeyring(
+         keyring: NfcKeyring.single(hexKey, version: keyVersion),
+       );
+
+  /// Codec backed by every key the device holds.
+  ///
+  /// Writes use [NfcKeyring.currentVersion]; reads resolve the version named in
+  /// the payload header. Throws [ArgumentError] when the ring is empty or any
+  /// key is not a 32-byte (64 hex char) AES-256 key.
+  NfcPayloadCodec.fromKeyring({required NfcKeyring keyring})
+    : _keys = _parseKeyring(keyring),
+      _writeVersion = keyring.currentVersion;
+
+  /// Decoded keys by version.
+  final Map<int, Uint8List> _keys;
+
+  /// Version [encode] stamps into the header, or null when the keyring named
+  /// no usable current version (reads still work; writes are refused).
+  final int? _writeVersion;
+
+  /// Validates and decodes every key in [keyring] up front, so a malformed key
+  /// fails at construction instead of at tap time in front of a patient.
+  static Map<int, Uint8List> _parseKeyring(NfcKeyring keyring) {
+    if (keyring.isEmpty) {
+      throw ArgumentError('NFC keyring is empty: no key to encrypt or decrypt with.');
     }
+    final parsed = <int, Uint8List>{};
+    for (final MapEntry<int, String> entry in keyring.keys.entries) {
+      final int version = entry.key;
+      if (version < 0 || version > kMaxNfcKeyVersion) {
+        throw ArgumentError(
+          'NFC key version must be 0..$kMaxNfcKeyVersion to fit the payload '
+          'header. Got $version.',
+        );
+      }
+      final Uint8List bytes = _hexToBytes(entry.value);
+      if (bytes.length != 32) {
+        throw ArgumentError(
+          'AES-256 key must be exactly 32 bytes (64 hex chars). '
+          'Got ${bytes.length} bytes for key version $version.',
+        );
+      }
+      parsed[version] = bytes;
+    }
+    return parsed;
   }
 
-  final Uint8List _keyBytes;
+  /// Key version new writes are stamped with, or null when writes are refused.
+  int? get writeKeyVersion => _writeVersion;
+
+  /// Key versions this codec can decrypt with, ascending.
+  List<int> get knownKeyVersions => _keys.keys.toList()..sort();
 
   // Primitiva algorítmica estándar de la industria (AES-GCM con llaves de 256 bits)
   final _algorithm = crypto.AesGcm.with256bits();
@@ -89,7 +156,9 @@ class NfcPayloadCodec {
   int estimateSize(Map<String, dynamic> data) {
     final cborBytes = _jsonToCbor(data);
     final deflated = _deflate(cborBytes);
-    return deflated.length + _kAesGcmOverhead;
+    // Includes the version header, since it is written to the chip too and so
+    // comes out of the same capacity budget the guardian fit is computed from.
+    return deflated.length + _kAesGcmOverhead + _kHeaderLength;
   }
 
   // ── CBOR ────────────────────────────────────────────────────────────────
@@ -139,21 +208,34 @@ class NfcPayloadCodec {
 
   // ── AES-256-GCM REAL IMPLEMENTATION ────────────────────────────────────
   //
-  // Wire format: [12-byte nonce][ciphertext][16-byte auth tag]
+  // Wire format: ['H']['W'][key_version][12-byte nonce][ciphertext][16-byte tag]
+  // Legacy (pre-versioning) format, still readable: [nonce][ciphertext][tag]
 
   Future<Uint8List> _encrypt(Uint8List plaintext) async {
+    final int? version = _writeVersion;
+    final Uint8List? key = version == null ? null : _keys[version];
+    if (version == null || key == null) {
+      throw StateError(
+        'No current NFC key version available for writing '
+        '(versions held: ${knownKeyVersions.join(', ')}). '
+        'Log in again to refresh the keyring.',
+      );
+    }
+
     // Generar un nonce seguro y aleatorio de 12 bytes
     final nonce = _secureRandom(_kNonceLength);
 
     // Cifrado simétrico de alta seguridad utilizando el paquete oficial
     final secretBox = await _algorithm.encrypt(
       plaintext,
-      secretKey: crypto.SecretKey(_keyBytes),
+      secretKey: crypto.SecretKey(key),
       nonce: nonce,
     );
 
     // Empaquetar la estructura binaria final para el chip NFC
     final output = BytesBuilder(copy: false);
+    // Version header: a reader resolves the key from this without guessing.
+    output.add(<int>[_kMagic0, _kMagic1, version]);
     output.add(nonce);
     output.add(secretBox.cipherText);
     output.add(
@@ -162,21 +244,57 @@ class NfcPayloadCodec {
     return output.toBytes();
   }
 
+  /// Decrypts [packed], resolving which key to use from its header.
+  ///
+  /// Order of attempts:
+  ///   1. If [packed] opens with the magic bytes and names a version this
+  ///      device holds, decrypt the body with that key. This is the normal
+  ///      path and is deterministic — no guessing.
+  ///   2. Otherwise (or if step 1 failed), treat [packed] as a pre-versioning
+  ///      payload and try each key held, version 0 first.
+  ///
+  /// Step 2 is not only for the rollout. A legacy payload begins with a random
+  /// nonce, which has a 1-in-65536 chance of starting with the magic bytes, so
+  /// the fallback is what keeps that case correct rather than silently
+  /// unreadable. Trial decryption is safe here because AES-GCM authenticates:
+  /// a wrong key fails the tag rather than returning wrong plaintext.
   Future<Uint8List?> _decrypt(Uint8List packed) async {
-    if (packed.length < _kAesGcmOverhead) {
-      throw FormatException(
-        'Encrypted payload too short: ${packed.length} bytes '
-        '(minimum $_kAesGcmOverhead)',
-      );
+    // 1. Versioned payload.
+    if (packed.length >= _kHeaderLength + _kAesGcmOverhead &&
+        packed[0] == _kMagic0 &&
+        packed[1] == _kMagic1) {
+      final Uint8List? key = _keys[packed[2]];
+      if (key != null) {
+        final result = await _decryptWith(
+          key,
+          Uint8List.sublistView(packed, _kHeaderLength),
+        );
+        if (result != null) return result;
+      }
     }
 
+    // 2. Pre-versioning payload: no header, single global key.
+    for (final int version in knownKeyVersions) {
+      final result = await _decryptWith(_keys[version]!, packed);
+      if (result != null) return result;
+    }
+
+    return null;
+  }
+
+  /// One AES-256-GCM attempt over [body] laid out as
+  /// `[nonce][ciphertext][tag]`. Returns null on any failure — a short body, a
+  /// wrong key, or tampered data — so callers can try the next candidate.
+  Future<Uint8List?> _decryptWith(Uint8List key, Uint8List body) async {
+    if (body.length < _kAesGcmOverhead) return null;
+
     // Desmenuzar el payload binario
-    final nonce = Uint8List.sublistView(packed, 0, _kNonceLength);
-    final tag = Uint8List.sublistView(packed, packed.length - _kTagLength);
+    final nonce = Uint8List.sublistView(body, 0, _kNonceLength);
+    final tag = Uint8List.sublistView(body, body.length - _kTagLength);
     final ciphertext = Uint8List.sublistView(
-      packed,
+      body,
       _kNonceLength,
-      packed.length - _kTagLength,
+      body.length - _kTagLength,
     );
 
     try {
@@ -191,7 +309,7 @@ class NfcPayloadCodec {
       // el algoritmo arrojará una excepción matemática inmediatamente.
       final clearText = await _algorithm.decrypt(
         secretBox,
-        secretKey: crypto.SecretKey(_keyBytes),
+        secretKey: crypto.SecretKey(key),
       );
 
       return Uint8List.fromList(clearText);

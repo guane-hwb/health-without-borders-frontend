@@ -65,12 +65,12 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
 
     payload.HwbChipReadResult? chip;
     try {
-      final key = await AppScope.of(
+      final keyring = await AppScope.of(
         context,
-      ).authRepository.getNfcEncryptionKey();
-      if (key != null && key.isNotEmpty) {
+      ).authRepository.getNfcKeyring();
+      if (keyring != null && keyring.isNotEmpty) {
         chip = await payload.NfcPayloadService(
-          codec: NfcPayloadCodec(hexKey: key),
+          codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
         ).readHwbChip(alertMessage: _nfcAlert(guardian: false));
       }
     } on payload.NfcNotAvailableException {
@@ -230,16 +230,16 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
     try {
-      final key = await AppScope.of(
+      final keyring = await AppScope.of(
         context,
-      ).authRepository.getNfcEncryptionKey();
-      if (key == null || key.isEmpty) {
+      ).authRepository.getNfcKeyring();
+      if (keyring == null || keyring.isEmpty) {
         throw NfcSessionException(
           isEs ? 'No hay llave NFC disponible.' : 'No NFC key available.',
         );
       }
       final chip = await payload.NfcPayloadService(
-        codec: NfcPayloadCodec(hexKey: key),
+        codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
       ).readHwbChip(alertMessage: _nfcAlert(guardian: true));
       if (!mounted) return;
 

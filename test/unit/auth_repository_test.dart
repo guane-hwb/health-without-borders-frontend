@@ -9,6 +9,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -239,7 +240,7 @@ void main() {
     });
 
     test(
-      'login también persiste nfc_encryption_key cuando está presente',
+      'login persiste el anillo NFC y retira la llave suelta previa',
       () async {
         final jwt = _validJwt('doc@hwb.org');
         when(
@@ -262,12 +263,33 @@ void main() {
 
         await repo.login(email: 'doc@hwb.org', password: 'x');
 
-        verify(
+        // Un backend sin versionado entrega sólo nfc_encryption_key: se guarda
+        // como el anillo con la llave en la versión 0, que es exactamente con
+        // la que descifran las pulseras ya escritas.
+        final List<Object?> captured = verify(
+          () => storage.write(
+            key: AuthRepository.nfcKeyringKey,
+            value: captureAny(named: 'value'),
+          ),
+        ).captured;
+        expect(captured, hasLength(1));
+
+        final NfcKeyring? persisted = NfcKeyring.fromJson(
+          jsonDecode(captured.single! as String) as Map<String, dynamic>,
+        );
+        expect(persisted, isNotNull);
+        expect(persisted!.currentVersion, kLegacyNfcKeyVersion);
+        expect(persisted.keyFor(0), 'super-secret-nfc');
+
+        // La llave suelta queda superada por el anillo: no se deja el mismo
+        // material en dos lugares.
+        verify(() => storage.delete(key: AuthRepository.nfcKeyKey)).called(1);
+        verifyNever(
           () => storage.write(
             key: AuthRepository.nfcKeyKey,
-            value: 'super-secret-nfc',
+            value: any(named: 'value'),
           ),
-        ).called(1);
+        );
       },
     );
 
@@ -1532,4 +1554,121 @@ void main() {
       },
     );
   });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // getNfcKeyring() — versionado de llaves NFC
+  // ───────────────────────────────────────────────────────────────────────────
+  group('getNfcKeyring()', () {
+    const String keyV0 =
+        '0000000000000000000000000000000000000000000000000000000000000000';
+    const String keyV1 =
+        '1111111111111111111111111111111111111111111111111111111111111111';
+
+    test('login absorbe el anillo y lo deja disponible en memoria', () async {
+      when(
+        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+      ).thenAnswer(
+        (_) async => <String, dynamic>{
+          'access_token': _validJwt('doc@hwb.org'),
+          'refresh_token': 'r-1',
+          'nfc_encryption_key': keyV1,
+          'nfc_key_version': 1,
+          'nfc_keyring': <String, dynamic>{'0': keyV0, '1': keyV1},
+        },
+      );
+      when(
+        () =>
+            api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+      ).thenAnswer((_) async => _meResponse());
+      when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+
+      await repo.login(email: 'doc@hwb.org', password: 'x');
+
+      final ring = await repo.getNfcKeyring();
+      expect(ring, isNotNull);
+      expect(ring!.currentVersion, 1);
+      expect(ring.keyFor(0), keyV0);
+      expect(ring.keyFor(1), keyV1);
+      // La llave de escritura sigue siendo la versión actual.
+      expect(await repo.getNfcEncryptionKey(), keyV1);
+    });
+
+    test('el anillo se persiste para que un arranque en frío lo recupere',
+        () async {
+      when(
+        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+      ).thenAnswer(
+        (_) async => <String, dynamic>{
+          'access_token': _validJwt('doc@hwb.org'),
+          'nfc_key_version': 1,
+          'nfc_keyring': <String, dynamic>{'0': keyV0, '1': keyV1},
+        },
+      );
+      when(
+        () =>
+            api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+      ).thenAnswer((_) async => _meResponse());
+      when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+
+      await repo.login(email: 'doc@hwb.org', password: 'x');
+
+      verify(
+        () => storage.write(
+          key: AuthRepository.nfcKeyringKey,
+          value: any(named: 'value'),
+        ),
+      ).called(1);
+      // La llave suelta queda superada por el anillo.
+      verify(() => storage.delete(key: AuthRepository.nfcKeyKey)).called(1);
+    });
+
+    test('reconstruye el anillo desde el almacenamiento', () async {
+      final stored = jsonEncode(
+        NfcKeyring(
+          keys: <int, String>{0: keyV0, 1: keyV1},
+          currentVersion: 1,
+        ).toJson(),
+      );
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => stored);
+
+      final ring = await repo.getNfcKeyring();
+
+      expect(ring, isNotNull);
+      expect(ring!.versions, <int>[0, 1]);
+      expect(ring.currentVersion, 1);
+    });
+
+    test(
+      'ruta de actualización: una llave suelta previa se lee como versión 0',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyringKey),
+        ).thenAnswer((_) async => null);
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyKey),
+        ).thenAnswer((_) async => keyV0);
+
+        final ring = await repo.getNfcKeyring();
+
+        expect(ring, isNotNull);
+        expect(ring!.currentVersion, kLegacyNfcKeyVersion);
+        expect(ring.keyFor(0), keyV0);
+      },
+    );
+
+    test('sin material de llave devuelve null', () async {
+      when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+
+      expect(await repo.getNfcKeyring(), isNull);
+    });
+
+    test('clearSession borra el anillo persistido', () async {
+      await repo.clearSession();
+
+      verify(() => storage.delete(key: AuthRepository.nfcKeyringKey)).called(1);
+    });
+  });
+
 }

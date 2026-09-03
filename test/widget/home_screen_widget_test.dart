@@ -11,6 +11,7 @@ import 'package:health_without_borders_frontend/src/core/network/api_client.dart
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
@@ -30,6 +31,9 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<String?> getNfcEncryptionKey() async => null;
+
+  @override
+  Future<NfcKeyring?> getNfcKeyring() async => null;
 
   @override
   UserSession? currentUser;

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../core/nfc/nfc_guardian_payload.dart';
+import '../../../../../core/nfc/nfc_keyring.dart';
 import '../../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../../core/nfc/nfc_payload_service.dart';
 import '../../../../../core/nfc/nfc_triage_payload.dart';
@@ -16,13 +17,13 @@ import 'reassign_device_dialog.dart';
 Future<bool> executeUpdateNfcChips({
   required BuildContext context,
   required PatientFullRecord record,
-  required String nfcKey,
+  required NfcKeyring keyring,
   required bool patientChipDirty,
   required bool guardianChipDirty,
 }) async {
   final isEs = AppStrings.of(context).isEs;
   final messenger = ScaffoldMessenger.of(context);
-  final codec = NfcPayloadCodec(hexKey: nfcKey);
+  final codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
 
   if (patientChipDirty) {
     final ok = await showNfcGuidedWrite(

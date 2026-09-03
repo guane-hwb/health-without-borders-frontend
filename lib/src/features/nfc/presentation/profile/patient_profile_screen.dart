@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/di/app_scope.dart';
 import '../../../../core/i18n/app_strings.dart';
+import '../../../../core/nfc/nfc_keyring.dart';
 import '../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../core/storage/local_database.dart';
@@ -82,7 +83,7 @@ class PatientProfileScreen extends StatefulWidget {
   static Future<bool> Function({
     required BuildContext context,
     required PatientFullRecord record,
-    required String nfcKey,
+    required NfcKeyring keyring,
     required bool patientChipDirty,
     required bool guardianChipDirty,
   })
@@ -213,9 +214,9 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     final scope = AppScope.of(context);
     final isEs = AppStrings.of(context).isEs;
 
-    final nfcKey = await scope.authRepository.getNfcEncryptionKey();
+    final keyring = await scope.authRepository.getNfcKeyring();
     if (!mounted) return;
-    if (nfcKey == null || nfcKey.isEmpty) {
+    if (keyring == null || !keyring.canWrite) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -237,7 +238,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     final ok = await PatientProfileScreen.executeUpdateNfcChipsImpl(
       context: context,
       record: _draft,
-      nfcKey: nfcKey,
+      keyring: keyring,
       patientChipDirty: status.patientChipDirty,
       guardianChipDirty: status.guardianChipDirty,
     );
@@ -274,9 +275,9 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     );
     if (!mounted || selection == null || selection.targets.isEmpty) return;
 
-    final nfcKey = await scope.authRepository.getNfcEncryptionKey();
+    final keyring = await scope.authRepository.getNfcKeyring();
     if (!mounted) return;
-    if (nfcKey == null || nfcKey.isEmpty) {
+    if (keyring == null || !keyring.canWrite) {
       _showReassignSnack(
         isEs
             ? 'No hay clave NFC disponible para grabar.'
@@ -285,7 +286,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       );
       return;
     }
-    final codec = NfcPayloadCodec(hexKey: nfcKey);
+    final codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
 
     setState(() => _isUpdatingChips = true);
     var record = _draft;
