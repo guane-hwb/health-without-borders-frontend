@@ -2,7 +2,9 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
+import '../../../core/utils/app_logger.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/form_widgets.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
@@ -88,6 +90,63 @@ class _EditMedicalStaffScreenState extends State<EditMedicalStaffScreen> {
     _providerRepsCodeCtrl.dispose();
     _dateCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _save() async {
+    final scope = AppScope.of(context);
+    final user = scope.authRepository.currentUser;
+
+    final List<MedicalHistoryItem> updatedHistory = List.from(
+      widget.patient.medicalHistory,
+    );
+    final lastItem = updatedHistory.isNotEmpty ? updatedHistory.last : null;
+
+    final String prevDate = lastItem?.startDateTime ?? '';
+    final String inputDate = _dateCtrl.text.trim();
+    final String effectiveDate = inputDate.isNotEmpty
+        ? inputDate
+        : (prevDate.isNotEmpty ? prevDate : DateTime.now().toIso8601String());
+
+    final newItem = MedicalHistoryItem(
+      startDateTime: effectiveDate,
+      type: lastItem?.type ?? '01',
+      physician: _practNameCtrl.text.trim(),
+      location: _providerNameCtrl.text.trim(),
+      careModality: _careModality,
+      diagnosisType: _diagnosisType,
+      dischargeDisposition: _dischargeDisposition,
+      clinicalEvaluation: lastItem?.clinicalEvaluation,
+    );
+
+    if (updatedHistory.isNotEmpty) {
+      updatedHistory[updatedHistory.length - 1] = newItem;
+    } else {
+      updatedHistory.add(newItem);
+    }
+
+    final updatedPatient = widget.patient.copyWith(
+      medicalHistory: updatedHistory,
+    );
+
+    try {
+      await scope.localDatabase.savePatient(
+        updatedPatient,
+        ownerUserId: user?.id,
+        organizationId: user?.organizationId,
+      );
+      await scope.localDatabase.markChipsDirty(
+        updatedPatient.patientId,
+        patient: true,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(updatedPatient);
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error guardando personal médico',
+        error: e,
+        stackTrace: stack,
+      );
+    }
   }
 
   @override
@@ -213,7 +272,7 @@ class _EditMedicalStaffScreenState extends State<EditMedicalStaffScreen> {
                               child: SizedBox(
                                 height: 40,
                                 child: ElevatedButton.icon(
-                                  onPressed: () => Navigator.of(context).pop(),
+                                  onPressed: _save,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF00A396),
                                     shape: RoundedRectangleBorder(

@@ -30,6 +30,15 @@ class WebStoreCorruptionException implements Exception {
       'el contenido original se conservó en "$quarantineKey".';
 }
 
+class AuditDecryptionException implements Exception {
+  AuditDecryptionException(this.logId);
+  final int logId;
+
+  @override
+  String toString() =>
+      'AuditDecryptionException: no se pudo descifrar el registro de auditoría $logId por clave destruida o corrupta.';
+}
+
 class LocalDatabase {
   LocalDatabase._({FlutterSecureStorage? secureStorage})
     : _secureStorage = secureStorage ?? _defaultSecureStorage,
@@ -103,6 +112,7 @@ class LocalDatabase {
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
   static const String _dbKeyStorageName = 'hwb_sqlite_aes_key';
+  static const String _auditKeyStorageName = 'hwb_sqlite_audit_aes_key';
 
   static const String _webStoreKey = 'hwb_web_patients_store';
   static const String _webLogKey = 'hwb_web_emergency_log';
@@ -115,7 +125,9 @@ class LocalDatabase {
   final FlutterSecureStorage _secureStorage;
   Database? _db;
   Uint8List? _dbEncryptionKey;
+  Uint8List? _auditEncryptionKey;
   Future<Uint8List>? _keyInitFuture;
+  Future<Uint8List>? _auditKeyInitFuture;
 
   static Future<void> init() async {}
 
@@ -364,7 +376,7 @@ class LocalDatabase {
     return rows;
   }
 
-  // ── Encryption Helpers ────────────────────────────────────────────────────
+  // ── Encryption Helpers (PHI) ──────────────────────────────────────────────
 
   Future<Uint8List> _getOrCreateEncryptionKey() async {
     if (_dbEncryptionKey != null) return _dbEncryptionKey!;
@@ -450,12 +462,122 @@ class LocalDatabase {
       return cipherBase64;
     }
 
+    final keyBytes = await _getOrCreateEncryptionKey();
+    final combined = base64Decode(cipherBase64);
+
+    if (combined.length < 12 + 16) {
+      throw const FormatException(
+        'Invalid or truncated local encryption payload.',
+      );
+    }
+
+    final nonce = combined.sublist(0, 12);
+    final macBytes = combined.sublist(combined.length - 16);
+    final cipherText = combined.sublist(12, combined.length - 16);
+
+    final algorithm = crypto.AesGcm.with256bits();
+    final secretKey = crypto.SecretKey(keyBytes);
+    final secretBox = crypto.SecretBox(
+      cipherText,
+      nonce: nonce,
+      mac: crypto.Mac(macBytes),
+    );
+
+    final clearBytes = await algorithm.decrypt(secretBox, secretKey: secretKey);
+    return utf8.decode(clearBytes);
+  }
+
+  // ── Encryption Helpers (Audit Logs) ──────────────────────────────────────
+
+  Future<Uint8List> _getOrCreateAuditEncryptionKey() async {
+    if (_auditEncryptionKey != null) return _auditEncryptionKey!;
+    return _auditKeyInitFuture ??= _initAuditEncryptionKey();
+  }
+
+  Future<Uint8List> _initAuditEncryptionKey() async {
     try {
-      final keyBytes = await _getOrCreateEncryptionKey();
+      final existingKeyBase64 = await _secureStorage.read(
+        key: _auditKeyStorageName,
+      );
+      if (existingKeyBase64 != null && existingKeyBase64.isNotEmpty) {
+        _auditEncryptionKey = base64Decode(existingKeyBase64);
+        return _auditEncryptionKey!;
+      }
+    } catch (e) {
+      AppLogger.e('Error leyendo clave de cifrado de auditoría: $e');
+    }
+
+    final random = Random.secure();
+    final newKeyBytes = Uint8List.fromList(
+      List<int>.generate(32, (_) => random.nextInt(256)),
+    );
+
+    try {
+      await _secureStorage.write(
+        key: _auditKeyStorageName,
+        value: base64Encode(newKeyBytes),
+      );
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo persistir la clave de cifrado de auditoría',
+        error: e,
+        stackTrace: stack,
+      );
+      _auditKeyInitFuture = null;
+      throw StateError('Almacén seguro no disponible para auditoría.');
+    }
+
+    _auditEncryptionKey = newKeyBytes;
+    return _auditEncryptionKey!;
+  }
+
+  Future<String> _encryptAuditPayload(String plainText) async {
+    try {
+      final keyBytes = await _getOrCreateAuditEncryptionKey();
+      final algorithm = crypto.AesGcm.with256bits();
+      final secretKey = crypto.SecretKey(keyBytes);
+      final nonce = algorithm.newNonce();
+
+      final secretBox = await algorithm.encrypt(
+        utf8.encode(plainText),
+        secretKey: secretKey,
+        nonce: nonce,
+      );
+
+      final combined = Uint8List(
+        secretBox.nonce.length +
+            secretBox.cipherText.length +
+            secretBox.mac.bytes.length,
+      );
+      combined.setAll(0, secretBox.nonce);
+      combined.setAll(secretBox.nonce.length, secretBox.cipherText);
+      combined.setAll(
+        secretBox.nonce.length + secretBox.cipherText.length,
+        secretBox.mac.bytes,
+      );
+
+      return base64Encode(combined);
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error cifrando log de auditoría',
+        error: e,
+        stackTrace: stack,
+      );
+      rethrow;
+    }
+  }
+
+  Future<String> _decryptAuditPayload(String cipherBase64) async {
+    if (!cipherBase64.startsWith('ey') && !cipherBase64.contains('=')) {
+      return cipherBase64;
+    }
+
+    try {
+      final keyBytes = await _getOrCreateAuditEncryptionKey();
       final combined = base64Decode(cipherBase64);
 
       if (combined.length < 12 + 16) {
-        return '{}';
+        return '[CORRUPTED_KEY_MISSING]';
       }
 
       final nonce = combined.sublist(0, 12);
@@ -476,8 +598,8 @@ class LocalDatabase {
       );
       return utf8.decode(clearBytes);
     } catch (e) {
-      AppLogger.e('Error descifrando PHI local: $e');
-      return '{}';
+      AppLogger.e('Error descifrando log de auditoría: $e');
+      return '[CORRUPTED_KEY_MISSING]';
     }
   }
 
@@ -673,8 +795,8 @@ class LocalDatabase {
       'patient_uid': patientUid,
       'patient_name': patientName == null
           ? null
-          : await _encryptPayload(patientName),
-      'user_id': userId == null ? null : await _encryptPayload(userId),
+          : await _encryptAuditPayload(patientName),
+      'user_id': userId == null ? null : await _encryptAuditPayload(userId),
       'reason': reason,
       'occurred_at': DateTime.now().toIso8601String(),
       'is_synced': 0,
@@ -735,11 +857,19 @@ class LocalDatabase {
       }
       final name = mutable['patient_name'] as String?;
       if (name != null && name.isNotEmpty) {
-        mutable['patient_name'] = await _decryptPayload(name);
+        final decryptedName = await _decryptAuditPayload(name);
+        if (decryptedName == '[CORRUPTED_KEY_MISSING]') {
+          throw AuditDecryptionException((mutable['id'] as num?)?.toInt() ?? 0);
+        }
+        mutable['patient_name'] = decryptedName;
       }
       final uId = mutable['user_id'] as String?;
       if (uId != null && uId.isNotEmpty) {
-        mutable['user_id'] = await _decryptPayload(uId);
+        final decryptedUserId = await _decryptAuditPayload(uId);
+        if (decryptedUserId == '[CORRUPTED_KEY_MISSING]') {
+          throw AuditDecryptionException((mutable['id'] as num?)?.toInt() ?? 0);
+        }
+        mutable['user_id'] = decryptedUserId;
       }
       out.add(mutable);
     }
@@ -809,12 +939,67 @@ class LocalDatabase {
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
+  final Map<String, Future<void>> _patientSaveQueues = <String, Future<void>>{};
 
   Future<void> savePatient(
     PatientFullRecord record, {
     String? ownerUserId,
     String? organizationId,
     String? retiredDeviceReason,
+    bool isSynced = false,
+  }) {
+    final String patientId = record.patientId;
+
+    final Future<void> previous =
+        _patientSaveQueues[patientId] ?? Future<void>.value();
+    final Completer<void> ticket = Completer<void>();
+    _patientSaveQueues[patientId] = ticket.future;
+
+    return _runQueuedSave(
+      previous: previous,
+      ticket: ticket,
+      patientId: patientId,
+      record: record,
+      ownerUserId: ownerUserId,
+      organizationId: organizationId,
+      retiredDeviceReason: retiredDeviceReason,
+      isSynced: isSynced,
+    );
+  }
+
+  Future<void> _runQueuedSave({
+    required Future<void> previous,
+    required Completer<void> ticket,
+    required String patientId,
+    required PatientFullRecord record,
+    String? ownerUserId,
+    String? organizationId,
+    String? retiredDeviceReason,
+    bool isSynced = false,
+  }) async {
+    await previous.catchError((_) {});
+    try {
+      await _savePatientNow(
+        record,
+        ownerUserId: ownerUserId,
+        organizationId: organizationId,
+        retiredDeviceReason: retiredDeviceReason,
+        isSynced: isSynced,
+      );
+    } finally {
+      ticket.complete();
+      if (identical(_patientSaveQueues[patientId], ticket.future)) {
+        await _patientSaveQueues.remove(patientId);
+      }
+    }
+  }
+
+  Future<void> _savePatientNow(
+    PatientFullRecord record, {
+    String? ownerUserId,
+    String? organizationId,
+    String? retiredDeviceReason,
+    bool isSynced = false,
   }) async {
     final rawJson = jsonEncode(record.toJson());
     final encryptedJson = await _encryptPayload(rawJson);
@@ -844,11 +1029,11 @@ class LocalDatabase {
           'device_uid': record.deviceUid,
           'patient_name': maskedNameStr,
           'record_json': encryptedJson,
-          'is_synced': 0,
+          'is_synced': isSynced ? 1 : 0,
           'sync_error': null,
           'sync_error_code': null,
           'created_at': createdAt,
-          'synced_at': null,
+          'synced_at': isSynced ? DateTime.now().toIso8601String() : null,
           'revision': revision,
           'owner_user_id': effectiveOwner,
           'organization_id': organizationId ?? previous?['organization_id'],
@@ -862,57 +1047,64 @@ class LocalDatabase {
 
     final db = await _database;
 
-    final existing = await db!.query(
-      _table,
-      columns: [
-        'created_at',
-        'revision',
-        'owner_user_id',
-        'organization_id',
-        'pending_retired_reason',
-      ],
-      where: 'patient_id = ?',
-      whereArgs: [record.patientId],
-      limit: 1,
-    );
-    String? prevOwner = ownerUserId;
-    String? prevOrg = organizationId;
-    String? reason = retiredDeviceReason;
-
-    if (existing.isNotEmpty) {
-      final prevCreatedAt = existing.first['created_at'] as String?;
-      if (prevCreatedAt != null) createdAt = prevCreatedAt;
-      revision = ((existing.first['revision'] as int?) ?? 0) + 1;
-      prevOwner ??= existing.first['owner_user_id'] as String?;
-      prevOrg ??= existing.first['organization_id'] as String?;
-      reason ??= existing.first['pending_retired_reason'] as String?;
-    }
-
-    if (prevOwner == null) {
-      AppLogger.e(
-        'savePatient(${record.patientId}) llamado sin ownerUserId: la fila '
-        'quedará sin propietario y no se sincronizará ni se mostrará en '
-        'ninguna consulta filtrada por usuario hasta que se reconcilie.',
+    await db!.transaction((txn) async {
+      final existing = await txn.query(
+        _table,
+        columns: [
+          'created_at',
+          'revision',
+          'owner_user_id',
+          'organization_id',
+          'pending_retired_reason',
+        ],
+        where: 'patient_id = ?',
+        whereArgs: [record.patientId],
+        limit: 1,
       );
-    }
 
-    final row = <String, dynamic>{
-      'patient_id': record.patientId,
-      'device_uid': record.deviceUid,
-      'patient_name': maskedNameStr,
-      'record_json': encryptedJson,
-      'is_synced': 0,
-      'sync_error': null,
-      'sync_error_code': null,
-      'created_at': createdAt,
-      'synced_at': null,
-      'revision': revision,
-      'owner_user_id': prevOwner,
-      'organization_id': prevOrg,
-      'pending_retired_reason': reason,
-    };
+      String? prevOwner = ownerUserId;
+      String? prevOrg = organizationId;
+      String? reason = retiredDeviceReason;
 
-    await db.insert(_table, row, conflictAlgorithm: ConflictAlgorithm.replace);
+      if (existing.isNotEmpty) {
+        final prevCreatedAt = existing.first['created_at'] as String?;
+        if (prevCreatedAt != null) createdAt = prevCreatedAt;
+        revision = ((existing.first['revision'] as int?) ?? 0) + 1;
+        prevOwner ??= existing.first['owner_user_id'] as String?;
+        prevOrg ??= existing.first['organization_id'] as String?;
+        reason ??= existing.first['pending_retired_reason'] as String?;
+      }
+
+      if (prevOwner == null) {
+        AppLogger.e(
+          'savePatient(${record.patientId}) llamado sin ownerUserId: la fila '
+          'quedará sin propietario y no se sincronizará ni se mostrará en '
+          'ninguna consulta filtrada por usuario hasta que se reconcilie.',
+        );
+      }
+
+      final row = <String, dynamic>{
+        'patient_id': record.patientId,
+        'device_uid': record.deviceUid,
+        'patient_name': maskedNameStr,
+        'record_json': encryptedJson,
+        'is_synced': isSynced ? 1 : 0,
+        'sync_error': null,
+        'sync_error_code': null,
+        'created_at': createdAt,
+        'synced_at': isSynced ? DateTime.now().toIso8601String() : null,
+        'revision': revision,
+        'owner_user_id': prevOwner,
+        'organization_id': prevOrg,
+        'pending_retired_reason': reason,
+      };
+
+      await txn.insert(
+        _table,
+        row,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    });
   }
 
   // ── Query ─────────────────────────────────────────────────────────────────
@@ -1208,18 +1400,17 @@ class LocalDatabase {
     if (_isWeb) {
       await _withWebLock(() async {
         final current = await _webGetPatient(patientId);
-        if (current != null) {
-          if (revision != null &&
-              ((current['revision'] as int?) ?? 0) != revision) {
-            return;
-          }
-          final updated = <String, dynamic>{
-            ...current,
-            'sync_error': error,
-            'sync_error_code': statusCode,
-          };
-          await _webPutPatient(patientId, updated);
+        if (current == null) return;
+        if (revision != null &&
+            ((current['revision'] as int?) ?? 0) != revision) {
+          return;
         }
+        final updated = <String, dynamic>{
+          ...current,
+          'sync_error': error,
+          'sync_error_code': statusCode,
+        };
+        await _webPutPatient(patientId, updated);
       });
       return;
     }

@@ -1,6 +1,7 @@
 // lib/src/features/nfc/presentation/register/register_nfc_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/di/app_scope.dart';
 import '../../../../core/network/api_client.dart';
@@ -32,6 +33,9 @@ class RegisterNfcScreen extends StatefulWidget {
 class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   int _step = 0;
   final RegisterDraft _draft = RegisterDraft();
+
+  late final String _patientId = const Uuid().v4();
+
   PatientFullRecord? _savedRecord;
   String? _lastConsultationTime;
   String? _lastVaccineTime;
@@ -107,10 +111,20 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
-  // En lib/src/features/nfc/presentation/register/register_nfc_screen.dart
-
   Future<void> _confirm() async {
-    final record = _draft.toRecord();
+    final draftRecord = _draft.toRecord();
+    final record = PatientFullRecord(
+      patientId: _patientId,
+      deviceUid: draftRecord.deviceUid,
+      patientInfo: draftRecord.patientInfo,
+      guardianInfo: draftRecord.guardianInfo,
+      guardian2Info: draftRecord.guardian2Info,
+      backgroundHistory: draftRecord.backgroundHistory,
+      allergies: draftRecord.allergies,
+      medicalHistory: draftRecord.medicalHistory,
+      vaccinationRecord: draftRecord.vaccinationRecord,
+    );
+
     final scope = AppScope.of(context);
 
     var currentUser = scope.authRepository.currentUser;
@@ -124,6 +138,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           record,
           ownerUserId: currentUser?.id,
           organizationId: currentUser?.organizationId,
+          isSynced: true,
         );
         await scope.localDatabase.markSynced(record.patientId);
 
@@ -222,6 +237,12 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         setState(() {});
         return;
       }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: AppColors.error, content: Text(e.message)),
+      );
+      return;
     } catch (_) {}
 
     try {
@@ -229,6 +250,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         record,
         ownerUserId: currentUser?.id,
         organizationId: currentUser?.organizationId,
+        isSynced: false,
       );
     } catch (_) {
       if (!mounted) return;
@@ -336,10 +358,21 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     currentUser ??= await scope.authRepository.restoreSession();
 
     try {
+      final existingRecords = await scope.localDatabase.getAllRecords(
+        ownerUserId: currentUser?.id,
+      );
+      final existing = existingRecords.where(
+        (e) => e.patientId == record.patientId,
+      );
+      final bool alreadySynced = existing.isNotEmpty
+          ? existing.first.isSynced
+          : false;
+
       await scope.localDatabase.savePatient(
         record,
         ownerUserId: currentUser?.id,
         organizationId: currentUser?.organizationId,
+        isSynced: alreadySynced,
       );
       if (mounted) setState(() => _savedRecord = record);
     } catch (_) {
@@ -369,12 +402,12 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
     await scope.authRepository.getCurrentUser();
 
-    final nfcKey = await scope.authRepository.getNfcEncryptionKey();
+    var nfcKey = await scope.authRepository.getNfcEncryptionKey();
     if (!mounted) return;
 
     if (nfcKey == null || nfcKey.trim().length != 64) {
-      _completeFinalize();
-      return;
+      nfcKey =
+          '0000000000000000000000000000000000000000000000000000000000000000';
     }
 
     final codec = NfcPayloadCodec(hexKey: nfcKey.trim());

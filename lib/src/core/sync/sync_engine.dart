@@ -19,7 +19,7 @@ enum SyncOneResult { success, failure, busy, notFound }
 
 enum _SyncOutcome { success, failure, networkFailure, abortBatch }
 
-/// Background sync engine that pushes local patient records to the backend.
+/// Motor de sincronización en segundo plano que envía registros locales al backend.
 class SyncEngine {
   SyncEngine({
     required PatientRepository patientRepository,
@@ -55,7 +55,9 @@ class SyncEngine {
     Duration(minutes: 30),
   ];
 
-  bool _isSyncing = false;
+  Future<bool>? _activeSyncAllFuture;
+  Completer<void>? _syncOneCompletion;
+  bool get _syncOneRunning => _syncOneCompletion != null;
 
   final ValueNotifier<int> pendingCount = ValueNotifier<int>(0);
   final ValueNotifier<int> blockedCount = ValueNotifier<int>(0);
@@ -127,14 +129,50 @@ class SyncEngine {
 
   // ── Sync logic ────────────────────────────────────────────────────────────
 
-  Future<bool> syncAll() async {
-    // getUnsyncedRecords/pendingEmergencyAccessLogs treat ownerUserId: null
-    // as "no filter — return everything", which is meant for admin/export
-    // tooling, not for an unauthenticated sync cycle. Without a resolved
-    // user there is no safe scope to sync under, so bail out rather than
-    // risk uploading another user's still-pending queue under no identity
-    // (or a stale cached token) — see
-    // v3-cola-sin-propietario-se-sincroniza-con-otro-usuario.
+  Future<bool> syncAll() {
+    if (_activeSyncAllFuture != null) {
+      AppLogger.d(
+        'syncAll en ejecución: uniendo llamada al ciclo en curso (single-flight).',
+      );
+      return _activeSyncAllFuture!;
+    }
+
+    final completer = Completer<bool>();
+    _activeSyncAllFuture = completer.future;
+
+    final Completer<void>? syncOneInFlight = _syncOneCompletion;
+    final Future<bool> Function() startCycle = _executeSyncAll;
+
+    if (syncOneInFlight != null) {
+      AppLogger.d('syncAll en espera: syncOne en ejecución.');
+      syncOneInFlight.future
+          .catchError((_) {})
+          .then((_) => startCycle())
+          .then(completer.complete)
+          .catchError((Object e, StackTrace st) {
+            completer.completeError(e, st);
+          })
+          .whenComplete(() {
+            _activeSyncAllFuture = null;
+          });
+      return _activeSyncAllFuture!;
+    }
+
+    startCycle()
+        .then((result) {
+          completer.complete(result);
+        })
+        .catchError((Object e, StackTrace st) {
+          completer.completeError(e, st);
+        })
+        .whenComplete(() {
+          _activeSyncAllFuture = null;
+        });
+
+    return _activeSyncAllFuture!;
+  }
+
+  Future<bool> _executeSyncAll() async {
     if (_currentUserId == null) {
       AppLogger.d('syncAll omitido: no hay sesión activa.');
       return false;
@@ -143,8 +181,6 @@ class SyncEngine {
     await refreshPendingCount();
     await _syncEmergencyLogs();
 
-    if (_isSyncing) return false;
-    _isSyncing = true;
     bool allSuccessful = true;
 
     try {
@@ -202,7 +238,6 @@ class SyncEngine {
       AppLogger.e('Error crítico durante syncAll', error: e, stackTrace: stack);
       return false;
     } finally {
-      _isSyncing = false;
       await refreshPendingCount();
       _scheduleRetry();
     }
@@ -222,8 +257,6 @@ class SyncEngine {
     }
 
     try {
-      // Pass the re-labeling reason only when present, so ordinary syncs keep
-      // calling syncPatient(record) unchanged.
       final PatientSyncResponse response =
           (entry.retiredDeviceReason != null &&
               entry.retiredDeviceReason!.isNotEmpty)
@@ -274,7 +307,9 @@ class SyncEngine {
         return _SyncOutcome.abortBatch;
       }
 
-      final String safeMsg = (e.statusCode == 422)
+      final String safeMsg = (e.statusCode == 409)
+          ? 'Registro duplicado (409): El chip NFC ya pertenece a otro paciente'
+          : (e.statusCode == 422)
           ? 'Error de validación (422): Campos incompatibles con el backend'
           : e.message;
 
@@ -284,6 +319,7 @@ class SyncEngine {
         statusCode: e.statusCode,
         revision: entry.revision,
       );
+
       onRecordSynced?.call(entry.patientId, false, safeMsg);
       return _SyncOutcome.failure;
     } catch (e, stack) {
@@ -317,16 +353,19 @@ class SyncEngine {
   // ── Manual controls ───────────────────────────────────────────────────────
 
   Future<SyncOneResult> syncOne(String patientId) async {
-    if (_isSyncing) return SyncOneResult.busy;
+    if (_activeSyncAllFuture != null || _syncOneRunning) {
+      return SyncOneResult.busy;
+    }
+    final Completer<void> completion = Completer<void>();
+    _syncOneCompletion = completion;
 
-    final entries = await _localDb.getUnsyncedRecords(
-      ownerUserId: _currentUserId,
-    );
-    final match = entries.where((e) => e.patientId == patientId);
-    if (match.isEmpty) return SyncOneResult.notFound;
-
-    _isSyncing = true;
     try {
+      final entries = await _localDb.getUnsyncedRecords(
+        ownerUserId: _currentUserId,
+      );
+      final match = entries.where((e) => e.patientId == patientId);
+      if (match.isEmpty) return SyncOneResult.notFound;
+
       final outcome = await _syncOne(match.first);
       if (outcome == _SyncOutcome.success) {
         return SyncOneResult.success;
@@ -334,7 +373,8 @@ class SyncEngine {
         return SyncOneResult.failure;
       }
     } finally {
-      _isSyncing = false;
+      _syncOneCompletion = null;
+      completion.complete();
       await refreshPendingCount();
     }
   }

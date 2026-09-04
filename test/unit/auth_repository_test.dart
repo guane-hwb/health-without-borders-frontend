@@ -1129,17 +1129,19 @@ void main() {
       verify(() => storage.delete(key: AuthRepository.sessionKey)).called(1);
     });
 
-    test('clearSession destruye la clave de cifrado cuando no hay nada '
-        'pendiente (v2-clave-db-sobrevive-logout)', () async {
-      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
-      when(
-        () => localDb.getUnsyncedEmergencyLogCount(),
-      ).thenAnswer((_) async => 0);
+    test(
+      'clearSession CONSERVA la clave de cifrado local (v3-destruir-clave-rompe-log-breakglass)',
+      () async {
+        when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+        when(
+          () => localDb.getUnsyncedEmergencyLogCount(),
+        ).thenAnswer((_) async => 0);
 
-      await repo.clearSession();
+        await repo.clearSession();
 
-      verify(() => localDb.destroyEncryptionKey()).called(1);
-    });
+        verifyNever(() => localDb.destroyEncryptionKey());
+      },
+    );
 
     test(
       'clearSession NO destruye la clave si quedan pacientes pendientes',

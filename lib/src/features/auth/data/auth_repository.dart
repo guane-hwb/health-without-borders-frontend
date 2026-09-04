@@ -346,15 +346,6 @@ class AuthRepository implements TokenProvider {
     try {
       await _secureStorage.delete(key: _sessionKey);
     } catch (_) {}
-
-    try {
-      final int pendingPatients = await _localDb.getUnsyncedCount();
-      final int pendingEmergencyLogs = await _localDb
-          .getUnsyncedEmergencyLogCount();
-      if (pendingPatients == 0 && pendingEmergencyLogs == 0) {
-        await _localDb.destroyEncryptionKey();
-      }
-    } catch (_) {}
   }
 
   Future<bool> wipeLocalPhi({bool force = false}) async {
@@ -368,7 +359,10 @@ class AuthRepository implements TokenProvider {
         }
       }
       await _localDb.clearAll();
-      await _localDb.destroyEncryptionKey();
+      final int remainingLogs = await _localDb.getUnsyncedEmergencyLogCount();
+      if (remainingLogs == 0 || force) {
+        await _localDb.destroyEncryptionKey();
+      }
       return true;
     } catch (e, stack) {
       AppLogger.e('Error limpiando la base local', error: e, stackTrace: stack);

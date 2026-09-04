@@ -101,12 +101,12 @@ void main() {
   late MockSyncEngine sync;
 
   UserSession user({UserRole role = UserRole.doctor}) => UserSession(
-        id: 'u1',
-        email: 'doctor@hwb.org',
-        fullName: 'Ana Doctor',
-        role: role,
-        organizationId: 'org-1',
-      );
+    id: 'u1',
+    email: 'doctor@hwb.org',
+    fullName: 'Ana Doctor',
+    role: role,
+    organizationId: 'org-1',
+  );
 
   void stubDefaults() {
     final activeUser = user();
@@ -118,14 +118,25 @@ void main() {
     ).thenReturn(ValueNotifier<UserSession?>(activeUser));
     when(() => auth.getNfcEncryptionKey()).thenAnswer((_) async => null);
     when(() => auth.logout()).thenAnswer((_) async {});
+
+    when(() => patientRepo.syncPatient(any())).thenAnswer(
+      (_) async =>
+          PatientSyncResponse(status: 'success', internalId: '', message: ''),
+    );
+
     when(
       () => db.savePatient(
         any(),
         ownerUserId: any(named: 'ownerUserId'),
         organizationId: any(named: 'organizationId'),
         retiredDeviceReason: any(named: 'retiredDeviceReason'),
+        isSynced: any(named: 'isSynced'),
       ),
     ).thenAnswer((_) async {});
+    when(() => db.markSynced(any())).thenAnswer((_) async {});
+    when(
+      () => db.getAllRecords(ownerUserId: any(named: 'ownerUserId')),
+    ).thenAnswer((_) async => []);
     when(
       () => db.clearChipsDirty(
         any(),
@@ -342,6 +353,7 @@ void main() {
           ownerUserId: any(named: 'ownerUserId'),
           organizationId: any(named: 'organizationId'),
           retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          isSynced: any(named: 'isSynced'),
         ),
       ).called(1);
       expect(find.byType(Step6Success), findsOneWidget);
@@ -394,6 +406,7 @@ void main() {
             ownerUserId: any(named: 'ownerUserId'),
             organizationId: any(named: 'organizationId'),
             retiredDeviceReason: any(named: 'retiredDeviceReason'),
+            isSynced: any(named: 'isSynced'),
           ),
         ).called(2);
         expect(find.byType(SnackBar).last, findsOneWidget);
@@ -448,6 +461,7 @@ void main() {
             ownerUserId: any(named: 'ownerUserId'),
             organizationId: any(named: 'organizationId'),
             retiredDeviceReason: any(named: 'retiredDeviceReason'),
+            isSynced: any(named: 'isSynced'),
           ),
         ).called(2);
         expect(find.byType(SnackBar).last, findsOneWidget);
@@ -461,12 +475,18 @@ void main() {
     'RegisterNfcScreen — _finalize / _completeFinalize (sin llave NFC)',
     () {
       testWidgets(
-        'sin nfcKey: no abre overlay de escritura, sincroniza y sella (paso 5)',
+        'sin nfcKey: usa clave fallback, completa escritura y sella',
         (tester) async {
           await pumpScreen(tester);
           await advanceToHub(tester);
 
           tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+          await tester.pump();
+          await tester.pump();
+          await pumpFrames(tester, 2);
+
+          final nav = Navigator.of(tester.element(find.byType(Step6Success)));
+          nav.pop(true);
           await tester.pumpAndSettle();
 
           verify(() => sync.syncAll()).called(1);
@@ -484,10 +504,22 @@ void main() {
         (tester) async {
           await pumpScreen(tester);
           await advanceToHub(tester);
+
           tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+          await tester.pump();
+          await tester.pump();
+          await pumpFrames(tester, 2);
+
+          final nav = Navigator.of(tester.element(find.byType(Step6Success)));
+          nav.pop(true);
           await tester.pumpAndSettle();
 
-          tester.widget<Step6Success>(find.byType(Step6Success)).onGoHome!();
+          final success = tester.widget<Step6Success>(
+            find.byType(Step6Success),
+          );
+          expect(success.sealed, isTrue);
+
+          success.onGoHome!();
           await tester.pumpAndSettle();
 
           expect(find.byType(HomeScreen), findsOneWidget);
@@ -516,9 +548,7 @@ void main() {
           await tester.pump();
           await pumpFrames(tester, 2);
 
-          final nav = Navigator.of(
-            tester.element(find.byType(Step6Success)),
-          );
+          final nav = Navigator.of(tester.element(find.byType(Step6Success)));
           nav.pop(true);
           await tester.pumpAndSettle();
 
@@ -545,16 +575,15 @@ void main() {
               'AA:BB:CC:DD';
           await advanceToHub(tester);
 
-          final onFinish =
-              tester.widget<Step6Success>(find.byType(Step6Success)).onFinish;
+          final onFinish = tester
+              .widget<Step6Success>(find.byType(Step6Success))
+              .onFinish;
           onFinish();
           await tester.pump();
           await tester.pump();
           await pumpFrames(tester, 2);
 
-          final nav = Navigator.of(
-            tester.element(find.byType(Step6Success)),
-          );
+          final nav = Navigator.of(tester.element(find.byType(Step6Success)));
           nav.pop(true);
           await tester.pump();
           await pumpFrames(tester, 2);

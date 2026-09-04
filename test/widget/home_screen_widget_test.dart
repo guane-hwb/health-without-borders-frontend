@@ -180,6 +180,7 @@ class FakeLocalDatabase implements LocalDatabase {
   @override
   Future<void> savePatient(
     PatientFullRecord record, {
+    bool isSynced = false,
     String? ownerUserId,
     String? organizationId,
     String? retiredDeviceReason,
