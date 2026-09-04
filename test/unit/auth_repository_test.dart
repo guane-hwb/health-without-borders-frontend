@@ -35,6 +35,15 @@ String _validJwt(String email) => _buildJwt({'sub': email, 'exp': 9999999999});
 
 String _jwtNoSub() => _buildJwt({'user': 'x'});
 
+/// A refresh token whose `exp` is [days] from now (negative = already expired).
+String _refreshJwt({int days = 7}) => _buildJwt({
+  'sub': 'doc@hwb.org',
+  'type': 'refresh',
+  'exp':
+      DateTime.now().toUtc().add(Duration(days: days)).millisecondsSinceEpoch ~/
+      1000,
+});
+
 Map<String, dynamic> _meResponse({String email = 'doc@hwb.org'}) => {
   'email': email,
   'id': '42',
@@ -1054,6 +1063,11 @@ void main() {
       when(
         () => storage.read(key: AuthRepository.nfcKeyKey),
       ).thenAnswer((_) async => 'my-nfc-key');
+      // La llave sólo se entrega dentro de la ventana de sesión, así que el
+      // caso positivo necesita un refresh token vigente.
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => _refreshJwt());
 
       final key = await repo.getNfcEncryptionKey();
 
@@ -1570,7 +1584,7 @@ void main() {
       ).thenAnswer(
         (_) async => <String, dynamic>{
           'access_token': _validJwt('doc@hwb.org'),
-          'refresh_token': 'r-1',
+          'refresh_token': _refreshJwt(),
           'nfc_encryption_key': keyV1,
           'nfc_key_version': 1,
           'nfc_keyring': <String, dynamic>{'0': keyV0, '1': keyV1},
@@ -1632,6 +1646,9 @@ void main() {
       when(
         () => storage.read(key: AuthRepository.nfcKeyringKey),
       ).thenAnswer((_) async => stored);
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => _refreshJwt());
 
       final ring = await repo.getNfcKeyring();
 
@@ -1649,6 +1666,9 @@ void main() {
         when(
           () => storage.read(key: AuthRepository.nfcKeyKey),
         ).thenAnswer((_) async => keyV0);
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => _refreshJwt());
 
         final ring = await repo.getNfcKeyring();
 
@@ -1669,6 +1689,120 @@ void main() {
 
       verify(() => storage.delete(key: AuthRepository.nfcKeyringKey)).called(1);
     });
+  });
+
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Ventana de sesión de la llave NFC (exp del refresh token)
+  // ───────────────────────────────────────────────────────────────────────────
+  group('ventana de sesión del anillo NFC', () {
+    const String keyV0 =
+        '0000000000000000000000000000000000000000000000000000000000000000';
+
+    String storedRing() => jsonEncode(NfcKeyring.single(keyV0).toJson());
+
+    test('dentro de la ventana entrega el anillo', () async {
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => storedRing());
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => _refreshJwt(days: 3));
+
+      expect(await repo.getNfcKeyring(), isNotNull);
+      expect(await repo.isNfcSessionExpired(), isFalse);
+    });
+
+    test('refresh token vencido: no entrega el anillo y lo borra', () async {
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => storedRing());
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => _refreshJwt(days: -1));
+
+      expect(await repo.getNfcKeyring(), isNull);
+      expect(await repo.isNfcSessionExpired(), isTrue);
+
+      // No basta con negar el acceso: el material se retira del disco.
+      verify(
+        () => storage.delete(key: AuthRepository.nfcKeyringKey),
+      ).called(greaterThanOrEqualTo(1));
+      verify(
+        () => storage.delete(key: AuthRepository.nfcKeyKey),
+      ).called(greaterThanOrEqualTo(1));
+    });
+
+    test('sin refresh token guardado se rechaza el anillo', () async {
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => storedRing());
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => null);
+
+      // Sin refresh token la sesión no es renovable: se trata como vencida.
+      expect(await repo.getNfcKeyring(), isNull);
+      expect(await repo.isNfcSessionExpired(), isTrue);
+    });
+
+    test('refresh token ilegible se trata como vencido', () async {
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => storedRing());
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => 'no-es-un-jwt');
+
+      expect(await repo.getNfcKeyring(), isNull);
+    });
+
+    test('refresh token sin claim exp se trata como vencido', () async {
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => storedRing());
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => _buildJwt({'sub': 'doc@hwb.org'}));
+
+      expect(await repo.getNfcKeyring(), isNull);
+    });
+
+    test(
+      'la ventana también aplica a la llave suelta heredada',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyringKey),
+        ).thenAnswer((_) async => null);
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyKey),
+        ).thenAnswer((_) async => keyV0);
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => _refreshJwt(days: -1));
+
+        expect(await repo.getNfcKeyring(), isNull);
+      },
+    );
+
+    test(
+      'getNfcEncryptionKey no entrega la llave fuera de la ventana',
+      () async {
+        // El disco tiene anillo, pero la sesión ya venció: getNfcEncryptionKey
+        // pasa por getNfcKeyring, así que hereda el mismo gate.
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyringKey),
+        ).thenAnswer((_) async => storedRing());
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyKey),
+        ).thenAnswer((_) async => keyV0);
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => _refreshJwt(days: -1));
+
+        expect(await repo.getNfcEncryptionKey(), isNull);
+      },
+    );
   });
 
 }

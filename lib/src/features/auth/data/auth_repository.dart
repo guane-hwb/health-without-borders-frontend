@@ -247,6 +247,14 @@ class AuthRepository implements TokenProvider {
   /// carries every live key version, so a wristband written under an older key
   /// still decrypts while a rotation is in progress.
   Future<NfcKeyring?> getNfcKeyring() async {
+    // The keyring is only valid inside the session window. Checking here — the
+    // one place the key is handed out — means no screen can bypass it, and the
+    // check reads the refresh token's `exp` locally, so it still holds offline.
+    if (!await _isSessionWindowOpen()) {
+      await _forgetNfcKeyring();
+      return null;
+    }
+
     if (_cachedKeyring?.isNotEmpty == true) return _cachedKeyring;
 
     // Restored session / cold start: rebuild from storage.
@@ -282,16 +290,32 @@ class AuthRepository implements TokenProvider {
 
   /// The single key new writes use. Kept for call sites that only encrypt.
   Future<String?> getNfcEncryptionKey() async {
-    if (_cachedNfcKey?.isNotEmpty == true) return _cachedNfcKey;
+    // Routed through getNfcKeyring so the session window applies here too;
+    // otherwise the cached single key would outlive the expired keyring.
     final NfcKeyring? keyring = await getNfcKeyring();
-    final String? current = keyring?.currentKey;
+    if (keyring == null) return null;
+
+    final String? current = keyring.currentKey;
     if (current != null && current.isNotEmpty) return current;
-    if (kIsWeb) return null;
+    return _cachedNfcKey?.isNotEmpty == true ? _cachedNfcKey : null;
+  }
+
+  /// Whether NFC is unavailable because the session window closed, as opposed
+  /// to no key ever having been delivered. Lets the NFC screens tell the user
+  /// to log in again instead of reporting a reader failure.
+  Future<bool> isNfcSessionExpired() async => !await _isSessionWindowOpen();
+
+  /// Drops the keyring from memory and from disk.
+  Future<void> _forgetNfcKeyring() async {
+    _cachedKeyring = null;
+    _cachedNfcKey = null;
+    if (kIsWeb) return;
     try {
-      return await _secureStorage.read(key: _nfcKeyKey);
-    } catch (_) {
-      return null;
-    }
+      await _secureStorage.delete(key: _nfcKeyringKey);
+    } catch (_) {}
+    try {
+      await _secureStorage.delete(key: _nfcKeyKey);
+    } catch (_) {}
   }
 
   Future<void> logout({bool wipeLocalData = false}) async {
@@ -465,16 +489,49 @@ class AuthRepository implements TokenProvider {
     return UserSession.fromEmail(email ?? 'user');
   }
 
-  String? _emailFromJwt(String token) {
+  String? _emailFromJwt(String token) => _jwtPayload(token)?['sub']?.toString();
+
+  /// Decodes a JWT's payload without verifying its signature.
+  ///
+  /// Reading a claim is not the same as trusting the token: verification needs
+  /// the server's secret and is the backend's job. This is only used to read
+  /// claims the device can act on locally — which is what makes the NFC key
+  /// window work with no connectivity.
+  Map<String, dynamic>? _jwtPayload(String token) {
     try {
       final parts = token.split('.');
       if (parts.length != 3) return null;
       final payload = utf8.decode(
         base64Url.decode(base64Url.normalize(parts[1])),
       );
-      return (jsonDecode(payload) as Map<String, dynamic>)['sub']?.toString();
+      final Object? decoded = jsonDecode(payload);
+      return decoded is Map<String, dynamic> ? decoded : null;
     } catch (_) {
       return null;
     }
+  }
+
+  /// The `exp` claim of [token] as a UTC instant, or null when unreadable.
+  DateTime? _jwtExpiry(String token) {
+    final Object? exp = _jwtPayload(token)?['exp'];
+    final int? seconds = exp is int ? exp : int.tryParse(exp?.toString() ?? '');
+    if (seconds == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
+  }
+
+  /// Whether the refresh token still bounds a live session.
+  ///
+  /// The NFC keyring is only handed out inside this window. A device with no
+  /// refresh token has no renewable session, so it is treated as outside the
+  /// window rather than given the benefit of the doubt.
+  Future<bool> _isSessionWindowOpen() async {
+    final String? refreshToken = await _getRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) return false;
+
+    final DateTime? expiry = _jwtExpiry(refreshToken);
+    // An unreadable refresh token cannot prove a live session either.
+    if (expiry == null) return false;
+
+    return DateTime.now().toUtc().isBefore(expiry);
   }
 }
