@@ -35,10 +35,18 @@ const _kReqStyle = TextStyle(
   fontWeight: FontWeight.w700,
 );
 
-const List<String> kEthnicityCodes = <String>['6', '1', '2', '3', '4', '5'];
-const List<String> kNoEthnicityCodes = <String>['6', '99'];
+const List<String> kEthnicityCodes = <String>[
+  '99',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+];
+const List<String> kNoEthnicityCodes = <String>['99'];
 const List<String> kDisabilityCodes = <String>[
-  '00',
+  '08',
   '01',
   '02',
   '03',
@@ -47,9 +55,26 @@ const List<String> kDisabilityCodes = <String>[
   '06',
   '07',
 ];
+const List<String> kNoDisabilityCodes = <String>['08'];
+
+const List<String> kGenderIdentityCodes = <String>[
+  '01',
+  '02',
+  '03',
+  '04',
+  '05',
+];
+const List<String> kNoGenderIdentityCodes = <String>['05'];
 
 bool patientHasEthnicity(String? ethnicity) =>
     ethnicity != null && !kNoEthnicityCodes.contains(ethnicity);
+
+RegisterDraft applyDemographicSentinelDefaults(RegisterDraft d) {
+  d.ethnicity ??= kNoEthnicityCodes.first;
+  d.disabilityCategory ??= kNoDisabilityCodes.first;
+  d.genderIdentity ??= kNoGenderIdentityCodes.first;
+  return d;
+}
 
 Widget _buildLabel(String labelText, bool isRequired) {
   final cleanText = labelText.replaceAll('*', '').trim();
@@ -250,6 +275,8 @@ class _Step3State extends State<Step3PatientData> {
     d.weight = double.tryParse(_weight.text.trim().replaceAll(',', '.'));
     d.height = double.tryParse(_height.text.trim().replaceAll(',', '.'));
 
+    applyDemographicSentinelDefaults(d);
+
     widget.onContinue();
   }
 
@@ -287,8 +314,13 @@ class _Step3State extends State<Step3PatientData> {
       '02': s.sexFemale,
       '03': isEs ? 'Transgénero' : 'Transgender',
       '04': isEs ? 'No binario' : 'Non-binary',
-      '99': isEs ? 'No reporta' : 'Not reported',
+      '05': isEs ? 'No declara' : 'Does not declare',
     };
+    assert(
+      gender.keys.toSet().containsAll(kGenderIdentityCodes) &&
+          kGenderIdentityCodes.toSet().containsAll(gender.keys),
+      'kGenderIdentityCodes debe reflejar exactamente las llaves del mapa gender',
+    );
 
     final nat = <String, String>{
       for (final code in kSupportedNationalityCodes)
@@ -296,19 +328,20 @@ class _Step3State extends State<Step3PatientData> {
     };
 
     final ethLabels = <String, String>{
-      '6': isEs ? 'Ninguno' : 'None',
+      '99': isEs ? 'Ninguno' : 'None',
       '1': isEs ? 'Indígena' : 'Indigenous',
       '2': isEs ? 'ROM/Gitano' : 'Romani',
       '3': isEs ? 'Raizal' : 'Raizal',
       '4': isEs ? 'Palenquero' : 'Palenquero',
       '5': isEs ? 'Afrocolombiano' : 'Afro-Colombian',
+      '6': isEs ? 'Otras etnias' : 'Other ethnicities',
     };
     final eth = <String, String>{
       for (final code in kEthnicityCodes) code: ethLabels[code]!,
     };
 
     final disLabels = <String, String>{
-      '00': isEs ? 'Ninguna' : 'None',
+      '08': isEs ? 'Ninguna' : 'None',
       '01': isEs ? 'Física' : 'Physical',
       '02': isEs ? 'Visual' : 'Visual',
       '03': isEs ? 'Auditiva' : 'Hearing',
@@ -442,8 +475,6 @@ class _Step3State extends State<Step3PatientData> {
                     title: s.identification,
                   ),
                   Row(
-                    // Al usar .end, las cajas de entrada se alinean exactamente
-                    // en la misma línea base, corrigiendo el desfase visual.
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       SizedBox(
@@ -559,10 +590,9 @@ class _Step3State extends State<Step3PatientData> {
                   const SizedBox(height: 12),
                   _StyledDropdown<String>(
                     label: isEs ? 'Identidad de género' : 'Gender identity',
-                    value: d.genderIdentity ?? '99',
+                    value: d.genderIdentity ?? '05',
                     items: gender,
-                    onChanged: (v) =>
-                        setState(() => d.genderIdentity = v == '99' ? null : v),
+                    onChanged: (v) => setState(() => d.genderIdentity = v),
                   ),
                   const SizedBox(height: 12),
                   _StyledDropdown<String>(
@@ -582,10 +612,9 @@ class _Step3State extends State<Step3PatientData> {
                   const SizedBox(height: 12),
                   _StyledDropdown<String>(
                     label: isEs ? 'Etnia' : 'Ethnicity',
-                    value: d.ethnicity ?? '6',
+                    value: d.ethnicity ?? '99',
                     items: eth,
-                    onChanged: (v) =>
-                        setState(() => d.ethnicity = v == '6' ? null : v),
+                    onChanged: (v) => setState(() => d.ethnicity = v),
                   ),
                   if (_hasEthnicity) ...[
                     const SizedBox(height: 12),
@@ -611,11 +640,9 @@ class _Step3State extends State<Step3PatientData> {
                   const SizedBox(height: 12),
                   _StyledDropdown<String>(
                     label: isEs ? 'Discapacidad' : 'Disability',
-                    value: d.disabilityCategory ?? '00',
+                    value: d.disabilityCategory ?? '08',
                     items: dis,
-                    onChanged: (v) => setState(
-                      () => d.disabilityCategory = v == '00' ? null : v,
-                    ),
+                    onChanged: (v) => setState(() => d.disabilityCategory = v),
                   ),
                 ],
               ),
