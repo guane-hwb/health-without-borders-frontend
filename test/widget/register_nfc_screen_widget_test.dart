@@ -483,12 +483,6 @@ void main() {
           await advanceToHub(tester);
 
           tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
-          await tester.pump();
-          await tester.pump();
-          await pumpFrames(tester, 2);
-
-          final nav = Navigator.of(tester.element(find.byType(Step6Success)));
-          nav.pop(true);
           await tester.pumpAndSettle();
 
           verify(() => sync.syncAll()).called(1);
@@ -508,12 +502,6 @@ void main() {
           await advanceToHub(tester);
 
           tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
-          await tester.pump();
-          await tester.pump();
-          await pumpFrames(tester, 2);
-
-          final nav = Navigator.of(tester.element(find.byType(Step6Success)));
-          nav.pop(true);
           await tester.pumpAndSettle();
 
           final success = tester.widget<Step6Success>(

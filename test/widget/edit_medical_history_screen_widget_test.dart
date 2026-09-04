@@ -53,6 +53,9 @@ class FakeAuthRepository implements AuthRepository {
   Future<String?> getNfcEncryptionKey() async => 'fake-nfc-key-12345';
 
   @override
+  Future<Null> getNfcKeyring() async => null;
+
+  @override
   Future<void> clearSession() async {}
 
   @override
