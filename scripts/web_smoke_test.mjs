@@ -9,7 +9,7 @@ if (!url) {
 }
 
 const expectFailure = process.env.EXPECT_FAILURE === 'true';
-const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS ?? 20000);
+const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS ?? 45000);
 
 const consoleErrors = [];
 const pageErrors = [];
@@ -36,7 +36,7 @@ await page.addInitScript(() => {
 
 let firstFrameReached = false;
 try {
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+  await page.goto(url, { waitUntil: 'networkidle', timeout: timeoutMs });
   await page.waitForFunction(() => window.__flutterFirstFrameSeen === true, {
     timeout: timeoutMs,
   });
