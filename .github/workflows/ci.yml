@@ -98,11 +98,15 @@ jobs:
 
       - name: Crear env de release INTENCIONALMENTE inválido (HTTP)
         run: |
-          echo "API_BASE_URL=http://localhost:8000" > .env
+          rm -f .env .env.production assets/.env.production
+          echo "API_BASE_URL=http://insecure-should-be-blocked.example.com" > .env
           echo "API_BASE_URL=http://insecure-should-be-blocked.example.com" > .env.production
+          if [ -d "assets" ]; then
+            echo "API_BASE_URL=http://insecure-should-be-blocked.example.com" > assets/.env.production
+          fi
 
       - name: Build Web (Release) con configuración inválida
-        run: flutter build web --release --dart-define=ENV_FILE=.env.production
+        run: flutter build web --release --no-pub --dart-define=ENV_FILE=.env.production
 
       - name: Set up Node
         uses: actions/setup-node@v4
