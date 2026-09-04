@@ -217,12 +217,18 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     final keyring = await scope.authRepository.getNfcKeyring();
     if (!mounted) return;
     if (keyring == null || !keyring.canWrite) {
+      final bool expired = await scope.authRepository.isNfcSessionExpired();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isEs
-                ? 'No hay clave NFC disponible para grabar.'
-                : 'No NFC key available to write.',
+            expired
+                ? (isEs
+                      ? 'Su sesión expiró. Inicie sesión de nuevo para grabar.'
+                      : 'Your session expired. Log in again to write.')
+                : (isEs
+                      ? 'No hay clave NFC disponible para grabar.'
+                      : 'No NFC key available to write.'),
           ),
           backgroundColor: AppColors.error,
         ),
@@ -278,10 +284,16 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     final keyring = await scope.authRepository.getNfcKeyring();
     if (!mounted) return;
     if (keyring == null || !keyring.canWrite) {
+      final bool expired = await scope.authRepository.isNfcSessionExpired();
+      if (!mounted) return;
       _showReassignSnack(
-        isEs
-            ? 'No hay clave NFC disponible para grabar.'
-            : 'No NFC key available to write.',
+        expired
+            ? (isEs
+                  ? 'Su sesión expiró. Inicie sesión de nuevo para grabar.'
+                  : 'Your session expired. Log in again to write.')
+            : (isEs
+                  ? 'No hay clave NFC disponible para grabar.'
+                  : 'No NFC key available to write.'),
         error: true,
       );
       return;

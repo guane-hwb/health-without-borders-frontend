@@ -132,6 +132,9 @@ class _FakeAuthRepository extends AuthRepository {
     if (hex == null || hex.isEmpty) return null;
     return NfcKeyring.single(hex);
   }
+
+  @override
+  Future<bool> isNfcSessionExpired() async => false;
 }
 
 class _FaultyLocalDatabase extends LocalDatabase {

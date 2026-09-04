@@ -40,6 +40,10 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   bool _scanning = false;
   String? _errorMessage;
 
+  /// Set when a scan found no keyring because the session window closed, so the
+  /// offline fallback can say "log in again" rather than blame the chip.
+  bool _nfcSessionExpired = false;
+
   // ── Stored values across steps ──
   String? _patientDeviceUid;
 
@@ -62,16 +66,21 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       _scanning = true;
       _errorMessage = null;
     });
+    _nfcSessionExpired = false;
 
     payload.HwbChipReadResult? chip;
     try {
-      final keyring = await AppScope.of(
-        context,
-      ).authRepository.getNfcKeyring();
+      final authRepository = AppScope.of(context).authRepository;
+      final alertMessage = _nfcAlert(guardian: false);
+      final keyring = await authRepository.getNfcKeyring();
       if (keyring != null && keyring.isNotEmpty) {
         chip = await payload.NfcPayloadService(
           codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
-        ).readHwbChip(alertMessage: _nfcAlert(guardian: false));
+        ).readHwbChip(alertMessage: alertMessage);
+      } else {
+        // No keyring: the scan can still resolve the patient online from the
+        // chip UID, so only remember the reason for the offline fallback.
+        _nfcSessionExpired = await authRepository.isNfcSessionExpired();
       }
     } on payload.NfcNotAvailableException {
       if (mounted) {
@@ -195,9 +204,15 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         final isEs = s.isEs;
         setState(() {
           _scanning = false;
-          _errorMessage = isEs
-              ? 'Sin conexión y sin respaldo legible en el chip.'
-              : 'Offline and no readable backup on the chip.';
+          _errorMessage = _nfcSessionExpired
+              ? (isEs
+                    ? 'Sin conexión y su sesión expiró: inicie sesión de nuevo '
+                          'para leer el respaldo del chip.'
+                    : 'Offline and your session expired: log in again to read '
+                          'the chip backup.')
+              : (isEs
+                    ? 'Sin conexión y sin respaldo legible en el chip.'
+                    : 'Offline and no readable backup on the chip.');
         });
       }
     }
@@ -230,12 +245,17 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
     try {
-      final keyring = await AppScope.of(
-        context,
-      ).authRepository.getNfcKeyring();
+      final authRepository = AppScope.of(context).authRepository;
+      final keyring = await authRepository.getNfcKeyring();
       if (keyring == null || keyring.isEmpty) {
+        final bool expired = await authRepository.isNfcSessionExpired();
         throw NfcSessionException(
-          isEs ? 'No hay llave NFC disponible.' : 'No NFC key available.',
+          expired
+              ? (isEs
+                    ? 'Su sesión expiró. Inicie sesión de nuevo para leer '
+                          'dispositivos NFC.'
+                    : 'Your session expired. Log in again to read NFC devices.')
+              : (isEs ? 'No hay llave NFC disponible.' : 'No NFC key available.'),
         );
       }
       final chip = await payload.NfcPayloadService(
