@@ -1465,6 +1465,34 @@ class MedicationRequestItem {
     if (notes != null) 'notes': notes,
   };
 
+  MedicationRequestItem copyWith({
+    String? medicationName,
+    String? dciCode,
+    String? iumCode,
+    String? dosage,
+    String? quantity,
+    String? frequency,
+    String? duration,
+    String? route,
+    String? status,
+    String? intent,
+    String? notes,
+  }) {
+    return MedicationRequestItem(
+      medicationName: medicationName ?? this.medicationName,
+      dciCode: dciCode ?? this.dciCode,
+      iumCode: iumCode ?? this.iumCode,
+      dosage: dosage ?? this.dosage,
+      quantity: quantity ?? this.quantity,
+      frequency: frequency ?? this.frequency,
+      duration: duration ?? this.duration,
+      route: route ?? this.route,
+      status: status ?? this.status,
+      intent: intent ?? this.intent,
+      notes: notes ?? this.notes,
+    );
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
