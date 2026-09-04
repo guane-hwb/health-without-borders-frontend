@@ -6,15 +6,19 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
+import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
 class MockPatientRepository extends Mock implements PatientRepository {}
+
+class MockAuthRepository extends Mock implements AuthRepository {}
 
 class MockLocalDatabase extends Mock implements LocalDatabase {}
 
@@ -35,8 +39,10 @@ void main() {
   });
 
   late MockPatientRepository patientRepo;
+  late MockAuthRepository authRepo;
   late MockLocalDatabase localDb;
   late SyncEngine engine;
+  late UserSession testUser;
 
   // Helpers ------------------------------------------------------------
 
@@ -58,6 +64,7 @@ void main() {
     when(() => entry.toPatientRecord()).thenReturn(record);
     when(() => entry.syncErrorCode).thenReturn(syncErrorCode);
     when(() => entry.revision).thenReturn(revision);
+    when(() => entry.retiredDeviceReason).thenReturn(null);
     return entry;
   }
 
@@ -82,7 +89,18 @@ void main() {
 
   setUp(() {
     patientRepo = MockPatientRepository();
+    authRepo = MockAuthRepository();
     localDb = MockLocalDatabase();
+
+    testUser = UserSession(
+      id: 'user-test-123',
+      fullName: 'Test User',
+      email: 'user@test.org',
+      role: UserRole.doctor,
+      organizationId: 'org-test-123',
+    );
+
+    when(() => authRepo.currentUser).thenReturn(testUser);
 
     when(
       () => localDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
@@ -97,6 +115,11 @@ void main() {
     ).thenAnswer((_) async => 0);
     when(
       () => localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+    ).thenAnswer((_) async => []);
+    when(
+      () => localDb.pendingEmergencyAccessLogs(
+        ownerUserId: any(named: 'ownerUserId'),
+      ),
     ).thenAnswer((_) async => []);
     when(
       () => localDb.purgeStalePermanentErrors(maxAge: any(named: 'maxAge')),
@@ -118,7 +141,11 @@ void main() {
       ),
     ).thenAnswer((_) async {});
 
-    engine = SyncEngine(patientRepository: patientRepo, localDatabase: localDb);
+    engine = SyncEngine(
+      patientRepository: patientRepo,
+      authRepository: authRepo,
+      localDatabase: localDb,
+    );
   });
 
   tearDown(() {
@@ -471,7 +498,7 @@ void main() {
         verify(
           () => localDb.markSyncError(
             'A',
-            'A patient is already registered with this device tag.',
+            'Registro duplicado (409): El chip NFC ya pertenece a otro paciente',
             statusCode: 409,
             revision: 0,
           ),
@@ -657,6 +684,7 @@ void main() {
           StreamController<List<ConnectivityResult>>.broadcast();
       connectivityEngine = SyncEngine(
         patientRepository: patientRepo,
+        authRepository: authRepo,
         localDatabase: localDb,
         connectivityStream: connectivityController.stream,
       );

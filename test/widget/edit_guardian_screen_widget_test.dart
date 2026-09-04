@@ -1,19 +1,4 @@
 // test/widget/edit_guardian_screen_widget_test.dart
-//
-// Widget testing for EditGuardianScreen.
-// Covers what the Flutter widget tree requires:
-// • Rendering the header with the correct title
-// • Rendering the 4 text fields (name, document number, address, phone number)
-// • Rendering the 2 dropdowns (document type, country)
-// • Pre-loading the guardian's name and phone number into the fields
-// • Document number and address fields start empty
-// • "Back" button closes the screen (pop-up)
-// • "Save" button closes the screen (pop-up)
-// • Changing the value in the document type dropdown
-// • Changing the value in the country dropdown
-// • Editing the name field
-// • Editing the phone number field
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -90,6 +75,20 @@ class FakeAuthRepository implements AuthRepository {
   @override
   ValueNotifier<UserSession?> get sessionNotifier =>
       ValueNotifier<UserSession?>(null);
+
+  @override
+  VoidCallback? onSessionInvalidated;
+
+  @override
+  Future<void> discardForeignPendingData() async {}
+
+  @override
+  Future<List<Map<String, Object?>>>
+  pendingForeignEmergencyLogsForReview() async => <Map<String, Object?>>[];
+
+  @override
+  Future<List<LocalPatientEntry>> pendingForeignRecordsForReview() async =>
+      <LocalPatientEntry>[];
 }
 
 class FakeLocalDatabase implements LocalDatabase {
@@ -99,14 +98,23 @@ class FakeLocalDatabase implements LocalDatabase {
     String? patientName,
     String? userId,
     String reason = 'guardian_absent_offline',
+    String? ownerUserId,
+    String? organizationId,
   }) async {}
 
   @override
-  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs() async =>
-      <Map<String, Object?>>[];
+  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs({
+    String? ownerUserId,
+  }) async => <Map<String, Object?>>[];
 
   @override
-  Future<int> getUnsyncedEmergencyLogCount() async => 0;
+  Future<int> getUnsyncedEmergencyLogCount({String? ownerUserId}) async => 0;
+
+  @override
+  Future<int> getOrphanedEmergencyLogCount() async => 0;
+
+  @override
+  Future<int> getOrphanedPendingCount() async => 0;
 
   @override
   Future<void> clearAll() async {}
@@ -117,6 +125,13 @@ class FakeLocalDatabase implements LocalDatabase {
   @override
   Future<List<LocalPatientEntry>> getAllRecords({String? ownerUserId}) async =>
       [];
+
+  @override
+  Future<List<MapEntry<String, String>>> getWebQuarantinedEntries() async =>
+      <MapEntry<String, String>>[];
+
+  @override
+  List<String> get webQuarantinedKeysForTesting => <String>[];
 
   @override
   Future<int> getUnsyncedCount({String? ownerUserId}) async => 0;
@@ -145,6 +160,7 @@ class FakeLocalDatabase implements LocalDatabase {
   @override
   Future<void> savePatient(
     PatientFullRecord record, {
+    bool isSynced = false,
     String? ownerUserId,
     String? organizationId,
     String? retiredDeviceReason,
@@ -493,28 +509,52 @@ void main() {
 
       bool popped = false;
 
+      final authRepo = FakeAuthRepository();
+      final apiClient = ApiClient(baseUrl: 'https://example.com');
+      final patientRepo = PatientRepository(
+        apiClient: apiClient,
+        authRepository: authRepo,
+      );
+      final userRepo = UserRepository(
+        apiClient: apiClient,
+        authRepository: authRepo,
+      );
+      final syncEngine = SyncEngine(
+        patientRepository: patientRepo,
+        localDatabase: FakeLocalDatabase(),
+      );
+
       await tester.pumpWidget(
         AppLocale(
           locale: 'es',
           setLocale: (_) {},
-          child: MaterialApp(
-            home: Builder(
-              builder: (ctx) => ElevatedButton(
-                onPressed: () {
-                  Navigator.of(ctx).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => AppLocale(
-                        locale: 'es',
-                        setLocale: (_) {},
-                        child: EditGuardianScreen(patient: _makePatient()),
-                      ),
-                    ),
-                  );
-                },
-                child: const Text('Open'),
-              ),
+          child: AppScope(
+            authRepository: authRepo,
+            userRepository: userRepo,
+            patientRepository: patientRepo,
+            localDatabase: FakeLocalDatabase(),
+            syncEngine: syncEngine,
+            statsRepository: StatsRepository(
+              apiClient: ApiClient(baseUrl: 'http://localhost'),
+              authRepository: authRepo,
             ),
-            navigatorObservers: [_PopObserver(onPop: () => popped = true)],
+            reachability: Reachability(baseUrl: 'http://localhost'),
+            child: MaterialApp(
+              home: Builder(
+                builder: (ctx) => ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(ctx).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            EditGuardianScreen(patient: _makePatient()),
+                      ),
+                    );
+                  },
+                  child: const Text('Open'),
+                ),
+              ),
+              navigatorObservers: [_PopObserver(onPop: () => popped = true)],
+            ),
           ),
         ),
       );
@@ -536,28 +576,52 @@ void main() {
 
       bool popped = false;
 
+      final authRepo = FakeAuthRepository();
+      final apiClient = ApiClient(baseUrl: 'https://example.com');
+      final patientRepo = PatientRepository(
+        apiClient: apiClient,
+        authRepository: authRepo,
+      );
+      final userRepo = UserRepository(
+        apiClient: apiClient,
+        authRepository: authRepo,
+      );
+      final syncEngine = SyncEngine(
+        patientRepository: patientRepo,
+        localDatabase: FakeLocalDatabase(),
+      );
+
       await tester.pumpWidget(
         AppLocale(
           locale: 'es',
           setLocale: (_) {},
-          child: MaterialApp(
-            home: Builder(
-              builder: (ctx) => ElevatedButton(
-                onPressed: () {
-                  Navigator.of(ctx).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => AppLocale(
-                        locale: 'es',
-                        setLocale: (_) {},
-                        child: EditGuardianScreen(patient: _makePatient()),
-                      ),
-                    ),
-                  );
-                },
-                child: const Text('Open'),
-              ),
+          child: AppScope(
+            authRepository: authRepo,
+            userRepository: userRepo,
+            patientRepository: patientRepo,
+            localDatabase: FakeLocalDatabase(),
+            syncEngine: syncEngine,
+            statsRepository: StatsRepository(
+              apiClient: ApiClient(baseUrl: 'http://localhost'),
+              authRepository: authRepo,
             ),
-            navigatorObservers: [_PopObserver(onPop: () => popped = true)],
+            reachability: Reachability(baseUrl: 'http://localhost'),
+            child: MaterialApp(
+              home: Builder(
+                builder: (ctx) => ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(ctx).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            EditGuardianScreen(patient: _makePatient()),
+                      ),
+                    );
+                  },
+                  child: const Text('Open'),
+                ),
+              ),
+              navigatorObservers: [_PopObserver(onPop: () => popped = true)],
+            ),
           ),
         ),
       );
@@ -576,28 +640,52 @@ void main() {
     ) async {
       bool popped = false;
 
+      final authRepo = FakeAuthRepository();
+      final apiClient = ApiClient(baseUrl: 'https://example.com');
+      final patientRepo = PatientRepository(
+        apiClient: apiClient,
+        authRepository: authRepo,
+      );
+      final userRepo = UserRepository(
+        apiClient: apiClient,
+        authRepository: authRepo,
+      );
+      final syncEngine = SyncEngine(
+        patientRepository: patientRepo,
+        localDatabase: FakeLocalDatabase(),
+      );
+
       await tester.pumpWidget(
         AppLocale(
           locale: 'es',
           setLocale: (_) {},
-          child: MaterialApp(
-            home: Builder(
-              builder: (ctx) => ElevatedButton(
-                onPressed: () {
-                  Navigator.of(ctx).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => AppLocale(
-                        locale: 'es',
-                        setLocale: (_) {},
-                        child: EditGuardianScreen(patient: _makePatient()),
-                      ),
-                    ),
-                  );
-                },
-                child: const Text('Open'),
-              ),
+          child: AppScope(
+            authRepository: authRepo,
+            userRepository: userRepo,
+            patientRepository: patientRepo,
+            localDatabase: FakeLocalDatabase(),
+            syncEngine: syncEngine,
+            statsRepository: StatsRepository(
+              apiClient: ApiClient(baseUrl: 'http://localhost'),
+              authRepository: authRepo,
             ),
-            navigatorObservers: [_PopObserver(onPop: () => popped = true)],
+            reachability: Reachability(baseUrl: 'http://localhost'),
+            child: MaterialApp(
+              home: Builder(
+                builder: (ctx) => ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(ctx).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            EditGuardianScreen(patient: _makePatient()),
+                      ),
+                    );
+                  },
+                  child: const Text('Open'),
+                ),
+              ),
+              navigatorObservers: [_PopObserver(onPop: () => popped = true)],
+            ),
           ),
         ),
       );
@@ -612,7 +700,7 @@ void main() {
     });
   });
 
-  // ── Group 6: Location (ES / EN)3456 ────────────────────────────────────
+  // ── Group 6: Location (ES / EN) ──────────────────────────────────────────
   group('EditGuardianScreen — localización', () {
     testWidgets('en locale ES muestra "Guardar"', (tester) async {
       await tester.pumpWidget(

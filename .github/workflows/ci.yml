@@ -1,4 +1,3 @@
-# .github/workflows/ci.yml
 name: CI
 
 on:
@@ -30,7 +29,7 @@ jobs:
       - name: Create env files for CI
         run: |
           echo "API_BASE_URL=http://localhost:8000" > .env
-          echo "API_BASE_URL=http://localhost:8000" > .env.production
+          echo "API_BASE_URL=https://api-ci.healthwithoutborders.org" > .env.production
 
       - name: Analyze
         run: flutter analyze --fatal-infos --fatal-warnings
@@ -52,8 +51,28 @@ jobs:
       - name: Build APK (Debug)
         run: flutter build apk --debug
 
-      - name: Build Web
-        run: flutter build web --release
+      - name: Build Web (Release)
+        run: flutter build web --release --dart-define=ENV_FILE=.env.production
+
+      - name: Set up Node (for Web smoke test)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.48.0
+          npx playwright install --with-deps chromium
+          
+      - name: Smoke test — el artefacto Web promocionado arranca limpio
+        run: |
+          python3 -m http.server 8788 --directory build/web &
+          SERVER_PID=$!
+          sleep 2
+          node scripts/web_smoke_test.mjs http://localhost:8788
+          STATUS=$?
+          kill "$SERVER_PID" || true
+          exit $STATUS
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
@@ -62,3 +81,49 @@ jobs:
           files: ./coverage/lcov.info
           fail_ci_if_error: true
           skip_validation: true
+
+  web-release-http-guard-check:
+    name: "Prueba negativa: HTTP en release debe seguir bloqueado"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.5"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Crear env de release INTENCIONALMENTE inválido (HTTP)
+        run: |
+          rm -f .env .env.production assets/.env.production
+          echo "API_BASE_URL=http://insecure-should-be-blocked.example.com" > .env
+          echo "API_BASE_URL=http://insecure-should-be-blocked.example.com" > .env.production
+          if [ -d "assets" ]; then
+            echo "API_BASE_URL=http://insecure-should-be-blocked.example.com" > assets/.env.production
+          fi
+
+      - name: Build Web (Release) con configuración inválida
+        run: flutter build web --release --no-pub --dart-define=ENV_FILE=.env.production
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.48.0
+          npx playwright install --with-deps chromium
+
+      - name: Confirmar que la app NO arranca con HTTP en release
+        run: |
+          python3 -m http.server 8789 --directory build/web &
+          SERVER_PID=$!
+          sleep 2
+          EXPECT_FAILURE=true node scripts/web_smoke_test.mjs http://localhost:8789
+          STATUS=$?
+          kill "$SERVER_PID" || true
+          exit $STATUS

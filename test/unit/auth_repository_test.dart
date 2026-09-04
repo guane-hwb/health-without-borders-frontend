@@ -427,6 +427,7 @@ void main() {
       );
     });
   });
+
   group('login() — cambio de usuario', () {
     void stubLoginAs(String email) {
       when(
@@ -465,24 +466,30 @@ void main() {
       },
     );
 
-    test('usuario distinto con pacientes pendientes: NO borra nada', () async {
-      when(
-        () => storage.read(key: AuthRepository.lastUserIdKey),
-      ).thenAnswer((_) async => '11');
-      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 4);
-      when(
-        () => localDb.getUnsyncedEmergencyLogCount(),
-      ).thenAnswer((_) async => 0);
-      stubLoginAs('doc@hwb.org');
+    test(
+      'usuario distinto con pacientes pendientes: NO borra nada y bloquea login',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.lastUserIdKey),
+        ).thenAnswer((_) async => '11');
+        when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 4);
+        when(
+          () => localDb.getUnsyncedEmergencyLogCount(),
+        ).thenAnswer((_) async => 0);
+        stubLoginAs('doc@hwb.org');
 
-      await repo.login(email: 'doc@hwb.org', password: 'x');
+        await expectLater(
+          () => repo.login(email: 'doc@hwb.org', password: 'x'),
+          throwsA(isA<ForeignPendingDataException>()),
+        );
 
-      verifyNever(() => localDb.clearAll());
-      verifyNever(() => localDb.destroyEncryptionKey());
-    });
+        verifyNever(() => localDb.clearAll());
+        verifyNever(() => localDb.destroyEncryptionKey());
+      },
+    );
 
     test('usuario distinto con accesos de emergencia pendientes (aunque los '
-        'pacientes ya estén al día): NO borra nada — el log comparte la '
+        'pacientes ya estén al día): NO borra nada y bloquea login — el log comparte la '
         'misma clave de cifrado', () async {
       when(
         () => storage.read(key: AuthRepository.lastUserIdKey),
@@ -493,7 +500,10 @@ void main() {
       ).thenAnswer((_) async => 1);
       stubLoginAs('doc@hwb.org');
 
-      await repo.login(email: 'doc@hwb.org', password: 'x');
+      await expectLater(
+        () => repo.login(email: 'doc@hwb.org', password: 'x'),
+        throwsA(isA<ForeignPendingDataException>()),
+      );
 
       verifyNever(() => localDb.clearAll());
       verifyNever(() => localDb.destroyEncryptionKey());
@@ -1155,17 +1165,19 @@ void main() {
       verify(() => storage.delete(key: AuthRepository.sessionKey)).called(1);
     });
 
-    test('clearSession destruye la clave de cifrado cuando no hay nada '
-        'pendiente (v2-clave-db-sobrevive-logout)', () async {
-      when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
-      when(
-        () => localDb.getUnsyncedEmergencyLogCount(),
-      ).thenAnswer((_) async => 0);
+    test(
+      'clearSession CONSERVA la clave de cifrado local (v3-destruir-clave-rompe-log-breakglass)',
+      () async {
+        when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+        when(
+          () => localDb.getUnsyncedEmergencyLogCount(),
+        ).thenAnswer((_) async => 0);
 
-      await repo.clearSession();
+        await repo.clearSession();
 
-      verify(() => localDb.destroyEncryptionKey()).called(1);
-    });
+        verifyNever(() => localDb.destroyEncryptionKey());
+      },
+    );
 
     test(
       'clearSession NO destruye la clave si quedan pacientes pendientes',

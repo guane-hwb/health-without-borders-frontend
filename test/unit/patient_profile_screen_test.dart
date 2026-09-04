@@ -352,20 +352,18 @@ void main() {
       expect(tryParsePatientDate('YYYY-MM-DD'), isNull);
     });
 
-    test('64. formato dd/mm/aaaa NO se reconoce con la expresión regular '
-        'actual (bug conocido)', () {
-      expect(tryParsePatientDate('15/06/1990'), isNull);
-      expect(tryParsePatientDate('15-06-1990'), isNull);
+    test('64. formato dd/mm/aaaa y dd-mm-aaaa se parsea correctamente', () {
+      expect(tryParsePatientDate('15/06/1990'), DateTime(1990, 6, 15));
+      expect(tryParsePatientDate('15-06-1990'), DateTime(1990, 6, 15));
     });
 
-    test('65. formato dd/mm/aaaa SÍ coincide si termina con un signo "\$" '
-        'literal (cubre la rama tal como está escrita hoy)', () {
-      final d = tryParsePatientDate(r'15/06/1990$');
+    test('65. formato dd/mm/aaaa con espacios o fin de línea válido', () {
+      final d = tryParsePatientDate('15/06/1990');
       expect(d, DateTime(1990, 6, 15));
     });
 
-    test('66. mes no numérico dentro del formato con "\$" devuelve null', () {
-      expect(tryParsePatientDate(r'15/AA/1990$'), isNull);
+    test('66. mes no numérico dentro del formato dd/mm/aaaa devuelve null', () {
+      expect(tryParsePatientDate('15/AA/1990'), isNull);
     });
   });
 

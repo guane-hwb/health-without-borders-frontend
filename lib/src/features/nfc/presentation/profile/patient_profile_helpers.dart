@@ -1,8 +1,10 @@
 // lib/src/features/nfc/presentation/profile/patient_profile_helpers.dart
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/material.dart';
 
 import '../../../../core/i18n/app_strings.dart';
+import '../../../../design/tokens/app_colors.dart';
 
 DateTime? tryParsePatientDate(String dob) {
   try {
@@ -10,7 +12,7 @@ DateTime? tryParsePatientDate(String dob) {
   } catch (_) {}
 
   final slashMatch = RegExp(
-    r'^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s*\$',
+    r'^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s*$',
   ).firstMatch(dob.trim());
   if (slashMatch != null) {
     final day = int.tryParse(slashMatch.group(1)!);
@@ -132,4 +134,39 @@ String medStatusLabel(AppStrings s, String statusCode) {
     default:
       return statusCode;
   }
+}
+
+// ── Confirm Exit Dialog ──────────────────────────────────────────────────
+
+Future<bool> confirmProfileExit(
+  BuildContext context,
+  bool lastSaveFailed,
+) async {
+  if (!lastSaveFailed) return true;
+  final isEs = AppStrings.of(context).isEs;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(isEs ? 'Cambios sin guardar' : 'Unsaved changes'),
+      content: Text(
+        isEs
+            ? 'El último cambio no pudo guardarse en el dispositivo. Si sale ahora se perderá.'
+            : 'The last change could not be saved on this device. Leaving now will discard it.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: Text(AppStrings.of(ctx).cancel),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: Text(
+            AppStrings.of(ctx).exit,
+            style: const TextStyle(color: AppColors.error),
+          ),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
 }

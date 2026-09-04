@@ -91,6 +91,20 @@ class FakeAuthRepository implements AuthRepository {
   @override
   ValueNotifier<UserSession?> get sessionNotifier =>
       ValueNotifier<UserSession?>(currentUser);
+
+  @override
+  VoidCallback? onSessionInvalidated;
+
+  @override
+  Future<void> discardForeignPendingData() async {}
+
+  @override
+  Future<List<Map<String, Object?>>>
+  pendingForeignEmergencyLogsForReview() async => <Map<String, Object?>>[];
+
+  @override
+  Future<List<LocalPatientEntry>> pendingForeignRecordsForReview() async =>
+      <LocalPatientEntry>[];
 }
 
 class FakeLocalDatabase implements LocalDatabase {
@@ -104,14 +118,24 @@ class FakeLocalDatabase implements LocalDatabase {
     String? patientName,
     String? userId,
     String reason = 'guardian_absent_offline',
+    String? ownerUserId,
+    String? organizationId,
   }) async {}
 
   @override
-  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs() async =>
-      <Map<String, Object?>>[];
+  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs({
+    String? ownerUserId,
+  }) async => <Map<String, Object?>>[];
 
   @override
-  Future<int> getUnsyncedEmergencyLogCount() async => pendingCount;
+  Future<int> getUnsyncedEmergencyLogCount({String? ownerUserId}) async =>
+      pendingCount;
+
+  @override
+  Future<int> getOrphanedEmergencyLogCount() async => 0;
+
+  @override
+  Future<int> getOrphanedPendingCount() async => 0;
 
   @override
   Future<void> clearAll() async {}
@@ -122,6 +146,13 @@ class FakeLocalDatabase implements LocalDatabase {
   @override
   Future<List<LocalPatientEntry>> getAllRecords({String? ownerUserId}) async =>
       <LocalPatientEntry>[];
+
+  @override
+  Future<List<MapEntry<String, String>>> getWebQuarantinedEntries() async =>
+      <MapEntry<String, String>>[];
+
+  @override
+  List<String> get webQuarantinedKeysForTesting => <String>[];
 
   @override
   Future<int> getUnsyncedCount({String? ownerUserId}) async => pendingCount;
@@ -156,6 +187,7 @@ class FakeLocalDatabase implements LocalDatabase {
   @override
   Future<void> savePatient(
     PatientFullRecord record, {
+    bool isSynced = false,
     String? ownerUserId,
     String? organizationId,
     String? retiredDeviceReason,

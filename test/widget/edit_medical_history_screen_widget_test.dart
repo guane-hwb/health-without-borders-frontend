@@ -1,21 +1,290 @@
 // test/widget/edit_medical_history_screen_widget_test.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
+import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
+import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/edit_medical_history_screen.dart';
+
+// -----------------------------------------------------------------------------
+// FAKES
+// -----------------------------------------------------------------------------
+
+class FakeAuthRepository implements AuthRepository {
+  FakeAuthRepository();
+
+  @override
+  UserSession? get currentUser => null;
+
+  @override
+  Future<UserSession> login({
+    required String email,
+    required String password,
+  }) async => UserSession.fromEmail(email);
+
+  @override
+  Future<UserSession?> getCurrentUser() async => null;
+
+  @override
+  Future<String> getAccessToken({bool forceRefresh = false}) async =>
+      'test-token';
+
+  @override
+  Future<String?> refreshAccessToken() async => null;
+
+  @override
+  Future<UserSession?> restoreSession() async => null;
+
+  @override
+  ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
+
+  @override
+  Future<String?> getNfcEncryptionKey() async => 'fake-nfc-key-12345';
+
+  @override
+  Future<Null> getNfcKeyring() async => null;
+
+  @override
+  Future<bool> isNfcSessionExpired() async => false;
+
+  @override
+  Future<void> clearSession() async {}
+
+  @override
+  Future<void> logout({bool wipeLocalData = false}) async {}
+
+  @override
+  Future<bool> wipeLocalPhi({bool force = false}) async => true;
+
+  @override
+  bool get hasToken => false;
+
+  @override
+  ValueNotifier<UserSession?> get sessionNotifier =>
+      ValueNotifier<UserSession?>(null);
+
+  @override
+  VoidCallback? onSessionInvalidated;
+
+  @override
+  Future<void> discardForeignPendingData() async {}
+
+  @override
+  Future<List<Map<String, Object?>>>
+  pendingForeignEmergencyLogsForReview() async => <Map<String, Object?>>[];
+
+  @override
+  Future<List<LocalPatientEntry>> pendingForeignRecordsForReview() async =>
+      <LocalPatientEntry>[];
+}
+
+class FakeLocalDatabase implements LocalDatabase {
+  @override
+  Future<void> logEmergencyAccess({
+    required String patientUid,
+    String? patientName,
+    String? userId,
+    String reason = 'guardian_absent_offline',
+    String? ownerUserId,
+    String? organizationId,
+  }) async {}
+
+  @override
+  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs({
+    String? ownerUserId,
+  }) async => <Map<String, Object?>>[];
+
+  @override
+  Future<int> getUnsyncedEmergencyLogCount({String? ownerUserId}) async => 0;
+
+  @override
+  Future<int> getOrphanedEmergencyLogCount() async => 0;
+
+  @override
+  Future<int> getOrphanedPendingCount() async => 0;
+
+  @override
+  Future<void> clearAll() async {}
+
+  @override
+  Future<void> deleteRecord(String patientId) async {}
+
+  @override
+  Future<List<LocalPatientEntry>> getAllRecords({String? ownerUserId}) async =>
+      [];
+
+  @override
+  Future<List<MapEntry<String, String>>> getWebQuarantinedEntries() async =>
+      <MapEntry<String, String>>[];
+
+  @override
+  List<String> get webQuarantinedKeysForTesting => <String>[];
+
+  @override
+  Future<int> getUnsyncedCount({String? ownerUserId}) async => 0;
+
+  @override
+  Future<List<LocalPatientEntry>> getUnsyncedRecords({
+    String? ownerUserId,
+  }) async => [];
+
+  @override
+  Future<void> markSyncError(
+    String patientId,
+    String error, {
+    int? statusCode,
+    int? revision,
+  }) async {}
+
+  @override
+  Future<void> markSynced(
+    String patientId, {
+    String? createdAt,
+    String? recordJson,
+    int? revision,
+  }) async {}
+
+  @override
+  Future<void> savePatient(
+    PatientFullRecord record, {
+    bool isSynced = false,
+    String? ownerUserId,
+    String? organizationId,
+    String? retiredDeviceReason,
+  }) async {}
+
+  @override
+  Future<NfcChipStatus?> getChipStatus(String patientId) async => null;
+
+  @override
+  Future<void> markChipsDirty(
+    String patientId, {
+    bool patient = false,
+    bool guardian = false,
+  }) async {}
+
+  @override
+  Future<void> clearChipsDirty(
+    String patientId, {
+    bool patient = false,
+    bool guardian = false,
+  }) async {}
+
+  @override
+  Future<void> purgeStalePermanentErrors({
+    Duration maxAge = const Duration(days: 7),
+  }) async {}
+
+  @override
+  Future<void> destroyEncryptionKey() async {}
+
+  @override
+  Future<void> markEmergencyLogsSynced(List<int> emergencyLogIds) async {}
+
+  @override
+  Future<int> getBlockedCount({String? ownerUserId}) async => 0;
+
+  @override
+  Future<int> getRetryablePendingCount({String? ownerUserId}) async => 0;
+}
 
 // -----------------------------------------------------------------------------
 // BUILD SUBJECT
 // -----------------------------------------------------------------------------
 
 Widget buildSubject(PatientFullRecord patient) {
-  return MaterialApp(
-    builder: (context, child) {
-      return AppLocale(locale: 'es', setLocale: (_) {}, child: child!);
-    },
-    home: EditMedicalHistoryScreen(patient: patient),
+  final authRepo = FakeAuthRepository();
+  final apiClient = ApiClient(baseUrl: 'https://example.com');
+  final patientRepo = PatientRepository(
+    apiClient: apiClient,
+    authRepository: authRepo,
+  );
+  final userRepo = UserRepository(
+    apiClient: apiClient,
+    authRepository: authRepo,
+  );
+  final syncEngine = SyncEngine(
+    patientRepository: patientRepo,
+    localDatabase: FakeLocalDatabase(),
+  );
+
+  return AppLocale(
+    locale: 'es',
+    setLocale: (_) {},
+    child: AppScope(
+      authRepository: authRepo,
+      userRepository: userRepo,
+      patientRepository: patientRepo,
+      localDatabase: FakeLocalDatabase(),
+      syncEngine: syncEngine,
+      statsRepository: StatsRepository(
+        apiClient: ApiClient(baseUrl: 'http://localhost'),
+        authRepository: authRepo,
+      ),
+      reachability: Reachability(baseUrl: 'http://localhost'),
+      child: MaterialApp(home: EditMedicalHistoryScreen(patient: patient)),
+    ),
+  );
+}
+
+Widget buildSubjectForNavigation(PatientFullRecord patient) {
+  final authRepo = FakeAuthRepository();
+  final apiClient = ApiClient(baseUrl: 'https://example.com');
+  final patientRepo = PatientRepository(
+    apiClient: apiClient,
+    authRepository: authRepo,
+  );
+  final userRepo = UserRepository(
+    apiClient: apiClient,
+    authRepository: authRepo,
+  );
+  final syncEngine = SyncEngine(
+    patientRepository: patientRepo,
+    localDatabase: FakeLocalDatabase(),
+  );
+
+  return AppLocale(
+    locale: 'es',
+    setLocale: (_) {},
+    child: AppScope(
+      authRepository: authRepo,
+      userRepository: userRepo,
+      patientRepository: patientRepo,
+      localDatabase: FakeLocalDatabase(),
+      syncEngine: syncEngine,
+      statsRepository: StatsRepository(
+        apiClient: ApiClient(baseUrl: 'http://localhost'),
+        authRepository: authRepo,
+      ),
+      reachability: Reachability(baseUrl: 'http://localhost'),
+      child: MaterialApp(
+        home: Builder(
+          builder: (ctx) {
+            return ElevatedButton(
+              onPressed: () async {
+                await Navigator.of(ctx).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => EditMedicalHistoryScreen(patient: patient),
+                  ),
+                );
+              },
+              child: const Text('Abrir'),
+            );
+          },
+        ),
+      ),
+    ),
   );
 }
 
@@ -424,28 +693,7 @@ void main() {
 
   group('Botones inferiores', () {
     testWidgets('botón "Volver" inferior hace pop', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          builder: (context, child) {
-            return AppLocale(locale: 'es', setLocale: (_) {}, child: child!);
-          },
-          home: Builder(
-            builder: (ctx) {
-              return ElevatedButton(
-                onPressed: () async {
-                  await Navigator.of(ctx).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          EditMedicalHistoryScreen(patient: emptyPatient()),
-                    ),
-                  );
-                },
-                child: const Text('Abrir'),
-              );
-            },
-          ),
-        ),
-      );
+      await tester.pumpWidget(buildSubjectForNavigation(emptyPatient()));
 
       await tapVisible(tester, find.text('Abrir'));
       await tester.pumpAndSettle();
@@ -461,28 +709,7 @@ void main() {
     });
 
     testWidgets('botón "Volver" del header superior hace pop', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          builder: (context, child) {
-            return AppLocale(locale: 'es', setLocale: (_) {}, child: child!);
-          },
-          home: Builder(
-            builder: (ctx) {
-              return ElevatedButton(
-                onPressed: () async {
-                  await Navigator.of(ctx).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          EditMedicalHistoryScreen(patient: emptyPatient()),
-                    ),
-                  );
-                },
-                child: const Text('Abrir'),
-              );
-            },
-          ),
-        ),
-      );
+      await tester.pumpWidget(buildSubjectForNavigation(emptyPatient()));
 
       await tapVisible(tester, find.text('Abrir'));
       await tester.pumpAndSettle();
@@ -502,28 +729,7 @@ void main() {
     });
 
     testWidgets('botón "Guardar" hace pop', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          builder: (context, child) {
-            return AppLocale(locale: 'es', setLocale: (_) {}, child: child!);
-          },
-          home: Builder(
-            builder: (ctx) {
-              return ElevatedButton(
-                onPressed: () async {
-                  await Navigator.of(ctx).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          EditMedicalHistoryScreen(patient: emptyPatient()),
-                    ),
-                  );
-                },
-                child: const Text('Abrir'),
-              );
-            },
-          ),
-        ),
-      );
+      await tester.pumpWidget(buildSubjectForNavigation(emptyPatient()));
 
       await tapVisible(tester, find.text('Abrir'));
       await tester.pumpAndSettle();
