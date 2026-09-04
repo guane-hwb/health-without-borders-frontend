@@ -29,6 +29,9 @@ class FakeAuthRepository implements AuthRepository {
   Future<NfcKeyring?> getNfcKeyring() async => null;
 
   @override
+  Future<bool> isNfcSessionExpired() async => false;
+
+  @override
   UserSession? get currentUser => session;
 
   @override

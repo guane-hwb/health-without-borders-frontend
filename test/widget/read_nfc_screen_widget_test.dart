@@ -138,6 +138,11 @@ class FakeAuthRepository extends AuthRepository {
     if (key == null || key.isEmpty) return null;
     return NfcKeyring.single(key);
   }
+
+  /// The fake never models an expired window; a null key here means "no key
+  /// was ever delivered", which keeps the existing message expectations.
+  @override
+  Future<bool> isNfcSessionExpired() async => false;
 }
 
 class _FakeLocaleProvider extends StatelessWidget {
