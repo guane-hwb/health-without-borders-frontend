@@ -13,6 +13,7 @@ import 'package:health_without_borders_frontend/src/core/storage/local_database.
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
@@ -117,6 +118,7 @@ void main() {
       () => auth.sessionNotifier,
     ).thenReturn(ValueNotifier<UserSession?>(activeUser));
     when(() => auth.getNfcEncryptionKey()).thenAnswer((_) async => null);
+    when(() => auth.getNfcKeyring()).thenAnswer((_) async => null);
     when(() => auth.logout()).thenAnswer((_) async {});
 
     when(() => patientRepo.syncPatient(any())).thenAnswer(
@@ -539,6 +541,9 @@ void main() {
           when(
             () => auth.getNfcEncryptionKey(),
           ).thenAnswer((_) async => validHexKey);
+          when(
+            () => auth.getNfcKeyring(),
+          ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
 
           await pumpScreen(tester);
           await advanceToHub(tester);
@@ -566,6 +571,9 @@ void main() {
           when(
             () => auth.getNfcEncryptionKey(),
           ).thenAnswer((_) async => validHexKey);
+          when(
+            () => auth.getNfcKeyring(),
+          ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
 
           await pumpScreen(tester);
           tester

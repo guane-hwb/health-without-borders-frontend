@@ -10,6 +10,7 @@ import 'package:health_without_borders_frontend/src/core/network/api_client.dart
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_service.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
@@ -126,6 +127,16 @@ class FakeAuthRepository extends AuthRepository {
       throw Exception('secure storage unavailable (simulated)');
     }
     return nfcKey;
+  }
+
+  @override
+  Future<NfcKeyring?> getNfcKeyring() async {
+    if (throwOnGetKey) {
+      throw Exception('secure storage unavailable (simulated)');
+    }
+    final String? key = nfcKey;
+    if (key == null || key.isEmpty) return null;
+    return NfcKeyring.single(key);
   }
 }
 

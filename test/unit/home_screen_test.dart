@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 
 class FakeAuthRepository implements AuthRepository {
@@ -23,6 +24,9 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<String?> getNfcEncryptionKey() async => null;
+
+  @override
+  Future<NfcKeyring?> getNfcKeyring() async => null;
 
   @override
   UserSession? get currentUser => session;

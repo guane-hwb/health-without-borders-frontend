@@ -400,17 +400,15 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       return;
     }
 
-    await scope.authRepository.getCurrentUser();
-
-    var nfcKey = await scope.authRepository.getNfcEncryptionKey();
+    final keyring = await scope.authRepository.getNfcKeyring();
     if (!mounted) return;
 
-    if (nfcKey == null || nfcKey.trim().length != 64) {
-      nfcKey =
-          '0000000000000000000000000000000000000000000000000000000000000000';
+    if (keyring == null || !keyring.canWrite) {
+      _completeFinalize();
+      return;
     }
 
-    final codec = NfcPayloadCodec(hexKey: nfcKey.trim());
+    final codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
     final s = AppStrings.of(context);
     final isEs = s.isEs;
 

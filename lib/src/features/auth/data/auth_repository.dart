@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/nfc/nfc_keyring.dart';
 import '../../../core/storage/local_database.dart';
 import '../../../core/utils/app_logger.dart';
 import '../domain/user_session.dart';
@@ -56,6 +57,8 @@ class AuthRepository implements TokenProvider {
   @visibleForTesting
   static const String nfcKeyKey = _nfcKeyKey;
   @visibleForTesting
+  static const String nfcKeyringKey = _nfcKeyringKey;
+  @visibleForTesting
   static const String sessionKey = _sessionKey;
   @visibleForTesting
   static const String lastUserIdKey = _lastUserIdKey;
@@ -63,6 +66,7 @@ class AuthRepository implements TokenProvider {
   static const String _tokenKey = 'hwb_access_token';
   static const String _refreshKey = 'hwb_refresh_token';
   static const String _nfcKeyKey = 'hwb_nfc_key';
+  static const String _nfcKeyringKey = 'hwb_nfc_keyring';
   static const String _sessionKey = 'hwb_user_session';
   static const String _lastUserIdKey = 'hwb_last_user_id';
 
@@ -73,6 +77,7 @@ class AuthRepository implements TokenProvider {
   String? _cachedToken;
   String? _cachedRefreshToken;
   String? _cachedNfcKey;
+  NfcKeyring? _cachedKeyring;
   UserSession? _session;
 
   final ValueNotifier<UserSession?> _sessionNotifier =
@@ -156,16 +161,7 @@ class AuthRepository implements TokenProvider {
       } catch (_) {}
     }
 
-    final nfcKey = tokenData['nfc_encryption_key']?.toString();
-    if (nfcKey != null && nfcKey.isNotEmpty) {
-      if (kIsWeb) {
-        _cachedNfcKey = nfcKey;
-      } else {
-        try {
-          await _secureStorage.write(key: _nfcKeyKey, value: nfcKey);
-        } catch (_) {}
-      }
-    }
+    await _absorbKeyring(tokenData);
 
     _updateSession(fetchedSession);
 
@@ -281,11 +277,58 @@ class AuthRepository implements TokenProvider {
       } catch (_) {}
     }
 
+    // /login/refresh carries the keyring as well, so a silent refresh picks up
+    // a rotated current version without waiting for the next full login.
+    await _absorbKeyring(data);
+
     return newAccess;
   }
 
+  /// The full set of NFC keys this device holds, or null when none are known.
+  ///
+  /// Prefer this over [getNfcEncryptionKey] for anything that reads a chip: it
+  /// carries every live key version, so a wristband written under an older key
+  /// still decrypts while a rotation is in progress.
+  Future<NfcKeyring?> getNfcKeyring() async {
+    if (_cachedKeyring?.isNotEmpty == true) return _cachedKeyring;
+
+    // Restored session / cold start: rebuild from storage.
+    if (kIsWeb) return _cachedKeyring;
+    try {
+      final String? raw = await _secureStorage.read(key: _nfcKeyringKey);
+      if (raw != null && raw.isNotEmpty) {
+        final Object? decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) {
+          final NfcKeyring? restored = NfcKeyring.fromJson(decoded);
+          if (restored != null && restored.isNotEmpty) {
+            _cachedKeyring = restored;
+            return restored;
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Upgrade path: a device provisioned by a build that predates versioning
+    // holds a bare single key. Treat it as key version 0, which is exactly what
+    // its already-written tags decrypt with.
+    try {
+      final String? legacy = await _secureStorage.read(key: _nfcKeyKey);
+      if (legacy != null && legacy.isNotEmpty) {
+        final NfcKeyring restored = NfcKeyring.single(legacy);
+        _cachedKeyring = restored;
+        return restored;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  /// The single key new writes use. Kept for call sites that only encrypt.
   Future<String?> getNfcEncryptionKey() async {
     if (_cachedNfcKey?.isNotEmpty == true) return _cachedNfcKey;
+    final NfcKeyring? keyring = await getNfcKeyring();
+    final String? current = keyring?.currentKey;
+    if (current != null && current.isNotEmpty) return current;
     if (kIsWeb) return null;
     try {
       return await _secureStorage.read(key: _nfcKeyKey);
@@ -332,6 +375,7 @@ class AuthRepository implements TokenProvider {
     _cachedToken = null;
     _cachedRefreshToken = null;
     _cachedNfcKey = null;
+    _cachedKeyring = null;
     _updateSession(null);
 
     try {
@@ -342,6 +386,9 @@ class AuthRepository implements TokenProvider {
     } catch (_) {}
     try {
       await _secureStorage.delete(key: _nfcKeyKey);
+    } catch (_) {}
+    try {
+      await _secureStorage.delete(key: _nfcKeyringKey);
     } catch (_) {}
     try {
       await _secureStorage.delete(key: _sessionKey);
@@ -378,6 +425,33 @@ class AuthRepository implements TokenProvider {
   bool get hasToken => _cachedToken?.isNotEmpty == true;
 
   // ── Private ───────────────────────────────────────────────────────────────
+
+  /// Reads NFC key material out of a login, refresh, or `/users/me` body and
+  /// makes it the device's keyring.
+  ///
+  /// Silently does nothing when the response carries no key material, so a
+  /// response that omits it never clears a keyring the device already holds.
+  Future<void> _absorbKeyring(Map<String, dynamic> data) async {
+    final NfcKeyring? keyring = NfcKeyring.fromResponse(data);
+    if (keyring == null || keyring.isEmpty) return;
+
+    _cachedKeyring = keyring;
+    _cachedNfcKey = keyring.currentKey;
+    if (kIsWeb) return;
+
+    try {
+      await _secureStorage.write(
+        key: _nfcKeyringKey,
+        value: jsonEncode(keyring.toJson()),
+      );
+    } catch (_) {}
+
+    // The bare single key is superseded by the ring; drop it so the same
+    // material is not left in two places.
+    try {
+      await _secureStorage.delete(key: _nfcKeyKey);
+    } catch (_) {}
+  }
 
   Future<String?> _getRefreshToken() async {
     if (_cachedRefreshToken?.isNotEmpty == true) return _cachedRefreshToken;
@@ -428,6 +502,7 @@ class AuthRepository implements TokenProvider {
         path: '/api/v1/users/me',
         headers: headers,
       );
+      await _absorbKeyring(data);
       return UserSession.fromJson(data);
     } on ApiException catch (e) {
       if (e.statusCode != 404 && e.statusCode != 403) rethrow;
