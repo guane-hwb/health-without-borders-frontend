@@ -56,10 +56,6 @@ class PatientProfileScreen extends StatefulWidget {
   final bool readOnly;
   final bool offline;
   final bool emergency;
-
-  /// Whether to offer the "Reasignar dispositivo" action. Only the lost/damaged
-  /// recovery path (patient search) sets this; scanning via Read NFC does not,
-  /// since a successful scan means the tags are present and working.
   final bool allowReassign;
 
   @visibleForTesting
@@ -170,12 +166,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (!mounted) return;
     final hasNet = hasInternetConnection(results);
     if (_hasInternet != hasNet) {
-      setState(() {
-        _hasInternet = hasNet;
-      });
-      if (_hasInternet && _hasUnsyncedChanges) {
-        _sync(silent: true);
-      }
+      setState(() => _hasInternet = hasNet);
+      if (_hasInternet && _hasUnsyncedChanges) _sync(silent: true);
     }
   }
 
@@ -185,8 +177,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       AppScope.of(context).authRepository.currentUser?.role ?? UserRole.doctor;
 
   Future<void> _markNfcChipsDirtyIfChanged(LocalDatabase db) async {
-    if (_draft.patientId.isEmpty) return;
-    if (_original == _draft) return;
+    if (_draft.patientId.isEmpty || _original == _draft) return;
     final triageChanged =
         jsonEncode(NfcTriagePayload.buildPatientPayload(record: _original)) !=
         jsonEncode(NfcTriagePayload.buildPatientPayload(record: _draft));
@@ -256,8 +247,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (!mounted) return;
     setState(() => _isUpdatingChips = false);
   }
-
-  // ── Lost / damaged bracelet re-labeling ───────────────────────────────────
 
   Future<void> _reassignDevices() async {
     if (_isUpdatingChips || widget.readOnly) return;
@@ -335,19 +324,13 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       });
       await _loadChipStatus(scope.localDatabase);
       if (!mounted) return;
-      if (_hasInternet) {
-        await scope.syncEngine.syncAll();
-      }
+      if (_hasInternet) await scope.syncEngine.syncAll();
       if (!mounted) return;
       _showReassignSnack(
         isEs ? 'dispositivo reasignado.' : 'Device reassigned.',
       );
     } catch (e, stack) {
-      AppLogger.e(
-        'Fallo al guardar la reasignación del dispositivo ',
-        error: e,
-        stackTrace: stack,
-      );
+      AppLogger.e('Fallo al reasignar', error: e, stackTrace: stack);
       if (!mounted) return;
       setState(() => _isUpdatingChips = false);
       _showReassignSnack(
@@ -371,20 +354,14 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   Future<void> _saveAndPendingSync() async {
     final scope = AppScope.of(context);
-
     var currentUser = scope.authRepository.currentUser;
     currentUser ??= await scope.authRepository.restoreSession();
 
     if (currentUser == null) {
-      AppLogger.e(
-        'No se pudo guardar ni sincronizar: no hay usuario autenticado.',
-      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Sesión no activa. Por favor, vuelve a iniciar sesión.',
-          ),
+          content: Text('Sesión no activa. Vuelve a iniciar sesión.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -397,29 +374,20 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ownerUserId: currentUser.id,
         organizationId: currentUser.organizationId,
       );
-
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
-
-      if (_hasInternet) {
-        await _sync(silent: true);
-      }
+      if (_hasInternet) await _sync(silent: true);
     } catch (e, stack) {
-      AppLogger.e(
-        'Error guardando en local_database',
-        error: e,
-        stackTrace: stack,
-      );
+      AppLogger.e('Error local_database', error: e, stackTrace: stack);
       if (!mounted) return;
 
       setState(() => _lastSaveFailed = true);
-
       final isEs = AppStrings.of(context).isEs;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             isEs
-                ? 'El cambio NO está a salvo en este dispositivo. Si sale, se perderá.'
-                : 'The change is NOT safe on this device. If you exit, it will be lost.',
+                ? 'El cambio NO está a salvo en este dispositivo.'
+                : 'The change is NOT safe on this device.',
           ),
           backgroundColor: AppColors.error,
           action: SnackBarAction(
@@ -510,12 +478,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     unawaited(_saveAndPendingSync());
   }
 
-  // ── Sync ─────────────────────────────────────────────────────────────────
-
   Future<void> _sync({bool silent = false}) async {
-    if (widget.readOnly) return;
-    if (_isSyncing) return;
-
+    if (widget.readOnly || _isSyncing) return;
     final isEs = AppStrings.of(context).isEs;
 
     if (!_hasInternet && !silent) {
@@ -523,8 +487,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         SnackBar(
           content: Text(
             isEs
-                ? 'Sin conexión. Se sincronizará automáticamente al reconectar.'
-                : 'Offline. It will sync automatically once reconnected.',
+                ? 'Sin conexión. Se sincronizará al reconectar.'
+                : 'Offline. It will sync once reconnected.',
           ),
           backgroundColor: Colors.orange.shade800,
         ),
@@ -532,16 +496,11 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       return;
     }
 
-    if (!silent) {
-      setState(() {
-        _isSyncing = true;
-      });
-    }
+    if (!silent) setState(() => _isSyncing = true);
     try {
       final scope = AppScope.of(context);
       final currentUser = scope.authRepository.currentUser;
 
-      // Incluir ownerUserId y organizationId para evitar desatribución
       await scope.localDatabase.savePatient(
         _draft,
         ownerUserId: currentUser?.id,
@@ -551,21 +510,15 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
       final bool ok = await scope.syncEngine.syncAll();
       if (!mounted) return;
-      if (ok) {
-        _draftController.markSynced();
-      }
-      setState(() {
-        _isSyncing = false;
-      });
+      if (ok) _draftController.markSynced();
+      setState(() => _isSyncing = false);
       if (!silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               ok
                   ? AppStrings.of(context).savedChangesMsg
-                  : (isEs
-                        ? 'Fallo al sincronizar con el servidor. Cambios preservados localmente.'
-                        : 'Sync failed with server. Changes preserved locally.'),
+                  : (isEs ? 'Fallo al sincronizar.' : 'Sync failed.'),
             ),
             backgroundColor: ok ? AppColors.success : AppColors.error,
           ),
@@ -573,25 +526,17 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _isSyncing = false;
-      });
+      setState(() => _isSyncing = false);
       if (!silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              isEs
-                  ? 'Fallo al sincronizar con el servidor. Cambios preservados localmente.'
-                  : 'Sync failed with server. Changes preserved locally.',
-            ),
+            content: Text(isEs ? 'Fallo al sincronizar.' : 'Sync failed.'),
             backgroundColor: AppColors.error,
           ),
         );
       }
     }
   }
-
-  // ── Navigation ───────────────────────────────────────────────────────────
 
   Future<void> _navigateAddConsultation() async {
     if (widget.readOnly) return;
@@ -609,9 +554,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
             AddConsultationScreen(patient: _draft, returnToProfile: true),
       ),
     );
-    if (result != null) {
-      _addConsultation(result);
-    }
+    if (result != null) _addConsultation(result);
   }
 
   Future<void> _navigateAddVaccine() async {
@@ -623,12 +566,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                 AddVaccineScreen(patient: _draft, returnToProfile: true),
           ),
         );
-    if (result != null && result.isNotEmpty) {
-      _addVaccines(result);
-    }
+    if (result != null && result.isNotEmpty) _addVaccines(result);
   }
-
-  // ── Sheets ────────────────────────────────────────────────────────────────
 
   Future<void> _openVitalSignsSheet() async {
     if (widget.readOnly) return;
@@ -674,8 +613,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       builder: (_) => EditGuardianSheet(
         guardian: current,
         guardianIndex: guardianIndex,
-        onConfirm: (GuardianInfo updatedGuardian) {
-          _draftController.updateGuardian(guardianIndex, updatedGuardian);
+        onConfirm: (updated) {
+          _draftController.updateGuardian(guardianIndex, updated);
           unawaited(_saveAndPendingSync());
         },
       ),
@@ -692,9 +631,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       builder: (_) => EditChronicPersonalSheet(
         title: AppStrings.of(context).personalHistoryTitle,
         currentValue: bg.personalHistory,
-        onConfirm: (text) {
-          _updateBackground(personalHistory: text);
-        },
+        onConfirm: (text) => _updateBackground(personalHistory: text),
       ),
     );
   }
@@ -795,8 +732,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     );
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     final p = _draft;
@@ -811,7 +746,12 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                   patient: p,
                   hasUnsyncedChanges: !_hasInternet && _hasUnsyncedChanges,
                   lastSyncedAt: widget.lastSyncedAt,
-                  onBack: () => _confirmExit(),
+                  onBack: () async {
+                    if (await confirmProfileExit(context, _lastSaveFailed)) {
+                      if (!context.mounted) return;
+                      Navigator.of(context).popUntil((r) => r.isFirst);
+                    }
+                  },
                 ),
                 ProfileTabsBar(controller: _tabController, draft: _draft),
                 if (widget.emergency) const EmergencyBanner(),
@@ -869,40 +809,5 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ),
       ),
     );
-  }
-
-  Future<void> _confirmExit() async {
-    if (_lastSaveFailed) {
-      final isEs = AppStrings.of(context).isEs;
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(isEs ? 'Cambios sin guardar' : 'Unsaved changes'),
-          content: Text(
-            isEs
-                ? 'El último cambio no pudo guardarse en el dispositivo. '
-                      'Si sale ahora se perderá.'
-                : 'The last change could not be saved on this device. '
-                      'Leaving now will discard it.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(AppStrings.of(ctx).cancel),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text(
-                AppStrings.of(ctx).exit,
-                style: const TextStyle(color: AppColors.error),
-              ),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-      if (!mounted) return;
-    }
-    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 }
