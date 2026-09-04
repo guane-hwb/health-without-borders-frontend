@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/di/app_scope.dart';
-import '../../../../core/network/api_client.dart';
 import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/hwb_logo.dart';
 import '../../../../shared/widgets/locale_switcher.dart';
@@ -126,124 +125,8 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     );
 
     final scope = AppScope.of(context);
-
     var currentUser = scope.authRepository.currentUser;
     currentUser ??= await scope.authRepository.restoreSession();
-
-    try {
-      final response = await scope.patientRepository.syncPatient(record);
-
-      if (response.status == 'success') {
-        await scope.localDatabase.savePatient(
-          record,
-          ownerUserId: currentUser?.id,
-          organizationId: currentUser?.organizationId,
-          isSynced: true,
-        );
-        await scope.localDatabase.markSynced(record.patientId);
-
-        if (!mounted) return;
-        setState(() {
-          _savedRecord = record;
-          _step = 4;
-        });
-        return;
-      }
-    } on ApiException catch (e) {
-      if (e.statusCode == 409) {
-        if (!mounted) return;
-        final isEs = AppStrings.of(context).isEs;
-
-        await scope.localDatabase.deleteRecord(record.patientId);
-
-        if (!mounted) return;
-
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.nfc_outlined,
-                      color: AppColors.error,
-                      size: 40,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    isEs ? 'Registro Duplicado' : 'Duplicate Record',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    isEs
-                        ? 'El dispositivo NFC escaneado ya se encuentra asignado a otro paciente en el sistema.'
-                        : 'The scanned NFC device is already assigned to another patient in the system.',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF64748B),
-                      height: 1.4,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: Text(
-                        isEs ? 'Entendido' : 'Understand',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-
-        if (!mounted) return;
-        setState(() {});
-        return;
-      }
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: AppColors.error, content: Text(e.message)),
-      );
-      return;
-    } catch (_) {}
 
     try {
       await scope.localDatabase.savePatient(
