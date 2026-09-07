@@ -232,26 +232,30 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
     setState(() => _isUpdatingChips = true);
 
-    final ok = await PatientProfileScreen.executeUpdateNfcChipsImpl(
-      context: context,
-      record: _draft,
-      keyring: keyring,
-      patientChipDirty: status.patientChipDirty,
-      guardianChipDirty: status.guardianChipDirty,
-    );
-
-    if (!mounted) return;
-    if (ok) {
-      await scope.localDatabase.clearChipsDirty(
-        _draft.patientId,
-        patient: status.patientChipDirty,
-        guardian: status.guardianChipDirty,
+    try {
+      final ok = await PatientProfileScreen.executeUpdateNfcChipsImpl(
+        context: context,
+        record: _draft,
+        keyring: keyring,
+        patientChipDirty: status.patientChipDirty,
+        guardianChipDirty: status.guardianChipDirty,
       );
-    }
 
-    await _loadChipStatus(scope.localDatabase);
-    if (!mounted) return;
-    setState(() => _isUpdatingChips = false);
+      if (!mounted) return;
+      if (ok) {
+        await scope.localDatabase.clearChipsDirty(
+          _draft.patientId,
+          patient: status.patientChipDirty,
+          guardian: status.guardianChipDirty,
+        );
+      }
+
+      await _loadChipStatus(scope.localDatabase);
+    } finally {
+      // Without this the button stays disabled until the screen is rebuilt if
+      // anything above throws.
+      if (mounted) setState(() => _isUpdatingChips = false);
+    }
   }
 
   Future<void> _reassignDevices() async {
@@ -287,7 +291,19 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       );
       return;
     }
-    final codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
+    final NfcPayloadCodec codec;
+    try {
+      codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
+    } catch (e, stack) {
+      AppLogger.e('Anillo de llaves NFC inválido', error: e, stackTrace: stack);
+      _showReassignSnack(
+        isEs
+            ? 'La clave NFC no es válida. Contacte al administrador.'
+            : 'The NFC key is invalid. Contact your administrator.',
+        error: true,
+      );
+      return;
+    }
 
     setState(() => _isUpdatingChips = true);
     var record = _draft;

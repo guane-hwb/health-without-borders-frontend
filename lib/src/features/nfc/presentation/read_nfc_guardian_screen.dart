@@ -7,6 +7,7 @@ import '../../../core/i18n/app_strings.dart';
 import '../../../core/nfc/nfc_payload_codec.dart';
 import '../../../core/nfc/nfc_payload_service.dart';
 import '../../../core/nfc/nfc_triage_payload.dart';
+import '../../../core/utils/app_logger.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
@@ -152,13 +153,46 @@ class _ReadNfcGuardianScreenState extends State<ReadNfcGuardianScreen> {
     final needsGuardianWrite = status?.guardianChipDirty ?? false;
 
     if (needsPatientWrite || needsGuardianWrite) {
-      var nfcKey = await scope.authRepository.getNfcEncryptionKey();
+      // Build the codec from the whole keyring, not a single key: the write
+      // must be stamped with the ring's current version. Using the bare-key
+      // constructor here stamped version 0 while encrypting with whatever the
+      // current key was, which after a rotation produces a wristband no reader
+      // can decrypt.
+      final keyring = await scope.authRepository.getNfcKeyring();
       if (!ctx.mounted) return;
-      if (nfcKey == null || nfcKey.trim().length != 64) {
-        nfcKey =
-            '0000000000000000000000000000000000000000000000000000000000000000';
+      if (keyring == null || !keyring.canWrite) {
+        // Refuse rather than fall back to a placeholder key. Writing patient
+        // data under a guessable key would expose it and produce a wristband
+        // no legitimate device could read.
+        final bool expired = await scope.authRepository.isNfcSessionExpired();
+        if (!ctx.mounted) return;
+        _showSyncError(
+          ctx,
+          expired
+              ? (isEs
+                    ? 'Su sesión expiró. Inicie sesión de nuevo para grabar.'
+                    : 'Your session expired. Log in again to write.')
+              : (isEs
+                    ? 'No hay clave NFC disponible para grabar.'
+                    : 'No NFC key available to write.'),
+        );
+        return;
       }
-      final codec = NfcPayloadCodec(hexKey: nfcKey.trim());
+
+      final NfcPayloadCodec codec;
+      try {
+        codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
+      } catch (e, stack) {
+        AppLogger.e('Anillo de llaves NFC inválido', error: e, stackTrace: stack);
+        if (!ctx.mounted) return;
+        _showSyncError(
+          ctx,
+          isEs
+              ? 'La clave NFC no es válida. Contacte al administrador.'
+              : 'The NFC key is invalid. Contact your administrator.',
+        );
+        return;
+      }
 
       if (needsPatientWrite) {
         final expectedUid = _p.deviceUid;

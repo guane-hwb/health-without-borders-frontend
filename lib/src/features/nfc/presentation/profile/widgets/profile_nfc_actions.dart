@@ -9,6 +9,8 @@ import '../../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../../core/nfc/nfc_payload_service.dart';
 import '../../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../../core/nfc/partial_card_notice.dart';
+import '../../../../../core/utils/app_logger.dart';
+import '../../../../../design/tokens/app_colors.dart';
 import '../../../domain/patient_record.dart';
 import '../../nfc_guided_write.dart';
 import 'reassign_device_dialog.dart';
@@ -23,7 +25,26 @@ Future<bool> executeUpdateNfcChips({
 }) async {
   final isEs = AppStrings.of(context).isEs;
   final messenger = ScaffoldMessenger.of(context);
-  final codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
+
+  final NfcPayloadCodec codec;
+  try {
+    codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
+  } catch (e, stack) {
+    // A keyring with no usable key must not take down the screen: report it
+    // and let the caller unwind normally.
+    AppLogger.e('Anillo de llaves NFC inválido', error: e, stackTrace: stack);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          isEs
+              ? 'La clave NFC no es válida. Contacte al administrador.'
+              : 'The NFC key is invalid. Contact your administrator.',
+        ),
+        backgroundColor: AppColors.error,
+      ),
+    );
+    return false;
+  }
 
   if (patientChipDirty) {
     final ok = await showNfcGuidedWrite(
