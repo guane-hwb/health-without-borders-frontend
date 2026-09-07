@@ -45,7 +45,9 @@ void main() {
       expect(r.from, DateTime(2026, 6, 10));
       expect(r.to, DateTime(2026, 7, 9));
       // Inclusive span really is 30 days.
-      expect(r.to!.difference(r.from!).inDays, 29);
+      final startUtc = DateTime.utc(r.from!.year, r.from!.month, r.from!.day);
+      final endUtc = DateTime.utc(r.to!.year, r.to!.month, r.to!.day);
+      expect(endUtc.difference(startUtc).inDays, 29);
     });
 
     test('crosses a month boundary correctly', () {
@@ -114,6 +116,32 @@ void main() {
       expect(base.from, DateTime(2026, 5, 11));
       expect(base.to, DateTime(2026, 6, 9));
     });
+
+    test(
+      'DST Primavera (Spring Forward): no trunca el rango por pérdida de 1 hora',
+      () {
+        final r = StatsDateRange.custom(
+          DateTime(2026, 3, 1),
+          DateTime(2026, 3, 30),
+        );
+        final base = r.comparisonBaseline!;
+        expect(base.from, DateTime(2026, 1, 30));
+        expect(base.to, DateTime(2026, 2, 28));
+      },
+    );
+
+    test(
+      'DST Otoño (Fall Back): no extiende el rango por ganancia de 1 hora',
+      () {
+        final r = StatsDateRange.custom(
+          DateTime(2026, 11, 1),
+          DateTime(2026, 11, 30),
+        );
+        final base = r.comparisonBaseline!;
+        expect(base.from, DateTime(2026, 10, 2));
+        expect(base.to, DateTime(2026, 10, 31));
+      },
+    );
   });
 
   group('igualdad por valor', () {

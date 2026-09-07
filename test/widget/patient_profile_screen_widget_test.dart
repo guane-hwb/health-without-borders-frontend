@@ -251,6 +251,22 @@ class _FakeSyncEngine extends SyncEngine {
   void stop() {}
 }
 
+class _DelayedFakeSyncEngine extends _FakeSyncEngine {
+  Completer<bool>? _pending;
+
+  @override
+  Future<bool> syncAll() {
+    callCount++;
+    _pending = Completer<bool>();
+    return _pending!.future;
+  }
+
+  void complete({bool success = true}) {
+    _pending?.complete(success);
+    _pending = null;
+  }
+}
+
 class _LocaleWrapper extends StatefulWidget {
   const _LocaleWrapper({required this.locale, required this.child});
   final String locale;
@@ -2478,5 +2494,147 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AddVaccineScreen), findsNothing);
     });
+  });
+
+  group('ProfileHeader — spinner de sincronización (isSyncing)', () {
+    testWidgets(
+      '122. Antes de sincronizar: ícono de sync visible, botón habilitado, '
+      'semántica enabled: true',
+      (tester) async {
+        final engine = _DelayedFakeSyncEngine();
+        await _pumpScreen(tester, _record(), syncEng: engine);
+
+        final header = tester.widget<ProfileHeader>(find.byType(ProfileHeader));
+        expect(header.isSyncing, isFalse);
+
+        expect(find.byIcon(Icons.sync_rounded), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+
+        final semantics = tester.widget<Semantics>(
+          find.byWidgetPredicate(
+            (w) =>
+                w is Semantics &&
+                w.properties.label?.contains('Sincronizar') == true,
+          ),
+        );
+        expect(semantics.properties.enabled, isTrue);
+
+        final syncButton = tester.widget<IconButton>(
+          find.descendant(
+            of: find.byWidgetPredicate(
+              (w) =>
+                  w is Semantics &&
+                  w.properties.label?.contains('Sincronizar') == true,
+            ),
+            matching: find.byType(IconButton),
+          ),
+        );
+        expect(syncButton.onPressed, isNotNull);
+      },
+    );
+
+    testWidgets('123. Mientras isSyncing es true: spinner visible, botón '
+        'deshabilitado, semántica enabled: false', (tester) async {
+      final engine = _DelayedFakeSyncEngine();
+      await _pumpScreen(tester, _record(), syncEng: engine);
+
+      final headerBefore = tester.widget<ProfileHeader>(
+        find.byType(ProfileHeader),
+      );
+      headerBefore.onSync!();
+      await tester.pump();
+
+      final headerDuring = tester.widget<ProfileHeader>(
+        find.byType(ProfileHeader),
+      );
+      expect(headerDuring.isSyncing, isTrue);
+
+      expect(find.byIcon(Icons.sync_rounded), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsWidgets);
+
+      final semantics = tester.widget<Semantics>(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.label?.contains('Sincronizar') == true,
+        ),
+      );
+      expect(semantics.properties.enabled, isFalse);
+
+      final syncButton = tester.widget<IconButton>(
+        find.descendant(
+          of: find.byWidgetPredicate(
+            (w) =>
+                w is Semantics &&
+                w.properties.label?.contains('Sincronizar') == true,
+          ),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(syncButton.onPressed, isNull);
+
+      // Limpieza: liberamos el syncAll() en vuelo para no dejar timers.
+      engine.complete();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      '124. Una segunda pulsación mientras sincroniza no dispara otro '
+      'syncAll (botón deshabilitado ⇒ callback nunca se invoca de nuevo)',
+      (tester) async {
+        final engine = _DelayedFakeSyncEngine();
+        await _pumpScreen(tester, _record(), syncEng: engine);
+
+        final header = tester.widget<ProfileHeader>(find.byType(ProfileHeader));
+        header.onSync!();
+        await tester.pump();
+        expect(engine.callCount, 1);
+
+        // Con isSyncing == true, IconButton.onPressed es null: un tap real
+        // en el widget no debe producir ningún efecto.
+        final syncButtonFinder = find.descendant(
+          of: find.byWidgetPredicate(
+            (w) =>
+                w is Semantics &&
+                w.properties.label?.contains('Sincronizar') == true,
+          ),
+          matching: find.byType(IconButton),
+        );
+        await tester.tap(syncButtonFinder, warnIfMissed: false);
+        await tester.pump();
+
+        expect(engine.callCount, 1);
+
+        engine.complete();
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      '125. Al completar la sincronización, isSyncing vuelve a false y el '
+      'ícono de sync reaparece',
+      (tester) async {
+        final engine = _DelayedFakeSyncEngine();
+        await _pumpScreen(tester, _record(), syncEng: engine);
+
+        final header = tester.widget<ProfileHeader>(find.byType(ProfileHeader));
+        header.onSync!();
+        await tester.pump();
+        expect(
+          tester.widget<ProfileHeader>(find.byType(ProfileHeader)).isSyncing,
+          isTrue,
+        );
+
+        engine.complete();
+        await tester.pumpAndSettle();
+
+        final headerAfter = tester.widget<ProfileHeader>(
+          find.byType(ProfileHeader),
+        );
+        expect(headerAfter.isSyncing, isFalse);
+        expect(find.byIcon(Icons.sync_rounded), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+      },
+    );
   });
 }

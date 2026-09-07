@@ -811,5 +811,32 @@ void main() {
         await _expectAfterScroll(tester, find.textContaining('Generado el'));
       },
     );
+
+    testWidgets(
+      'cambiar idioma actualiza dinámicamente la opción "Todas / All"',
+      (tester) async {
+        final userRepo = FakeUserRepository(orgsResult: [_org('o1', 'Org A')]);
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: userRepo,
+            statsRepo: FakeStatsRepository(_stats()),
+            locale: 'es',
+          ),
+        );
+
+        expect(find.text('Todas'), findsOneWidget);
+
+        await tester.tap(find.text('EN'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('All'), findsOneWidget);
+
+        await tester.tap(find.text('ES'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Todas'), findsOneWidget);
+      },
+    );
   });
 }

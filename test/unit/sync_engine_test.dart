@@ -1,8 +1,10 @@
 // test/unit/sync_engine_test.dart
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -806,5 +808,151 @@ void main() {
         verify(() => patientRepo.syncPatient(any())).called(3);
       },
     );
+  });
+
+  group('_scheduleRetry — v3-retry-perpetuo-solo-bloqueados', () {
+    late SyncEngine shortBackoffEngine;
+
+    setUp(() {
+      shortBackoffEngine = SyncEngine(
+        patientRepository: patientRepo,
+        authRepository: authRepo,
+        localDatabase: localDb,
+        retryBackoff: const [Duration(milliseconds: 10)],
+      );
+    });
+
+    tearDown(() {
+      shortBackoffEngine.stop();
+    });
+
+    test('una cola con solo errores permanentes (409) no deja timer de '
+        'reintento activo, aunque pase mucho tiempo', () {
+      fakeAsync((async) {
+        final entry409 = buildEntry(
+          'CONFLICT',
+          record: MockPatientFullRecord(),
+          syncErrorCode: 409,
+        );
+
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entry409]);
+        when(
+          () => localDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 0);
+        when(
+          () => localDb.getBlockedCount(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => 1);
+
+        shortBackoffEngine.syncAll();
+        async.elapse(Duration.zero);
+
+        // entry409 se filtra client-side antes de intentar sincronizar.
+        verifyNever(() => patientRepo.syncPatient(any()));
+        expect(shortBackoffEngine.pendingCount.value, 0);
+        expect(shortBackoffEngine.blockedCount.value, 1);
+
+        clearInteractions(localDb);
+
+        async.elapse(const Duration(seconds: 5));
+
+        verifyNever(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        );
+        verifyNever(() => patientRepo.syncPatient(any()));
+      });
+    });
+
+    test('una cola con un fallo de red (transitorio, no permanente) SÍ '
+        'reprograma y reintenta tras el backoff', () {
+      fakeAsync((async) {
+        final entry = buildEntry('A', record: MockPatientFullRecord());
+
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entry]);
+        when(
+          () => localDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 1);
+        when(
+          () => localDb.getBlockedCount(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => 0);
+        when(
+          () => patientRepo.syncPatient(any()),
+        ).thenThrow(const SocketException('sin conexión'));
+
+        shortBackoffEngine.syncAll();
+        async.elapse(Duration.zero);
+
+        verify(() => patientRepo.syncPatient(any())).called(1);
+        expect(shortBackoffEngine.pendingCount.value, 1);
+
+        // Tras el backoff de 10ms, el timer sí debe disparar otro ciclo.
+        async.elapse(const Duration(milliseconds: 15));
+
+        verify(() => patientRepo.syncPatient(any())).called(1);
+      });
+    });
+
+    test('una cola mixta (1 bloqueada + 1 retryable exitosa) deja de '
+        'reprogramar en cuanto la retryable se resuelve', () {
+      fakeAsync((async) {
+        final entry409 = buildEntry(
+          'CONFLICT',
+          record: MockPatientFullRecord(),
+          syncErrorCode: 409,
+        );
+        final entryOk = buildEntry('OK', record: MockPatientFullRecord());
+
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entry409, entryOk]);
+        when(
+          () => patientRepo.syncPatient(any()),
+        ).thenAnswer((_) async => buildResponse('success'));
+        when(
+          () => localDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 0);
+        when(
+          () => localDb.getBlockedCount(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => 1);
+
+        shortBackoffEngine.syncAll();
+        async.elapse(Duration.zero);
+
+        // Solo la retryable ('OK') se intenta; la 409 se salta.
+        verify(() => patientRepo.syncPatient(any())).called(1);
+        expect(shortBackoffEngine.pendingCount.value, 0);
+        expect(shortBackoffEngine.blockedCount.value, 1);
+
+        clearInteractions(localDb);
+        clearInteractions(patientRepo);
+
+        async.elapse(const Duration(seconds: 5));
+
+        // Con solo la bloqueada restante, no debe reprogramarse nada más.
+        verifyNever(() => patientRepo.syncPatient(any()));
+        verifyNever(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        );
+      });
+    });
   });
 }

@@ -758,6 +758,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                   patient: p,
                   hasUnsyncedChanges: !_hasInternet && _hasUnsyncedChanges,
                   lastSyncedAt: widget.lastSyncedAt,
+                  isSyncing: _isSyncing,
+                  onSync: widget.readOnly ? null : () => _sync(),
                   onBack: () async {
                     if (await confirmProfileExit(context, _lastSaveFailed)) {
                       if (!context.mounted) return;
