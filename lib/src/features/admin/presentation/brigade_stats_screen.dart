@@ -310,34 +310,13 @@ class _GeneratedAtLabel extends StatelessWidget {
   const _GeneratedAtLabel({required this.generatedAt});
   final DateTime generatedAt;
 
-  static String _month(AppStrings s, int month) => switch (month) {
-    1 => s.monEne,
-    2 => s.monFeb,
-    3 => s.monMar,
-    4 => s.monAbr,
-    5 => s.monMay,
-    6 => s.monJun,
-    7 => s.monJul,
-    8 => s.monAgo,
-    9 => s.monSep,
-    10 => s.monOct,
-    11 => s.monNov,
-    _ => s.monDic,
-  };
-
-  static String _fmt(DateTime d, AppStrings s) {
-    final hh = d.hour.toString().padLeft(2, '0');
-    final mm = d.minute.toString().padLeft(2, '0');
-    return '${d.day} ${_month(s, d.month)} ${d.year}, $hh:$mm';
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     return Padding(
       padding: const EdgeInsets.only(left: 2, bottom: 6),
       child: Text(
-        s.statsGeneratedAt(_fmt(generatedAt, s)),
+        s.statsGeneratedAt(formatGeneratedAt(generatedAt, s)),
         style: const TextStyle(
           fontSize: 10,
           color: AppColors.textSecondary,
@@ -346,6 +325,39 @@ class _GeneratedAtLabel extends StatelessWidget {
       ),
     );
   }
+}
+
+String monthAbbrev(AppStrings s, int month) => switch (month) {
+  1 => s.monEne,
+  2 => s.monFeb,
+  3 => s.monMar,
+  4 => s.monAbr,
+  5 => s.monMay,
+  6 => s.monJun,
+  7 => s.monJul,
+  8 => s.monAgo,
+  9 => s.monSep,
+  10 => s.monOct,
+  11 => s.monNov,
+  _ => s.monDic,
+};
+
+String utcOffsetLabel(DateTime localDate) {
+  final offset = localDate.timeZoneOffset;
+  final sign = offset.isNegative ? '-' : '+';
+  final abs = offset.abs();
+  final hh = abs.inHours.toString().padLeft(2, '0');
+  final mm = (abs.inMinutes % 60).toString().padLeft(2, '0');
+  return 'UTC$sign$hh:$mm';
+}
+
+String formatGeneratedAt(DateTime generatedAt, AppStrings s) {
+  final localDate = generatedAt.toLocal();
+  final hh = localDate.hour.toString().padLeft(2, '0');
+  final mm = localDate.minute.toString().padLeft(2, '0');
+  final offset = utcOffsetLabel(localDate);
+  return '${localDate.day} ${monthAbbrev(s, localDate.month)} '
+      '${localDate.year}, $hh:$mm ($offset)';
 }
 
 class _SectionTitle extends StatelessWidget {
