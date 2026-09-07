@@ -58,6 +58,7 @@ class SyncEngine {
   Future<bool>? _activeSyncAllFuture;
   Completer<void>? _syncOneCompletion;
   bool get _syncOneRunning => _syncOneCompletion != null;
+  Duration? _pendingServerRetryAfter;
 
   final ValueNotifier<int> pendingCount = ValueNotifier<int>(0);
   final ValueNotifier<int> blockedCount = ValueNotifier<int>(0);
@@ -126,13 +127,25 @@ class SyncEngine {
 
     if (pendingCount.value <= 0) {
       _retryAttempt = 0;
+      _pendingServerRetryAfter = null;
       return;
     }
 
-    final Duration delay =
+    final Duration backoff =
         _retryBackoff[_retryAttempt.clamp(0, _retryBackoff.length - 1)];
+
+    final Duration? serverHint = _pendingServerRetryAfter;
+    _pendingServerRetryAfter = null;
+    final Duration delay = (serverHint != null && serverHint > backoff)
+        ? serverHint
+        : backoff;
+
     _retryAttempt++;
-    AppLogger.d('Reintento de sincronización programado en $delay.');
+    AppLogger.d(
+      serverHint != null && serverHint > backoff
+          ? 'Reintento de sincronización programado en $delay (Retry-After del servidor).'
+          : 'Reintento de sincronización programado en $delay.',
+    );
     _retryTimer = Timer(delay, syncAll);
   }
 
@@ -223,7 +236,7 @@ class SyncEngine {
           consecutiveNetworkFailures++;
           if (consecutiveNetworkFailures >= maxConsecutiveNetworkFailures) {
             AppLogger.e(
-              'Red inutilizable: abandonando el lote tras $consecutiveNetworkFailures fallos de red consecutivos.',
+              'Red/Servidor inalcanzable: abandonando el lote tras $consecutiveNetworkFailures fallos de red/5xx consecutivos.',
             );
             break;
           }
@@ -314,6 +327,13 @@ class SyncEngine {
         return _SyncOutcome.abortBatch;
       }
 
+      final bool isTransientServerError =
+          e.statusCode == 408 ||
+          e.statusCode == 429 ||
+          (e.statusCode != null &&
+              e.statusCode! >= 500 &&
+              e.statusCode! <= 599);
+
       final String safeMsg = (e.statusCode == 409)
           ? 'Registro duplicado (409): El chip NFC ya pertenece a otro paciente'
           : (e.statusCode == 422)
@@ -328,7 +348,17 @@ class SyncEngine {
       );
 
       onRecordSynced?.call(entry.patientId, false, safeMsg);
-      return _SyncOutcome.failure;
+
+      if (isTransientServerError && e.retryAfter != null) {
+        final Duration hint = e.retryAfter!;
+        if (_pendingServerRetryAfter == null ||
+            hint > _pendingServerRetryAfter!) {
+          _pendingServerRetryAfter = hint;
+        }
+      }
+      return isTransientServerError
+          ? _SyncOutcome.networkFailure
+          : _SyncOutcome.failure;
     } catch (e, stack) {
       AppLogger.e(
         'Error no controlado sincronizando ${entry.patientId}',

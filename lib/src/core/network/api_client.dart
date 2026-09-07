@@ -5,21 +5,16 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiException implements Exception {
-  ApiException(this.message, {this.statusCode, this.detail});
+  ApiException(this.message, {this.statusCode, this.detail, this.retryAfter});
 
   final String message;
   final int? statusCode;
-
-  /// The raw, decoded `detail` from the error body when it is structured
-  /// (e.g. the 410 retired-tag response `{code, reason, message}`). Null when
-  /// the body carried a plain string detail or no body at all. Callers that
-  /// need machine-readable error info should read this instead of parsing
-  /// [message].
   final Object? detail;
+  final Duration? retryAfter;
 
   @override
   String toString() =>
-      'ApiException(statusCode: $statusCode, message: $message)';
+      'ApiException(statusCode: $statusCode, message: $message, retryAfter: $retryAfter)';
 }
 
 abstract class TokenProvider {
@@ -277,8 +272,6 @@ class ApiClient {
     _throwDecodedError(response, decoded);
   }
 
-  /// Builds and throws an [ApiException] from a non-2xx response, preserving
-  /// the structured `detail` when the body carried one.
   Never _throwDecodedError(http.Response response, Object? decoded) {
     final Object? detail = (decoded is Map<String, dynamic>)
         ? decoded['detail']
@@ -290,7 +283,63 @@ class ApiClient {
       message,
       statusCode: response.statusCode,
       detail: detail,
+      retryAfter: _parseRetryAfter(response),
     );
+  }
+
+  Duration? _parseRetryAfter(http.Response response) {
+    final String? raw = response.headers['retry-after'];
+    if (raw == null) return null;
+    final String value = raw.trim();
+    if (value.isEmpty) return null;
+
+    final int? seconds = int.tryParse(value);
+    if (seconds != null) {
+      return Duration(seconds: seconds < 0 ? 0 : seconds);
+    }
+
+    final DateTime? when = _parseHttpDate(value);
+    if (when == null) return null;
+    final Duration delta = when.toUtc().difference(DateTime.now().toUtc());
+    return delta.isNegative ? Duration.zero : delta;
+  }
+
+  static const List<String> _httpDateMonths = <String>[
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  static final RegExp _httpDatePattern = RegExp(
+    r'^[A-Za-z]{3}, (\d{2}) ([A-Za-z]{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$',
+  );
+
+  DateTime? _parseHttpDate(String value) {
+    final RegExpMatch? match = _httpDatePattern.firstMatch(value);
+    if (match == null) return null;
+    final int month = _httpDateMonths.indexOf(match.group(2)!) + 1;
+    if (month == 0) return null;
+    try {
+      return DateTime.utc(
+        int.parse(match.group(3)!),
+        month,
+        int.parse(match.group(1)!),
+        int.parse(match.group(4)!),
+        int.parse(match.group(5)!),
+        int.parse(match.group(6)!),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   String _httpErrorFallback(int statusCode) {
