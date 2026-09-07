@@ -61,17 +61,22 @@ class SyncEngine {
 
   final ValueNotifier<int> pendingCount = ValueNotifier<int>(0);
   final ValueNotifier<int> blockedCount = ValueNotifier<int>(0);
+  final ValueNotifier<int> totalCount = ValueNotifier<int>(0);
 
   String? get _currentUserId => _authRepo?.currentUser?.id;
 
   Future<void> refreshPendingCount() async {
     try {
-      pendingCount.value = await _localDb.getRetryablePendingCount(
+      final retryable = await _localDb.getRetryablePendingCount(
         ownerUserId: _currentUserId,
       );
-      blockedCount.value = await _localDb.getBlockedCount(
+      final blocked = await _localDb.getBlockedCount(
         ownerUserId: _currentUserId,
       );
+
+      pendingCount.value = retryable;
+      blockedCount.value = blocked;
+      totalCount.value = retryable + blocked;
     } catch (e, stack) {
       AppLogger.e(
         'Error al refrescar conteo de pendientes',
@@ -110,16 +115,20 @@ class SyncEngine {
   void stop() {
     _debounceTimer?.cancel();
     _retryTimer?.cancel();
+    _retryTimer = null;
     _connectivitySub?.cancel();
     _connectivitySub = null;
   }
 
   void _scheduleRetry() {
     _retryTimer?.cancel();
-    if (pendingCount.value == 0) {
+    _retryTimer = null;
+
+    if (pendingCount.value <= 0) {
       _retryAttempt = 0;
       return;
     }
+
     final Duration delay =
         _retryBackoff[_retryAttempt.clamp(0, _retryBackoff.length - 1)];
     _retryAttempt++;
@@ -186,7 +195,6 @@ class SyncEngine {
     try {
       if (_reachability != null && !await _reachability.probe()) {
         AppLogger.d('Backend inalcanzable. Se omite el lote.');
-        _scheduleRetry();
         return false;
       }
 
@@ -230,7 +238,6 @@ class SyncEngine {
       final remaining = await _localDb.getRetryablePendingCount(
         ownerUserId: _currentUserId,
       );
-      pendingCount.value = remaining;
       onSyncStatusChanged?.call(remaining);
 
       return allSuccessful && remaining == 0;
