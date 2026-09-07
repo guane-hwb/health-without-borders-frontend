@@ -389,6 +389,7 @@ class _OrgFilterDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       decoration: BoxDecoration(
@@ -419,10 +420,13 @@ class _OrgFilterDropdown extends StatelessWidget {
           ),
           onChanged: onChanged,
           items: orgs.map<DropdownMenuItem<String>>((_OrgFilter org) {
+            final displayName = org.id == kAllOrgsFilterId
+                ? s.statsFilterAll
+                : org.name;
             return DropdownMenuItem<String>(
               value: org.id,
               child: Text(
-                org.name,
+                displayName,
                 style: const TextStyle(fontWeight: FontWeight.w500),
               ),
             );
