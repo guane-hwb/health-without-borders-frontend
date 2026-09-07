@@ -42,6 +42,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen>
   bool _loading = true;
   _Failure? _failure;
   String? _errorDetail;
+  int _loadRequestId = 0;
 
   @override
   void initState() {
@@ -80,6 +81,8 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen>
   }
 
   Future<void> _load() async {
+    final int requestId = ++_loadRequestId;
+
     setState(() {
       _range = _reevaluateRange(_range);
       _loading = true;
@@ -91,7 +94,7 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen>
     try {
       if (_showFilter && _orgs.isEmpty) {
         final orgs = await scope.userRepository.listOrganizations();
-        if (!mounted) return;
+        if (!mounted || requestId != _loadRequestId) return;
         _orgs = <_OrgFilter>[
           _OrgFilter(
             id: kAllOrgsFilterId,
@@ -106,26 +109,28 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen>
         dateFrom: _range.from,
         dateTo: _range.to,
       );
-      if (!mounted) return;
+
+      if (!mounted || requestId != _loadRequestId) return;
+
       setState(() {
         _stats = stats;
         _loading = false;
       });
     } on ApiException catch (e) {
-      if (!mounted) return;
+      if (!mounted || requestId != _loadRequestId) return;
       setState(() {
         _failure = e.statusCode == 403 ? _Failure.forbidden : _Failure.other;
         _errorDetail = e.message;
         _loading = false;
       });
     } on StatsUnavailableException catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestId != _loadRequestId) return;
       setState(() {
         _failure = _Failure.offline;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || requestId != _loadRequestId) return;
       setState(() {
         _failure = _Failure.other;
         _errorDetail = e.toString();

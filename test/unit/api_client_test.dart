@@ -1,10 +1,4 @@
 // test/unit/api_client_test.dart
-//
-// Exercises the auto-refresh interceptor baked into ApiClient: on a 401 from a
-// protected route it renews the access token once (via the injected
-// TokenProvider) and replays the request with the fresh bearer. Public routes
-// (login / refresh) never trigger a refresh, and without a provider a 401
-// simply propagates.
 
 import 'dart:convert';
 
@@ -31,7 +25,7 @@ void main() {
 
       expect(
         exception.toString(),
-        'ApiException(statusCode: 500, message: algo falló)',
+        'ApiException(statusCode: 500, message: algo falló, retryAfter: null)',
       );
     });
 
@@ -42,7 +36,7 @@ void main() {
       expect(exception.message, 'sin status');
       expect(
         exception.toString(),
-        'ApiException(statusCode: null, message: sin status)',
+        'ApiException(statusCode: null, message: sin status, retryAfter: null)',
       );
     });
   });
