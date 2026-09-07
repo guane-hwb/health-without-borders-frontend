@@ -14,12 +14,16 @@ class ProfileHeader extends StatelessWidget {
     required this.hasUnsyncedChanges,
     required this.onBack,
     this.lastSyncedAt,
+    this.isSyncing = false,
+    this.onSync,
   });
 
   final PatientFullRecord patient;
   final bool hasUnsyncedChanges;
   final VoidCallback onBack;
   final String? lastSyncedAt;
+  final bool isSyncing;
+  final VoidCallback? onSync;
 
   int? get _age => helpers.computeAge(patient.patientInfo.dob, DateTime.now());
 
@@ -40,6 +44,8 @@ class ProfileHeader extends StatelessWidget {
     final age = _age;
     final docNumber = patient.patientInfo.identification.documentNumber;
     final s = AppStrings.of(context);
+    final isEs = s.isEs;
+
     return Container(
       color: AppColors.primary,
       padding: const EdgeInsets.fromLTRB(8, 6, 14, 14),
@@ -53,6 +59,32 @@ class ProfileHeader extends StatelessWidget {
                 icon: const Icon(Icons.arrow_back, color: AppColors.white),
               ),
               const Spacer(),
+              if (onSync != null) ...[
+                Semantics(
+                  label: isEs ? 'Sincronizar cambios' : 'Sync changes',
+                  button: true,
+                  enabled: !isSyncing,
+                  child: IconButton(
+                    onPressed: isSyncing ? null : onSync,
+                    icon: isSyncing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                AppColors.white,
+                              ),
+                            ),
+                          )
+                        : const Icon(
+                            Icons.sync_rounded,
+                            color: AppColors.white,
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
               const LanguageToggle(),
               const SizedBox(width: 4),
             ],
