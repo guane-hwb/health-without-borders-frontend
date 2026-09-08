@@ -107,10 +107,11 @@ class LocalDatabase {
       FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: false));
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 9;
+  static const int _dbVersion = 10;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
+  static const String _keyVersionTable = 'nfc_key_version_observations';
   static const String _dbKeyStorageName = 'hwb_sqlite_aes_key';
   static const String _auditKeyStorageName = 'hwb_sqlite_audit_aes_key';
 
@@ -120,6 +121,7 @@ class LocalDatabase {
 
   static const String _webPatientPrefix = 'hwb_web_patient::';
   static const String _webChipPrefix = 'hwb_web_chip::';
+  static const String _webKeyVersionPrefix = 'hwb_web_keyver::';
   static const String _webLogPrefix = 'hwb_web_emlog::';
 
   final FlutterSecureStorage _secureStorage;
@@ -329,6 +331,39 @@ class LocalDatabase {
   Future<void> _webDeleteChipRow(String patientId) async {
     await _ensureWebMigrated();
     await _webRemove('$_webChipPrefix$patientId');
+  }
+
+  Future<void> _webPutKeyVersionRow(
+    String deviceUid,
+    Map<String, Object?> row,
+  ) async {
+    await _ensureWebMigrated();
+    try {
+      await _webSet('$_webKeyVersionPrefix$deviceUid', jsonEncode(row));
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error guardando versión de llave NFC en IndexedDB web',
+        error: e,
+        stackTrace: stack,
+      );
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, Object?>>> _webAllKeyVersionRows() async {
+    await _ensureWebMigrated();
+    final entries = await _webList(_webKeyVersionPrefix);
+    final rows = <Map<String, Object?>>[];
+    for (final e in entries) {
+      if (e.key.contains('::quarantine::')) continue;
+      try {
+        rows.add(Map<String, Object?>.from(jsonDecode(e.value) as Map));
+      } catch (_) {
+        // An unreadable observation is telemetry, not clinical data: skip it
+        // rather than quarantine, so a corrupt row never blocks a read.
+      }
+    }
+    return rows;
   }
 
   Future<Map<String, Object?>?> _webGetLogRow(int id) async {
@@ -672,6 +707,7 @@ class LocalDatabase {
         await db.execute('CREATE INDEX idx_owner ON $_table (owner_user_id)');
         await _createChipStatusTable(db);
         await _createEmergencyLogTable(db);
+        await _createKeyVersionTable(db);
       },
       onUpgrade: (Database db, int oldVersion, int newVersion) async {
         if (oldVersion < 2) {
@@ -734,6 +770,9 @@ class LocalDatabase {
             '$_emergencyLogTable (owner_user_id)',
           );
         }
+        if (oldVersion < 10) {
+          await _createKeyVersionTable(db);
+        }
       },
     );
   }
@@ -761,6 +800,33 @@ class LocalDatabase {
     ''');
   }
 
+  /// Records which NFC key version each chip was last seen on.
+  ///
+  /// Keyed by device UID so repeated scans of the same chip update one row
+  /// instead of piling up: the question is "what version is this chip on
+  /// now", not "how often was it read".
+  ///
+  /// [device_role] separates wristbands from guardian cards. Both are written
+  /// with the same keyring, so a version cannot be retired safely by looking
+  /// at wristbands alone — guardian cards are rewritten less often and are the
+  /// likelier stragglers.
+  static Future<void> _createKeyVersionTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_keyVersionTable (
+        device_uid  TEXT PRIMARY KEY,
+        device_role TEXT NOT NULL,
+        key_version INTEGER NOT NULL,
+        had_header  INTEGER NOT NULL DEFAULT 0,
+        observed_at TEXT NOT NULL,
+        is_synced   INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_keyver_synced '
+      'ON $_keyVersionTable (is_synced)',
+    );
+  }
+
   static Future<void> _createEmergencyLogTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS $_emergencyLogTable (
@@ -780,6 +846,108 @@ class LocalDatabase {
       'CREATE INDEX IF NOT EXISTS idx_emlog_owner ON '
       '$_emergencyLogTable (owner_user_id)',
     );
+  }
+
+  /// Records that [deviceUid] was just read on [keyVersion].
+  ///
+  /// Upserts by UID: repeated scans of the same chip refresh one row. Marks it
+  /// unsynced so the next sync can report it.
+  ///
+  /// Telemetry must never break a clinical read, so every failure here is
+  /// swallowed. A missing observation only delays a rotation decision.
+  Future<void> recordNfcKeyVersion({
+    required String deviceUid,
+    required String deviceRole,
+    required int keyVersion,
+    bool hadHeader = false,
+  }) async {
+    if (deviceUid.isEmpty) return;
+
+    final row = <String, Object?>{
+      'device_uid': deviceUid,
+      'device_role': deviceRole,
+      'key_version': keyVersion,
+      'had_header': hadHeader ? 1 : 0,
+      'observed_at': DateTime.now().toIso8601String(),
+      'is_synced': 0,
+    };
+
+    try {
+      final db = await _database;
+      if (db == null) {
+        await _withWebLock(() => _webPutKeyVersionRow(deviceUid, row));
+        return;
+      }
+      await db.insert(
+        _keyVersionTable,
+        row,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo registrar la versión de llave NFC observada',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  /// Observations not yet reported to the backend.
+  Future<List<Map<String, Object?>>> pendingNfcKeyVersions() async {
+    try {
+      final db = await _database;
+      if (db == null) {
+        return (await _webAllKeyVersionRows())
+            .where((Map<String, Object?> r) =>
+                (r['is_synced'] as num?)?.toInt() == 0)
+            .toList();
+      }
+      return await db.query(_keyVersionTable, where: 'is_synced = 0');
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudieron leer las versiones de llave NFC pendientes',
+        error: e,
+        stackTrace: stack,
+      );
+      return <Map<String, Object?>>[];
+    }
+  }
+
+  /// Marks the given UIDs as reported.
+  Future<void> markNfcKeyVersionsSynced(List<String> deviceUids) async {
+    if (deviceUids.isEmpty) return;
+    try {
+      final db = await _database;
+      if (db == null) {
+        await _withWebLock(() async {
+          for (final String uid in deviceUids) {
+            final rows = await _webAllKeyVersionRows();
+            for (final r in rows) {
+              if (r['device_uid'] == uid) {
+                await _webPutKeyVersionRow(uid, <String, Object?>{
+                  ...r,
+                  'is_synced': 1,
+                });
+              }
+            }
+          }
+        });
+        return;
+      }
+      await db.update(
+        _keyVersionTable,
+        <String, Object?>{'is_synced': 1},
+        where:
+            'device_uid IN (${List<String>.filled(deviceUids.length, '?').join(',')})',
+        whereArgs: deviceUids,
+      );
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudieron marcar como sincronizadas las versiones de llave NFC',
+        error: e,
+        stackTrace: stack,
+      );
+    }
   }
 
   Future<void> logEmergencyAccess({

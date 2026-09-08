@@ -34,6 +34,41 @@ const int _kHeaderLength = 3;
 /// Highest key version representable in the single-byte header.
 const int kMaxNfcKeyVersion = 255;
 
+/// A decoded payload together with the key version that actually opened it.
+///
+/// Which version a chip is on cannot be known without decrypting it, and it is
+/// the only way to tell how far a rotation has drained. Retiring a version
+/// while wristbands are still on it makes those tags unreadable offline, so the
+/// decision needs this measured rather than assumed.
+class NfcDecodeResult {
+  const NfcDecodeResult({
+    required this.data,
+    required this.keyVersion,
+    required this.hadHeader,
+  });
+
+  /// The decoded payload.
+  final Map<String, dynamic> data;
+
+  /// The version whose key decrypted this payload.
+  ///
+  /// For a headerless payload this is the version that succeeded, which is
+  /// what the chip is effectively on.
+  final int keyVersion;
+
+  /// Whether the payload carried a version header, i.e. was written as
+  /// version 1 or later. False for version 0 and for pre-versioning tags.
+  final bool hadHeader;
+}
+
+/// Internal outcome of a decryption attempt.
+class _DecryptOutcome {
+  const _DecryptOutcome(this.plaintext, this.keyVersion, this.hadHeader);
+  final Uint8List plaintext;
+  final int keyVersion;
+  final bool hadHeader;
+}
+
 /// Encodes and decodes NFC payloads using the HWB pipeline:
 ///   JSON Map → CBOR → DEFLATE (zlib level 9) → AES-256-GCM
 ///
@@ -177,18 +212,30 @@ class NfcPayloadCodec {
   ///
   /// Returns null if decryption fails (wrong key, tampered data).
   Future<Map<String, dynamic>?> decode(Uint8List encrypted) async {
+    return (await decodeDetailed(encrypted))?.data;
+  }
+
+  /// Like [decode], but also reports which key version opened the payload.
+  ///
+  /// Callers that only need the record should use [decode]; this exists so a
+  /// read can record what version the chip is on.
+  Future<NfcDecodeResult?> decodeDetailed(Uint8List encrypted) async {
     try {
       // Step 1: AES-256-GCM → DEFLATE (Asíncrono real)
-      final deflated = await _decrypt(encrypted);
-      if (deflated == null) return null;
+      final outcome = await _decrypt(encrypted);
+      if (outcome == null) return null;
 
       // Step 2: INFLATE → CBOR
-      final cborBytes = _inflate(deflated);
+      final cborBytes = _inflate(outcome.plaintext);
 
       // Step 3: CBOR → JSON map
       final data = _cborToJson(cborBytes);
 
-      return data;
+      return NfcDecodeResult(
+        data: data,
+        keyVersion: outcome.keyVersion,
+        hadHeader: outcome.hadHeader,
+      );
     } catch (_) {
       return null; // Decryption or parsing failed
     }
@@ -317,19 +364,22 @@ class NfcPayloadCodec {
   ///
   /// Because a v1+ payload is encrypted with its header as associated data,
   /// stripping the header does not turn it into a readable step-2 payload.
-  Future<Uint8List?> _decrypt(Uint8List packed) async {
+  Future<_DecryptOutcome?> _decrypt(Uint8List packed) async {
     // 1. Versioned payload (version 1 and up).
     if (packed.length >= _kHeaderLength + _kAesGcmOverhead &&
         packed[0] == _kMagic0 &&
         packed[1] == _kMagic1) {
-      final Uint8List? key = _keys[packed[2]];
+      final int version = packed[2];
+      final Uint8List? key = _keys[version];
       if (key != null) {
         final result = await _decryptWith(
           key,
           Uint8List.sublistView(packed, _kHeaderLength),
           aad: Uint8List.sublistView(packed, 0, _kHeaderLength),
         );
-        if (result != null) return result;
+        if (result != null) {
+          return _DecryptOutcome(result, version, true);
+        }
       }
     }
 
@@ -337,7 +387,8 @@ class NfcPayloadCodec {
     //    written before key versioning existed. No associated data.
     for (final int version in knownKeyVersions) {
       final result = await _decryptWith(_keys[version]!, packed);
-      if (result != null) return result;
+      // The version that succeeded is the one the chip is effectively on.
+      if (result != null) return _DecryptOutcome(result, version, false);
     }
 
     return null;

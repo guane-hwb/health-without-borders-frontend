@@ -1822,4 +1822,110 @@ void main() {
       },
     );
   });
+
+  group('Versiones de llave NFC observadas (nativo)', () {
+    test('registra la versión leída y queda pendiente de sincronizar', () async {
+      final db = LocalDatabase.instance;
+
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-A',
+        deviceRole: 'patient',
+        keyVersion: 0,
+      );
+
+      final pending = await db.pendingNfcKeyVersions();
+      expect(pending, hasLength(1));
+      expect(pending.first['device_uid'], 'uid-A');
+      expect(pending.first['device_role'], 'patient');
+      expect(pending.first['key_version'], 0);
+      expect(pending.first['had_header'], 0);
+    });
+
+    test('vuelve a leer el mismo chip: actualiza, no acumula', () async {
+      final db = LocalDatabase.instance;
+
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-B',
+        deviceRole: 'patient',
+        keyVersion: 0,
+      );
+      // El chip se regrabó y ahora está en la v1.
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-B',
+        deviceRole: 'patient',
+        keyVersion: 1,
+        hadHeader: true,
+      );
+
+      final pending = await db.pendingNfcKeyVersions();
+      // La pregunta es en qué versión está el chip ahora, no cuántas veces se
+      // leyó, así que una sola fila por UID.
+      expect(pending, hasLength(1));
+      expect(pending.first['key_version'], 1);
+      expect(pending.first['had_header'], 1);
+    });
+
+    test('distingue pulsera de tarjeta de guardián', () async {
+      final db = LocalDatabase.instance;
+
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-pac',
+        deviceRole: 'patient',
+        keyVersion: 1,
+      );
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-guard',
+        deviceRole: 'guardian',
+        keyVersion: 0,
+      );
+
+      final pending = await db.pendingNfcKeyVersions();
+      final roles = <String?, Object?>{
+        for (final r in pending) r['device_uid'] as String?: r['device_role'],
+      };
+      // Ambas se escriben con el mismo anillo: retirar una versión mirando
+      // sólo pulseras dejaría ilegibles las tarjetas rezagadas.
+      expect(roles['uid-pac'], 'patient');
+      expect(roles['uid-guard'], 'guardian');
+    });
+
+    test('marcar como sincronizadas las saca de pendientes', () async {
+      final db = LocalDatabase.instance;
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-C',
+        deviceRole: 'patient',
+        keyVersion: 0,
+      );
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-D',
+        deviceRole: 'guardian',
+        keyVersion: 0,
+      );
+
+      await db.markNfcKeyVersionsSynced(<String>['uid-C']);
+
+      final pending = await db.pendingNfcKeyVersions();
+      expect(pending, hasLength(1));
+      expect(pending.first['device_uid'], 'uid-D');
+    });
+
+    test('un UID vacío se ignora', () async {
+      final db = LocalDatabase.instance;
+
+      await db.recordNfcKeyVersion(
+        deviceUid: '',
+        deviceRole: 'patient',
+        keyVersion: 0,
+      );
+
+      expect(await db.pendingNfcKeyVersions(), isEmpty);
+    });
+
+    test('marcar una lista vacía no revienta', () async {
+      final db = LocalDatabase.instance;
+      await db.markNfcKeyVersionsSynced(<String>[]);
+      expect(await db.pendingNfcKeyVersions(), isEmpty);
+    });
+  });
+
 }
