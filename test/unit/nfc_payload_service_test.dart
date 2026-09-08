@@ -577,15 +577,21 @@ void main() {
     test('devuelve el triage decodificado', () async {
       final payload = Uint8List.fromList([1, 2, 3]);
       when(
-        () => codec.decode(any()),
-      ).thenAnswer((_) async => <String, dynamic>{'fn': 'Martha'});
+        () => codec.decodeDetailed(any()),
+      ).thenAnswer(
+        (_) async => const NfcDecodeResult(
+          data: <String, dynamic>{'fn': 'Martha'},
+          keyVersion: 0,
+          hadHeader: false,
+        ),
+      );
 
       final service = _service(codec, _chipWith(kHwbNdefMimeType, payload));
       final result = await service.readTriagePayload();
 
       expect(result.uid, kExpectedUid);
       expect(result.triage, isNotNull);
-      verify(() => codec.decode(payload)).called(1);
+      verify(() => codec.decodeDetailed(payload)).called(1);
     });
 
     test('triage null cuando el chip está en blanco', () async {
@@ -593,7 +599,7 @@ void main() {
       final result = await service.readTriagePayload();
       expect(result.uid, kExpectedUid);
       expect(result.triage, isNull);
-      verifyNever(() => codec.decode(any()));
+      verifyNever(() => codec.decodeDetailed(any()));
     });
 
     test('triage null cuando el chip no soporta NDEF', () async {
@@ -609,11 +615,11 @@ void main() {
       );
       final result = await service.readTriagePayload();
       expect(result.triage, isNull);
-      verifyNever(() => codec.decode(any()));
+      verifyNever(() => codec.decodeDetailed(any()));
     });
 
     test('triage null cuando el codec no puede descifrar', () async {
-      when(() => codec.decode(any())).thenAnswer((_) async => null);
+      when(() => codec.decodeDetailed(any())).thenAnswer((_) async => null);
       final service = _service(
         codec,
         _chipWith(kHwbNdefMimeType, Uint8List.fromList([1])),
@@ -644,7 +650,7 @@ void main() {
       );
       final result = await service.readTriagePayload();
       expect(result.triage, isNull);
-      verifyNever(() => codec.decode(any()));
+      verifyNever(() => codec.decodeDetailed(any()));
     });
 
     test('falla si el chip no tiene identificador legible', () async {
@@ -683,8 +689,14 @@ void main() {
     test('guardian cuando el chip trae el registro del guardián', () async {
       final payload = Uint8List.fromList([5, 5]);
       when(
-        () => codec.decode(any()),
-      ).thenAnswer((_) async => <String, dynamic>{'patientId': 'x'});
+        () => codec.decodeDetailed(any()),
+      ).thenAnswer(
+        (_) async => const NfcDecodeResult(
+          data: <String, dynamic>{'patientId': 'x'},
+          keyVersion: 0,
+          hadHeader: false,
+        ),
+      );
       final service = _service(codec, _chipWith(kHwbGuardianMimeType, payload));
 
       final result = await service.readHwbChip();
@@ -696,8 +708,14 @@ void main() {
 
     test('triage cuando el chip solo trae el registro de triage', () async {
       when(
-        () => codec.decode(any()),
-      ).thenAnswer((_) async => <String, dynamic>{'fn': 'Martha'});
+        () => codec.decodeDetailed(any()),
+      ).thenAnswer(
+        (_) async => const NfcDecodeResult(
+          data: <String, dynamic>{'fn': 'Martha'},
+          keyVersion: 0,
+          hadHeader: false,
+        ),
+      );
       final service = _service(
         codec,
         _chipWith(kHwbNdefMimeType, Uint8List.fromList([1])),
@@ -714,8 +732,14 @@ void main() {
       // El del guardián es un superconjunto del de triage.
       final guardianPayload = Uint8List.fromList([9]);
       when(
-        () => codec.decode(any()),
-      ).thenAnswer((_) async => <String, dynamic>{'patientId': 'x'});
+        () => codec.decodeDetailed(any()),
+      ).thenAnswer(
+        (_) async => const NfcDecodeResult(
+          data: <String, dynamic>{'patientId': 'x'},
+          keyVersion: 0,
+          hadHeader: false,
+        ),
+      );
       final service = _service(
         codec,
         HwbTag(
@@ -741,11 +765,11 @@ void main() {
       final result = await service.readHwbChip();
 
       expect(result.kind, HwbChipKind.guardian);
-      verify(() => codec.decode(guardianPayload)).called(1);
+      verify(() => codec.decodeDetailed(guardianPayload)).called(1);
     });
 
     test('none cuando el guardián no se puede descifrar', () async {
-      when(() => codec.decode(any())).thenAnswer((_) async => null);
+      when(() => codec.decodeDetailed(any())).thenAnswer((_) async => null);
       final service = _service(
         codec,
         _chipWith(kHwbGuardianMimeType, Uint8List.fromList([1])),

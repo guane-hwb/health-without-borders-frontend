@@ -421,6 +421,75 @@ void main() {
     });
   });
 
+
+  group('decodeDetailed expone la versión observada', () {
+    test('un payload v0 reporta la versión 0 y sin encabezado', () async {
+      final codec = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring.single(_keyV0),
+      );
+
+      final result = await codec.decodeDetailed(await codec.encode(_record));
+
+      expect(result, isNotNull);
+      expect(result!.keyVersion, 0);
+      expect(result.hadHeader, isFalse);
+      expect(result.data['patientId'], 'p-123');
+    });
+
+    test('un payload v1 reporta su versión y que traía encabezado', () async {
+      final codec = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring.single(_keyV1, version: 1),
+      );
+
+      final result = await codec.decodeDetailed(await codec.encode(_record));
+
+      expect(result!.keyVersion, 1);
+      expect(result.hadHeader, isTrue);
+    });
+
+    test(
+      'una pulsera vieja leída por un lector rotado reporta la v0',
+      () async {
+        final oldWriter = NfcPayloadCodec.fromKeyring(
+          keyring: NfcKeyring.single(_keyV0),
+        );
+        final tag = await oldWriter.encode(_record);
+
+        final rotatedReader = NfcPayloadCodec.fromKeyring(
+          keyring: NfcKeyring(
+            keys: <int, String>{0: _keyV0, 1: _keyV1},
+            currentVersion: 1,
+          ),
+        );
+
+        final result = await rotatedReader.decodeDetailed(tag);
+
+        // Ésta es la medición que decide si la v0 se puede retirar.
+        expect(result!.keyVersion, 0);
+        expect(result.hadHeader, isFalse);
+      },
+    );
+
+    test('un payload ilegible devuelve null', () async {
+      final codec = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring.single(_keyV0),
+      );
+
+      expect(await codec.decodeDetailed(Uint8List(4)), isNull);
+    });
+
+    test('decode sigue devolviendo sólo el mapa', () async {
+      final codec = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring.single(_keyV0),
+      );
+
+      final decoded = await codec.decode(await codec.encode(_record));
+
+      expect(decoded, isNotNull);
+      expect(decoded!['patientId'], 'p-123');
+    });
+  });
+
 }
 
 /// Emulates the pre-versioning reader: AES-256-GCM over [nonce][ct][tag], with

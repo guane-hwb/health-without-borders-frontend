@@ -61,6 +61,24 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
 
   // ── Patient scan ──────────────────────────────────────────────────────────
 
+  /// Notes which key version this chip decrypted with.
+  ///
+  /// Fire-and-forget by design: this is telemetry for deciding when a key
+  /// version can be retired, and it must never interfere with a read.
+  Future<void> _recordChipKeyVersion(payload.HwbChipReadResult chip) async {
+    final int? version = chip.keyVersion;
+    if (version == null || chip.uid.isEmpty) return;
+    if (!mounted) return;
+    await AppScope.of(context).localDatabase.recordNfcKeyVersion(
+      deviceUid: chip.uid,
+      deviceRole: chip.kind == payload.HwbChipKind.guardian
+          ? 'guardian'
+          : 'patient',
+      keyVersion: version,
+      hadHeader: chip.hadHeader ?? false,
+    );
+  }
+
   Future<void> _scanPatient() async {
     setState(() {
       _scanning = true;
@@ -77,6 +95,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         chip = await payload.NfcPayloadService(
           codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
         ).readHwbChip(alertMessage: alertMessage);
+        await _recordChipKeyVersion(chip);
       } else {
         // No keyring: the scan can still resolve the patient online from the
         // chip UID, so only remember the reason for the offline fallback.
@@ -261,6 +280,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       final chip = await payload.NfcPayloadService(
         codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
       ).readHwbChip(alertMessage: _nfcAlert(guardian: true));
+      await _recordChipKeyVersion(chip);
       if (!mounted) return;
 
       final expected = <String>[

@@ -95,6 +95,21 @@ class FakeAuthRepository implements AuthRepository {
 
 class FakeLocalDatabase implements LocalDatabase {
   @override
+  Future<void> recordNfcKeyVersion({
+    required String deviceUid,
+    required String deviceRole,
+    required int keyVersion,
+    bool hadHeader = false,
+  }) async {}
+
+  @override
+  Future<List<Map<String, Object?>>> pendingNfcKeyVersions() async =>
+      <Map<String, Object?>>[];
+
+  @override
+  Future<void> markNfcKeyVersionsSynced(List<String> deviceUids) async {}
+
+  @override
   Future<void> logEmergencyAccess({
     required String patientUid,
     String? patientName,
