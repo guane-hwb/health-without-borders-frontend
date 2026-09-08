@@ -60,6 +60,10 @@ class FakeAuthRepository implements AuthRepository {
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
+  ValueListenable<bool> get sessionWindowClosed =>
+      ValueNotifier<bool>(false);
+
+  @override
   ValueNotifier<UserSession?> get sessionNotifier =>
       ValueNotifier<UserSession?>(session);
 

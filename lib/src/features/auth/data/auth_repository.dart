@@ -59,6 +59,8 @@ class AuthRepository implements TokenProvider {
   @visibleForTesting
   static const String nfcKeyringKey = _nfcKeyringKey;
   @visibleForTesting
+  static const String clockMarkKey = _clockMarkKey;
+  @visibleForTesting
   static const String sessionKey = _sessionKey;
   @visibleForTesting
   static const String lastUserIdKey = _lastUserIdKey;
@@ -69,6 +71,15 @@ class AuthRepository implements TokenProvider {
   static const String _nfcKeyringKey = 'hwb_nfc_keyring';
   static const String _sessionKey = 'hwb_user_session';
   static const String _lastUserIdKey = 'hwb_last_user_id';
+  static const String _clockMarkKey = 'hwb_clock_mark';
+
+  /// How far the device clock may legitimately move backwards before it is
+  /// treated as tampering rather than a correction.
+  ///
+  /// NTP corrections and timezone changes move the clock by minutes or hours;
+  /// a day of slack absorbs those without letting someone reopen an expired
+  /// window by setting the date back a week.
+  static const Duration clockRollbackTolerance = Duration(hours: 24);
 
   final ApiClient _apiClient;
   final FlutterSecureStorage _secureStorage;
@@ -78,6 +89,7 @@ class AuthRepository implements TokenProvider {
   String? _cachedRefreshToken;
   String? _cachedNfcKey;
   NfcKeyring? _cachedKeyring;
+  DateTime? _cachedClockMark;
   UserSession? _session;
 
   final ValueNotifier<UserSession?> _sessionNotifier =
@@ -88,6 +100,17 @@ class AuthRepository implements TokenProvider {
 
   final ValueNotifier<bool> _sessionExpired = ValueNotifier<bool>(false);
   ValueListenable<bool> get sessionExpired => _sessionExpired;
+
+  final ValueNotifier<bool> _sessionWindowClosed = ValueNotifier<bool>(false);
+
+  /// True when the session window has lapsed but the session was still
+  /// restored locally.
+  ///
+  /// Distinct from [sessionExpired], which forces a return to the login
+  /// screen: here the person keeps access to what is already on the device
+  /// (pending records above all) while anything needing the network or an NFC
+  /// key is refused until they reconnect.
+  ValueListenable<bool> get sessionWindowClosed => _sessionWindowClosed;
 
   UserSession? get currentUser => _session;
 
@@ -105,6 +128,7 @@ class AuthRepository implements TokenProvider {
     required String password,
   }) async {
     _sessionExpired.value = false;
+    _sessionWindowClosed.value = false;
 
     final Map<String, dynamic> tokenData = await _apiClient.postForm(
       path: '/api/v1/login/access-token',
@@ -207,6 +231,12 @@ class AuthRepository implements TokenProvider {
     if (token == null || token.isEmpty) return null;
     _cachedToken = token;
 
+    // Evaluate the window on restore instead of waiting for something to ask
+    // for the keyring. Until now a cold start outside the window looked like a
+    // healthy session and only NFC reported otherwise; and the key stayed on
+    // disk for as long as nobody happened to call getNfcKeyring().
+    await _refreshSessionWindowState();
+
     final UserSession? persisted = await _readPersistedSession();
     if (persisted != null) {
       _updateSession(persisted);
@@ -219,6 +249,21 @@ class AuthRepository implements TokenProvider {
       if (fetched.id.isNotEmpty) await _persistSession(fetched);
     } catch (_) {}
     return _session;
+  }
+
+  /// Brings [sessionExpired] and the stored keyring in line with the window.
+  ///
+  /// The session is still restored when the window has closed: the device may
+  /// hold unsynced records that the health worker needs to see, and forcing a
+  /// logout could strand them behind the different-user guard. What it cannot
+  /// do is act as if nothing happened, so the flag is raised and the key
+  /// material is dropped now rather than whenever it is next requested.
+  Future<void> _refreshSessionWindowState() async {
+    final bool open = await _isSessionWindowOpen();
+    if (open) return;
+
+    await _forgetNfcKeyring();
+    _sessionWindowClosed.value = true;
   }
 
   Future<String> getAccessToken({bool forceRefresh = false}) async {
@@ -280,6 +325,9 @@ class AuthRepository implements TokenProvider {
     // /login/refresh carries the keyring as well, so a silent refresh picks up
     // a rotated current version without waiting for the next full login.
     await _absorbKeyring(data);
+
+    // A new refresh token means a new `exp`: the window is open again.
+    _sessionWindowClosed.value = false;
 
     return newAccess;
   }
@@ -442,6 +490,7 @@ class AuthRepository implements TokenProvider {
   }
 
   Future<void> _invalidateSession() async {
+    // clearSession() already drops the keyring from memory and disk.
     await clearSession();
     _sessionExpired.value = true;
   }
@@ -579,6 +628,55 @@ class AuthRepository implements TokenProvider {
     // An unreadable refresh token cannot prove a live session either.
     if (expiry == null) return false;
 
-    return DateTime.now().toUtc().isBefore(expiry);
+    final DateTime now = DateTime.now().toUtc();
+    if (await _clockMovedBackwards(now)) return false;
+    await _recordClockMark(now);
+
+    return now.isBefore(expiry);
+  }
+
+  /// Whether the device clock is behind the furthest point already observed by
+  /// more than [clockRollbackTolerance].
+  ///
+  /// The window is judged against the device clock, so setting the date back
+  /// would otherwise reopen an expired session. A stored high-water mark makes
+  /// that visible: time is not supposed to run backwards.
+  Future<bool> _clockMovedBackwards(DateTime now) async {
+    final DateTime? mark = await _readClockMark();
+    if (mark == null) return false;
+    return now.isBefore(mark.subtract(clockRollbackTolerance));
+  }
+
+  Future<DateTime?> _readClockMark() async {
+    if (kIsWeb) return _cachedClockMark;
+    if (_cachedClockMark != null) return _cachedClockMark;
+    try {
+      final String? raw = await _secureStorage.read(key: _clockMarkKey);
+      if (raw == null || raw.isEmpty) return null;
+      final int? millis = int.tryParse(raw);
+      if (millis == null) return null;
+      _cachedClockMark = DateTime.fromMillisecondsSinceEpoch(
+        millis,
+        isUtc: true,
+      );
+      return _cachedClockMark;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Moves the high-water mark forward. Never backwards, which is the point.
+  Future<void> _recordClockMark(DateTime now) async {
+    final DateTime? mark = _cachedClockMark;
+    if (mark != null && !now.isAfter(mark)) return;
+
+    _cachedClockMark = now;
+    if (kIsWeb) return;
+    try {
+      await _secureStorage.write(
+        key: _clockMarkKey,
+        value: now.millisecondsSinceEpoch.toString(),
+      );
+    } catch (_) {}
   }
 }

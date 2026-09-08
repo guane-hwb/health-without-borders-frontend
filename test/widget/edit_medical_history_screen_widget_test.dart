@@ -50,6 +50,10 @@ class FakeAuthRepository implements AuthRepository {
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
+  ValueListenable<bool> get sessionWindowClosed =>
+      ValueNotifier<bool>(false);
+
+  @override
   Future<String?> getNfcEncryptionKey() async => 'fake-nfc-key-12345';
 
   @override

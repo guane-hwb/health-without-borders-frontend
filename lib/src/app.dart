@@ -20,6 +20,7 @@ import 'features/auth/data/auth_repository.dart';
 import 'features/auth/data/user_repository.dart';
 import 'features/auth/presentation/auth_gate.dart';
 import 'features/auth/presentation/login_screen.dart';
+import 'features/auth/presentation/session_window_banner.dart';
 import 'features/nfc/data/patient_repository.dart';
 
 class HealthWithoutBordersApp extends StatefulWidget {
@@ -134,6 +135,13 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
           darkTheme: AppTheme.dark(),
           themeMode: ThemeMode.light,
           onGenerateRoute: AppRoutes.onGenerateRoute,
+          // Wraps every route, so the warning follows the person around
+          // instead of living on one screen they may never open.
+          builder: (BuildContext context, Widget? child) =>
+              SessionWindowBanner(
+                windowClosed: _authRepository.sessionWindowClosed,
+                child: child ?? const SizedBox.shrink(),
+              ),
           home: AuthGate(authRepository: _authRepository),
         ),
       ),
