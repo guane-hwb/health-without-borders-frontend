@@ -1817,4 +1817,147 @@ void main() {
     );
   });
 
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Ventana evaluada al restaurar, borrado no perezoso y reloj monótono
+  // ───────────────────────────────────────────────────────────────────────────
+  group('restoreSession y la ventana de sesión', () {
+    const String keyV0 =
+        '0000000000000000000000000000000000000000000000000000000000000000';
+
+    String storedRing() => jsonEncode(NfcKeyring.single(keyV0).toJson());
+
+    void stubStorage({required String? refresh, String? ring}) {
+      when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+      when(
+        () => storage.read(key: AuthRepository.tokenKey),
+      ).thenAnswer((_) async => _validJwt('doc@hwb.org'));
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => refresh);
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => ring);
+    }
+
+    test('dentro de la ventana no marca nada', () async {
+      stubStorage(refresh: _refreshJwt(), ring: storedRing());
+
+      await repo.restoreSession();
+
+      expect(repo.sessionWindowClosed.value, isFalse);
+      // La sesión no se fuerza al login: eso es sessionExpired, otra cosa.
+      expect(repo.sessionExpired.value, isFalse);
+    });
+
+    test(
+      'fuera de la ventana marca el estado pero conserva la sesión',
+      () async {
+        stubStorage(refresh: _refreshJwt(days: -1), ring: storedRing());
+
+        final session = await repo.restoreSession();
+
+        expect(repo.sessionWindowClosed.value, isTrue);
+        // Se conserva el acceso a lo que ya está en el dispositivo: puede
+        // haber registros sin sincronizar que la persona necesita ver.
+        expect(session, isNotNull);
+        expect(repo.sessionExpired.value, isFalse);
+      },
+    );
+
+    test(
+      'el anillo se borra al restaurar, sin esperar a que lo pidan',
+      () async {
+        stubStorage(refresh: _refreshJwt(days: -1), ring: storedRing());
+
+        await repo.restoreSession();
+
+        // Antes el material seguía en disco hasta que algo llamara a
+        // getNfcKeyring(), que podía no ocurrir nunca.
+        verify(
+          () => storage.delete(key: AuthRepository.nfcKeyringKey),
+        ).called(greaterThanOrEqualTo(1));
+      },
+    );
+  });
+
+  group('reloj movido hacia atrás', () {
+    const String keyV0 =
+        '0000000000000000000000000000000000000000000000000000000000000000';
+
+    String storedRing() => jsonEncode(NfcKeyring.single(keyV0).toJson());
+
+    String mark(Duration fromNow) => DateTime.now()
+        .toUtc()
+        .add(fromNow)
+        .millisecondsSinceEpoch
+        .toString();
+
+    test('un retroceso dentro de la tolerancia no cierra la ventana', () async {
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => storedRing());
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => _refreshJwt());
+      // La marca quedó 12 h adelante: dentro de las 24 h de holgura para
+      // correcciones de NTP o cambios de zona horaria.
+      when(
+        () => storage.read(key: AuthRepository.clockMarkKey),
+      ).thenAnswer((_) async => mark(const Duration(hours: 12)));
+
+      expect(await repo.getNfcKeyring(), isNotNull);
+    });
+
+    test('un retroceso mayor a la tolerancia cierra la ventana', () async {
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => storedRing());
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => _refreshJwt());
+      // La marca quedó 10 días adelante del reloj actual: alguien atrasó la
+      // fecha para reabrir una ventana ya vencida.
+      when(
+        () => storage.read(key: AuthRepository.clockMarkKey),
+      ).thenAnswer((_) async => mark(const Duration(days: 10)));
+
+      expect(await repo.getNfcKeyring(), isNull);
+      expect(await repo.isNfcSessionExpired(), isTrue);
+    });
+
+    test('una marca ilegible se ignora', () async {
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => storedRing());
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => _refreshJwt());
+      when(
+        () => storage.read(key: AuthRepository.clockMarkKey),
+      ).thenAnswer((_) async => 'no-es-un-numero');
+
+      expect(await repo.getNfcKeyring(), isNotNull);
+    });
+
+    test('la marca se persiste al evaluar la ventana', () async {
+      when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => storedRing());
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => _refreshJwt());
+
+      await repo.getNfcKeyring();
+
+      verify(
+        () => storage.write(
+          key: AuthRepository.clockMarkKey,
+          value: any(named: 'value'),
+        ),
+      ).called(greaterThanOrEqualTo(1));
+    });
+  });
+
 }
