@@ -46,10 +46,13 @@ void main() {
       );
     });
 
-    test('lanza FormatException si el hex tiene longitud impar', () {
+    test('lanza ArgumentError si el hex tiene longitud impar', () {
+      // El constructor ahora reporta de forma uniforme «no queda ninguna llave
+      // usable», sin importar por qué la llave era inválida: antes el hex
+      // impar se distinguía con FormatException.
       expect(
         () => NfcPayloadCodec(hexKey: 'abc'),
-        throwsA(isA<FormatException>()),
+        throwsA(isA<ArgumentError>()),
       );
     });
   });

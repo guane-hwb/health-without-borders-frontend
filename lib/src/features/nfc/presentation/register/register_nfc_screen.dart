@@ -13,6 +13,7 @@ import '../../domain/register_draft.dart';
 import '../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../core/nfc/nfc_payload_service.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../nfc_guided_write.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
@@ -291,7 +292,16 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       return;
     }
 
-    final codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
+    final NfcPayloadCodec codec;
+    try {
+      codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
+    } catch (e, stack) {
+      // Finish the wizard instead of stranding it on the last step: the record
+      // is already saved locally and the chips stay marked dirty.
+      AppLogger.e('Anillo de llaves NFC inválido', error: e, stackTrace: stack);
+      _completeFinalize();
+      return;
+    }
     final s = AppStrings.of(context);
     final isEs = s.isEs;
 
