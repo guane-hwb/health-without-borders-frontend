@@ -110,4 +110,30 @@ class PatientRepository {
       headers: await _authHeaders(),
     );
   }
+
+  /// Reports which NFC key version each scanned chip was found on.
+  ///
+  /// Only the four telemetry fields are sent — UID, role, version, timestamp.
+  /// Whatever else the local row carries (sync bookkeeping) stays on the
+  /// device, so the wire payload cannot drift into holding anything else.
+  Future<void> reportNfcKeyVersions(List<Map<String, Object?>> entries) async {
+    if (entries.isEmpty) return;
+    await _apiClient.postJson(
+      path: '/api/v1/patients/nfc-key-versions',
+      body: <String, dynamic>{
+        'entries': entries
+            .map(
+              (Map<String, Object?> e) => <String, dynamic>{
+                'device_uid': e['device_uid'],
+                'device_role': e['device_role'],
+                'key_version': e['key_version'],
+                'had_header': (e['had_header'] as num?)?.toInt() == 1,
+                'observed_at': e['observed_at'],
+              },
+            )
+            .toList(),
+      },
+      headers: await _authHeaders(),
+    );
+  }
 }

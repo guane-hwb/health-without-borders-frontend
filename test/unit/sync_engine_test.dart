@@ -38,6 +38,8 @@ void main() {
   setUpAll(() {
     registerFallbackValue(FakePatientFullRecord());
     registerFallbackValue(const Duration(days: 30));
+    registerFallbackValue(<Map<String, Object?>>[]);
+    registerFallbackValue(<String>[]);
   });
 
   late MockPatientRepository patientRepo;
@@ -123,6 +125,13 @@ void main() {
         ownerUserId: any(named: 'ownerUserId'),
       ),
     ).thenAnswer((_) async => []);
+    when(() => localDb.pendingNfcKeyVersions()).thenAnswer((_) async => []);
+    when(
+      () => localDb.markNfcKeyVersionsSynced(any()),
+    ).thenAnswer((_) async {});
+    when(
+      () => patientRepo.reportNfcKeyVersions(any()),
+    ).thenAnswer((_) async {});
     when(
       () => localDb.purgeStalePermanentErrors(maxAge: any(named: 'maxAge')),
     ).thenAnswer((_) async {});
@@ -955,4 +964,50 @@ void main() {
       });
     });
   });
+
+  group('reporte de versiones de llave NFC', () {
+    Map<String, Object?> row(String uid, int version, {String role = 'patient'}) =>
+        <String, Object?>{
+          'device_uid': uid,
+          'device_role': role,
+          'key_version': version,
+          'had_header': version == 0 ? 0 : 1,
+          'observed_at': '2026-09-08T10:00:00.000Z',
+          'is_synced': 0,
+        };
+
+    test('sin observaciones pendientes no llama al repositorio', () async {
+      await engine.syncAll();
+
+      verifyNever(() => patientRepo.reportNfcKeyVersions(any()));
+    });
+
+    test('envía las pendientes y las marca como sincronizadas', () async {
+      when(() => localDb.pendingNfcKeyVersions()).thenAnswer(
+        (_) async => [row('uid-1', 0), row('uid-2', 1, role: 'guardian')],
+      );
+
+      await engine.syncAll();
+
+      verify(() => patientRepo.reportNfcKeyVersions(any())).called(1);
+      final captured = verify(
+        () => localDb.markNfcKeyVersionsSynced(captureAny()),
+      ).captured.single as List<String>;
+      expect(captured, <String>['uid-1', 'uid-2']);
+    });
+
+    test('un fallo al reportar no aborta el lote ni marca nada', () async {
+      when(
+        () => localDb.pendingNfcKeyVersions(),
+      ).thenAnswer((_) async => [row('uid-1', 0)]);
+      when(
+        () => patientRepo.reportNfcKeyVersions(any()),
+      ).thenThrow(Exception('sin red'));
+
+      // La telemetría nunca puede tumbar la sincronización clínica.
+      await expectLater(engine.syncAll(), completes);
+      verifyNever(() => localDb.markNfcKeyVersionsSynced(any()));
+    });
+  });
+
 }
