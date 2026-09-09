@@ -202,6 +202,7 @@ class SyncEngine {
 
     await refreshPendingCount();
     await _syncEmergencyLogs();
+    await _syncNfcKeyVersions();
 
     bool allSuccessful = true;
 
@@ -413,6 +414,32 @@ class SyncEngine {
       _syncOneCompletion = null;
       completion.complete();
       await refreshPendingCount();
+    }
+  }
+
+  /// Ships pending NFC key version sightings.
+  ///
+  /// Best-effort like the audit log: a failure here delays a rotation decision,
+  /// never a clinical action, so it must not abort the batch.
+  Future<void> _syncNfcKeyVersions() async {
+    try {
+      final pending = await _localDb.pendingNfcKeyVersions();
+      if (pending.isEmpty) return;
+
+      await _patientRepo.reportNfcKeyVersions(pending);
+
+      final uids = pending
+          .map((Map<String, Object?> r) => r['device_uid'] as String?)
+          .whereType<String>()
+          .toList();
+      await _localDb.markNfcKeyVersionsSynced(uids);
+      AppLogger.d('Versiones de llave NFC reportadas: ${uids.length}');
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error reportando versiones de llave NFC',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 
