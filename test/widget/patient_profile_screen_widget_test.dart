@@ -113,23 +113,22 @@ class _FakeAuthRepository extends AuthRepository {
   final String? key;
   final Duration? keyDelay;
 
+  /// Counts how often the screen asked for key material. The name is kept so
+  /// existing assertions keep reading naturally now that the only accessor is
+  /// the keyring.
   int getNfcEncryptionKeyCallCount = 0;
 
   @override
   UserSession? get currentUser => _fakeUser;
 
   @override
-  Future<String?> getNfcEncryptionKey() async {
+  Future<NfcKeyring?> getNfcKeyring() async {
     getNfcEncryptionKeyCallCount++;
     if (keyDelay != null) await Future<void>.delayed(keyDelay!);
-    return key ??
+    final String hex =
+        key ??
         '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF';
-  }
-
-  @override
-  Future<NfcKeyring?> getNfcKeyring() async {
-    final String? hex = await getNfcEncryptionKey();
-    if (hex == null || hex.isEmpty) return null;
+    if (hex.isEmpty) return null;
     return NfcKeyring.single(hex);
   }
 
