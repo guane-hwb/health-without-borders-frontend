@@ -122,14 +122,6 @@ class FakeAuthRepository extends AuthRepository {
   bool throwOnGetKey = false;
 
   @override
-  Future<String?> getNfcEncryptionKey() async {
-    if (throwOnGetKey) {
-      throw Exception('secure storage unavailable (simulated)');
-    }
-    return nfcKey;
-  }
-
-  @override
   Future<NfcKeyring?> getNfcKeyring() async {
     if (throwOnGetKey) {
       throw Exception('secure storage unavailable (simulated)');
@@ -725,7 +717,7 @@ void main() {
     'Pre-lectura de chip NFC (requiere ReadNfcScreen.overrideReadHwbChip)',
     () {
       testWidgets(
-        'authRepository.getNfcEncryptionKey() retorna null: se salta la '
+        'authRepository.getNfcKeyring() retorna null: se salta la '
         'lectura del chip y sigue el flujo normal por NfcService',
         (tester) async {
           fakeAuth.nfcKey = null;

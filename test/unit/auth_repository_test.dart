@@ -1066,10 +1066,10 @@ void main() {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  // getNfcEncryptionKey()
+  // Llave suelta heredada (sólo alcanzable vía el anillo)
   // ───────────────────────────────────────────────────────────────────────────
-  group('getNfcEncryptionKey()', () {
-    test('devuelve la clave almacenada', () async {
+  group('llave suelta heredada', () {
+    test('se devuelve como anillo de versión 0', () async {
       when(
         () => storage.read(key: AuthRepository.nfcKeyKey),
       ).thenAnswer((_) async => 'my-nfc-key');
@@ -1079,9 +1079,10 @@ void main() {
         () => storage.read(key: AuthRepository.refreshKey),
       ).thenAnswer((_) async => _refreshJwt());
 
-      final key = await repo.getNfcEncryptionKey();
+      final ring = await repo.getNfcKeyring();
 
-      expect(key, 'my-nfc-key');
+      expect(ring, isNotNull);
+      expect(ring!.keyFor(kLegacyNfcKeyVersion), 'my-nfc-key');
     });
 
     test('devuelve null cuando no hay clave', () async {
@@ -1089,9 +1090,7 @@ void main() {
         () => storage.read(key: AuthRepository.nfcKeyKey),
       ).thenAnswer((_) async => null);
 
-      final key = await repo.getNfcEncryptionKey();
-
-      expect(key, isNull);
+      expect(await repo.getNfcKeyring(), isNull);
     });
 
     test('storage lanza excepción → devuelve null (silenciado)', () async {
@@ -1099,9 +1098,7 @@ void main() {
         () => storage.read(key: AuthRepository.nfcKeyKey),
       ).thenThrow(Exception('hardware error'));
 
-      final key = await repo.getNfcEncryptionKey();
-
-      expect(key, isNull);
+      expect(await repo.getNfcKeyring(), isNull);
     });
   });
 
@@ -1616,7 +1613,7 @@ void main() {
       expect(ring.keyFor(0), keyV0);
       expect(ring.keyFor(1), keyV1);
       // La llave de escritura sigue siendo la versión actual.
-      expect(await repo.getNfcEncryptionKey(), keyV1);
+      expect(ring.currentKey, keyV1);
     });
 
     test('el anillo se persiste para que un arranque en frío lo recupere',
@@ -1798,10 +1795,8 @@ void main() {
     );
 
     test(
-      'getNfcEncryptionKey no entrega la llave fuera de la ventana',
+      'ni el anillo ni la llave heredada salen fuera de la ventana',
       () async {
-        // El disco tiene anillo, pero la sesión ya venció: getNfcEncryptionKey
-        // pasa por getNfcKeyring, así que hereda el mismo gate.
         when(
           () => storage.read(key: AuthRepository.nfcKeyringKey),
         ).thenAnswer((_) async => storedRing());
@@ -1812,7 +1807,7 @@ void main() {
           () => storage.read(key: AuthRepository.refreshKey),
         ).thenAnswer((_) async => _refreshJwt(days: -1));
 
-        expect(await repo.getNfcEncryptionKey(), isNull);
+        expect(await repo.getNfcKeyring(), isNull);
       },
     );
   });

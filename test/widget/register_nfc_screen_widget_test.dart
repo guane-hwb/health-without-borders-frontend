@@ -117,7 +117,6 @@ void main() {
     when(
       () => auth.sessionNotifier,
     ).thenReturn(ValueNotifier<UserSession?>(activeUser));
-    when(() => auth.getNfcEncryptionKey()).thenAnswer((_) async => null);
     when(() => auth.getNfcKeyring()).thenAnswer((_) async => null);
     when(() => auth.logout()).thenAnswer((_) async {});
 
@@ -527,9 +526,6 @@ void main() {
         'sin tarjeta de guardián: solo intenta la pulsera del paciente',
         (tester) async {
           when(
-            () => auth.getNfcEncryptionKey(),
-          ).thenAnswer((_) async => validHexKey);
-          when(
             () => auth.getNfcKeyring(),
           ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
 
@@ -556,9 +552,6 @@ void main() {
       testWidgets(
         'con tarjeta de guardián registrada: también intenta la tarjeta del guardián',
         (tester) async {
-          when(
-            () => auth.getNfcEncryptionKey(),
-          ).thenAnswer((_) async => validHexKey);
           when(
             () => auth.getNfcKeyring(),
           ).thenAnswer((_) async => NfcKeyring.single(validHexKey));

@@ -87,7 +87,6 @@ class AuthRepository implements TokenProvider {
 
   String? _cachedToken;
   String? _cachedRefreshToken;
-  String? _cachedNfcKey;
   NfcKeyring? _cachedKeyring;
   DateTime? _cachedClockMark;
   UserSession? _session;
@@ -334,9 +333,11 @@ class AuthRepository implements TokenProvider {
 
   /// The full set of NFC keys this device holds, or null when none are known.
   ///
-  /// Prefer this over [getNfcEncryptionKey] for anything that reads a chip: it
-  /// carries every live key version, so a wristband written under an older key
-  /// still decrypts while a rotation is in progress.
+  /// Carries every live key version, so a wristband written under an older key
+  /// still decrypts while a rotation is in progress. Always build the codec
+  /// from this rather than a single key: a codec built from a bare key stamps
+  /// version 0 into the payload while encrypting with whatever the current key
+  /// is, which after a rotation produces a chip no reader can decrypt.
   Future<NfcKeyring?> getNfcKeyring() async {
     // The keyring is only valid inside the session window. Checking here — the
     // one place the key is handed out — means no screen can bypass it, and the
@@ -379,18 +380,6 @@ class AuthRepository implements TokenProvider {
     return null;
   }
 
-  /// The single key new writes use. Kept for call sites that only encrypt.
-  Future<String?> getNfcEncryptionKey() async {
-    // Routed through getNfcKeyring so the session window applies here too;
-    // otherwise the cached single key would outlive the expired keyring.
-    final NfcKeyring? keyring = await getNfcKeyring();
-    if (keyring == null) return null;
-
-    final String? current = keyring.currentKey;
-    if (current != null && current.isNotEmpty) return current;
-    return _cachedNfcKey?.isNotEmpty == true ? _cachedNfcKey : null;
-  }
-
   /// Whether NFC is unavailable because the session window closed, as opposed
   /// to no key ever having been delivered. Lets the NFC screens tell the user
   /// to log in again instead of reporting a reader failure.
@@ -399,7 +388,6 @@ class AuthRepository implements TokenProvider {
   /// Drops the keyring from memory and from disk.
   Future<void> _forgetNfcKeyring() async {
     _cachedKeyring = null;
-    _cachedNfcKey = null;
     if (kIsWeb) return;
     try {
       await _secureStorage.delete(key: _nfcKeyringKey);
@@ -446,7 +434,6 @@ class AuthRepository implements TokenProvider {
 
     _cachedToken = null;
     _cachedRefreshToken = null;
-    _cachedNfcKey = null;
     _cachedKeyring = null;
     _updateSession(null);
 
@@ -509,7 +496,6 @@ class AuthRepository implements TokenProvider {
     if (keyring == null || keyring.isEmpty) return;
 
     _cachedKeyring = keyring;
-    _cachedNfcKey = keyring.currentKey;
     if (kIsWeb) return;
 
     try {

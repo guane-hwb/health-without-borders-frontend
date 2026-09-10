@@ -33,9 +33,6 @@ class FakeAuthRepository implements AuthRepository {
   loginHandler;
 
   @override
-  Future<String?> getNfcEncryptionKey() async => null;
-
-  @override
   Future<NfcKeyring?> getNfcKeyring() async => null;
 
   @override
