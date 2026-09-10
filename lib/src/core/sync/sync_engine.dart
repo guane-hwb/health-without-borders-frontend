@@ -63,6 +63,7 @@ class SyncEngine {
   final ValueNotifier<int> pendingCount = ValueNotifier<int>(0);
   final ValueNotifier<int> blockedCount = ValueNotifier<int>(0);
   final ValueNotifier<int> totalCount = ValueNotifier<int>(0);
+  final ValueNotifier<bool> isOnline = ValueNotifier<bool>(true);
 
   String? get _currentUserId => _authRepo?.currentUser?.id;
 
@@ -98,6 +99,9 @@ class SyncEngine {
         _connectivityStream ?? Connectivity().onConnectivityChanged;
     _connectivitySub = stream.listen((List<ConnectivityResult> results) {
       final hasConnection = results.any((r) => r != ConnectivityResult.none);
+
+      isOnline.value = hasConnection;
+
       if (hasConnection) {
         _retryAttempt = 0;
         _debounceTimer?.cancel();

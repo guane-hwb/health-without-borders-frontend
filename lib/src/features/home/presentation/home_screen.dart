@@ -245,6 +245,8 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scope = AppScope.of(context);
+
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
@@ -292,31 +294,77 @@ class _Header extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.22),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.shield_outlined,
-                  size: 13,
-                  color: AppColors.white,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _roleLabel(context, user.role),
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+
+          ValueListenableBuilder<bool>(
+            valueListenable: scope.syncEngine.isOnline,
+            builder: (context, isOnline, _) {
+              return Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.shield_outlined,
+                          size: 13,
+                          color: AppColors.white,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _roleLabel(context, user.role),
+                          style: const TextStyle(
+                            color: AppColors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
+
+                  if (!isOnline)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade800,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.wifi_off_rounded,
+                            size: 13,
+                            color: AppColors.white,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            AppStrings.of(context).offlineModeBadge,
+                            style: const TextStyle(
+                              color: AppColors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),

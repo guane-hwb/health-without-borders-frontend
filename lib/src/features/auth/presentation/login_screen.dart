@@ -339,9 +339,16 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } on ApiException catch (e) {
       if (!mounted) return;
+      final isNetworkError =
+          e.message.toLowerCase().contains('socketexception') ||
+          e.message.toLowerCase().contains('network') ||
+          e.message.toLowerCase().contains('connection');
+
+      final errorMessage = isNetworkError ? s.loginNetworkRequired : e.message;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.message),
+          content: Text(errorMessage),
           backgroundColor: Colors.red.shade700,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -350,11 +357,21 @@ class _LoginScreenState extends State<LoginScreen> {
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         ),
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
+      final errStr = e.toString().toLowerCase();
+      final isNetworkError =
+          errStr.contains('socketexception') ||
+          errStr.contains('network') ||
+          errStr.contains('failed host lookup');
+
+      final errorMessage = isNetworkError
+          ? s.loginNetworkRequired
+          : s.loginFailed;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(s.loginFailed),
+          content: Text(errorMessage),
           backgroundColor: Colors.red.shade700,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
