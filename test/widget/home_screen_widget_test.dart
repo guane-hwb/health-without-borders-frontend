@@ -69,8 +69,7 @@ class FakeAuthRepository implements AuthRepository {
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
-  ValueListenable<bool> get sessionWindowClosed =>
-      ValueNotifier<bool>(false);
+  ValueListenable<bool> get sessionWindowClosed => ValueNotifier<bool>(false);
 
   @override
   Future<void> clearSession() async {
@@ -239,7 +238,6 @@ class FakeLocalDatabase implements LocalDatabase {
       pendingCount;
 }
 
-/// Create a [UserSession] with the specified role.
 UserSession _session(UserRole role, {String name = 'Ana Rodríguez'}) =>
     UserSession(
       id: 'uid-001',
@@ -252,7 +250,7 @@ UserSession _session(UserRole role, {String name = 'Ana Rodríguez'}) =>
 late FakeAuthRepository mockAuth;
 late FakeLocalDatabase mockDb;
 
-Widget _wrapHome({required UserSession? user}) {
+Widget _wrapHome({required UserSession? user, bool isOnline = true}) {
   mockAuth.currentUser = user;
 
   final apiClient = ApiClient(baseUrl: 'https://example.com');
@@ -268,6 +266,7 @@ Widget _wrapHome({required UserSession? user}) {
     patientRepository: patientRepository,
     localDatabase: mockDb,
   );
+  syncEngine.isOnline.value = isOnline;
 
   return AppLocale(
     locale: 'es',
@@ -284,7 +283,11 @@ Widget _wrapHome({required UserSession? user}) {
       ),
       reachability: Reachability(baseUrl: 'http://localhost'),
       child: MaterialApp(
-        routes: {'/login': (_) => const LoginScreen()},
+        routes: {
+          '/login': (_) => const LoginScreen(),
+          '/nfc/loss-wristband': (_) =>
+              const Scaffold(body: Text('Loss Wristband Screen')),
+        },
         home: const HomeScreen(),
       ),
     ),
@@ -296,14 +299,9 @@ void _setUpMocks() {
   mockDb = FakeLocalDatabase(pendingCount: 0);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Tests
-// ─────────────────────────────────────────────────────────────────────────────
-
 void main() {
   setUp(_setUpMocks);
 
-  // ── Group 1: Session-free redirection ───────────────────────────────────────
   group('HomeScreen — sin usuario activo', () {
     testWidgets('muestra LoginScreen cuando currentUser es null', (
       tester,
@@ -315,7 +313,6 @@ void main() {
     });
   });
 
-  // ── Group 2: Header ───────────────────────────────────────────────────────
   group('HomeScreen — header', () {
     testWidgets('muestra el nombre completo del usuario', (tester) async {
       final user = _session(UserRole.doctor, name: 'Carlos Mejía');
@@ -358,7 +355,6 @@ void main() {
     });
   });
 
-  // ── Group 3: Body superadmin ──────────────────────────────────────────────
   group('HomeScreen — body superadmin', () {
     testWidgets('muestra card de Gestionar organizaciones', (tester) async {
       final user = _session(UserRole.superadmin);
@@ -395,7 +391,6 @@ void main() {
     });
   });
 
-  // ── Group 4: Body orgAdmin ────────────────────────────────────────────────
   group('HomeScreen — body orgAdmin', () {
     testWidgets('muestra card de Gestionar usuarios', (tester) async {
       final user = _session(UserRole.orgAdmin);
@@ -439,7 +434,6 @@ void main() {
     });
   });
 
-  // ── Group 5: Body clínico (doctor / nurse) ────────────────────────────────
   group('HomeScreen — body clínico', () {
     for (final role in [UserRole.doctor, UserRole.nurse]) {
       testWidgets('$role — muestra card Leer NFC', (tester) async {
@@ -480,7 +474,51 @@ void main() {
     }
   });
 
-  // ── Group 6: _SyncCard — state with pending ────────────────────────────
+  group('HomeScreen — validación offline en búsqueda de paciente', () {
+    testWidgets(
+      'muestra SnackBar preventivo estando offline al tocar Buscar Paciente',
+      (tester) async {
+        final user = _session(UserRole.doctor);
+        await tester.pumpWidget(_wrapHome(user: user, isOnline: false));
+        await tester.pumpAndSettle();
+
+        final searchCard = find.byIcon(Icons.search_rounded);
+        await tester.scrollUntilVisible(searchCard, 80);
+        await tester.ensureVisible(searchCard);
+        await tester.pumpAndSettle();
+
+        await tester.tap(searchCard);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(
+          find.text(
+            'Sin conexión a Internet. Por favor, conéctese a una red para realizar búsquedas.',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('navega a la pantalla de búsqueda estando online', (
+      tester,
+    ) async {
+      final user = _session(UserRole.doctor);
+      await tester.pumpWidget(_wrapHome(user: user, isOnline: true));
+      await tester.pumpAndSettle();
+
+      final searchCard = find.byIcon(Icons.search_rounded);
+      await tester.scrollUntilVisible(searchCard, 80);
+      await tester.ensureVisible(searchCard);
+      await tester.pumpAndSettle();
+
+      await tester.tap(searchCard);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Loss Wristband Screen'), findsOneWidget);
+    });
+  });
+
   group('_SyncCard — badge de pendientes', () {
     testWidgets(
       'sin pendientes muestra cloud_done y NO muestra badge numérico',
@@ -519,7 +557,6 @@ void main() {
     });
   });
 
-  // ── Group 7: Logout dialog ────────────────────────────────────────────
   group('HomeScreen — logout dialog', () {
     Future<void> tapLogout(WidgetTester tester) async {
       final logoutIcon = find.byIcon(Icons.logout_rounded);
@@ -562,24 +599,30 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
     });
 
-    testWidgets('confirmar logout llama clearSession', (tester) async {
-      final user = _session(UserRole.nurse);
-      await tester.pumpWidget(_wrapHome(user: user));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'confirmar logout llama clearSession y muestra spinner de carga',
+      (tester) async {
+        final user = _session(UserRole.nurse);
+        await tester.pumpWidget(_wrapHome(user: user));
+        await tester.pumpAndSettle();
 
-      await tapLogout(tester);
+        await tapLogout(tester);
 
-      final confirmBtn = find
-          .descendant(
-            of: find.byType(AlertDialog),
-            matching: find.byType(TextButton),
-          )
-          .last;
-      await tester.tap(confirmBtn);
-      await tester.pumpAndSettle();
+        final confirmBtn = find
+            .descendant(
+              of: find.byType(AlertDialog),
+              matching: find.byType(TextButton),
+            )
+            .last;
+        await tester.tap(confirmBtn);
+        await tester.pump();
 
-      expect(mockAuth.clearSessionCalled, isTrue);
-    });
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+        await tester.pumpAndSettle();
+        expect(mockAuth.clearSessionCalled, isTrue);
+      },
+    );
 
     testWidgets('el diálogo tiene exactamente 2 botones', (tester) async {
       final user = _session(UserRole.superadmin);
@@ -609,7 +652,6 @@ void main() {
     });
   });
 
-  // ── Group 8: Locale switcher ──────────────────────────────────────────────
   group('HomeScreen — selector de idioma', () {
     testWidgets('muestra botones ES y EN', (tester) async {
       final user = _session(UserRole.doctor);
@@ -621,7 +663,6 @@ void main() {
     });
   });
 
-  // ── Group 9: ActionCard — visual structure ───────────────────────────────
   group('_ActionCard — estructura visual', () {
     testWidgets('cada card tiene ícono de flecha derecha', (tester) async {
       final user = _session(UserRole.doctor);

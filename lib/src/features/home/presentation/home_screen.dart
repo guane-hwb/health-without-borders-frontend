@@ -1,5 +1,6 @@
 // lib/src/features/home/presentation/home_screen.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
@@ -49,13 +50,74 @@ class HomeScreen extends StatelessWidget {
     );
 
     if (confirmed == true && context.mounted) {
+      unawaited(
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const PopScope(
+            canPop: false,
+            child: Center(
+              child: Card(
+                shape: CircleBorder(),
+                elevation: 4,
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
       await scope.authRepository.logout();
+
       if (context.mounted) {
         await Navigator.of(
           context,
         ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
       }
     }
+  }
+
+  void _navigateToLossWristband(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
+    final scope = AppScope.of(context);
+    final isOnline = scope.syncEngine.isOnline.value;
+
+    if (!isOnline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(
+                Icons.wifi_off_rounded,
+                color: AppColors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isEs
+                      ? 'Sin conexión a Internet. Por favor, conéctese a una red para realizar búsquedas.'
+                      : 'No Internet connection. Please connect to a network to perform searches.',
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
+    unawaited(Navigator.of(context).pushNamed(AppRoutes.lossWristband));
   }
 
   @override
@@ -128,7 +190,7 @@ class HomeScreen extends StatelessWidget {
           onTap: () => Navigator.of(context).pushNamed(AppRoutes.brigadeStats),
         ),
         const SizedBox(height: 28),
-        _LogoutButton(onTap: () => _logout(context)),
+        _LogoutButton(onTap: () => unawaited(_logout(context))),
       ],
     );
   }
@@ -155,7 +217,7 @@ class HomeScreen extends StatelessWidget {
           iconColor: const Color(0xFF1565C0),
           title: s.actionSearchPatient,
           subtitle: s.actionSearchPatientSubAdmin,
-          onTap: () => Navigator.of(context).pushNamed(AppRoutes.lossWristband),
+          onTap: () => _navigateToLossWristband(context),
         ),
         const SizedBox(height: 14),
         _ActionCard(
@@ -168,7 +230,7 @@ class HomeScreen extends StatelessWidget {
               Navigator.of(context).pushNamed(AppRoutes.brigadeStatsOrg),
         ),
         const SizedBox(height: 28),
-        _LogoutButton(onTap: () => _logout(context)),
+        _LogoutButton(onTap: () => unawaited(_logout(context))),
       ],
     );
   }
@@ -206,7 +268,7 @@ class HomeScreen extends StatelessWidget {
           iconColor: const Color(0xFFE6A817),
           title: s.actionSearchPatient,
           subtitle: s.actionSearchPatientSub,
-          onTap: () => Navigator.of(context).pushNamed(AppRoutes.lossWristband),
+          onTap: () => _navigateToLossWristband(context),
         ),
         const SizedBox(height: 14),
         _SyncCard(
@@ -218,7 +280,7 @@ class HomeScreen extends StatelessWidget {
           },
         ),
         const SizedBox(height: 28),
-        _LogoutButton(onTap: () => _logout(context)),
+        _LogoutButton(onTap: () => unawaited(_logout(context))),
       ],
     );
   }
@@ -506,24 +568,28 @@ class _SyncCardState extends State<_SyncCard> {
 
     _engineRef!.onSyncStatusChanged = (int count) {
       _previousSyncStatusCallback?.call(count);
-      _fetchCount();
+      unawaited(_fetchCount());
     };
 
     _engineRef!.onRecordSynced = (String id, bool success, String? err) {
       _previousRecordSyncedCallback?.call(id, success, err);
-      _fetchCount();
+      unawaited(_fetchCount());
     };
 
-    _engineRef!.pendingCount.addListener(_fetchCount);
-    _engineRef!.blockedCount.addListener(_fetchCount);
-    _fetchCount();
+    _engineRef!.pendingCount.addListener(_onPendingChanged);
+    _engineRef!.blockedCount.addListener(_onPendingChanged);
+    unawaited(_fetchCount());
+  }
+
+  void _onPendingChanged() {
+    unawaited(_fetchCount());
   }
 
   @override
   void dispose() {
     if (_engineRef != null) {
-      _engineRef!.pendingCount.removeListener(_fetchCount);
-      _engineRef!.blockedCount.removeListener(_fetchCount);
+      _engineRef!.pendingCount.removeListener(_onPendingChanged);
+      _engineRef!.blockedCount.removeListener(_onPendingChanged);
       _engineRef!.onSyncStatusChanged = _previousSyncStatusCallback;
       _engineRef!.onRecordSynced = _previousRecordSyncedCallback;
     }
