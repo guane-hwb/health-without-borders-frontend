@@ -120,6 +120,8 @@ void main() {
     when(() => auth.getNfcKeyring()).thenAnswer((_) async => null);
     when(() => auth.logout()).thenAnswer((_) async {});
 
+    when(() => sync.isOnline).thenReturn(ValueNotifier<bool>(true));
+
     when(() => patientRepo.syncPatient(any())).thenAnswer(
       (_) async =>
           PatientSyncResponse(status: 'success', internalId: '', message: ''),
@@ -161,7 +163,7 @@ void main() {
   });
 
   Future<void> pumpScreen(WidgetTester tester, {String locale = 'es'}) async {
-    tester.view.physicalSize = const Size(600, 2000);
+    tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);

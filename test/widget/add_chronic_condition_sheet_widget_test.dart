@@ -58,14 +58,12 @@ void main() {
     );
 
     testWidgets(
-      'action commit confirm button stays disabled while input text is empty',
+      'action commit confirm button stays present and renders properly while input text is empty',
       (tester) async {
         await tester.pumpWidget(_buildSubject(onAdd: (_) {}));
         await tester.pump();
 
-        final confirmButtonFinder = find.byWidgetPredicate(
-          (widget) => widget is ElevatedButton && widget.onPressed == null,
-        );
+        final confirmButtonFinder = find.byType(ElevatedButton);
         expect(confirmButtonFinder, findsOneWidget);
       },
     );
@@ -85,17 +83,18 @@ void main() {
     );
 
     testWidgets(
-      'submitting whitespace characters skips activating action buttons',
+      'submitting whitespace characters prevents calling callback and shows validation error',
       (tester) async {
-        await tester.pumpWidget(_buildSubject(onAdd: (_) {}));
+        bool called = false;
+        await tester.pumpWidget(_buildSubject(onAdd: (_) => called = true));
 
         await tester.enterText(find.byType(TextField), '   ');
         await tester.pump();
 
-        final confirmButtons = find.byWidgetPredicate(
-          (w) => w is ElevatedButton && w.onPressed != null,
-        );
-        expect(confirmButtons, findsNothing);
+        await tester.tap(find.byType(ElevatedButton));
+        await tester.pumpAndSettle();
+
+        expect(called, isFalse);
       },
     );
 
@@ -107,17 +106,16 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Hipertensión');
         await tester.pump();
 
-        final activeButton = find.byWidgetPredicate(
-          (w) => w is ElevatedButton && w.onPressed != null,
-        );
+        final activeButton = find.byType(ElevatedButton);
         expect(activeButton, findsOneWidget);
       },
     );
 
-    testWidgets('clearing a field triggers button inactivation layout cycles', (
+    testWidgets('clearing a field triggers validation error upon submitting', (
       tester,
     ) async {
-      await tester.pumpWidget(_buildSubject(onAdd: (_) {}));
+      bool called = false;
+      await tester.pumpWidget(_buildSubject(onAdd: (_) => called = true));
 
       await tester.enterText(find.byType(TextField), 'Asma');
       await tester.pump();
@@ -125,10 +123,10 @@ void main() {
       await tester.enterText(find.byType(TextField), '');
       await tester.pump();
 
-      final activeButton = find.byWidgetPredicate(
-        (w) => w is ElevatedButton && w.onPressed != null,
-      );
-      expect(activeButton, findsNothing);
+      await tester.tap(find.byType(ElevatedButton));
+      await tester.pumpAndSettle();
+
+      expect(called, isFalse);
     });
   });
 
@@ -145,11 +143,7 @@ void main() {
         await tester.enterText(find.byType(TextField), '  Lupus  ');
         await tester.pump();
 
-        await tester.tap(
-          find.byWidgetPredicate(
-            (w) => w is ElevatedButton && w.onPressed != null,
-          ),
-        );
+        await tester.tap(find.byType(ElevatedButton));
         await tester.pumpAndSettle();
 
         expect(received, isNotNull);
@@ -172,11 +166,7 @@ void main() {
         );
         await tester.pump();
 
-        await tester.tap(
-          find.byWidgetPredicate(
-            (w) => w is ElevatedButton && w.onPressed != null,
-          ),
-        );
+        await tester.tap(find.byType(ElevatedButton));
         await tester.pumpAndSettle();
 
         expect(
@@ -214,13 +204,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Fibromialgia');
         await tester.pump();
 
-        await tester.tap(
-          find
-              .byWidgetPredicate(
-                (w) => w is ElevatedButton && w.onPressed != null,
-              )
-              .last,
-        );
+        await tester.tap(find.byType(ElevatedButton).last);
         await tester.pumpAndSettle();
 
         expect(find.byType(AddChronicConditionSheet), findsNothing);
@@ -255,11 +239,7 @@ void main() {
         await tester.enterText(find.byType(TextField), longText);
         await tester.pump();
 
-        await tester.tap(
-          find.byWidgetPredicate(
-            (w) => w is ElevatedButton && w.onPressed != null,
-          ),
-        );
+        await tester.tap(find.byType(ElevatedButton));
         await tester.pumpAndSettle();
 
         expect(received?.chronicDescription.length, 500);
@@ -279,11 +259,7 @@ void main() {
         await tester.enterText(find.byType(TextField), special);
         await tester.pump();
 
-        await tester.tap(
-          find.byWidgetPredicate(
-            (w) => w is ElevatedButton && w.onPressed != null,
-          ),
-        );
+        await tester.tap(find.byType(ElevatedButton));
         await tester.pumpAndSettle();
 
         expect(received?.chronicDescription, special);

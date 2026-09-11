@@ -54,6 +54,10 @@ Widget buildTestableApp({
   final syncEngine = MockSyncEngine();
   final reachability = MockReachability();
 
+  when(() => syncEngine.isOnline).thenReturn(ValueNotifier<bool>(true));
+  when(() => syncEngine.pendingCount).thenReturn(ValueNotifier<int>(0));
+  when(() => syncEngine.blockedCount).thenReturn(ValueNotifier<int>(0));
+
   return AppLocale(
     locale: 'es',
     setLocale: (_) {},

@@ -57,6 +57,21 @@ Widget _wrap({
 }
 
 void main() {
+  setUp(() {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first.physicalSize = const Size(
+      1600,
+      1200,
+    );
+    binding.platformDispatcher.views.first.devicePixelRatio = 1.0;
+  });
+
+  tearDown(() {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first.resetPhysicalSize();
+    binding.platformDispatcher.views.first.resetDevicePixelRatio();
+  });
+
   group('EditChronicPersonalSheet – Initial Rendering', () {
     testWidgets('Displays the title passed as a parameter', (tester) async {
       await tester.pumpWidget(
@@ -134,14 +149,14 @@ void main() {
     );
 
     testWidgets(
-      'Displays the close chevron action icon within the SheetScaffold layer boundary',
+      'Displays the close chevron action icon within the header boundary',
       (tester) async {
         await tester.pumpWidget(
           _wrap(title: 'T', currentValue: null, onConfirm: (_) {}),
         );
         await tester.pumpAndSettle();
 
-        expect(find.byIcon(Icons.close), findsOneWidget);
+        expect(find.byIcon(Icons.close_rounded), findsOneWidget);
       },
     );
 
@@ -395,7 +410,7 @@ void main() {
     );
 
     testWidgets(
-      'Tapping close icons pops navigator layout structures without invoking confirmation pipelines',
+      'Tapping close icons pops navigator layout structures without invoking confirmation pipelines when unchanged',
       (tester) async {
         var confirmCalled = false;
 
@@ -431,7 +446,7 @@ void main() {
         await tester.tap(find.text('Push'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byIcon(Icons.close));
+        await tester.tap(find.byIcon(Icons.close_rounded));
         await tester.pumpAndSettle();
 
         expect(find.byType(EditChronicPersonalSheet), findsNothing);

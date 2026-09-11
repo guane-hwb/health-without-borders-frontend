@@ -637,8 +637,9 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
-      builder: (_) => EditGuardianSheet(
+      builder: (sheetContext) => EditGuardianSheet(
         guardian: current,
         guardianIndex: guardianIndex,
         onConfirm: (updated) {
