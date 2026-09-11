@@ -179,6 +179,7 @@ class AuthRepository implements TokenProvider {
     final String? refreshToken = tokenData['refresh_token']?.toString();
     if (refreshToken != null && refreshToken.isNotEmpty) {
       _cachedRefreshToken = refreshToken;
+      await _anchorClockMark(refreshToken);
       try {
         await _secureStorage.write(key: _refreshKey, value: refreshToken);
       } catch (_) {}
@@ -316,6 +317,7 @@ class AuthRepository implements TokenProvider {
     final String? newRefresh = data['refresh_token']?.toString();
     if (newRefresh != null && newRefresh.isNotEmpty) {
       _cachedRefreshToken = newRefresh;
+      await _anchorClockMark(newRefresh);
       try {
         await _secureStorage.write(key: _refreshKey, value: newRefresh);
       } catch (_) {}
@@ -435,6 +437,9 @@ class AuthRepository implements TokenProvider {
     _cachedToken = null;
     _cachedRefreshToken = null;
     _cachedKeyring = null;
+    // The mark belongs to the session being torn down; carrying it into the
+    // next one is what leaves a stale future mark blocking NFC.
+    _cachedClockMark = null;
     _updateSession(null);
 
     try {
@@ -448,6 +453,9 @@ class AuthRepository implements TokenProvider {
     } catch (_) {}
     try {
       await _secureStorage.delete(key: _nfcKeyringKey);
+    } catch (_) {}
+    try {
+      await _secureStorage.delete(key: _clockMarkKey);
     } catch (_) {}
     try {
       await _secureStorage.delete(key: _sessionKey);
@@ -479,6 +487,9 @@ class AuthRepository implements TokenProvider {
   Future<void> _invalidateSession() async {
     // clearSession() already drops the keyring from memory and disk.
     await clearSession();
+    // The window banner belongs to a restored-but-lapsed session; this path
+    // sends the user to the login screen, where it would otherwise linger.
+    _sessionWindowClosed.value = false;
     _sessionExpired.value = true;
   }
 
@@ -593,12 +604,40 @@ class AuthRepository implements TokenProvider {
     }
   }
 
+  /// The `iat` claim of [token] as a UTC instant, or null when unreadable.
+  DateTime? _jwtIssuedAt(String token) => _jwtInstant(token, 'iat');
+
   /// The `exp` claim of [token] as a UTC instant, or null when unreadable.
-  DateTime? _jwtExpiry(String token) {
-    final Object? exp = _jwtPayload(token)?['exp'];
-    final int? seconds = exp is int ? exp : int.tryParse(exp?.toString() ?? '');
+  DateTime? _jwtExpiry(String token) => _jwtInstant(token, 'exp');
+
+  DateTime? _jwtInstant(String token, String claim) {
+    final Object? value = _jwtPayload(token)?[claim];
+    final int? seconds =
+        value is int ? value : int.tryParse(value?.toString() ?? '');
     if (seconds == null) return null;
     return DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
+  }
+
+  /// Re-anchors the clock mark to the server's own clock.
+  ///
+  /// The mark otherwise only moves forward, so a device whose clock ran ahead
+  /// — even briefly — keeps a mark in the future and refuses NFC until the
+  /// real time catches up, with no way out but clearing app storage, which
+  /// destroys pending records. A successful login or refresh proves contact
+  /// with the server, and the refresh token's `iat` is the server's view of
+  /// now, so it is the one value that can safely move the mark **backwards**.
+  Future<void> _anchorClockMark(String refreshToken) async {
+    final DateTime? issuedAt = _jwtIssuedAt(refreshToken);
+    if (issuedAt == null) return;
+
+    _cachedClockMark = issuedAt;
+    if (kIsWeb) return;
+    try {
+      await _secureStorage.write(
+        key: _clockMarkKey,
+        value: issuedAt.millisecondsSinceEpoch.toString(),
+      );
+    } catch (_) {}
   }
 
   /// Whether the refresh token still bounds a live session.
