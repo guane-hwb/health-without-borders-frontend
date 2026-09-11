@@ -1,4 +1,5 @@
 // lib/src/features/nfc/presentation/register/register_nfc_screen.dart
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -57,6 +58,19 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   }
 
   void _stepBack() async {
+    if (_step > 0) {
+      setState(() => _step--);
+    } else {
+      await _goToHomeDirectly();
+    }
+  }
+
+  Future<void> _handleSystemPop() async {
+    if (_savedRecord != null || _step >= 4) {
+      Navigator.of(context).pop();
+      return;
+    }
+
     if (_step > 0) {
       setState(() => _step--);
     } else {
@@ -315,8 +329,6 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     try {
       codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
     } catch (e, stack) {
-      // Finish the wizard instead of stranding it on the last step: the record
-      // is already saved locally and the chips stay marked dirty.
       AppLogger.e('Anillo de llaves NFC inválido', error: e, stackTrace: stack);
       if (!mounted) return;
       _warnChipsNotWritten(
@@ -444,29 +456,39 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final onSuccess = _step >= 4;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FB),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                _WizardHeader(
-                  title: s.newPatient,
-                  onBack: onSuccess ? null : _goToHomeDirectly,
-                  stepText: onSuccess ? null : '${_step + 1}/4',
-                ),
-                if (!onSuccess) _ProgressBar(step: _step, total: 4),
-                Expanded(child: _buildStep()),
-              ],
-            ),
-            const Positioned(
-              left: 116,
-              right: 116,
-              bottom: 14,
-              child: ScreenBottomHandle(),
-            ),
-          ],
+
+    final canPopDirectly = _savedRecord != null || _step >= 5;
+
+    return PopScope(
+      canPop: canPopDirectly,
+      onPopInvokedWithResult: (bool didPop, dynamic result) async {
+        if (didPop) return;
+        await _handleSystemPop();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF6F8FB),
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  _WizardHeader(
+                    title: s.newPatient,
+                    onBack: onSuccess ? null : _goToHomeDirectly,
+                    stepText: onSuccess ? null : '${_step + 1}/4',
+                  ),
+                  if (!onSuccess) _ProgressBar(step: _step, total: 4),
+                  Expanded(child: _buildStep()),
+                ],
+              ),
+              const Positioned(
+                left: 116,
+                right: 116,
+                bottom: 14,
+                child: ScreenBottomHandle(),
+              ),
+            ],
+          ),
         ),
       ),
     );

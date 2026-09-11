@@ -82,8 +82,8 @@ void main() {
         expect(find.text('Editar residencia'), findsOneWidget);
         expect(find.text('Dirección y zona del paciente'), findsOneWidget);
         expect(find.text('Dirección'), findsOneWidget);
-        expect(find.text('Municipio'), findsOneWidget);
-        expect(find.text('Departamento'), findsOneWidget);
+        expect(find.text('Municipio *'), findsOneWidget);
+        expect(find.text('Departamento *'), findsOneWidget);
         expect(find.text('Zona'), findsOneWidget);
         expect(find.text('Urbana'), findsOneWidget);
         expect(find.text('Rural'), findsOneWidget);
@@ -103,8 +103,8 @@ void main() {
         expect(find.text('Edit residence'), findsOneWidget);
         expect(find.text('Patient address and zone'), findsOneWidget);
         expect(find.text('Address'), findsOneWidget);
-        expect(find.text('Municipality'), findsOneWidget);
-        expect(find.text('Department'), findsOneWidget);
+        expect(find.text('Municipality *'), findsOneWidget);
+        expect(find.text('Department *'), findsOneWidget);
         expect(find.text('Zone'), findsOneWidget);
         expect(find.text('Urban'), findsOneWidget);
         expect(find.text('Rural'), findsOneWidget);
@@ -221,7 +221,7 @@ void main() {
     );
 
     testWidgets(
-      'tapping close icon dismisses modal window instantly without committing actions',
+      'tapping close icon dismisses modal window instantly without committing actions when unchanged',
       (tester) async {
         var confirmCalled = false;
 
@@ -231,7 +231,7 @@ void main() {
           onConfirm: (_) => confirmCalled = true,
         );
 
-        await tester.tap(find.byIcon(Icons.close));
+        await tester.tap(find.byIcon(Icons.close_rounded));
         await tester.pumpAndSettle();
 
         expect(find.byType(EditAddressSheet), findsNothing);

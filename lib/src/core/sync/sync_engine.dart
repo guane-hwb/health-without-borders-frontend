@@ -63,6 +63,7 @@ class SyncEngine {
   final ValueNotifier<int> pendingCount = ValueNotifier<int>(0);
   final ValueNotifier<int> blockedCount = ValueNotifier<int>(0);
   final ValueNotifier<int> totalCount = ValueNotifier<int>(0);
+  final ValueNotifier<bool> isOnline = ValueNotifier<bool>(true);
 
   String? get _currentUserId => _authRepo?.currentUser?.id;
 
@@ -98,6 +99,9 @@ class SyncEngine {
         _connectivityStream ?? Connectivity().onConnectivityChanged;
     _connectivitySub = stream.listen((List<ConnectivityResult> results) {
       final hasConnection = results.any((r) => r != ConnectivityResult.none);
+
+      isOnline.value = hasConnection;
+
       if (hasConnection) {
         _retryAttempt = 0;
         _debounceTimer?.cancel();
@@ -366,14 +370,19 @@ class SyncEngine {
         error: e,
         stackTrace: stack,
       );
-      final bool isNetworkError =
-          e is TimeoutException ||
-          e is SocketException ||
-          e is http.ClientException ||
-          e.toString().contains('SocketException');
 
-      final String safeMsg = isNetworkError
-          ? 'Error de conexión de red'
+      final bool isSocketException =
+          e is SocketException || e.toString().contains('SocketException');
+      final bool isTimeout = e is TimeoutException;
+
+      final bool isNetworkError =
+          (isSocketException || isTimeout || e is http.ClientException) &&
+          isOnline.value;
+
+      final String safeMsg = isSocketException
+          ? 'Error de conexión de red (Socket)'
+          : isTimeout
+          ? 'Tiempo de espera agotado (Timeout)'
           : 'Error en proceso de sincronización';
 
       await _localDb.markSyncError(
@@ -382,6 +391,7 @@ class SyncEngine {
         revision: entry.revision,
       );
       onRecordSynced?.call(entry.patientId, false, safeMsg);
+
       return isNetworkError
           ? _SyncOutcome.networkFailure
           : _SyncOutcome.failure;

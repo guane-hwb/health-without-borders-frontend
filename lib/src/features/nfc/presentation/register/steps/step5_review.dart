@@ -1,4 +1,5 @@
 // lib/src/features/nfc/presentation/register/steps/step5_review.dart
+
 import 'package:flutter/material.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../core/i18n/app_strings.dart';
@@ -73,6 +74,22 @@ class _Step5State extends State<Step5Review> {
     }
   }
 
+  String _getRelLabel(String? code, bool isEs) {
+    const mapEs = {
+      '01': 'Padres',
+      '02': 'Hermanos',
+      '03': 'Tíos',
+      '04': 'Abuelos',
+    };
+    const mapEn = {
+      '01': 'Parents',
+      '02': 'Siblings',
+      '03': 'Uncles',
+      '04': 'Grandparents',
+    };
+    return (isEs ? mapEs[code ?? '01'] : mapEn[code ?? '01']) ?? '';
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = widget.draft;
@@ -97,23 +114,11 @@ class _Step5State extends State<Step5Review> {
 
     final zoneLabel = d.zone == '02' ? s.zoneRural : s.zoneUrban;
 
-    final guardianRelationshipLabel =
-        const {
-          '01': 'Padres',
-          '02': 'Hermanos',
-          '03': 'Tíos',
-          '04': 'Abuelos',
-        }[d.guardianRelationship ?? '01'] ??
-        '';
+    final hasGuardian1 = d.guardianName != null && d.guardianName!.isNotEmpty;
+    final hasGuardian2 = d.guardian2Name != null && d.guardian2Name!.isNotEmpty;
 
-    final guardianRelationshipLabelEn =
-        const {
-          '01': 'Parents',
-          '02': 'Siblings',
-          '03': 'Uncles',
-          '04': 'Grandparents',
-        }[d.guardianRelationship ?? '01'] ??
-        '';
+    final guardian1RelLabel = _getRelLabel(d.guardianRelationship, isEs);
+    final guardian2RelLabel = _getRelLabel(d.guardian2Relationship, isEs);
 
     // Text items counter string builder helper
     String itemsCount(int count) {
@@ -124,6 +129,40 @@ class _Step5State extends State<Step5Review> {
     final bannerText = isEs
         ? 'El registro se guarda en el dispositivo. Si hay internet se sincroniza ahora; si no, queda en la cola y se enviará automáticamente.'
         : 'The record is saved on the device. If internet is available, it syncs now; otherwise, it remains in the queue and will be sent automatically.';
+
+    final guardianRows = <MapEntry<String, String>>[];
+
+    if (!hasGuardian1 && !hasGuardian2) {
+      guardianRows.add(_kv('—', isEs ? 'Sin guardián' : 'No guardian'));
+    } else {
+      if (hasGuardian1) {
+        final prefix = hasGuardian2 ? (isEs ? 'G1 ' : 'G1 ') : '';
+        guardianRows.addAll([
+          _kv('$prefix${isEs ? 'Nombre' : 'Name'}', d.guardianName!),
+          _kv('$prefix${s.guardianRelationship}', guardian1RelLabel),
+          _kv('$prefix${isEs ? 'Teléfono' : 'Phone'}', d.guardianPhone ?? '—'),
+          _kv(
+            '$prefix NFC',
+            d.guardianDeviceUid ?? (isEs ? 'No registrada' : 'Not registered'),
+          ),
+        ]);
+      }
+
+      if (hasGuardian2) {
+        if (hasGuardian1) {
+          guardianRows.add(_kv('────────', '────────'));
+        }
+        guardianRows.addAll([
+          _kv(isEs ? 'G2 Nombre' : 'G2 Name', d.guardian2Name!),
+          _kv('G2 ${s.guardianRelationship}', guardian2RelLabel),
+          _kv(isEs ? 'G2 Teléfono' : 'G2 Phone', d.guardian2Phone ?? '—'),
+          _kv(
+            'G2 NFC',
+            d.guardian2DeviceUid ?? (isEs ? 'No registrada' : 'Not registered'),
+          ),
+        ]);
+      }
+    }
 
     return Column(
       children: [
@@ -186,27 +225,10 @@ class _Step5State extends State<Step5Review> {
               const SizedBox(height: 10),
               _Card(
                 icon: Icons.family_restroom,
-                title: s.guardian,
-                rows: d.guardianName == null || d.guardianName!.isEmpty
-                    ? [_kv('—', isEs ? 'Sin guardián' : 'No guardian')]
-                    : [
-                        _kv(isEs ? 'Nombre' : 'Name', d.guardianName!),
-                        _kv(
-                          s.guardianRelationship,
-                          isEs
-                              ? guardianRelationshipLabel
-                              : guardianRelationshipLabelEn,
-                        ),
-                        _kv(
-                          isEs ? 'Teléfono' : 'Phone',
-                          d.guardianPhone ?? '—',
-                        ),
-                        _kv(
-                          'NFC',
-                          d.guardianDeviceUid ??
-                              (isEs ? 'No registrada' : 'Not registered'),
-                        ),
-                      ],
+                title: hasGuardian2
+                    ? (isEs ? 'Guardianes (2)' : 'Guardians (2)')
+                    : s.guardian,
+                rows: guardianRows,
               ),
               const SizedBox(height: 10),
               _Card(

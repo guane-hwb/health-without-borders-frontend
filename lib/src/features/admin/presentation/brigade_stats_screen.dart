@@ -376,7 +376,7 @@ class _SectionTitle extends StatelessWidget {
   );
 }
 
-class _OrgFilterDropdown extends StatelessWidget {
+class _OrgFilterDropdown extends StatefulWidget {
   const _OrgFilterDropdown({
     required this.orgs,
     required this.selected,
@@ -388,51 +388,135 @@ class _OrgFilterDropdown extends StatelessWidget {
   final ValueChanged<String?> onChanged;
 
   @override
+  State<_OrgFilterDropdown> createState() => _OrgFilterDropdownState();
+}
+
+class _OrgFilterDropdownState extends State<_OrgFilterDropdown> {
+  final MenuController _menuController = MenuController();
+
+  String _getOrgName(BuildContext context, _OrgFilter org) {
+    final s = AppStrings.of(context);
+    return org.id == kAllOrgsFilterId ? s.statsFilterAll : org.name;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.divider),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x10000000),
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
-        ],
+    final selectedFilter = widget.orgs.firstWhere(
+      (o) => o.id == widget.selected,
+      orElse: () => _OrgFilter(
+        id: widget.selected,
+        name: widget.selected == kAllOrgsFilterId
+            ? s.statsFilterAll
+            : widget.selected,
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: selected,
-          isExpanded: true,
-          icon: const Icon(
-            Icons.keyboard_arrow_down,
-            color: AppColors.textSecondary,
+    );
+
+    final selectedName = _getOrgName(context, selectedFilter);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return MenuAnchor(
+          controller: _menuController,
+          style: MenuStyle(
+            fixedSize: WidgetStateProperty.all(
+              Size(constraints.maxWidth, double.nan),
+            ),
+            maximumSize: WidgetStateProperty.all(
+              Size(constraints.maxWidth, 250),
+            ),
+            backgroundColor: WidgetStateProperty.all(AppColors.white),
+            elevation: WidgetStateProperty.all(4),
+            shape: WidgetStateProperty.all(
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
           ),
-          dropdownColor: AppColors.white,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
-          onChanged: onChanged,
-          items: orgs.map<DropdownMenuItem<String>>((_OrgFilter org) {
-            final displayName = org.id == kAllOrgsFilterId
-                ? s.statsFilterAll
-                : org.name;
-            return DropdownMenuItem<String>(
-              value: org.id,
-              child: Text(
-                displayName,
-                style: const TextStyle(fontWeight: FontWeight.w500),
+          builder: (context, controller, child) {
+            return InkWell(
+              onTap: () {
+                if (controller.isOpen) {
+                  controller.close();
+                } else {
+                  controller.open();
+                }
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  filled: true,
+                  fillColor: AppColors.white,
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(10)),
+                    borderSide: BorderSide(
+                      color: Color(0xFFB0B8C4),
+                      width: 1.5,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(10)),
+                    borderSide: BorderSide(color: AppColors.primary, width: 2),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(10)),
+                    borderSide: BorderSide(
+                      color: Color(0xFFB0B8C4),
+                      width: 1.5,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        selectedName,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.expand_more,
+                      color: AppColors.textSecondary,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+          menuChildren: widget.orgs.map((org) {
+            final displayName = _getOrgName(context, org);
+            return SizedBox(
+              width: constraints.maxWidth,
+              child: MenuItemButton(
+                onPressed: () {
+                  widget.onChanged(org.id);
+                  _menuController.close();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    displayName,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
             );
           }).toList(),
-        ),
-      ),
+        );
+      },
     );
   }
 }

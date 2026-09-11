@@ -491,29 +491,42 @@ class _Step3State extends State<Step3PatientData> {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            LabeledTextField(
-                              label: s.documentNumberLabel,
-                              controller: _docNum,
-                              hint: 'Ej. 1098765432',
-                              requiredField: true,
-                              keyboardType: TextInputType.text,
-                            ),
-                            if (_isDocInvalid) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                isEs
-                                    ? 'Mínimo 5 caracteres alfanuméricos'
-                                    : 'Min 5 alphanumeric chars',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.error,
+                        child: Theme(
+                          data: Theme.of(context).copyWith(
+                            inputDecorationTheme: Theme.of(context)
+                                .inputDecorationTheme
+                                .copyWith(
+                                  enabledBorder: _isDocInvalid
+                                      ? const OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(10),
+                                          ),
+                                          borderSide: BorderSide(
+                                            color: AppColors.error,
+                                            width: 2,
+                                          ),
+                                        )
+                                      : null,
+                                  focusedBorder: _isDocInvalid
+                                      ? const OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(10),
+                                          ),
+                                          borderSide: BorderSide(
+                                            color: AppColors.error,
+                                            width: 2,
+                                          ),
+                                        )
+                                      : null,
                                 ),
-                              ),
-                            ],
-                          ],
+                          ),
+                          child: LabeledTextField(
+                            label: s.documentNumberLabel,
+                            controller: _docNum,
+                            hint: 'Ej. 1098765432',
+                            requiredField: true,
+                            keyboardType: TextInputType.text,
+                          ),
                         ),
                       ),
                     ],

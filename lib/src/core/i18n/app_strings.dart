@@ -643,6 +643,9 @@ class AppStrings {
       _get('statsGeneratedAt').replaceAll('{time}', time);
   String get passwordTooShort8 => _get('passwordTooShort8');
 
+  String get offlineModeBadge => _get('offlineModeBadge');
+  String get loginNetworkRequired => _get('loginNetworkRequired');
+
   // ══════════════════════════════════════════════════════════════════════════
   // TRANSLATIONS
   // ══════════════════════════════════════════════════════════════════════════
@@ -1219,6 +1222,10 @@ class AppStrings {
     'statsComparedTo': 'Comparado con {from} – {to}',
     'statsGeneratedAt': 'Generado el {time}',
     'passwordTooShort8': 'La contraseña debe tener al menos 8 caracteres',
+
+    'offlineModeBadge': 'Modo sin conexión',
+    'loginNetworkRequired':
+        'Se requiere conexión a internet para el primer inicio de sesión.',
   };
 
   static const Map<String, String> _en = {
@@ -1796,5 +1803,9 @@ class AppStrings {
     'statsComparedTo': 'Compared to {from} – {to}',
     'statsGeneratedAt': 'Generated at {time}',
     'passwordTooShort8': 'Password must be at least 8 characters long',
+
+    'offlineModeBadge': 'Offline mode',
+    'loginNetworkRequired':
+        'Internet connection is required for initial sign in.',
   };
 }

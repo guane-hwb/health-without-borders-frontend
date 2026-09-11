@@ -1,4 +1,7 @@
 // lib/src/features/nfc/presentation/add_vaccine_screen.dart
+
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -131,7 +134,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   // ── Save ──────────────────────────────────────────────────────────────────
 
   Future<void> _save() async {
-    if (_patient == null) return;
+    if (_patient == null && !widget.returnToProfile) return;
     final s = AppStrings.of(context);
     final isEs = s.isEs;
     setState(() => _isSaving = true);
@@ -168,59 +171,62 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
       vaccinationRecord: [..._patient!.vaccinationRecord, ...newVaccines],
     );
 
+    // Guardamos la referencia a AppScope ANTES de cualquier llamada asíncrona
+    final scope = AppScope.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
     try {
-      final scope = AppScope.of(context);
       await scope.localDatabase.savePatient(updatedRecord);
       await scope.localDatabase.markChipsDirty(
         updatedRecord.patientId,
         guardian: true,
       );
 
-      if (mounted) {
-        setState(() {
-          _saved = true;
-          _isSaving = false;
-        });
+      if (!mounted) return;
 
-        scope.syncEngine.syncAll().ignore();
+      setState(() {
+        _saved = true;
+        _isSaving = false;
+      });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              newVaccines.length == 1
-                  ? s.vaccineSaved
-                  : (isEs
-                        ? '${newVaccines.length} vacunas guardadas exitosamente ✓'
-                        : '${newVaccines.length} vaccines saved successfully ✓'),
-            ),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      await scope.syncEngine.refreshPendingCount();
+      unawaited(scope.syncEngine.syncAll());
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            newVaccines.length == 1
+                ? s.vaccineSaved
+                : (isEs
+                      ? '${newVaccines.length} vacunas guardadas exitosamente ✓'
+                      : '${newVaccines.length} vaccines saved successfully ✓'),
           ),
-        );
-      }
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        ),
+      );
     } catch (_) {
-      if (mounted) {
-        setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isEs
-                  ? 'No se pudo guardar. Inténtalo de nuevo.'
-                  : 'Could not save. Please try again.',
-            ),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            isEs
+                ? 'No se pudo guardar. Inténtalo de nuevo.'
+                : 'Could not save. Please try again.',
           ),
-        );
-      }
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        ),
+      );
     }
   }
 
