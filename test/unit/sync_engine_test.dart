@@ -609,7 +609,7 @@ void main() {
         verify(
           () => localDb.markSyncError(
             'A',
-            'Error de conexión de red',
+            'Tiempo de espera agotado (Timeout)',
             statusCode: null,
             revision: 0,
           ),
@@ -966,15 +966,18 @@ void main() {
   });
 
   group('reporte de versiones de llave NFC', () {
-    Map<String, Object?> row(String uid, int version, {String role = 'patient'}) =>
-        <String, Object?>{
-          'device_uid': uid,
-          'device_role': role,
-          'key_version': version,
-          'had_header': version == 0 ? 0 : 1,
-          'observed_at': '2026-09-08T10:00:00.000Z',
-          'is_synced': 0,
-        };
+    Map<String, Object?> row(
+      String uid,
+      int version, {
+      String role = 'patient',
+    }) => <String, Object?>{
+      'device_uid': uid,
+      'device_role': role,
+      'key_version': version,
+      'had_header': version == 0 ? 0 : 1,
+      'observed_at': '2026-09-08T10:00:00.000Z',
+      'is_synced': 0,
+    };
 
     test('sin observaciones pendientes no llama al repositorio', () async {
       await engine.syncAll();
@@ -990,9 +993,11 @@ void main() {
       await engine.syncAll();
 
       verify(() => patientRepo.reportNfcKeyVersions(any())).called(1);
-      final captured = verify(
-        () => localDb.markNfcKeyVersionsSynced(captureAny()),
-      ).captured.single as List<String>;
+      final captured =
+          verify(
+                () => localDb.markNfcKeyVersionsSynced(captureAny()),
+              ).captured.single
+              as List<String>;
       expect(captured, <String>['uid-1', 'uid-2']);
     });
 
@@ -1009,5 +1014,4 @@ void main() {
       verifyNever(() => localDb.markNfcKeyVersionsSynced(any()));
     });
   });
-
 }

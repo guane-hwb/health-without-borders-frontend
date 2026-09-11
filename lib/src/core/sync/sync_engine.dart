@@ -370,14 +370,19 @@ class SyncEngine {
         error: e,
         stackTrace: stack,
       );
-      final bool isNetworkError =
-          e is TimeoutException ||
-          e is SocketException ||
-          e is http.ClientException ||
-          e.toString().contains('SocketException');
 
-      final String safeMsg = isNetworkError
-          ? 'Error de conexión de red'
+      final bool isSocketException =
+          e is SocketException || e.toString().contains('SocketException');
+      final bool isTimeout = e is TimeoutException;
+
+      final bool isNetworkError =
+          (isSocketException || isTimeout || e is http.ClientException) &&
+          isOnline.value;
+
+      final String safeMsg = isSocketException
+          ? 'Error de conexión de red (Socket)'
+          : isTimeout
+          ? 'Tiempo de espera agotado (Timeout)'
           : 'Error en proceso de sincronización';
 
       await _localDb.markSyncError(
@@ -386,6 +391,7 @@ class SyncEngine {
         revision: entry.revision,
       );
       onRecordSynced?.call(entry.patientId, false, safeMsg);
+
       return isNetworkError
           ? _SyncOutcome.networkFailure
           : _SyncOutcome.failure;
