@@ -868,7 +868,9 @@ class LocalDatabase {
       'device_role': deviceRole,
       'key_version': keyVersion,
       'had_header': hadHeader ? 1 : 0,
-      'observed_at': DateTime.now().toIso8601String(),
+      // UTC with a 'Z' suffix. A naive local timestamp is read by the
+      // server as UTC, shifting every observation by the device's offset.
+      'observed_at': DateTime.now().toUtc().toIso8601String(),
       'is_synced': 0,
     };
 

@@ -39,6 +39,9 @@ String _jwtNoSub() => _buildJwt({'user': 'x'});
 String _refreshJwt({int days = 7}) => _buildJwt({
   'sub': 'doc@hwb.org',
   'type': 'refresh',
+  // The backend stamps `iat` on every token; the client re-anchors its clock
+  // mark to it, so the fixture has to carry it.
+  'iat': DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000,
   'exp':
       DateTime.now().toUtc().add(Duration(days: days)).millisecondsSinceEpoch ~/
       1000,
@@ -1951,6 +1954,105 @@ void main() {
           key: AuthRepository.clockMarkKey,
           value: any(named: 'value'),
         ),
+      ).called(greaterThanOrEqualTo(1));
+    });
+  });
+
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Reanclaje de la marca de reloj al reloj del servidor
+  // ───────────────────────────────────────────────────────────────────────────
+  group('marca de reloj reanclada al servidor', () {
+    const String keyV0 =
+        '0000000000000000000000000000000000000000000000000000000000000000';
+
+    String storedRing() => jsonEncode(NfcKeyring.single(keyV0).toJson());
+
+    String futureMark(Duration ahead) => DateTime.now()
+        .toUtc()
+        .add(ahead)
+        .millisecondsSinceEpoch
+        .toString();
+
+    test('un login correcto reancla una marca que quedó en el futuro', () async {
+      // El reloj del dispositivo estuvo diez días adelantado: sin reanclaje la
+      // marca lo deja sin NFC hasta que el tiempo real la alcance.
+      when(
+        () => storage.read(key: AuthRepository.clockMarkKey),
+      ).thenAnswer((_) async => futureMark(const Duration(days: 10)));
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => storedRing());
+      when(
+        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+      ).thenAnswer(
+        (_) async => <String, dynamic>{
+          'access_token': _validJwt('doc@hwb.org'),
+          'refresh_token': _refreshJwt(),
+          'nfc_encryption_key': keyV0,
+          'nfc_key_version': 0,
+          'nfc_keyring': <String, dynamic>{'0': keyV0},
+        },
+      );
+      when(
+        () =>
+            api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+      ).thenAnswer((_) async => _meResponse());
+
+      await repo.login(email: 'doc@hwb.org', password: 'x');
+
+      // El `iat` del refresh token es la única fuente que puede mover la marca
+      // hacia atrás con seguridad.
+      expect(await repo.getNfcKeyring(), isNotNull);
+      expect(await repo.isNfcSessionExpired(), isFalse);
+    });
+
+    test('el login persiste la marca reanclada', () async {
+      when(
+        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+      ).thenAnswer(
+        (_) async => <String, dynamic>{
+          'access_token': _validJwt('doc@hwb.org'),
+          'refresh_token': _refreshJwt(),
+        },
+      );
+      when(
+        () =>
+            api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+      ).thenAnswer((_) async => _meResponse());
+      when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+
+      await repo.login(email: 'doc@hwb.org', password: 'x');
+
+      verify(
+        () => storage.write(
+          key: AuthRepository.clockMarkKey,
+          value: any(named: 'value'),
+        ),
+      ).called(greaterThanOrEqualTo(1));
+    });
+
+    test('sin reanclaje, un retroceso real sigue cerrando la ventana', () async {
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => storedRing());
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => _refreshJwt());
+      when(
+        () => storage.read(key: AuthRepository.clockMarkKey),
+      ).thenAnswer((_) async => futureMark(const Duration(days: 10)));
+
+      // El reanclaje sólo ocurre con contacto real con el servidor; sin él la
+      // protección contra atrasar el reloj sigue intacta.
+      expect(await repo.getNfcKeyring(), isNull);
+    });
+
+    test('clearSession borra la marca', () async {
+      await repo.clearSession();
+
+      verify(
+        () => storage.delete(key: AuthRepository.clockMarkKey),
       ).called(greaterThanOrEqualTo(1));
     });
   });

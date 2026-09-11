@@ -288,6 +288,25 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     if (!mounted) return;
 
     if (keyring == null || !keyring.canWrite) {
+      // Finishing silently looks like the chips were written. Say so, or the
+      // patient leaves with a blank wristband nobody knows is blank.
+      final bool expired = await scope.authRepository.isNfcSessionExpired();
+      if (!mounted) return;
+      _warnChipsNotWritten(
+        expired
+            ? (AppStrings.of(context).isEs
+                  ? 'Su sesión expiró: el registro se guardó, pero los '
+                        'dispositivos NFC no se grabaron. Inicie sesión y '
+                        'grábelos desde el perfil.'
+                  : 'Your session expired: the record was saved, but the NFC '
+                        'devices were not written. Log in and write them from '
+                        'the profile.')
+            : (AppStrings.of(context).isEs
+                  ? 'No hay clave NFC disponible: el registro se guardó, pero '
+                        'los dispositivos no se grabaron.'
+                  : 'No NFC key available: the record was saved, but the '
+                        'devices were not written.'),
+      );
       _completeFinalize();
       return;
     }
@@ -299,6 +318,14 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       // Finish the wizard instead of stranding it on the last step: the record
       // is already saved locally and the chips stay marked dirty.
       AppLogger.e('Anillo de llaves NFC inválido', error: e, stackTrace: stack);
+      if (!mounted) return;
+      _warnChipsNotWritten(
+        AppStrings.of(context).isEs
+            ? 'La clave NFC no es válida: el registro se guardó, pero los '
+                  'dispositivos no se grabaron. Contacte al administrador.'
+            : 'The NFC key is invalid: the record was saved, but the devices '
+                  'were not written. Contact your administrator.',
+      );
       _completeFinalize();
       return;
     }
@@ -381,6 +408,20 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     }
 
     _completeFinalize();
+  }
+
+  /// Tells the user the record was saved but the chips were not written.
+  ///
+  /// The chips stay marked dirty, so they can be written later from the
+  /// patient profile; what must not happen is finishing in silence.
+  void _warnChipsNotWritten(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        duration: const Duration(seconds: 6),
+      ),
+    );
   }
 
   void _completeFinalize() {

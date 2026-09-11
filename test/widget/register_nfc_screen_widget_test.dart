@@ -118,6 +118,9 @@ void main() {
       () => auth.sessionNotifier,
     ).thenReturn(ValueNotifier<UserSession?>(activeUser));
     when(() => auth.getNfcKeyring()).thenAnswer((_) async => null);
+    // El asistente pregunta el motivo para distinguir «sesión vencida» de
+    // «no hay llave» al avisar que los chips no se grabaron.
+    when(() => auth.isNfcSessionExpired()).thenAnswer((_) async => false);
     when(() => auth.logout()).thenAnswer((_) async {});
 
     when(() => patientRepo.syncPatient(any())).thenAnswer(
@@ -476,7 +479,7 @@ void main() {
     'RegisterNfcScreen — _finalize / _completeFinalize (sin llave NFC)',
     () {
       testWidgets(
-        'sin nfcKey: usa clave fallback, completa escritura y sella',
+        'sin anillo NFC: no graba los chips, avisa y sella igual',
         (tester) async {
           await pumpScreen(tester);
           await advanceToHub(tester);
