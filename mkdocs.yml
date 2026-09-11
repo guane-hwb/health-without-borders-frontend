@@ -72,6 +72,7 @@ nav:
     - Project Structure: architecture/project-structure.md
     - Modules and Features: architecture/features.md
     - Offline-First and Synchronization: architecture/offline-sync.md
+    - NFC Encryption and Key Ring: architecture/nfc-encryption.md
   - API and Domain:
     - api/index.md
     - Domain Models: api/domain-models.md
