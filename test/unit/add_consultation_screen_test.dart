@@ -100,7 +100,12 @@ AppScope _defaultScope({
   final resolvedRepo = repo ?? _MockPatientRepository();
   final resolvedDb = db ?? _MockLocalDatabase();
   final resolvedSync = sync ?? _MockSyncEngine();
+
+  when(() => resolvedSync.isOnline).thenReturn(ValueNotifier<bool>(true));
+  when(() => resolvedSync.pendingCount).thenReturn(ValueNotifier<int>(0));
+  when(() => resolvedSync.blockedCount).thenReturn(ValueNotifier<int>(0));
   when(() => resolvedSync.syncAll()).thenAnswer((_) async => true);
+
   final resolvedReach = _MockReachability();
   when(() => resolvedReach.probe()).thenAnswer((_) async => true);
   return AppScope(

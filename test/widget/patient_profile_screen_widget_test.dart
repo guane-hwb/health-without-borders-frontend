@@ -113,9 +113,6 @@ class _FakeAuthRepository extends AuthRepository {
   final String? key;
   final Duration? keyDelay;
 
-  /// Counts how often the screen asked for key material. The name is kept so
-  /// existing assertions keep reading naturally now that the only accessor is
-  /// the keyring.
   int getNfcEncryptionKeyCallCount = 0;
 
   @override
@@ -323,28 +320,26 @@ Widget _wrap(
     onFakesReady(_Fakes(auth: fakeAuth, syncEngine: fakeSyncEngine, db: db));
   }
 
-  return _LocaleWrapper(
-    locale: locale,
-    child: MaterialApp(
-      home: AppScope(
-        authRepository: fakeAuth,
-        userRepository: UserRepository(
-          apiClient: const _NullApiClient(),
-          authRepository: fakeAuth,
-        ),
-        reachability: Reachability(baseUrl: 'http://localhost'),
-        patientRepository: PatientRepository(
-          apiClient: const _NullApiClient(),
-          authRepository: fakeAuth,
-        ),
-        localDatabase: db,
-        syncEngine: fakeSyncEngine,
-        statsRepository: StatsRepository(
-          apiClient: ApiClient(baseUrl: 'http://localhost'),
-          authRepository: fakeAuth,
-        ),
-        child: child,
-      ),
+  return AppScope(
+    authRepository: fakeAuth,
+    userRepository: UserRepository(
+      apiClient: const _NullApiClient(),
+      authRepository: fakeAuth,
+    ),
+    reachability: Reachability(baseUrl: 'http://localhost'),
+    patientRepository: PatientRepository(
+      apiClient: const _NullApiClient(),
+      authRepository: fakeAuth,
+    ),
+    localDatabase: db,
+    syncEngine: fakeSyncEngine,
+    statsRepository: StatsRepository(
+      apiClient: ApiClient(baseUrl: 'http://localhost'),
+      authRepository: fakeAuth,
+    ),
+    child: _LocaleWrapper(
+      locale: locale,
+      child: MaterialApp(home: child),
     ),
   );
 }
@@ -1938,14 +1933,12 @@ void main() {
 
         final initialCalls = fakes.syncEngine.callCount;
 
-        // Abrir modal de dirección
         final summary = tester.widget<ProfileTabSummary>(
           find.byType(ProfileTabSummary),
         );
         summary.onEditAddress();
         await tester.pumpAndSettle();
 
-        // Confirmar formulario con datos nuevos
         final sheet = tester.widget<EditAddressSheet>(
           find.byType(EditAddressSheet),
         );
@@ -1957,7 +1950,6 @@ void main() {
           ),
         );
 
-        // Bombeo directo de microtareas de Flutter para resolver _saveAndPendingSync
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pumpAndSettle();
@@ -2572,7 +2564,6 @@ void main() {
       );
       expect(syncButton.onPressed, isNull);
 
-      // Limpieza: liberamos el syncAll() en vuelo para no dejar timers.
       engine.complete();
       await tester.pumpAndSettle();
     });
@@ -2589,8 +2580,6 @@ void main() {
         await tester.pump();
         expect(engine.callCount, 1);
 
-        // Con isSyncing == true, IconButton.onPressed es null: un tap real
-        // en el widget no debe producir ningún efecto.
         final syncButtonFinder = find.descendant(
           of: find.byWidgetPredicate(
             (w) =>
