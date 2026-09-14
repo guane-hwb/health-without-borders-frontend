@@ -217,6 +217,11 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
           patientDeviceUid: chip.uid,
         );
         if (!mounted) return;
+        // Read-only: the wristband alone rebuilds a genuinely partial record —
+        // no patientId and an empty address — and the server takes declarative
+        // fields from whatever it is sent, so syncing an edit made from it
+        // would blank the patient's address. Making this editable needs the
+        // sync to carry only what changed, not the whole record.
         await _openProfile(record, readOnly: true, offline: true);
       } else {
         final s = AppStrings.of(context);
@@ -315,7 +320,14 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         patientDeviceUid: _patientDeviceUid ?? '',
       );
       if (!mounted) return;
-      await _openProfile(record, readOnly: true, offline: true);
+      // Editable, unlike the other offline paths. The guardian card carries the
+      // whole record — it only bounds the consultation and vaccination lists
+      // and strips the consent signature, and the server merges those lists by
+      // identifier and restores the signature, so syncing an edit made from
+      // this card cannot drop anything. A brigade offline with the guardian
+      // present is the ordinary case, not an exception, and it needs to be able
+      // to record a consultation.
+      await _openProfile(record, offline: true);
     } on NfcNotAvailableException {
       if (!mounted) return;
       setState(() {
@@ -409,6 +421,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       patientDeviceUid: _patientDeviceUid ?? '',
     );
     if (!mounted) return;
+    // Read-only by design: break-glass exists to see emergency data when no
+    // guardian is present, not to record care.
     await _openProfile(record, readOnly: true, offline: true, emergency: true);
   }
 

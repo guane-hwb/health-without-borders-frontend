@@ -268,9 +268,79 @@ void main() {
       expect(rebuilt.allergies.first.allergen, 'Penicilina');
       expect(rebuilt.medicalHistory.length, 3);
     });
+
+    test(
+      'preserves the declarative fields an offline edit would sync back',
+      () {
+        // The offline guardian read opens the profile editable, and the server
+        // takes declarative fields from whatever the device sends. Anything the
+        // card stops carrying would therefore be blanked on the patient's
+        // server record the first time someone edits offline. The bounded
+        // lists are safe — the server merges those by identifier — so this is
+        // the boundary that actually has to hold.
+        final record = _record(
+          history: <MedicalHistoryItem>[_consultation('2026-01-10T09:00:00')],
+          vaccines: <VaccinationRecordItem>[_vaccine('2026-06-01')],
+          allergies: <AllergyInfo>[
+            AllergyInfo(category: '01', allergen: 'Penicilina'),
+          ],
+        );
+
+        final rebuilt = NfcGuardianPayload.reconstructFromGuardian(
+          NfcGuardianPayload.buildGuardianPayload(record: record),
+        );
+
+        expect(rebuilt.patientId, record.patientId);
+        expect(rebuilt.deviceUid, record.deviceUid);
+        expect(
+          rebuilt.patientInfo.address.city,
+          record.patientInfo.address.city,
+        );
+        expect(
+          rebuilt.patientInfo.address.state,
+          record.patientInfo.address.state,
+        );
+        expect(
+          rebuilt.patientInfo.identification.documentNumber,
+          record.patientInfo.identification.documentNumber,
+        );
+        expect(rebuilt.allergies.length, record.allergies.length);
+      },
+    );
   });
 
   group('reconstructFromTriage', () {
+    test(
+      'is partial, which is why the wristband-only read stays read-only',
+      () {
+        const triage = TriageSummary(
+          firstName: 'Ana',
+          lastName: 'Pérez',
+          dob: '2015-01-01',
+          biologicalSex: 'F',
+          bloodType: 'O+',
+          documentType: 'MS',
+          documentNumber: '1234567890',
+          guardianPhone: '3001234567',
+          guardianDeviceUid: 'GUARDIAN:UID',
+          chronicConditions: '',
+          allergies: <TriageAllergy>[],
+        );
+
+        final record = NfcGuardianPayload.reconstructFromTriage(
+          triage,
+          deviceUid: 'PATIENT:UID',
+        );
+
+        // Syncing this back would create a second patient and blank the
+        // address on the real one. Hence read-only until the sync can carry
+        // only what changed.
+        expect(record.patientId, isEmpty);
+        expect(record.patientInfo.address.city, isEmpty);
+        expect(record.patientInfo.address.state, isEmpty);
+      },
+    );
+
     test('maps chronic conditions and allergies into a partial record', () {
       const triage = TriageSummary(
         firstName: 'Ana',
