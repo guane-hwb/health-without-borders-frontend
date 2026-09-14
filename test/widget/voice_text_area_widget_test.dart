@@ -1,12 +1,38 @@
 // test/widget/voice_text_area_widget_test.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
+import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
+import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
+import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/shared/voice_text_area.dart';
+
+// ─── Mocks ─────────────────────────────────────────────────────────────────
+
+class _MockAuthRepository extends Mock implements AuthRepository {}
+
+class _MockUserRepository extends Mock implements UserRepository {}
+
+class _MockPatientRepository extends Mock implements PatientRepository {}
+
+class _MockLocalDatabase extends Mock implements LocalDatabase {}
+
+class _MockSyncEngine extends Mock implements SyncEngine {}
+
+class _MockReachability extends Mock implements Reachability {}
 
 class FakeSpeechRecognitionResult extends Fake
     implements SpeechRecognitionResult {
@@ -97,6 +123,38 @@ class FakeSpeechToText implements stt.SpeechToText {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+AppScope _createMockScope({required Widget child}) {
+  final auth = _MockAuthRepository();
+  when(
+    () => auth.sessionNotifier,
+  ).thenReturn(ValueNotifier<UserSession?>(null));
+
+  final user = _MockUserRepository();
+  final patientRepo = _MockPatientRepository();
+  final db = _MockLocalDatabase();
+  final sync = _MockSyncEngine();
+  final reach = _MockReachability();
+
+  when(() => sync.isOnline).thenReturn(ValueNotifier<bool>(true));
+  when(() => sync.pendingCount).thenReturn(ValueNotifier<int>(0));
+  when(() => sync.blockedCount).thenReturn(ValueNotifier<int>(0));
+  when(() => reach.probe()).thenAnswer((_) async => true);
+
+  return AppScope(
+    authRepository: auth,
+    userRepository: user,
+    patientRepository: patientRepo,
+    localDatabase: db,
+    syncEngine: sync,
+    statsRepository: StatsRepository(
+      apiClient: ApiClient(baseUrl: 'http://localhost'),
+      authRepository: auth,
+    ),
+    reachability: reach,
+    child: child,
+  );
+}
+
 class _LocaleWrapper extends StatefulWidget {
   const _LocaleWrapper({required this.locale, required this.child});
   final String locale;
@@ -124,9 +182,11 @@ class _LocaleWrapperState extends State<_LocaleWrapper> {
 }
 
 Widget _wrapWithApp(Widget child, {String locale = 'es'}) {
-  return _LocaleWrapper(
-    locale: locale,
-    child: MaterialApp(home: Scaffold(body: child)),
+  return _createMockScope(
+    child: _LocaleWrapper(
+      locale: locale,
+      child: MaterialApp(home: Scaffold(body: child)),
+    ),
   );
 }
 
