@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -52,6 +53,11 @@ String _validKeyBase64() {
     List<int>.generate(32, (_) => random.nextInt(256)),
   );
   return base64Encode(bytes);
+}
+
+Future<Database> rawConnection() async {
+  final dbPath = p.join(await getDatabasesPath(), 'hwb_patients.db');
+  return openDatabase(dbPath);
 }
 
 void main() {
@@ -349,11 +355,6 @@ void main() {
   // ── LocalDatabase — real sqlite-backed behaviour ──────────────────────────
   group('LocalDatabase (native/sqlite code path)', () {
     late LocalDatabase localDb;
-
-    Future<Database> rawConnection() async {
-      final dbPath = p.join(await getDatabasesPath(), 'hwb_patients.db');
-      return openDatabase(dbPath);
-    }
 
     setUp(() async {
       localDb = LocalDatabase.instance;
@@ -1824,22 +1825,25 @@ void main() {
   });
 
   group('Versiones de llave NFC observadas (nativo)', () {
-    test('registra la versión leída y queda pendiente de sincronizar', () async {
-      final db = LocalDatabase.instance;
+    test(
+      'registra la versión leída y queda pendiente de sincronizar',
+      () async {
+        final db = LocalDatabase.instance;
 
-      await db.recordNfcKeyVersion(
-        deviceUid: 'uid-A',
-        deviceRole: 'patient',
-        keyVersion: 0,
-      );
+        await db.recordNfcKeyVersion(
+          deviceUid: 'uid-A',
+          deviceRole: 'patient',
+          keyVersion: 0,
+        );
 
-      final pending = await db.pendingNfcKeyVersions();
-      expect(pending, hasLength(1));
-      expect(pending.first['device_uid'], 'uid-A');
-      expect(pending.first['device_role'], 'patient');
-      expect(pending.first['key_version'], 0);
-      expect(pending.first['had_header'], 0);
-    });
+        final pending = await db.pendingNfcKeyVersions();
+        expect(pending, hasLength(1));
+        expect(pending.first['device_uid'], 'uid-A');
+        expect(pending.first['device_role'], 'patient');
+        expect(pending.first['key_version'], 0);
+        expect(pending.first['had_header'], 0);
+      },
+    );
 
     test('vuelve a leer el mismo chip: actualiza, no acumula', () async {
       final db = LocalDatabase.instance;
@@ -1928,4 +1932,576 @@ void main() {
     });
   });
 
+  group('Excepciones personalizadas', () {
+    test(
+      'WebStoreCorruptionException.toString() formatea el mensaje correctamente',
+      () {
+        final exc = WebStoreCorruptionException('key_test', 'quarantine_test');
+        expect(
+          exc.toString(),
+          equals(
+            'WebStoreCorruptionException: no se pudo decodificar "key_test"; '
+            'el contenido original se conservó en "quarantine_test".',
+          ),
+        );
+      },
+    );
+
+    test(
+      'AuditDecryptionException.toString() formatea el mensaje correctamente',
+      () {
+        final exc = AuditDecryptionException(42);
+        expect(
+          exc.toString(),
+          equals(
+            'AuditDecryptionException: no se pudo descifrar el registro de auditoría 42 por clave destruida o corrupta.',
+          ),
+        );
+      },
+    );
+  });
+
+  group('Cuarentena Web y getWebQuarantinedEntries', () {
+    test(
+      'getWebQuarantinedEntries devuelve vacio si no estamos en Web',
+      () async {
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: false,
+        );
+        final entries = await db.getWebQuarantinedEntries();
+        expect(entries, isEmpty);
+      },
+    );
+
+    test(
+      'getWebQuarantinedEntries escanea prefijos e identifica claves en cuarentena en Web',
+      () async {
+        final webBackend = <String, String>{
+          'hwb_web_patient::p1': '{}',
+          'hwb_web_patient::p1::quarantine::2026-01-01': 'bad_json_patient',
+          'hwb_web_chip::c1::quarantine::2026-01-01': 'bad_json_chip',
+          'hwb_web_emlog::1::quarantine::2026-01-01': 'bad_json_log',
+          'hwb_web_patient::p2': '{}',
+        };
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        final quarantined = await db.getWebQuarantinedEntries();
+        expect(quarantined, hasLength(3));
+        expect(
+          quarantined.map((e) => e.key),
+          contains('hwb_web_patient::p1::quarantine::2026-01-01'),
+        );
+      },
+    );
+
+    test(
+      'webQuarantinedKeysForTesting expone la lista de claves en cuarentena',
+      () async {
+        final webBackend = <String, String>{
+          'hwb_web_patient::p1': 'INVALID_JSON',
+        };
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await expectLater(db.getAllRecords(), completes);
+
+        expect(db.webQuarantinedKeysForTesting, isNotEmpty);
+      },
+    );
+
+    test(
+      'captura error si la escritura en cuarentena falla durante _webReadJsonRecord',
+      () async {
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => 'CORRUPT_JSON',
+          webSet: (k, v) async {
+            if (k.contains('quarantine')) {
+              throw Exception('Error al escribir en cuarentena');
+            }
+          },
+        );
+
+        await expectLater(
+          db.savePatient(_buildRecord(patientId: 'p-corrupt-fail-quarantine')),
+          throwsA(isA<WebStoreCorruptionException>()),
+        );
+      },
+    );
+
+    test(
+      '_webAllLogRows maneja JSON ilegible poniendo la clave en cuarentena',
+      () async {
+        final webBackend = <String, String>{
+          'hwb_web_emlog::10': 'JSON_CORRUPTO_LOG',
+        };
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        final logs = await db.pendingEmergencyAccessLogs();
+        expect(logs, isEmpty);
+        expect(
+          webBackend.keys.any(
+            (k) => k.contains('hwb_web_emlog::10::quarantine::'),
+          ),
+          isTrue,
+        );
+      },
+    );
+  });
+
+  group('Migración de cola Web heredada', () {
+    test(
+      'migra pacientes, chips y logs de las claves antiguas a los prefijos individuales',
+      () async {
+        final webBackend = <String, String>{
+          'hwb_web_patients_store': jsonEncode({
+            'p-leg1': {
+              'patient_id': 'p-leg1',
+              'device_uid': 'dev-leg1',
+              'patient_name': 'Legacy Name',
+              'record_json': '{}',
+              'is_synced': 0,
+              'created_at': '2026-01-01T00:00:00.000Z',
+            },
+          }),
+          'hwb_web_chip_status': jsonEncode({
+            'p-leg1': {'patient_id': 'p-leg1', 'patient_chip_dirty': 1},
+          }),
+          'hwb_web_emergency_log': jsonEncode([
+            {'id': 50, 'patient_uid': '04:LEGACY', 'is_synced': 0},
+          ]),
+        };
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webRemove: (k) async => webBackend.remove(k),
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await db.getAllRecords();
+
+        expect(webBackend.containsKey('hwb_web_patient::p-leg1'), isTrue);
+        expect(webBackend.containsKey('hwb_web_chip::p-leg1'), isTrue);
+        expect(webBackend.containsKey('hwb_web_emlog::50'), isTrue);
+        expect(webBackend.containsKey('hwb_web_patients_store'), isFalse);
+        expect(webBackend.containsKey('hwb_web_chip_status'), isFalse);
+        expect(webBackend.containsKey('hwb_web_emergency_log'), isFalse);
+      },
+    );
+
+    test(
+      'si _ensureWebMigrated ya está en ejecución, reutiliza el completer activo',
+      () async {
+        final webBackend = <String, String>{};
+        final completer = Completer<String?>();
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async {
+            if (k == 'hwb_web_patients_store') {
+              return completer.future;
+            }
+            return webBackend[k];
+          },
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => [],
+        );
+
+        final future1 = db.getAllRecords();
+        final future2 = db.getAllRecords();
+
+        completer.complete(null);
+        await Future.wait([future1, future2]);
+      },
+    );
+  });
+
+  group('_withWebLock reentrada', () {
+    test(
+      'ejecuta directamente la acción si ya nos encontramos dentro de la misma Zone',
+      () async {
+        final webBackend = <String, String>{};
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await expectLater(
+          db.savePatient(_buildRecord(patientId: 'p-lock-zone')),
+          completes,
+        );
+      },
+    );
+  });
+
+  group('NFC Key Version en Web y tratamiento de errores', () {
+    test(
+      'recordNfcKeyVersion, pendingNfcKeyVersions y markNfcKeyVersionsSynced en Web',
+      () async {
+        final webBackend = <String, String>{};
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await db.recordNfcKeyVersion(
+          deviceUid: 'web-uid-1',
+          deviceRole: 'patient',
+          keyVersion: 2,
+        );
+
+        var pending = await db.pendingNfcKeyVersions();
+        expect(pending, hasLength(1));
+        expect(pending.first['device_uid'], equals('web-uid-1'));
+
+        await db.markNfcKeyVersionsSynced(['web-uid-1']);
+        pending = await db.pendingNfcKeyVersions();
+        expect(pending, isEmpty);
+      },
+    );
+
+    test('captura errores al guardar o leer versiones de llave NFC', () async {
+      final db = LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        forceWeb: true,
+        webSet: (k, v) async {
+          if (k.startsWith('hwb_web_keyver::')) {
+            throw Exception('Error escribiendo llave NFC');
+          }
+        },
+        webList: (p) async {
+          if (p.startsWith('hwb_web_keyver::')) {
+            throw Exception('Error leyendo llave NFC');
+          }
+          return [];
+        },
+      );
+
+      await expectLater(
+        db.recordNfcKeyVersion(
+          deviceUid: 'fail-uid',
+          deviceRole: 'patient',
+          keyVersion: 1,
+        ),
+        completes,
+      );
+
+      final pending = await db.pendingNfcKeyVersions();
+      expect(pending, isEmpty);
+
+      await expectLater(db.markNfcKeyVersionsSynced(['fail-uid']), completes);
+    });
+
+    test(
+      'omite filas corruptas sin crashear en _webAllKeyVersionRows',
+      () async {
+        final webBackend = <String, String>{
+          'hwb_web_keyver::u1': 'JSON_INVALIDO_KEY_VERSION',
+        };
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        final pending = await db.pendingNfcKeyVersions();
+        expect(pending, isEmpty);
+      },
+    );
+  });
+
+  group('Cifrado y descifrado de registros de auditoría', () {
+    test(
+      'lanza AuditDecryptionException si el payload de auditoria está corrupto o truncado',
+      () async {
+        final localDb = LocalDatabase.instance;
+        await localDb.clearAll();
+
+        final raw = await rawConnection();
+        final invalidPayload = base64Encode(Uint8List(10)); // < 28 bytes
+
+        await raw.insert('emergency_access_log', <String, Object?>{
+          'patient_uid': '04:CORRUPT',
+          'patient_name': invalidPayload,
+          'reason': 'guardian_absent_offline',
+          'occurred_at': DateTime.now().toIso8601String(),
+          'is_synced': 0,
+        });
+
+        await expectLater(
+          localDb.pendingEmergencyAccessLogs(),
+          throwsA(isA<AuditDecryptionException>()),
+        );
+      },
+    );
+
+    test(
+      'lanza AuditDecryptionException si falla el descifrado del user_id en el log de auditoría',
+      () async {
+        final localDb = LocalDatabase.instance;
+        await localDb.clearAll();
+
+        final raw = await rawConnection();
+        final invalidPayload = base64Encode(Uint8List(10));
+
+        await raw.insert('emergency_access_log', <String, Object?>{
+          'patient_uid': '04:CORRUPT_USER',
+          'user_id': invalidPayload,
+          'reason': 'guardian_absent_offline',
+          'occurred_at': DateTime.now().toIso8601String(),
+          'is_synced': 0,
+        });
+
+        await expectLater(
+          localDb.pendingEmergencyAccessLogs(),
+          throwsA(isA<AuditDecryptionException>()),
+        );
+      },
+    );
+
+    test(
+      'reutiliza la clave de cifrado de auditoria si ya existe en SecureStorage',
+      () async {
+        final existingKey = _validKeyBase64();
+        inMemoryStorage['hwb_sqlite_audit_aes_key'] = existingKey;
+
+        final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
+        await localDb.logEmergencyAccess(
+          patientUid: '04:KEY_EXISTS',
+          patientName: 'Juan',
+        );
+
+        expect(
+          inMemoryStorage['hwb_sqlite_audit_aes_key'],
+          equals(existingKey),
+        );
+      },
+    );
+
+    test(
+      'captura error al leer clave de auditoría y genera una nueva',
+      () async {
+        when(
+          () => mockStorage.read(key: 'hwb_sqlite_audit_aes_key'),
+        ).thenThrow(Exception('Error de lectura SecureStorage'));
+
+        final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
+        await expectLater(
+          localDb.logEmergencyAccess(
+            patientUid: '04:READ_FAIL',
+            patientName: 'Pedro',
+          ),
+          completes,
+        );
+
+        expect(inMemoryStorage.containsKey('hwb_sqlite_audit_aes_key'), isTrue);
+      },
+    );
+
+    test(
+      'lanza StateError si falla la persistencia de la clave de auditoría',
+      () async {
+        when(
+          () => mockStorage.write(
+            key: 'hwb_sqlite_audit_aes_key',
+            value: any(named: 'value'),
+          ),
+        ).thenThrow(Exception('Error de escritura SecureStorage'));
+
+        final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
+        await expectLater(
+          localDb.logEmergencyAccess(
+            patientUid: '04:WRITE_FAIL',
+            patientName: 'Maria',
+          ),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
+  });
+
+  group('Consultas de conteos huérfanos', () {
+    test(
+      'getOrphanedEmergencyLogCount cuenta logs huérfanos en Nativo y Web',
+      () async {
+        final dbNative = LocalDatabase.instance;
+        await dbNative.clearAll();
+        await dbNative.logEmergencyAccess(
+          patientUid: '04:N1',
+          ownerUserId: null,
+        );
+        await dbNative.logEmergencyAccess(
+          patientUid: '04:N2',
+          ownerUserId: 'user-1',
+        );
+
+        expect(await dbNative.getOrphanedEmergencyLogCount(), equals(1));
+
+        final webBackend = <String, String>{};
+        final dbWeb = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await dbWeb.logEmergencyAccess(patientUid: '04:W1', ownerUserId: null);
+        await dbWeb.logEmergencyAccess(
+          patientUid: '04:W2',
+          ownerUserId: 'user-1',
+        );
+
+        expect(await dbWeb.getOrphanedEmergencyLogCount(), equals(1));
+      },
+    );
+
+    test(
+      'getOrphanedPendingCount cuenta pacientes huérfanos en Nativo y Web',
+      () async {
+        // Nativo
+        final dbNative = LocalDatabase.instance;
+        await dbNative.clearAll();
+        await dbNative.savePatient(
+          _buildRecord(patientId: 'p-orph-1'),
+          ownerUserId: null,
+        );
+        await dbNative.savePatient(
+          _buildRecord(patientId: 'p-orph-2'),
+          ownerUserId: 'owner-1',
+        );
+
+        expect(await dbNative.getOrphanedPendingCount(), equals(1));
+
+        final webBackend = <String, String>{};
+        final dbWeb = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await dbWeb.savePatient(
+          _buildRecord(patientId: 'w-orph-1'),
+          ownerUserId: null,
+        );
+        await dbWeb.savePatient(
+          _buildRecord(patientId: 'w-orph-2'),
+          ownerUserId: 'owner-1',
+        );
+
+        expect(await dbWeb.getOrphanedPendingCount(), equals(1));
+      },
+    );
+
+    test('getUnsyncedEmergencyLogCount con ownerUserId en Web', () async {
+      final webBackend = <String, String>{};
+      final dbWeb = LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        forceWeb: true,
+        webGet: (k) async => webBackend[k],
+        webSet: (k, v) async => webBackend[k] = v,
+        webList: (prefix) async =>
+            webBackend.entries.where((e) => e.key.startsWith(prefix)).toList(),
+      );
+
+      await dbWeb.logEmergencyAccess(
+        patientUid: '04:L1',
+        ownerUserId: 'user-A',
+      );
+      await dbWeb.logEmergencyAccess(
+        patientUid: '04:L2',
+        ownerUserId: 'user-B',
+      );
+
+      expect(
+        await dbWeb.getUnsyncedEmergencyLogCount(ownerUserId: 'user-A'),
+        equals(1),
+      );
+    });
+
+    test(
+      'destroyEncryptionKey en Web limpia el almacén con webClearAll',
+      () async {
+        bool clearAllCalled = false;
+        final dbWeb = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webClearAll: () async {
+            clearAllCalled = true;
+          },
+        );
+
+        await dbWeb.destroyEncryptionKey();
+        expect(clearAllCalled, isTrue);
+      },
+    );
+
+    test('destroyEncryptionKey captura error si webClearAll falla', () async {
+      final dbWeb = LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        forceWeb: true,
+        webClearAll: () async {
+          throw Exception('Error borrando storage web');
+        },
+      );
+
+      await expectLater(dbWeb.destroyEncryptionKey(), completes);
+    });
+  });
 }

@@ -900,8 +900,10 @@ class LocalDatabase {
       final db = await _database;
       if (db == null) {
         return (await _webAllKeyVersionRows())
-            .where((Map<String, Object?> r) =>
-                (r['is_synced'] as num?)?.toInt() == 0)
+            .where(
+              (Map<String, Object?> r) =>
+                  (r['is_synced'] as num?)?.toInt() == 0,
+            )
             .toList();
       }
       return await db.query(_keyVersionTable, where: 'is_synced = 0');

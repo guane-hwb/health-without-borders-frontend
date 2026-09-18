@@ -11,13 +11,19 @@ import 'package:health_without_borders_frontend/src/core/routes/app_routes.dart'
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/features/admin/presentation/brigade_stats_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/presentation/manage_organizations_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/presentation/manage_users_screen.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
+import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/loss_of_wristband_screen.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/read_nfc_screen.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/register_nfc_screen.dart';
+import 'package:health_without_borders_frontend/src/features/sync/presentation/sync_queue_screen.dart';
 
 class MockAuthRepository extends Mock implements AuthRepository {}
 
@@ -57,6 +63,8 @@ Widget buildTestableApp({
   when(() => syncEngine.isOnline).thenReturn(ValueNotifier<bool>(true));
   when(() => syncEngine.pendingCount).thenReturn(ValueNotifier<int>(0));
   when(() => syncEngine.blockedCount).thenReturn(ValueNotifier<int>(0));
+  when(() => syncEngine.refreshPendingCount()).thenAnswer((_) async {});
+  when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
 
   return AppLocale(
     locale: 'es',
@@ -168,6 +176,273 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(ManageOrganizationsScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets('Muestra LoginScreen cuando la ruta es /login directamente', (
+      tester,
+    ) async {
+      when(() => mockAuthRepository.currentUser).thenReturn(null);
+
+      await tester.pumpWidget(
+        buildTestableApp(
+          authRepository: mockAuthRepository,
+          initialRoute: AppRoutes.login,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LoginScreen), findsOneWidget);
+    });
+
+    testWidgets('Permite acceso a /home cuando hay sesión iniciada', (
+      tester,
+    ) async {
+      final session = _createSession(UserRole.doctor);
+      when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+      await tester.pumpWidget(
+        buildTestableApp(
+          authRepository: mockAuthRepository,
+          initialRoute: AppRoutes.home,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(HomeScreen), findsOneWidget);
+    });
+
+    testWidgets(
+      'Permite acceso a /nfc/read si el usuario puede leer pacientes',
+      (tester) async {
+        final session = _createSession(UserRole.doctor);
+        when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+        await tester.pumpWidget(
+          buildTestableApp(
+            authRepository: mockAuthRepository,
+            initialRoute: AppRoutes.readNfc,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ReadNfcScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Permite acceso a /nfc/register si el usuario puede registrar',
+      (tester) async {
+        final session = _createSession(UserRole.nurse);
+        when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+        await tester.pumpWidget(
+          buildTestableApp(
+            authRepository: mockAuthRepository,
+            initialRoute: AppRoutes.registerNfc,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RegisterNfcScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets('Muestra Acceso Restringido en /nfc/register sin permisos', (
+      tester,
+    ) async {
+      final session = _createSession(UserRole.superadmin);
+      when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+      await tester.pumpWidget(
+        buildTestableApp(
+          authRepository: mockAuthRepository,
+          initialRoute: AppRoutes.registerNfc,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Acceso Restringido'), findsOneWidget);
+    });
+
+    testWidgets(
+      'Permite acceso a /nfc/loss-wristband si puede buscar pacientes',
+      (tester) async {
+        final session = _createSession(UserRole.nurse);
+        when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+        await tester.pumpWidget(
+          buildTestableApp(
+            authRepository: mockAuthRepository,
+            initialRoute: AppRoutes.lossWristband,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(LossOfWristbandScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Muestra Acceso Restringido en /nfc/loss-wristband sin permisos',
+      (tester) async {
+        final session = _createSession(UserRole.superadmin);
+        when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+        await tester.pumpWidget(
+          buildTestableApp(
+            authRepository: mockAuthRepository,
+            initialRoute: AppRoutes.lossWristband,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Acceso Restringido'), findsOneWidget);
+      },
+    );
+
+    testWidgets('Permite acceso a /sync/queue si puede sincronizar', (
+      tester,
+    ) async {
+      final session = _createSession(UserRole.doctor);
+      when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+      await tester.pumpWidget(
+        buildTestableApp(
+          authRepository: mockAuthRepository,
+          initialRoute: AppRoutes.syncQueue,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SyncQueueScreen), findsOneWidget);
+    });
+
+    testWidgets('Muestra Acceso Restringido en /sync/queue sin permisos', (
+      tester,
+    ) async {
+      final session = _createSession(UserRole.superadmin);
+      when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+      await tester.pumpWidget(
+        buildTestableApp(
+          authRepository: mockAuthRepository,
+          initialRoute: AppRoutes.syncQueue,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Acceso Restringido'), findsOneWidget);
+    });
+
+    testWidgets(
+      'Muestra Acceso Restringido en /admin/manage-users sin permisos',
+      (tester) async {
+        final session = _createSession(UserRole.doctor);
+        when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+        await tester.pumpWidget(
+          buildTestableApp(
+            authRepository: mockAuthRepository,
+            initialRoute: AppRoutes.manageUsers,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Acceso Restringido'), findsOneWidget);
+      },
+    );
+
+    testWidgets('Permite acceso a /admin/brigade-stats a Superadmin', (
+      tester,
+    ) async {
+      final session = _createSession(UserRole.superadmin);
+      when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+      await tester.pumpWidget(
+        buildTestableApp(
+          authRepository: mockAuthRepository,
+          initialRoute: AppRoutes.brigadeStats,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BrigadeStatsScreen), findsOneWidget);
+    });
+
+    testWidgets(
+      'Muestra Acceso Restringido en /admin/brigade-stats si no es superadmin',
+      (tester) async {
+        final session = _createSession(UserRole.orgAdmin);
+        when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+        await tester.pumpWidget(
+          buildTestableApp(
+            authRepository: mockAuthRepository,
+            initialRoute: AppRoutes.brigadeStats,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Acceso Restringido'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Permite acceso a /admin/brigade-stats-org si puede ver analítica',
+      (tester) async {
+        final session = _createSession(UserRole.orgAdmin);
+        when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+        await tester.pumpWidget(
+          buildTestableApp(
+            authRepository: mockAuthRepository,
+            initialRoute: AppRoutes.brigadeStatsOrg,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final finder = find.byType(BrigadeStatsScreen);
+        expect(finder, findsOneWidget);
+
+        final screen = tester.widget<BrigadeStatsScreen>(finder);
+        expect(screen.scopeToOwnOrganization, isTrue);
+      },
+    );
+
+    testWidgets(
+      'Muestra Acceso Restringido en /admin/brigade-stats-org sin permisos de analítica',
+      (tester) async {
+        final session = _createSession(UserRole.nurse);
+        when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+        await tester.pumpWidget(
+          buildTestableApp(
+            authRepository: mockAuthRepository,
+            initialRoute: AppRoutes.brigadeStatsOrg,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Acceso Restringido'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Fallback por defecto dirige a HomeScreen para rutas no mapeadas',
+      (tester) async {
+        final session = _createSession(UserRole.doctor);
+        when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+        await tester.pumpWidget(
+          buildTestableApp(
+            authRepository: mockAuthRepository,
+            initialRoute: '/ruta-desconocida',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(HomeScreen), findsOneWidget);
       },
     );
   });

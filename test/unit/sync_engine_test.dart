@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'package:http/http.dart' as http;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:fake_async/fake_async.dart';
@@ -15,6 +16,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/auth_repo
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -33,6 +35,8 @@ class MockPatientSyncResponse extends Mock implements PatientSyncResponse {}
 class MockApiException extends Mock implements ApiException {}
 
 class FakePatientFullRecord extends Fake implements PatientFullRecord {}
+
+class MockReachability extends Mock implements Reachability {}
 
 void main() {
   setUpAll(() {
@@ -1013,5 +1017,318 @@ void main() {
       await expectLater(engine.syncAll(), completes);
       verifyNever(() => localDb.markNfcKeyVersionsSynced(any()));
     });
+  });
+
+  group('_scheduleRetry y syncOne en vuelo dentro de syncAll', () {
+    test('respeta el Retry-After del servidor cuando hint > backoff', () {
+      fakeAsync((async) {
+        final shortEngine = SyncEngine(
+          patientRepository: patientRepo,
+          authRepository: authRepo,
+          localDatabase: localDb,
+          retryBackoff: const [Duration(milliseconds: 100)],
+        );
+
+        final entry = buildEntry('A', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entry]);
+        when(
+          () => localDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 1);
+
+        final apiException = buildApiException(429, 'Demasiadas peticiones');
+        when(
+          () => apiException.retryAfter,
+        ).thenReturn(const Duration(milliseconds: 500));
+        when(() => patientRepo.syncPatient(any())).thenThrow(apiException);
+
+        shortEngine.syncAll();
+        async.elapse(Duration.zero);
+
+        clearInteractions(patientRepo);
+
+        async.elapse(const Duration(milliseconds: 200));
+        verifyNever(() => patientRepo.syncPatient(any()));
+
+        async.elapse(const Duration(milliseconds: 350));
+        verify(() => patientRepo.syncPatient(any())).called(1);
+
+        shortEngine.stop();
+      });
+    });
+
+    test(
+      'syncAll en espera se encola y ejecuta tras finalizar un syncOne en curso',
+      () async {
+        final entry = buildEntry('A', record: MockPatientFullRecord());
+
+        var callCount = 0;
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async {
+          callCount++;
+          return callCount == 1 ? [entry] : <LocalPatientEntry>[];
+        });
+
+        final syncCompleter = Completer<PatientSyncResponse>();
+        when(
+          () => patientRepo.syncPatient(any()),
+        ).thenAnswer((_) => syncCompleter.future);
+
+        final syncOneFuture = engine.syncOne('A');
+
+        final syncAllFuture = engine.syncAll();
+
+        syncCompleter.complete(buildResponse('success'));
+
+        final results = await Future.wait([syncOneFuture, syncAllFuture]);
+        expect(results[0], equals(SyncOneResult.success));
+        expect(results[1], isTrue);
+      },
+    );
+
+    test(
+      'captura errores durante la sincronización de emergencia sin lanzar excepciones',
+      () async {
+        when(
+          () => localDb.pendingEmergencyAccessLogs(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenThrow(Exception('Fallo critico en emergencia'));
+
+        await expectLater(engine.syncAll(), completes);
+      },
+    );
+  });
+
+  group('_executeSyncAll condiciones límite y alcance de red', () {
+    test(
+      'syncAll se omite y retorna false si no hay usuario autenticado',
+      () async {
+        when(() => authRepo.currentUser).thenReturn(null);
+
+        final result = await engine.syncAll();
+
+        expect(result, isFalse);
+        verifyNever(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        );
+      },
+    );
+
+    test(
+      'syncAll omite el lote si la sonda de reachability indica que el backend no es alcanzable',
+      () async {
+        final mockReachability = MockReachability();
+        when(() => mockReachability.probe()).thenAnswer((_) async => false);
+
+        final reachEngine = SyncEngine(
+          patientRepository: patientRepo,
+          authRepository: authRepo,
+          localDatabase: localDb,
+          reachability: mockReachability,
+        );
+
+        final result = await reachEngine.syncAll();
+
+        expect(result, isFalse);
+        verifyNever(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        );
+        reachEngine.stop();
+      },
+    );
+
+    test(
+      'syncAll atrapa excepciones críticas dentro del bloque try y retorna false',
+      () async {
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenThrow(StateError('Base de datos bloqueada'));
+
+        final result = await engine.syncAll();
+
+        expect(result, isFalse);
+      },
+    );
+  });
+
+  group('_syncOne ramas específicas', () {
+    test(
+      'envía retiredDeviceReason al repositorio si el registro lo especifica',
+      () async {
+        final entryWithReason = buildEntry(
+          'REASON-1',
+          record: MockPatientFullRecord(),
+        );
+        when(
+          () => entryWithReason.retiredDeviceReason,
+        ).thenReturn('dispositivo_perdido');
+
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entryWithReason]);
+        when(
+          () => patientRepo.syncPatient(
+            any(),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).thenAnswer((_) async => buildResponse('success'));
+
+        await engine.syncAll();
+
+        verify(
+          () => patientRepo.syncPatient(
+            any(),
+            retiredDeviceReason: 'dispositivo_perdido',
+          ),
+        ).called(1);
+      },
+    );
+
+    test(
+      'actualiza _pendingServerRetryAfter cuando ApiException incluye retryAfter mayor',
+      () async {
+        fakeAsync((async) {
+          final shortEngine = SyncEngine(
+            patientRepository: patientRepo,
+            authRepository: authRepo,
+            localDatabase: localDb,
+            retryBackoff: const [Duration(milliseconds: 50)],
+          );
+
+          final entry = buildEntry('A', record: MockPatientFullRecord());
+          when(
+            () => localDb.getUnsyncedRecords(
+              ownerUserId: any(named: 'ownerUserId'),
+            ),
+          ).thenAnswer((_) async => [entry]);
+          when(
+            () => localDb.getRetryablePendingCount(
+              ownerUserId: any(named: 'ownerUserId'),
+            ),
+          ).thenAnswer((_) async => 1);
+
+          final apiException = buildApiException(503, 'Servicio no disponible');
+          when(
+            () => apiException.retryAfter,
+          ).thenReturn(const Duration(milliseconds: 300));
+          when(() => patientRepo.syncPatient(any())).thenThrow(apiException);
+
+          shortEngine.syncAll();
+          async.elapse(Duration.zero);
+
+          clearInteractions(patientRepo);
+
+          async.elapse(const Duration(milliseconds: 100));
+          verifyNever(() => patientRepo.syncPatient(any()));
+
+          async.elapse(const Duration(milliseconds: 250));
+          verify(() => patientRepo.syncPatient(any())).called(1);
+
+          shortEngine.stop();
+        });
+      },
+    );
+
+    test(
+      'clasifica http.ClientException como fallo de red cuando isOnline es verdadero',
+      () async {
+        final entry = buildEntry('HTTP-FAIL', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entry]);
+        when(
+          () => patientRepo.syncPatient(any()),
+        ).thenThrow(http.ClientException('Error HTTP de conexión'));
+
+        await engine.syncAll();
+
+        verify(
+          () => localDb.markSyncError(
+            'HTTP-FAIL',
+            'Error en proceso de sincronización',
+            revision: 0,
+          ),
+        ).called(1);
+      },
+    );
+  });
+
+  group('Sincronización de logs de acceso de emergencia', () {
+    test('reporta logs pendientes y los marca como sincronizados', () async {
+      final pendingLogs = [
+        <String, Object?>{
+          'id': 101,
+          'patient_uid': '04:E1',
+          'reason': 'offline',
+        },
+        <String, Object?>{
+          'id': 102,
+          'patient_uid': '04:E2',
+          'reason': 'offline',
+        },
+      ];
+
+      when(
+        () => localDb.pendingEmergencyAccessLogs(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => pendingLogs);
+      when(
+        () => patientRepo.reportEmergencyAccess(any()),
+      ).thenAnswer((_) async {});
+      when(
+        () => localDb.markEmergencyLogsSynced(any()),
+      ).thenAnswer((_) async {});
+
+      await engine.syncAll();
+
+      verify(() => patientRepo.reportEmergencyAccess(pendingLogs)).called(1);
+      verify(() => localDb.markEmergencyLogsSynced([101, 102])).called(1);
+    });
+
+    test(
+      'captura errores al reportar logs de emergencia sin interrumpir el flujo',
+      () async {
+        final pendingLogs = [
+          <String, Object?>{
+            'id': 201,
+            'patient_uid': '04:ERR',
+            'reason': 'offline',
+          },
+        ];
+
+        when(
+          () => localDb.pendingEmergencyAccessLogs(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => pendingLogs);
+        when(
+          () => patientRepo.reportEmergencyAccess(any()),
+        ).thenThrow(Exception('Error reportando logs de emergencia'));
+
+        await expectLater(engine.syncAll(), completes);
+
+        verifyNever(() => localDb.markEmergencyLogsSynced(any()));
+      },
+    );
   });
 }
