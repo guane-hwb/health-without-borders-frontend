@@ -487,4 +487,138 @@ void main() {
       );
     });
   });
+
+  group('reportEmergencyAccess', () {
+    test(
+      'no hace ninguna petición si la lista de entradas está vacía',
+      () async {
+        await repository.reportEmergencyAccess(<Map<String, Object?>>[]);
+
+        verifyNever(
+          () => apiClient.postJson(
+            path: any(named: 'path'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        );
+      },
+    );
+
+    test(
+      'envía POST a /api/v1/patients/emergency-access con las entradas',
+      () async {
+        final List<Map<String, Object?>> entries = <Map<String, Object?>>[
+          <String, Object?>{
+            'patient_uid': '04:AA:BB',
+            'reason': 'guardian_absent_offline',
+          },
+        ];
+
+        when(
+          () => apiClient.postJson(
+            path: '/api/v1/patients/emergency-access',
+            body: <String, dynamic>{'entries': entries},
+            headers: expectedAuthHeader,
+          ),
+        ).thenAnswer((_) async => <String, dynamic>{});
+
+        await repository.reportEmergencyAccess(entries);
+
+        verify(
+          () => apiClient.postJson(
+            path: '/api/v1/patients/emergency-access',
+            body: <String, dynamic>{'entries': entries},
+            headers: expectedAuthHeader,
+          ),
+        ).called(1);
+      },
+    );
+  });
+
+  group('reportNfcKeyVersions', () {
+    test(
+      'no hace ninguna petición si la lista de entradas está vacía',
+      () async {
+        await repository.reportNfcKeyVersions(<Map<String, Object?>>[]);
+
+        verifyNever(
+          () => apiClient.postJson(
+            path: any(named: 'path'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        );
+      },
+    );
+
+    test(
+      'formatea los campos y envía POST a /api/v1/patients/nfc-key-versions',
+      () async {
+        final List<Map<String, Object?>> entries = <Map<String, Object?>>[
+          <String, Object?>{
+            'device_uid': '04:11:22:33',
+            'device_role': 'patient',
+            'key_version': 1,
+            'had_header': 1,
+            'observed_at': '2026-09-18 10:00:00',
+          },
+          <String, Object?>{
+            'device_uid': '04:44:55:66',
+            'device_role': 'guardian',
+            'key_version': 0,
+            'had_header': 0,
+            'observed_at': '',
+          },
+          <String, Object?>{
+            'device_uid': '04:77:88:99',
+            'device_role': 'patient',
+            'key_version': 2,
+            'had_header': null,
+            'observed_at': 'NOT_A_DATE',
+          },
+        ];
+
+        when(
+          () => apiClient.postJson(
+            path: '/api/v1/patients/nfc-key-versions',
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+          ),
+        ).thenAnswer((_) async => <String, dynamic>{});
+
+        await repository.reportNfcKeyVersions(entries);
+
+        final capturedBody =
+            verify(
+                  () => apiClient.postJson(
+                    path: '/api/v1/patients/nfc-key-versions',
+                    body: captureAny(named: 'body'),
+                    headers: expectedAuthHeader,
+                  ),
+                ).captured.single
+                as Map<String, dynamic>;
+
+        final List<dynamic> mappedEntries =
+            capturedBody['entries'] as List<dynamic>;
+
+        expect(mappedEntries, hasLength(3));
+
+        expect(mappedEntries[0]['device_uid'], '04:11:22:33');
+        expect(mappedEntries[0]['device_role'], 'patient');
+        expect(mappedEntries[0]['key_version'], 1);
+        expect(mappedEntries[0]['had_header'], isTrue);
+        expect(mappedEntries[0]['observed_at'], endsWith('Z'));
+
+        expect(mappedEntries[1]['device_uid'], '04:44:55:66');
+        expect(mappedEntries[1]['had_header'], isFalse);
+        expect(mappedEntries[1]['observed_at'], isNull);
+
+        expect(mappedEntries[2]['device_uid'], '04:77:88:99');
+        expect(mappedEntries[2]['had_header'], isFalse);
+        expect(mappedEntries[2]['observed_at'], 'NOT_A_DATE');
+      },
+    );
+  });
 }

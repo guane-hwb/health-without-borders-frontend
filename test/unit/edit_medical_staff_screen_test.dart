@@ -1,7 +1,40 @@
 // test/unit/edit_medical_staff_screen_test.dart
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+
+import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
+import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
+import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
+import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/edit_medical_staff_screen.dart';
+
+// =============================================================================
+// Mocks
+// =============================================================================
+
+class MockAuthRepository extends Mock implements AuthRepository {}
+
+class MockUserRepository extends Mock implements UserRepository {}
+
+class MockPatientRepository extends Mock implements PatientRepository {}
+
+class MockLocalDatabase extends Mock implements LocalDatabase {}
+
+class MockSyncEngine extends Mock implements SyncEngine {}
+
+class MockReachability extends Mock implements Reachability {}
+
+class FakePatientFullRecord extends Fake implements PatientFullRecord {}
 
 const _docTypes = {
   'CC': 'Cédula de Ciudadanía',
@@ -139,10 +172,90 @@ ProviderInfo _provider({
 }) => ProviderInfo(repsCode: repsCode, name: name);
 
 // =============================================================================
-// UNIT TESTS
+// Widget Testing Setup Helper
+// =============================================================================
+
+late MockAuthRepository mockAuth;
+late MockUserRepository mockUser;
+late MockPatientRepository mockPatientRepo;
+late MockLocalDatabase mockDb;
+late MockSyncEngine mockSync;
+late MockReachability mockReach;
+
+Widget _wrapWidget({required PatientFullRecord patient, UserSession? user}) {
+  mockAuth = MockAuthRepository();
+  mockUser = MockUserRepository();
+  mockPatientRepo = MockPatientRepository();
+  mockDb = MockLocalDatabase();
+  mockSync = MockSyncEngine();
+  mockReach = MockReachability();
+
+  final activeUser =
+      user ??
+      UserSession(
+        id: 'user-123',
+        fullName: 'Dr. Test',
+        email: 'test@hwb.org',
+        role: UserRole.doctor,
+        organizationId: 'org-01',
+      );
+
+  when(() => mockAuth.currentUser).thenReturn(activeUser);
+  when(
+    () => mockAuth.sessionNotifier,
+  ).thenReturn(ValueNotifier<UserSession?>(activeUser));
+
+  when(() => mockSync.isOnline).thenReturn(ValueNotifier<bool>(true));
+  when(() => mockSync.pendingCount).thenReturn(ValueNotifier<int>(0));
+  when(() => mockSync.blockedCount).thenReturn(ValueNotifier<int>(0));
+  when(() => mockSync.syncAll()).thenAnswer((_) async => true);
+
+  when(
+    () => mockDb.savePatient(
+      any(),
+      ownerUserId: any(named: 'ownerUserId'),
+      organizationId: any(named: 'organizationId'),
+      retiredDeviceReason: any(named: 'retiredDeviceReason'),
+      isSynced: any(named: 'isSynced'),
+    ),
+  ).thenAnswer((_) async {});
+
+  when(
+    () => mockDb.markChipsDirty(
+      any(),
+      patient: any(named: 'patient'),
+      guardian: any(named: 'guardian'),
+    ),
+  ).thenAnswer((_) async {});
+
+  return AppLocale(
+    locale: 'es',
+    setLocale: (_) {},
+    child: AppScope(
+      authRepository: mockAuth,
+      userRepository: mockUser,
+      patientRepository: mockPatientRepo,
+      localDatabase: mockDb,
+      syncEngine: mockSync,
+      statsRepository: StatsRepository(
+        apiClient: ApiClient(baseUrl: 'http://localhost'),
+        authRepository: mockAuth,
+      ),
+      reachability: mockReach,
+      child: MaterialApp(home: EditMedicalStaffScreen(patient: patient)),
+    ),
+  );
+}
+
+// =============================================================================
+// MAIN ENTRY
 // =============================================================================
 
 void main() {
+  setUpAll(() {
+    registerFallbackValue(FakePatientFullRecord());
+  });
+
   group('No medical history — all fields fallback to defaults', () {
     late InitialValues init;
 
@@ -477,5 +590,187 @@ void main() {
       expect(init.careModality, '05');
       expect(init.dischargeDisposition, '03');
     });
+  });
+
+  group('EditMedicalStaffScreen Widget Tests — Cobertura 100%', () {
+    testWidgets(
+      'Navegación de retorno desde el botón de la cabecera (onBack)',
+      (tester) async {
+        await tester.pumpWidget(_wrapWidget(patient: _patient()));
+        await tester.pumpAndSettle();
+
+        final backIcon = find.byIcon(Icons.arrow_back);
+        expect(backIcon, findsOneWidget);
+        await tester.tap(backIcon);
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'Navegación de retorno desde el botón Cancelar/Atrás inferior',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_wrapWidget(patient: _patient()));
+        await tester.pumpAndSettle();
+
+        final backBtn = find.text('Atrás');
+        await tester.ensureVisible(backBtn);
+        await tester.tap(backBtn);
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'Selección en Dropdowns (Tipo de doc, Modalidad de atención, Condición de egreso)',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_wrapWidget(patient: _patient()));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Cédula de Ciudadanía'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Cédula de Extranjería').last);
+        await tester.pumpAndSettle();
+
+        final modalityDropdown = find.text('Intramural');
+        await tester.ensureVisible(modalityDropdown);
+        await tester.tap(modalityDropdown);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Extramural - Móvil').last);
+        await tester.pumpAndSettle();
+
+        final dischargeDropdown = find.text('Alta médica');
+        await tester.ensureVisible(dischargeDropdown);
+        await tester.tap(dischargeDropdown);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Alta voluntaria').last);
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'Guardar realiza la actualización en la BD local cuando no existían antecedentes previa',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final p = _patient(history: []);
+        await tester.pumpWidget(_wrapWidget(patient: p));
+        await tester.pumpAndSettle();
+
+        final saveBtn = find.text('Guardar');
+        await tester.ensureVisible(saveBtn);
+        await tester.tap(saveBtn);
+        await tester.pumpAndSettle();
+
+        final captured =
+            verify(
+                  () => mockDb.savePatient(
+                    captureAny(),
+                    ownerUserId: any(named: 'ownerUserId'),
+                    organizationId: any(named: 'organizationId'),
+                    retiredDeviceReason: any(named: 'retiredDeviceReason'),
+                    isSynced: any(named: 'isSynced'),
+                  ),
+                ).captured.single
+                as PatientFullRecord;
+
+        expect(captured.medicalHistory.length, 1);
+        verify(
+          () => mockDb.markChipsDirty('uuid-001', patient: true),
+        ).called(1);
+      },
+    );
+
+    testWidgets(
+      'Guardar actualiza el último elemento existente y usa prevDate cuando inputDate está vacío',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final p = _patient(
+          history: [_encounter(startDateTime: '2024-01-01T10:00:00')],
+        );
+
+        await tester.pumpWidget(_wrapWidget(patient: p));
+        await tester.pumpAndSettle();
+
+        final textFields = find.byType(TextField);
+        await tester.enterText(textFields.at(4), '');
+        await tester.pumpAndSettle();
+
+        final saveBtn = find.text('Guardar');
+        await tester.ensureVisible(saveBtn);
+        await tester.tap(saveBtn);
+        await tester.pumpAndSettle();
+
+        final captured =
+            verify(
+                  () => mockDb.savePatient(
+                    captureAny(),
+                    ownerUserId: any(named: 'ownerUserId'),
+                    organizationId: any(named: 'organizationId'),
+                    retiredDeviceReason: any(named: 'retiredDeviceReason'),
+                    isSynced: any(named: 'isSynced'),
+                  ),
+                ).captured.single
+                as PatientFullRecord;
+
+        expect(
+          captured.medicalHistory.last.startDateTime,
+          '2024-01-01T10:00:00',
+        );
+      },
+    );
+
+    testWidgets(
+      'Manejo defensivo de error al fallar la base de datos durante el guardado',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        when(
+          () => mockDb.savePatient(
+            any(),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+            isSynced: any(named: 'isSynced'),
+          ),
+        ).thenThrow(Exception('Error inesperado en SQLite'));
+
+        await tester.pumpWidget(_wrapWidget(patient: _patient()));
+        await tester.pumpAndSettle();
+
+        final saveBtn = find.text('Guardar');
+        await tester.ensureVisible(saveBtn);
+        await tester.tap(saveBtn);
+        await tester.pumpAndSettle();
+      },
+    );
   });
 }

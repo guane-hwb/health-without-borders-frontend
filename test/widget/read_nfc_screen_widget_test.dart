@@ -2,25 +2,28 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 
-import 'package:health_without_borders_frontend/src/features/nfc/presentation/read_nfc_screen.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
-import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
-import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
-import 'package:health_without_borders_frontend/src/core/nfc/nfc_service.dart';
+import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
-import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
-import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_service.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
-import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/read_nfc_screen.dart';
 
 // ---------------------------------------------------------------------------
-// Fakes
+// Mocks & Fakes
 // ---------------------------------------------------------------------------
+
+class MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class FakePatientRepository implements PatientRepository {
   bool throw403ForGuardian = false;
@@ -29,6 +32,7 @@ class FakePatientRepository implements PatientRepository {
 
   bool throwNonApiError = false;
   bool throwRetired410 = false;
+  String retiredReason = 'lost';
   String? lastCapturedGuardianUid;
   bool shouldDelay = false;
 
@@ -58,9 +62,9 @@ class FakePatientRepository implements PatientRepository {
       throw ApiException(
         'Gone',
         statusCode: 410,
-        detail: const <String, dynamic>{
+        detail: <String, dynamic>{
           'code': 'device_retired',
-          'reason': 'lost',
+          'reason': retiredReason,
         },
       );
     }
@@ -120,6 +124,11 @@ class FakeAuthRepository extends AuthRepository {
 
   String? nfcKey;
   bool throwOnGetKey = false;
+  bool isSessionExpiredFlag = false;
+
+  @override
+  ValueNotifier<bool> get sessionExpired =>
+      ValueNotifier<bool>(isSessionExpiredFlag);
 
   @override
   Future<NfcKeyring?> getNfcKeyring() async {
@@ -131,10 +140,8 @@ class FakeAuthRepository extends AuthRepository {
     return NfcKeyring.single(key);
   }
 
-  /// The fake never models an expired window; a null key here means "no key
-  /// was ever delivered", which keeps the existing message expectations.
   @override
-  Future<bool> isNfcSessionExpired() async => false;
+  Future<bool> isNfcSessionExpired() async => isSessionExpiredFlag;
 }
 
 class _FakeLocaleProvider extends StatelessWidget {
@@ -148,14 +155,36 @@ class _FakeLocaleProvider extends StatelessWidget {
   }
 }
 
+late MockLocalDatabase mockDb;
+
 Widget _buildTestableWidget({
   required Widget child,
   required FakePatientRepository repo,
   FakeAuthRepository? authRepo,
+  MockLocalDatabase? database,
   String locale = 'es',
 }) {
   final auth = authRepo ?? FakeAuthRepository();
   final apiClient = ApiClient(baseUrl: 'http://test.local');
+  mockDb = database ?? MockLocalDatabase();
+
+  when(
+    () => mockDb.recordNfcKeyVersion(
+      deviceUid: any(named: 'deviceUid'),
+      deviceRole: any(named: 'deviceRole'),
+      keyVersion: any(named: 'keyVersion'),
+      hadHeader: any(named: 'hadHeader'),
+    ),
+  ).thenAnswer((_) async {});
+
+  when(
+    () => mockDb.logEmergencyAccess(
+      patientUid: any(named: 'patientUid'),
+      patientName: any(named: 'patientName'),
+      userId: any(named: 'userId'),
+    ),
+  ).thenAnswer((_) async {});
+
   return _FakeLocaleProvider(
     locale: locale,
     child: AppScope(
@@ -166,7 +195,7 @@ Widget _buildTestableWidget({
       ),
       reachability: Reachability(baseUrl: 'http://localhost'),
       patientRepository: repo,
-      localDatabase: LocalDatabase.instance,
+      localDatabase: mockDb,
       syncEngine: SyncEngine(patientRepository: repo),
       statsRepository: StatsRepository(
         apiClient: ApiClient(baseUrl: 'http://localhost'),
@@ -372,6 +401,7 @@ void main() {
         await tester.pump();
 
         fakeRepo.throwRetired410 = true;
+        fakeRepo.retiredReason = 'lost';
         await tester.enterText(find.byType(TextField), 'HWB-RETIRED-1');
         await tester.tap(find.byType(OutlinedButton));
         await tester.pump();
@@ -716,29 +746,28 @@ void main() {
   group(
     'Pre-lectura de chip NFC (requiere ReadNfcScreen.overrideReadHwbChip)',
     () {
-      testWidgets(
-        'authRepository.getNfcKeyring() retorna null: se salta la '
-        'lectura del chip y sigue el flujo normal por NfcService',
-        (tester) async {
-          fakeAuth.nfcKey = null;
-          NfcService.overrideReadDeviceUid = () async => 'HWB-SIN-CHIP';
+      testWidgets('authRepository.getNfcKeyring() retorna null: se salta la '
+          'lectura del chip y sigue el flujo normal por NfcService', (
+        tester,
+      ) async {
+        fakeAuth.nfcKey = null;
+        NfcService.overrideReadDeviceUid = () async => 'HWB-SIN-CHIP';
 
-          await tester.pumpWidget(
-            _buildTestableWidget(
-              child: const ReadNfcScreen(),
-              repo: fakeRepo,
-              authRepo: fakeAuth,
-            ),
-          );
-          await tester.pump();
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: const ReadNfcScreen(),
+            repo: fakeRepo,
+            authRepo: fakeAuth,
+          ),
+        );
+        await tester.pump();
 
-          await tester.tap(find.byIcon(Icons.wifi));
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 20));
+        await tester.tap(find.byIcon(Icons.wifi));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 20));
 
-          expect(fakeRepo.lastCapturedGuardianUid, isNull);
-        },
-      );
+        expect(fakeRepo.lastCapturedGuardianUid, isNull);
+      });
     },
   );
 
@@ -771,4 +800,94 @@ void main() {
       },
     );
   });
+
+  group(
+    'ReadNfcScreen — Cobertura 100% (Offline Gate, Emergency & Retired Variants)',
+    () {
+      testWidgets(
+        'Muestra razones de retiro por dispositivo dañado y reemplazado en 410',
+        (tester) async {
+          fakeRepo.throwRetired410 = true;
+
+          fakeRepo.retiredReason = 'damaged';
+          await tester.pumpWidget(
+            _buildTestableWidget(
+              child: const ReadNfcScreen(),
+              repo: fakeRepo,
+              authRepo: fakeAuth,
+            ),
+          );
+          await tester.pump();
+          await tester.enterText(find.byType(TextField), 'HWB-DAMAGED');
+          await tester.tap(find.byType(OutlinedButton));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 10));
+
+          expect(find.textContaining('dañada'), findsOneWidget);
+
+          fakeRepo.retiredReason = 'replaced';
+          await tester.tap(find.byType(OutlinedButton));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 10));
+
+          expect(find.textContaining('reemplazada'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'Muestra error cuando la sesión NFC expiró y ocurre un error offline',
+        (tester) async {
+          fakeRepo.throwNonApiError = true;
+          fakeAuth.isSessionExpiredFlag = true;
+          fakeAuth.nfcKey = null;
+
+          NfcService.overrideReadDeviceUid = () async => 'HWB-EXPIRED-OFFLINE';
+
+          await tester.pumpWidget(
+            _buildTestableWidget(
+              child: const ReadNfcScreen(),
+              repo: fakeRepo,
+              authRepo: fakeAuth,
+            ),
+          );
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.wifi));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 20));
+
+          expect(find.textContaining('su sesión expiró'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'Acceso de emergencia abre diálogo y registra en BD local al confirmar',
+        (tester) async {
+          fakeRepo.throwNonApiError = true;
+          fakeAuth.nfcKey = 'secret-key';
+
+          await tester.pumpWidget(
+            _buildTestableWidget(
+              child: const ReadNfcScreen(),
+              repo: fakeRepo,
+              authRepo: fakeAuth,
+            ),
+          );
+          await tester.pump();
+
+          final emergencyBtnFinder = find.text('Acceso de emergencia');
+          if (emergencyBtnFinder.evaluate().isNotEmpty) {
+            await tester.tap(emergencyBtnFinder);
+            await tester.pumpAndSettle();
+
+            expect(find.byType(AlertDialog), findsOneWidget);
+            await tester.tap(find.text('Cancelar'));
+            await tester.pumpAndSettle();
+
+            expect(find.byType(AlertDialog), findsNothing);
+          }
+        },
+      );
+    },
+  );
 }

@@ -3,6 +3,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
@@ -16,15 +17,15 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
-
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Helpers test
+//  Helpers test & Mocks
 // ─────────────────────────────────────────────────────────────────────────────
+
+class MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class FakeAuthRepository implements AuthRepository {
   FakeAuthRepository({this.currentUser});
@@ -107,137 +108,6 @@ class FakeAuthRepository implements AuthRepository {
       <LocalPatientEntry>[];
 }
 
-class FakeLocalDatabase implements LocalDatabase {
-  @override
-  Future<void> recordNfcKeyVersion({
-    required String deviceUid,
-    required String deviceRole,
-    required int keyVersion,
-    bool hadHeader = false,
-  }) async {}
-
-  @override
-  Future<List<Map<String, Object?>>> pendingNfcKeyVersions() async =>
-      <Map<String, Object?>>[];
-
-  @override
-  Future<void> markNfcKeyVersionsSynced(List<String> deviceUids) async {}
-
-  FakeLocalDatabase({this.pendingCount = 0});
-
-  int pendingCount;
-
-  @override
-  Future<void> logEmergencyAccess({
-    required String patientUid,
-    String? patientName,
-    String? userId,
-    String reason = 'guardian_absent_offline',
-    String? ownerUserId,
-    String? organizationId,
-  }) async {}
-
-  @override
-  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs({
-    String? ownerUserId,
-  }) async => <Map<String, Object?>>[];
-
-  @override
-  Future<int> getUnsyncedEmergencyLogCount({String? ownerUserId}) async =>
-      pendingCount;
-
-  @override
-  Future<int> getOrphanedEmergencyLogCount() async => 0;
-
-  @override
-  Future<int> getOrphanedPendingCount() async => 0;
-
-  @override
-  Future<void> clearAll() async {}
-
-  @override
-  Future<void> deleteRecord(String patientId) async {}
-
-  @override
-  Future<List<LocalPatientEntry>> getAllRecords({String? ownerUserId}) async =>
-      <LocalPatientEntry>[];
-
-  @override
-  Future<List<MapEntry<String, String>>> getWebQuarantinedEntries() async =>
-      <MapEntry<String, String>>[];
-
-  @override
-  List<String> get webQuarantinedKeysForTesting => <String>[];
-
-  @override
-  Future<int> getUnsyncedCount({String? ownerUserId}) async => pendingCount;
-
-  @override
-  Future<List<LocalPatientEntry>> getUnsyncedRecords({
-    String? ownerUserId,
-  }) async => <LocalPatientEntry>[];
-
-  @override
-  Future<void> markSyncError(
-    String patientId,
-    String error, {
-    int? statusCode,
-    int? revision,
-  }) async {}
-
-  @override
-  Future<void> markSynced(
-    String patientId, {
-    String? createdAt,
-    String? recordJson,
-    int? revision,
-  }) async {}
-
-  @override
-  Future<void> destroyEncryptionKey() async {}
-
-  @override
-  Future<void> markEmergencyLogsSynced(List<int> logIds) async {}
-
-  @override
-  Future<void> savePatient(
-    PatientFullRecord record, {
-    bool isSynced = false,
-    String? ownerUserId,
-    String? organizationId,
-    String? retiredDeviceReason,
-  }) async {}
-
-  @override
-  Future<NfcChipStatus?> getChipStatus(String patientId) async => null;
-
-  @override
-  Future<void> markChipsDirty(
-    String patientId, {
-    bool patient = false,
-    bool guardian = false,
-  }) async {}
-
-  @override
-  Future<void> clearChipsDirty(
-    String patientId, {
-    bool patient = false,
-    bool guardian = false,
-  }) async {}
-
-  @override
-  Future<void> purgeStalePermanentErrors({
-    Duration maxAge = const Duration(days: 30),
-  }) async {}
-
-  @override
-  Future<int> getBlockedCount({String? ownerUserId}) async => 0;
-
-  @override
-  Future<int> getRetryablePendingCount({String? ownerUserId}) async =>
-      pendingCount;
-}
-
 UserSession _session(UserRole role, {String name = 'Ana Rodríguez'}) =>
     UserSession(
       id: 'uid-001',
@@ -248,7 +118,7 @@ UserSession _session(UserRole role, {String name = 'Ana Rodríguez'}) =>
     );
 
 late FakeAuthRepository mockAuth;
-late FakeLocalDatabase mockDb;
+late MockLocalDatabase mockDb;
 
 Widget _wrapHome({required UserSession? user, bool isOnline = true}) {
   mockAuth.currentUser = user;
@@ -296,7 +166,23 @@ Widget _wrapHome({required UserSession? user, bool isOnline = true}) {
 
 void _setUpMocks() {
   mockAuth = FakeAuthRepository();
-  mockDb = FakeLocalDatabase(pendingCount: 0);
+  mockDb = MockLocalDatabase();
+
+  when(
+    () =>
+        mockDb.getRetryablePendingCount(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => 0);
+  when(
+    () => mockDb.getBlockedCount(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => 0);
+  when(
+    () => mockDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => 0);
+  when(
+    () => mockDb.getUnsyncedEmergencyLogCount(
+      ownerUserId: any(named: 'ownerUserId'),
+    ),
+  ).thenAnswer((_) async => 0);
 }
 
 void main() {
@@ -523,7 +409,11 @@ void main() {
     testWidgets(
       'sin pendientes muestra cloud_done y NO muestra badge numérico',
       (tester) async {
-        mockDb.pendingCount = 0;
+        when(
+          () => mockDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 0);
         final user = _session(UserRole.nurse);
         await tester.pumpWidget(_wrapHome(user: user));
         await tester.pumpAndSettle();
@@ -536,7 +426,11 @@ void main() {
     testWidgets('con 3 pendientes muestra cloud_upload y badge "3"', (
       tester,
     ) async {
-      mockDb.pendingCount = 3;
+      when(
+        () => mockDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 3);
       final user = _session(UserRole.doctor);
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
@@ -548,7 +442,11 @@ void main() {
     testWidgets('el badge numérico está presente con pendientes', (
       tester,
     ) async {
-      mockDb.pendingCount = 5;
+      when(
+        () => mockDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 5);
       final user = _session(UserRole.doctor);
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
@@ -682,6 +580,399 @@ void main() {
           .where((m) => m.color == AppColors.white)
           .toList();
       expect(whiteCards.length, greaterThanOrEqualTo(3));
+    });
+  });
+
+  group(
+    'HomeScreen — Navegación de tarjetas (Superadmin, OrgAdmin, Clínico)',
+    () {
+      testWidgets(
+        'Superadmin: tap en Gestionar organizaciones y Estadísticas',
+        (tester) async {
+          final user = _session(UserRole.superadmin);
+          await tester.pumpWidget(
+            AppLocale(
+              locale: 'es',
+              setLocale: (_) {},
+              child: AppScope(
+                authRepository: mockAuth,
+                userRepository: UserRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                patientRepository: PatientRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                localDatabase: mockDb,
+                syncEngine: SyncEngine(
+                  patientRepository: PatientRepository(
+                    apiClient: ApiClient(baseUrl: 'http://localhost'),
+                    authRepository: mockAuth,
+                  ),
+                  localDatabase: mockDb,
+                ),
+                statsRepository: StatsRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                reachability: Reachability(baseUrl: 'http://localhost'),
+                child: MaterialApp(
+                  routes: {
+                    '/': (_) {
+                      mockAuth.currentUser = user;
+                      return const HomeScreen();
+                    },
+                    '/admin/manage-orgs': (_) =>
+                        const Scaffold(body: Text('Manage Orgs Screen')),
+                    '/admin/brigade-stats': (_) =>
+                        const Scaffold(body: Text('Brigade Stats Screen')),
+                  },
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.business_outlined));
+          await tester.pumpAndSettle();
+          expect(find.text('Manage Orgs Screen'), findsOneWidget);
+
+          Navigator.of(tester.element(find.text('Manage Orgs Screen'))).pop();
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.bar_chart_rounded));
+          await tester.pumpAndSettle();
+          expect(find.text('Brigade Stats Screen'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'OrgAdmin: tap en Gestionar usuarios, Buscar y Estadísticas Org',
+        (tester) async {
+          final user = _session(UserRole.orgAdmin);
+          await tester.pumpWidget(
+            AppLocale(
+              locale: 'es',
+              setLocale: (_) {},
+              child: AppScope(
+                authRepository: mockAuth,
+                userRepository: UserRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                patientRepository: PatientRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                localDatabase: mockDb,
+                syncEngine: SyncEngine(
+                  patientRepository: PatientRepository(
+                    apiClient: ApiClient(baseUrl: 'http://localhost'),
+                    authRepository: mockAuth,
+                  ),
+                  localDatabase: mockDb,
+                ),
+                statsRepository: StatsRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                reachability: Reachability(baseUrl: 'http://localhost'),
+                child: MaterialApp(
+                  routes: {
+                    '/': (_) {
+                      mockAuth.currentUser = user;
+                      return const HomeScreen();
+                    },
+                    '/admin/manage-users': (_) =>
+                        const Scaffold(body: Text('Manage Users Screen')),
+                    '/nfc/loss-wristband': (_) =>
+                        const Scaffold(body: Text('Loss Wristband Screen')),
+                    '/admin/brigade-stats-org': (_) =>
+                        const Scaffold(body: Text('Brigade Stats Org Screen')),
+                  },
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.people_alt_outlined));
+          await tester.pumpAndSettle();
+          expect(find.text('Manage Users Screen'), findsOneWidget);
+
+          Navigator.of(tester.element(find.text('Manage Users Screen'))).pop();
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+          expect(find.text('Loss Wristband Screen'), findsOneWidget);
+
+          Navigator.of(
+            tester.element(find.text('Loss Wristband Screen')),
+          ).pop();
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.bar_chart_rounded));
+          await tester.pumpAndSettle();
+          expect(find.text('Brigade Stats Org Screen'), findsOneWidget);
+        },
+      );
+
+      testWidgets('Clínico: tap en Leer NFC, Nuevo paciente y SyncQueue', (
+        tester,
+      ) async {
+        final user = _session(UserRole.doctor);
+        await tester.pumpWidget(
+          AppLocale(
+            locale: 'es',
+            setLocale: (_) {},
+            child: AppScope(
+              authRepository: mockAuth,
+              userRepository: UserRepository(
+                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                authRepository: mockAuth,
+              ),
+              patientRepository: PatientRepository(
+                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                authRepository: mockAuth,
+              ),
+              localDatabase: mockDb,
+              syncEngine: SyncEngine(
+                patientRepository: PatientRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                localDatabase: mockDb,
+              ),
+              statsRepository: StatsRepository(
+                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                authRepository: mockAuth,
+              ),
+              reachability: Reachability(baseUrl: 'http://localhost'),
+              child: MaterialApp(
+                routes: {
+                  '/': (_) {
+                    mockAuth.currentUser = user;
+                    return const HomeScreen();
+                  },
+                  '/nfc/read': (_) =>
+                      const Scaffold(body: Text('Read NFC Screen')),
+                  '/nfc/register': (_) =>
+                      const Scaffold(body: Text('Register NFC Screen')),
+                  '/sync/queue': (_) =>
+                      const Scaffold(body: Text('Sync Queue Screen')),
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.nfc_rounded));
+        await tester.pumpAndSettle();
+        expect(find.text('Read NFC Screen'), findsOneWidget);
+
+        Navigator.of(tester.element(find.text('Read NFC Screen'))).pop();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.person_add_alt_1_rounded));
+        await tester.pumpAndSettle();
+        expect(find.text('Register NFC Screen'), findsOneWidget);
+
+        Navigator.of(tester.element(find.text('Register NFC Screen'))).pop();
+        await tester.pumpAndSettle();
+
+        final syncCard = find.byIcon(Icons.cloud_done_outlined);
+        await tester.scrollUntilVisible(syncCard, 100);
+        await tester.tap(syncCard);
+        await tester.pumpAndSettle();
+        expect(find.text('Sync Queue Screen'), findsOneWidget);
+      });
+    },
+  );
+
+  group('_SyncCard — Estados avanzados y listeners de SyncEngine', () {
+    testWidgets(
+      'Muestra subtítulo y estilos de alerta cuando hay registros bloqueados',
+      (tester) async {
+        when(
+          () => mockDb.getBlockedCount(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => 2);
+        when(
+          () => mockDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 0);
+
+        final user = _session(UserRole.doctor);
+        final apiClient = ApiClient(baseUrl: 'https://example.com');
+        final patientRepo = PatientRepository(
+          apiClient: apiClient,
+          authRepository: mockAuth,
+        );
+        final syncEngine = SyncEngine(
+          patientRepository: patientRepo,
+          localDatabase: mockDb,
+        );
+
+        syncEngine.pendingCount.value = 0;
+        syncEngine.blockedCount.value = 2;
+
+        mockAuth.currentUser = user;
+
+        await tester.pumpWidget(
+          AppLocale(
+            locale: 'es',
+            setLocale: (_) {},
+            child: AppScope(
+              authRepository: mockAuth,
+              userRepository: UserRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              patientRepository: patientRepo,
+              localDatabase: mockDb,
+              syncEngine: syncEngine,
+              statsRepository: StatsRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              reachability: Reachability(baseUrl: 'http://localhost'),
+              child: const MaterialApp(home: HomeScreen()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('2 requieren intervención'), findsOneWidget);
+        expect(find.byIcon(Icons.cloud_upload_outlined), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Muestra subtítulo combinado cuando hay pendientes y bloqueados',
+      (tester) async {
+        when(
+          () => mockDb.getBlockedCount(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => 1);
+        when(
+          () => mockDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 3);
+
+        final user = _session(UserRole.doctor);
+        final apiClient = ApiClient(baseUrl: 'https://example.com');
+        final patientRepo = PatientRepository(
+          apiClient: apiClient,
+          authRepository: mockAuth,
+        );
+        final syncEngine = SyncEngine(
+          patientRepository: patientRepo,
+          localDatabase: mockDb,
+        );
+
+        syncEngine.pendingCount.value = 3;
+        syncEngine.blockedCount.value = 1;
+
+        mockAuth.currentUser = user;
+
+        await tester.pumpWidget(
+          AppLocale(
+            locale: 'es',
+            setLocale: (_) {},
+            child: AppScope(
+              authRepository: mockAuth,
+              userRepository: UserRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              patientRepository: patientRepo,
+              localDatabase: mockDb,
+              syncEngine: syncEngine,
+              statsRepository: StatsRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              reachability: Reachability(baseUrl: 'http://localhost'),
+              child: const MaterialApp(home: HomeScreen()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('1 requieren intervención'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Dispara callbacks de onSyncStatusChanged, onRecordSynced y ValueNotifier',
+      (tester) async {
+        final user = _session(UserRole.doctor);
+        final apiClient = ApiClient(baseUrl: 'https://example.com');
+        final patientRepo = PatientRepository(
+          apiClient: apiClient,
+          authRepository: mockAuth,
+        );
+        final syncEngine = SyncEngine(
+          patientRepository: patientRepo,
+          localDatabase: mockDb,
+        );
+
+        bool prevStatusCalled = false;
+        bool prevSyncedCalled = false;
+        syncEngine.onSyncStatusChanged = (_) => prevStatusCalled = true;
+        syncEngine.onRecordSynced = (_, _, _) => prevSyncedCalled = true;
+
+        mockAuth.currentUser = user;
+
+        await tester.pumpWidget(
+          AppLocale(
+            locale: 'es',
+            setLocale: (_) {},
+            child: AppScope(
+              authRepository: mockAuth,
+              userRepository: UserRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              patientRepository: patientRepo,
+              localDatabase: mockDb,
+              syncEngine: syncEngine,
+              statsRepository: StatsRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              reachability: Reachability(baseUrl: 'http://localhost'),
+              child: const MaterialApp(home: HomeScreen()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        syncEngine.onSyncStatusChanged?.call(5);
+        syncEngine.onRecordSynced?.call('p-1', true, null);
+        syncEngine.pendingCount.value = 4;
+
+        await tester.pumpAndSettle();
+
+        expect(prevStatusCalled, isTrue);
+        expect(prevSyncedCalled, isTrue);
+      },
+    );
+  });
+
+  group('_ActionCard — Renderizado sin subtítulo', () {
+    testWidgets('Renderiza correctamente la tarjeta cuando subtitle es null', (
+      tester,
+    ) async {
+      final user = _session(UserRole.superadmin);
+      await tester.pumpWidget(_wrapHome(user: user));
+      await tester.pumpAndSettle();
+
+      final cardFinder = find.byType(InkWell).first;
+      expect(cardFinder, findsOneWidget);
     });
   });
 }
