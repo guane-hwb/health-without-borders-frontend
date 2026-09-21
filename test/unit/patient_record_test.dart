@@ -1295,6 +1295,416 @@ void main() {
       },
     );
   });
+
+  // =========================================================================
+  // Cobertura de copyWith, operator == y hashCode
+  // =========================================================================
+
+  group('Address — copyWith, operator ==, hashCode', () {
+    test('copyWith sobreescribe los campos indicados y conserva el resto', () {
+      final original = Address(city: 'Bogotá', state: 'DC', street: 'Calle 1');
+      final copy = original.copyWith(city: 'Medellín', street: 'Calle 2');
+
+      expect(copy.city, 'Medellín');
+      expect(copy.state, 'DC');
+      expect(copy.street, 'Calle 2');
+    });
+
+    test('operator == y hashCode reconocen instancias iguales y distintas', () {
+      final a1 = Address(city: 'Bogotá', state: 'DC');
+      final a2 = Address(city: 'Bogotá', state: 'DC');
+      final b = Address(city: 'Cali', state: 'Valle');
+
+      expect(a1, equals(a2));
+      expect(a1.hashCode, equals(a2.hashCode));
+      expect(a1, isNot(equals(b)));
+    });
+  });
+
+  group('PatientIdentification — copyWith, operator ==, hashCode', () {
+    test('copyWith sobreescribe campos', () {
+      final original = PatientIdentification(
+        documentType: 'CC',
+        documentNumber: '123',
+      );
+      final copy = original.copyWith(documentNumber: '456');
+
+      expect(copy.documentType, 'CC');
+      expect(copy.documentNumber, '456');
+    });
+
+    test('operator == y hashCode', () {
+      final id1 = PatientIdentification(
+        documentType: 'CC',
+        documentNumber: '123',
+      );
+      final id2 = PatientIdentification(
+        documentType: 'CC',
+        documentNumber: '123',
+      );
+      final id3 = PatientIdentification(
+        documentType: 'TI',
+        documentNumber: '123',
+      );
+
+      expect(id1, equals(id2));
+      expect(id1.hashCode, equals(id2.hashCode));
+      expect(id1, isNot(equals(id3)));
+    });
+  });
+
+  group('GuardianConsent — copyWith, operator ==, hashCode', () {
+    test('copyWith sobreescribe campos', () {
+      final original = GuardianConsent(
+        accepted: false,
+        acceptedAt: '2026-01-01',
+      );
+      final copy = original.copyWith(accepted: true, email: 'padre@mail.com');
+
+      expect(copy.accepted, isTrue);
+      expect(copy.acceptedAt, '2026-01-01');
+      expect(copy.email, 'padre@mail.com');
+    });
+
+    test('operator == y hashCode', () {
+      final c1 = GuardianConsent(
+        accepted: true,
+        acceptedAt: '2026-01-01',
+        email: 'a@b.com',
+      );
+      final c2 = GuardianConsent(
+        accepted: true,
+        acceptedAt: '2026-01-01',
+        email: 'a@b.com',
+      );
+      final c3 = GuardianConsent(accepted: false, acceptedAt: '2026-01-01');
+
+      expect(c1, equals(c2));
+      expect(c1.hashCode, equals(c2.hashCode));
+      expect(c1, isNot(equals(c3)));
+    });
+  });
+
+  group('GuardianInfo — copyWith, operator ==, hashCode', () {
+    test('copyWith sobreescribe campos', () {
+      final original = GuardianInfo(
+        name: 'Pedro',
+        relationship: 'Padre',
+        phone: '123',
+      );
+      final copy = original.copyWith(phone: '456', deviceUid: 'DEV-1');
+
+      expect(copy.name, 'Pedro');
+      expect(copy.phone, '456');
+      expect(copy.deviceUid, 'DEV-1');
+    });
+
+    test('operator == y hashCode', () {
+      final g1 = GuardianInfo(
+        name: 'Pedro',
+        relationship: 'Padre',
+        phone: '123',
+      );
+      final g2 = GuardianInfo(
+        name: 'Pedro',
+        relationship: 'Padre',
+        phone: '123',
+      );
+      final g3 = GuardianInfo(name: 'Ana', relationship: 'Madre', phone: '123');
+
+      expect(g1, equals(g2));
+      expect(g1.hashCode, equals(g2.hashCode));
+      expect(g1, isNot(equals(g3)));
+    });
+  });
+
+  group('FamilyHistoryItem — copyWith, operator ==, hashCode', () {
+    test('copyWith, operator == y hashCode', () {
+      final item = FamilyHistoryItem(
+        conditionDescription: 'HTA',
+        relationship: '01',
+      );
+      final copy = item.copyWith(conditionCie10Code: 'I10');
+
+      expect(copy.conditionCie10Code, 'I10');
+      expect(copy.conditionDescription, 'HTA');
+
+      final item2 = FamilyHistoryItem(
+        conditionDescription: 'HTA',
+        relationship: '01',
+      );
+      expect(item, equals(item2));
+      expect(item.hashCode, equals(item2.hashCode));
+    });
+  });
+
+  group('ChronicConditionItem — copyWith, operator ==, hashCode', () {
+    test('copyWith, operator == y hashCode', () {
+      final item = ChronicConditionItem(chronicDescription: 'Asma');
+      final copy = item.copyWith(chronicCie10Code: 'J45');
+
+      expect(copy.chronicCie10Code, 'J45');
+
+      final item2 = ChronicConditionItem(chronicDescription: 'Asma');
+      expect(item, equals(item2));
+      expect(item.hashCode, equals(item2.hashCode));
+    });
+  });
+
+  group('MedicationStatementItem — copyWith, operator ==, hashCode', () {
+    test('copyWith, operator == y hashCode', () {
+      final item = MedicationStatementItem(medicationName: 'Ibuprofeno');
+      final copy = item.copyWith(dosage: '400mg');
+
+      expect(copy.dosage, '400mg');
+
+      final item2 = MedicationStatementItem(medicationName: 'Ibuprofeno');
+      expect(item, equals(item2));
+      expect(item.hashCode, equals(item2.hashCode));
+    });
+  });
+
+  group('BackgroundHistory — copyWith, operator ==, hashCode', () {
+    test('copyWith y operator ==', () {
+      final bh = BackgroundHistory(personalHistory: 'Ninguno');
+      final copy = bh.copyWith(familyHistoryNotes: 'Notas');
+
+      expect(copy.personalHistory, 'Ninguno');
+      expect(copy.familyHistoryNotes, 'Notas');
+
+      final bh2 = BackgroundHistory(personalHistory: 'Ninguno');
+      expect(bh, equals(bh2));
+      expect(bh.hashCode, equals(bh2.hashCode));
+    });
+  });
+
+  group('AllergyInfo — copyWith, operator ==, hashCode', () {
+    test('copyWith y operator ==', () {
+      final allergy = AllergyInfo(category: '01', allergen: 'Polen');
+      final copy = allergy.copyWith(notes: 'Leve');
+
+      expect(copy.notes, 'Leve');
+
+      final allergy2 = AllergyInfo(category: '01', allergen: 'Polen');
+      expect(allergy, equals(allergy2));
+      expect(allergy.hashCode, equals(allergy2.hashCode));
+    });
+  });
+
+  group('VaccinationRecordItem — copyWith, operator ==, hashCode', () {
+    test('copyWith, operator == y hashCode', () {
+      final v = VaccinationRecordItem(
+        date: '2026-01-01',
+        vaccineName: 'COVID',
+        vaccineCode: '100',
+        dose: 1,
+        administratedBy: 'Doc',
+        administratedAt: 'EPS',
+      );
+      final copy = v.copyWith(dose: 2);
+
+      expect(copy.dose, 2);
+
+      final v2 = VaccinationRecordItem(
+        date: '2026-01-01',
+        vaccineName: 'COVID',
+        vaccineCode: '100',
+        dose: 1,
+        administratedBy: 'Doc',
+        administratedAt: 'EPS',
+      );
+      expect(v, equals(v2));
+      expect(v.hashCode, equals(v2.hashCode));
+    });
+  });
+
+  group('ClinicalEvaluation — copyWith, operator ==, hashCode', () {
+    test('copyWith, operator == y hashCode', () {
+      final ce = ClinicalEvaluation(historyOfCurrentIllness: 'Fiebre');
+      final copy = ce.copyWith(generalPhysicalExamination: 'Normal');
+
+      expect(copy.historyOfCurrentIllness, 'Fiebre');
+      expect(copy.generalPhysicalExamination, 'Normal');
+
+      final ce2 = ClinicalEvaluation(historyOfCurrentIllness: 'Fiebre');
+      expect(ce, equals(ce2));
+      expect(ce.hashCode, equals(ce2.hashCode));
+    });
+  });
+
+  group('DiagnosisItem — copyWith, operator ==, hashCode', () {
+    test('copyWith, operator == y hashCode', () {
+      final diag = DiagnosisItem(icd10Code: 'A00', description: 'Cólera');
+      final copy = diag.copyWith(icd11Code: '1A00');
+
+      expect(copy.icd11Code, '1A00');
+
+      final diag2 = DiagnosisItem(icd10Code: 'A00', description: 'Cólera');
+      expect(diag, equals(diag2));
+      expect(diag.hashCode, equals(diag2.hashCode));
+    });
+  });
+
+  group('RiskFactor — copyWith, operator ==, hashCode', () {
+    test('copyWith, operator == y hashCode', () {
+      final rf = RiskFactor(type: '01', name: 'Riesgo A');
+      final copy = rf.copyWith(name: 'Riesgo B');
+
+      expect(copy.type, '01');
+      expect(copy.name, 'Riesgo B');
+
+      final rf2 = RiskFactor(type: '01', name: 'Riesgo A');
+      expect(rf, equals(rf2));
+      expect(rf.hashCode, equals(rf2.hashCode));
+    });
+  });
+
+  group('IncapacityInfo — copyWith, operator ==, hashCode', () {
+    test('copyWith, operator == y hashCode', () {
+      final inc = IncapacityInfo(scope: '01', days: 5);
+      final copy = inc.copyWith(days: 10, maternityLeaveDays: 84);
+
+      expect(copy.days, 10);
+      expect(copy.maternityLeaveDays, 84);
+
+      final inc2 = IncapacityInfo(scope: '01', days: 5);
+      expect(inc, equals(inc2));
+      expect(inc.hashCode, equals(inc2.hashCode));
+    });
+  });
+
+  group('PractitionerInfo — copyWith, operator ==, hashCode', () {
+    test('copyWith, operator == y hashCode', () {
+      final prac = PractitionerInfo(
+        documentType: 'CC',
+        documentNumber: '123',
+        name: 'Dr. Smith',
+      );
+      final copy = prac.copyWith(firstName: 'John');
+
+      expect(copy.firstName, 'John');
+
+      final prac2 = PractitionerInfo(
+        documentType: 'CC',
+        documentNumber: '123',
+        name: 'Dr. Smith',
+      );
+      expect(prac, equals(prac2));
+      expect(prac.hashCode, equals(prac2.hashCode));
+    });
+  });
+
+  group('ProviderInfo — copyWith, operator ==, hashCode', () {
+    test('copyWith, operator == y hashCode', () {
+      final prov = ProviderInfo(repsCode: 'REP1', name: 'Hospital');
+      final copy = prov.copyWith(nitNumber: '900123');
+
+      expect(copy.nitNumber, '900123');
+
+      final prov2 = ProviderInfo(repsCode: 'REP1', name: 'Hospital');
+      expect(prov, equals(prov2));
+      expect(prov.hashCode, equals(prov2.hashCode));
+    });
+  });
+
+  group('PayerInfo — copyWith, operator ==, hashCode', () {
+    test('copyWith, operator == y hashCode', () {
+      final payer = PayerInfo(code: 'EPS1', name: 'Sura');
+      final copy = payer.copyWith(name: 'Sanitas');
+
+      expect(copy.code, 'EPS1');
+      expect(copy.name, 'Sanitas');
+
+      final payer2 = PayerInfo(code: 'EPS1', name: 'Sura');
+      expect(payer, equals(payer2));
+      expect(payer.hashCode, equals(payer2.hashCode));
+    });
+  });
+
+  group('MedicationRequestItem — Cobertura completa', () {
+    test('fromJson, toJson, copyWith, operator == y hashCode', () {
+      final json = <String, dynamic>{
+        'medicationName': 'Amoxicilina',
+        'dciCode': 'DCI001',
+        'iumCode': 'IUM001',
+        'dosage': '500mg',
+        'quantity': '21',
+        'frequency': 'Cada 8 horas',
+        'duration': '7 dias',
+        'route': 'Oral',
+        'status': 'active',
+        'intent': 'order',
+        'notes': 'Tomar con agua',
+      };
+
+      final item = MedicationRequestItem.fromJson(json);
+      expect(item.medicationName, 'Amoxicilina');
+      expect(item.dciCode, 'DCI001');
+
+      final serialized = item.toJson();
+      expect(serialized['medicationName'], 'Amoxicilina');
+      expect(serialized['notes'], 'Tomar con agua');
+
+      final copy = item.copyWith(dosage: '1000mg');
+      expect(copy.dosage, '1000mg');
+
+      final item2 = MedicationRequestItem.fromJson(json);
+      expect(item, equals(item2));
+      expect(item.hashCode, equals(item2.hashCode));
+    });
+  });
+
+  group('MedicalHistoryItem — Prescripciones y campos opcionales extendidos', () {
+    test(
+      'fromJson y toJson procesan la lista de prescriptions y campos de visualización',
+      () {
+        final json = <String, dynamic>{
+          'startDateTime': '2026-09-18T10:00:00',
+          'externalCauseDisplay': 'Accidente de trabajo',
+          'healthcareServiceCode': '101',
+          'healthcareServiceDisplay': 'Consulta Externa',
+          'occupationDescription': 'Ingeniero',
+          'prescriptions': [
+            {'medicationName': 'Paracetamol', 'dosage': '500mg'},
+          ],
+        };
+
+        final item = MedicalHistoryItem.fromJson(json);
+        expect(item.externalCauseDisplay, 'Accidente de trabajo');
+        expect(item.healthcareServiceCode, '101');
+        expect(item.healthcareServiceDisplay, 'Consulta Externa');
+        expect(item.occupationDescription, 'Ingeniero');
+        expect(item.prescriptions, hasLength(1));
+        expect(item.prescriptions.first.medicationName, 'Paracetamol');
+
+        final serialized = item.toJson();
+        expect(serialized['externalCauseDisplay'], 'Accidente de trabajo');
+        expect(serialized['healthcareServiceCode'], '101');
+        expect(serialized['healthcareServiceDisplay'], 'Consulta Externa');
+        expect(serialized['occupationDescription'], 'Ingeniero');
+        expect(serialized['prescriptions'], isA<List<dynamic>>());
+      },
+    );
+  });
+
+  group('PatientFullRecord — copyWith, operator == y hashCode', () {
+    test('copyWith actualiza campos de la raíz del paciente', () {
+      final minimal = _buildMinimal();
+      final copy = minimal.copyWith(patientId: 'pid-999', deviceUid: 'dev-xyz');
+
+      expect(copy.patientId, 'pid-999');
+      expect(copy.deviceUid, 'dev-xyz');
+      expect(copy.patientInfo.firstName, 'Ana');
+    });
+
+    test('operator == y hashCode comparan el contenido completo', () {
+      final record1 = _buildMinimal();
+      final record2 = _buildMinimal();
+
+      expect(record1, equals(record2));
+      expect(record1.hashCode, equals(record2.hashCode));
+    });
+  });
 }
 
 // =========================================================================
