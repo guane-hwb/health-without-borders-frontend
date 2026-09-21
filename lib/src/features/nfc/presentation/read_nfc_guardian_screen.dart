@@ -183,7 +183,11 @@ class _ReadNfcGuardianScreenState extends State<ReadNfcGuardianScreen> {
       try {
         codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
       } catch (e, stack) {
-        AppLogger.e('Anillo de llaves NFC inválido', error: e, stackTrace: stack);
+        AppLogger.e(
+          'Anillo de llaves NFC inválido',
+          error: e,
+          stackTrace: stack,
+        );
         if (!ctx.mounted) return;
         _showSyncError(
           ctx,

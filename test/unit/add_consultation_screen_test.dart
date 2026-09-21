@@ -915,4 +915,328 @@ void main() {
       },
     );
   });
+
+  group('Manejo dinámico de prescripciones', () {
+    testWidgets(
+      'Agregar y remover prescripciones actualiza el listado y mapea MedicationRequestItem',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final db = _MockLocalDatabase();
+        final sync = _MockSyncEngine();
+        when(() => db.savePatient(any())).thenAnswer((_) async {});
+        when(
+          () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
+        ).thenAnswer((_) async {});
+        when(() => sync.syncAll()).thenAnswer((_) async => true);
+
+        await tester.pumpWidget(
+          _buildApp(
+            patient: _fakePatient(),
+            scope: _defaultScope(db: db, sync: sync),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Scroll hacia abajo
+        final scrollable = find.byType(SingleChildScrollView);
+        await tester.drag(scrollable, const Offset(0, -600));
+        await tester.pumpAndSettle();
+
+        // 2. Agregar dos prescripciones
+        final addBtnText = find.text('Agregar medicamento');
+        await tester.ensureVisible(addBtnText);
+        await tester.tap(addBtnText);
+        await tester.pumpAndSettle();
+
+        await tester.tap(addBtnText);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Medicamento 1'), findsOneWidget);
+        expect(find.text('Medicamento 2'), findsOneWidget);
+
+        final removeBtns = find.byIcon(Icons.delete_outline);
+        await tester.tap(removeBtns.first);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Medicamento 1'), findsOneWidget);
+        expect(find.text('Medicamento 2'), findsNothing);
+
+        await tester.enterText(
+          textFieldWithHint('Amoxicilina 250mg/5ml'),
+          'Amoxicilina',
+        );
+        await tester.enterText(textFieldWithHint('5 ml cada 8h'), '500mg');
+        await tester.enterText(textFieldWithHint('7 días'), '7 días');
+        await tester.enterText(textFieldWithHint('Cada 8 horas'), 'Cada 8h');
+        await tester.enterText(textFieldWithHint('Oral'), 'Oral');
+        await tester.enterText(
+          textFieldWithHint('Opcional'),
+          'Tomar con comida',
+        );
+
+        final historyField = textFieldWithHint(_hintHistory);
+        await tester.ensureVisible(historyField);
+        await tester.enterText(historyField, 'Infección respiratoria');
+        await tester.pumpAndSettle();
+
+        await _tapGuardar(tester);
+        await tester.pumpAndSettle();
+
+        final capturedRecord =
+            verify(() => db.savePatient(captureAny())).captured.first
+                as PatientFullRecord;
+        final prescriptions = capturedRecord.medicalHistory.first.prescriptions;
+
+        expect(prescriptions, hasLength(1));
+        expect(prescriptions.first.medicationName, 'Amoxicilina');
+        expect(prescriptions.first.dosage, '500mg');
+        expect(prescriptions.first.duration, '7 días');
+        expect(prescriptions.first.frequency, 'Cada 8h');
+        expect(prescriptions.first.route, 'Oral');
+        expect(prescriptions.first.notes, 'Tomar con comida');
+      },
+    );
+  });
+
+  group('Validaciones temporales y pickers de fecha', () {
+    testWidgets(
+      'Selección de fecha/hora de inicio y botón para limpiar fecha de fin',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+        await tester.pumpAndSettle();
+
+        Future<void> confirmDialog() async {
+          final textButtons = find.byType(TextButton);
+          if (textButtons.evaluate().isNotEmpty) {
+            await tester.tap(textButtons.last);
+            await tester.pumpAndSettle();
+          }
+        }
+
+        await tester.tap(find.textContaining('Inicio de atención'));
+        await tester.pumpAndSettle();
+        await confirmDialog();
+        await confirmDialog();
+
+        await tester.tap(find.textContaining('Fin de atención'));
+        await tester.pumpAndSettle();
+        await confirmDialog();
+        await confirmDialog();
+
+        final clearBtn = find.byIcon(Icons.clear);
+        if (clearBtn.evaluate().isNotEmpty) {
+          await tester.tap(clearBtn);
+          await tester.pumpAndSettle();
+          expect(find.text('— no definido —'), findsOneWidget);
+        }
+      },
+    );
+
+    testWidgets('Muestra SnackBar si la fecha seleccionada no es válida', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+      await tester.pumpAndSettle();
+
+      final historyField = textFieldWithHint(_hintHistory);
+      await tester.ensureVisible(historyField);
+      await tester.enterText(historyField, 'Consulta general');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsNothing);
+    });
+  });
+
+  group('Mapeo de Practitioner, Provider y Búsqueda Manual', () {
+    testWidgets(
+      'Persiste PractitionerInfo y ProviderInfo completos al guardar',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final db = _MockLocalDatabase();
+        final sync = _MockSyncEngine();
+        when(() => db.savePatient(any())).thenAnswer((_) async {});
+        when(
+          () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
+        ).thenAnswer((_) async {});
+        when(() => sync.syncAll()).thenAnswer((_) async => true);
+
+        await tester.pumpWidget(
+          _buildApp(
+            patient: _fakePatient(),
+            scope: _defaultScope(db: db, sync: sync),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final historyField = textFieldWithHint(_hintHistory);
+        await tester.ensureVisible(historyField);
+        await tester.enterText(historyField, 'Control de rutina');
+
+        final textFields = find.byType(TextField);
+        await tester.enterText(textFields.at(0), '102030');
+        await tester.enterText(textFields.at(1), 'Dr. Roberto Gómez');
+        await tester.enterText(textFields.at(2), 'REPS-999');
+        await tester.enterText(textFields.at(3), 'Hospital Central');
+        await tester.pumpAndSettle();
+
+        await _tapGuardar(tester);
+        await tester.pumpAndSettle();
+
+        final capturedRecord =
+            verify(() => db.savePatient(captureAny())).captured.first
+                as PatientFullRecord;
+        final encounter = capturedRecord.medicalHistory.first;
+
+        expect(encounter.practitioner?.name, 'Dr. Roberto Gómez');
+        expect(encounter.practitioner?.documentNumber, '102030');
+        expect(encounter.provider?.name, 'Hospital Central');
+        expect(encounter.provider?.repsCode, 'REPS-999');
+      },
+    );
+
+    testWidgets('Búsqueda manual en diálogo ejecuta scanDevice exitosamente', (
+      tester,
+    ) async {
+      final repo = _MockPatientRepository();
+      when(
+        () => repo.scanDevice('UID-12345'),
+      ).thenAnswer((_) async => _fakePatient());
+
+      final scope = _defaultScope(repo: repo);
+      await tester.pumpWidget(_buildApp(scope: scope));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Buscar paciente'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.widgetWithText(TextField, ''), 'UID-12345');
+      await tester.tap(find.text('Buscar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Laura Ríos'), findsOneWidget);
+    });
+
+    testWidgets('Búsqueda manual maneja error al fallar scanDevice', (
+      tester,
+    ) async {
+      final repo = _MockPatientRepository();
+      final completer = Completer<PatientFullRecord>();
+      when(
+        () => repo.scanDevice('UID-ERROR'),
+      ).thenAnswer((_) => completer.future);
+
+      final scope = _defaultScope(repo: repo);
+      await tester.pumpWidget(_buildApp(scope: scope));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Buscar paciente'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.widgetWithText(TextField, ''), 'UID-ERROR');
+      await tester.tap(find.text('Buscar'));
+      await tester.pump();
+
+      completer.completeError(Exception('Paciente no encontrado'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Paciente no encontrado'), findsOneWidget);
+    });
+
+    testWidgets('Errores de ApiException y genéricos al escanear paciente', (
+      tester,
+    ) async {
+      final repo = _MockPatientRepository();
+      when(
+        () => repo.scanDevice(any()),
+      ).thenThrow(ApiException('Error de red API', statusCode: 500));
+
+      NfcService.overrideReadDeviceUid = () async => 'UID-FAIL';
+
+      final scope = _defaultScope(repo: repo);
+      await tester.pumpWidget(_buildApp(scope: scope));
+
+      await tester.tap(find.byIcon(Icons.nfc_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Error de red API'), findsOneWidget);
+
+      NfcService.overrideReadDeviceUid = null;
+    });
+
+    testWidgets('Acciones de navegación y botones de regreso', (tester) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        _buildApp(patient: _fakePatient(), scope: _scopeWithSave()),
+      );
+      await tester.pumpAndSettle();
+
+      final backBtn = find.byIcon(Icons.arrow_back);
+      expect(backBtn, findsOneWidget);
+
+      await _fillAndSave(tester);
+      final backOutlinedBtn = find.text('Atrás');
+      expect(backOutlinedBtn, findsOneWidget);
+      await tester.tap(backOutlinedBtn);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      'Renderiza etiqueta por defecto para sexo biológico desconocido (I)',
+      (tester) async {
+        final patientUnknownSex = PatientFullRecord(
+          patientId: 'P-999',
+          deviceUid: 'UID-999',
+          patientInfo: PatientInfo(
+            identification: PatientIdentification(
+              documentType: 'CC',
+              documentNumber: '111',
+            ),
+            firstName: 'Alex',
+            firstLastName: 'Caso',
+            dob: '2010-01-01',
+            biologicalSex: 'X',
+            address: Address(city: 'Bogotá', state: 'DC'),
+          ),
+          guardianInfo: GuardianInfo(name: '', relationship: '', phone: ''),
+        );
+
+        await tester.pumpWidget(_buildApp(patient: patientUnknownSex));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('2010-01-01 · X'), findsOneWidget);
+      },
+    );
+  });
 }

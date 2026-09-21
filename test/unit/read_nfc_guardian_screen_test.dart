@@ -203,4 +203,34 @@ void main() {
       },
     );
   });
+
+  group('ReadNfcGuardianScreen — Additional Unit & Helper Coverage', () {
+    test(
+      'practitionerName handles empty practitioner name with fallback to physician',
+      () {
+        final item = MedicalHistoryItem(
+          startDateTime: '2024-01-01T08:00:00',
+          physician: 'Dr. AltPhysician',
+          practitioner: PractitionerInfo(
+            documentType: 'CC',
+            documentNumber: '111',
+            name: '',
+          ),
+        );
+        expect(practitionerName(item), 'Dr. AltPhysician');
+      },
+    );
+
+    test(
+      'provName handles provider with empty name returning empty string',
+      () {
+        final item = MedicalHistoryItem(
+          startDateTime: '2024-01-01T08:00:00',
+          location: 'Clínica Fallback',
+          provider: ProviderInfo(repsCode: 'R1', name: ''),
+        );
+        expect(provName(item), '');
+      },
+    );
+  });
 }

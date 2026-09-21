@@ -279,7 +279,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
                     ? 'Su sesión expiró. Inicie sesión de nuevo para leer '
                           'dispositivos NFC.'
                     : 'Your session expired. Log in again to read NFC devices.')
-              : (isEs ? 'No hay llave NFC disponible.' : 'No NFC key available.'),
+              : (isEs
+                    ? 'No hay llave NFC disponible.'
+                    : 'No NFC key available.'),
         );
       }
       final chip = await payload.NfcPayloadService(
