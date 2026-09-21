@@ -57,8 +57,7 @@ class FakeAuthRepository implements AuthRepository {
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
-  ValueListenable<bool> get sessionWindowClosed =>
-      ValueNotifier<bool>(false);
+  ValueListenable<bool> get sessionWindowClosed => ValueNotifier<bool>(false);
 
   @override
   ValueNotifier<UserSession?> get sessionNotifier =>
@@ -277,5 +276,14 @@ void main() {
         expect(clinicalRoles, containsAll([UserRole.doctor, UserRole.nurse]));
       },
     );
+  });
+
+  // ── Group 6: _greeting hora nocturna y límites ─────────────────────────────
+  group('HomeScreen._greeting — cobertura nocturna', () {
+    test('devuelve evening para horas nocturnas (18 a 23)', () {
+      expect(_greetingForHour(18), equals('evening'));
+      expect(_greetingForHour(20), equals('evening'));
+      expect(_greetingForHour(23), equals('evening'));
+    });
   });
 }
