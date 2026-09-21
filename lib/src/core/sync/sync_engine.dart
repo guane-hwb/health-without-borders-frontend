@@ -339,8 +339,8 @@ class SyncEngine {
               e.statusCode! >= 500 &&
               e.statusCode! <= 599);
 
-      final String safeMsg = (e.statusCode == 409)
-          ? 'Registro duplicado (409): El chip NFC ya pertenece a otro paciente'
+      final String safeMsg = (e.statusCode == 409 && e.message.isNotEmpty)
+          ? e.message
           : (e.statusCode == 422)
           ? 'Error de validación (422): Campos incompatibles con el backend'
           : e.message;
