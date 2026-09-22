@@ -453,4 +453,155 @@ void main() {
       },
     );
   });
+
+  group('AddFamilyHistorySheet – Unsaved Changes Dialog & Close Handlers', () {
+    testWidgets(
+      'closes modal directly without alert when tapping close button if unmutated',
+      (tester) async {
+        await tester.pumpWidget(
+          _LocaleWrapper(
+            locale: 'es',
+            child: MaterialApp(
+              home: Scaffold(
+                body: Builder(
+                  builder: (ctx) => ElevatedButton(
+                    onPressed: () => showModalBottomSheet<void>(
+                      context: ctx,
+                      builder: (_) => AddFamilyHistorySheet(onAdd: (_) {}),
+                    ),
+                    child: const Text('Open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddFamilyHistorySheet), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'shows warning dialog when tapping close button with unsaved text',
+      (tester) async {
+        await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
+
+        await tester.enterText(find.byType(TextField), 'Asma');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'shows warning dialog when relationship chip changes even if text is empty',
+      (tester) async {
+        await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
+
+        await tester.tap(find.text(sEs.relSiblings));
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'cancels closing when clicking Cancel in unsaved changes dialog',
+      (tester) async {
+        await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
+
+        await tester.enterText(find.byType(TextField), 'Diabetes');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddFamilyHistorySheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'confirms exit and closes sheet when clicking Exit in unsaved changes dialog',
+      (tester) async {
+        await tester.pumpWidget(
+          _LocaleWrapper(
+            locale: 'es',
+            child: MaterialApp(
+              home: Scaffold(
+                body: Builder(
+                  builder: (ctx) => ElevatedButton(
+                    onPressed: () => showModalBottomSheet<void>(
+                      context: ctx,
+                      builder: (_) => AddFamilyHistorySheet(onAdd: (_) {}),
+                    ),
+                    child: const Text('Open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'Diabetes');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Salir'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddFamilyHistorySheet), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'triggers PopScope handler on system back gesture when changes exist',
+      (tester) async {
+        await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
+
+        await tester.enterText(find.byType(TextField), 'Hipertensión');
+        await tester.pump();
+
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        popScope.onPopInvokedWithResult?.call(false, null);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'shows mandatory error message in Spanish when submitted empty',
+      (tester) async {
+        await tester.pumpWidget(_buildSheet(onAdd: (_) {}, locale: 'es'));
+
+        await tester.tap(find.byType(ElevatedButton));
+        await tester.pumpAndSettle();
+
+        expect(find.text('La condición médica es obligatoria'), findsOneWidget);
+      },
+    );
+  });
 }

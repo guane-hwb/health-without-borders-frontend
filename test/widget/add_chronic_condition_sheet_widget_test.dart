@@ -74,8 +74,11 @@ Widget _wrap(Widget child, {String locale = 'en'}) {
   );
 }
 
-Widget _buildSubject({required ValueChanged<ChronicConditionItem> onAdd}) {
-  return _wrap(AddChronicConditionSheet(onAdd: onAdd));
+Widget _buildSubject({
+  required ValueChanged<ChronicConditionItem> onAdd,
+  String locale = 'en',
+}) {
+  return _wrap(AddChronicConditionSheet(onAdd: onAdd), locale: locale);
 }
 
 void main() {
@@ -322,6 +325,138 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(received?.chronicDescription, special);
+      },
+    );
+  });
+
+  group('AddChronicConditionSheet – Unsaved Changes Dialog & PopScope', () {
+    testWidgets(
+      'closes modal directly without alert when tapping close button if field is empty',
+      (tester) async {
+        await tester.pumpWidget(
+          _wrap(
+            Builder(
+              builder: (ctx) => Scaffold(
+                body: ElevatedButton(
+                  onPressed: () => showModalBottomSheet<void>(
+                    context: ctx,
+                    builder: (_) =>
+                        _wrap(AddChronicConditionSheet(onAdd: (_) {})),
+                  ),
+                  child: const Text('Abrir'),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Abrir'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddChronicConditionSheet), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'shows warning dialog when tapping close button with unsaved text',
+      (tester) async {
+        await tester.pumpWidget(_buildSubject(onAdd: (_) {}));
+
+        await tester.enterText(find.byType(TextField), 'Asma');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'cancels closing when clicking Cancel in unsaved changes dialog',
+      (tester) async {
+        await tester.pumpWidget(_buildSubject(onAdd: (_) {}));
+
+        await tester.enterText(find.byType(TextField), 'Diabetes');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddChronicConditionSheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'confirms exit and closes sheet when clicking Exit in unsaved changes dialog',
+      (tester) async {
+        await tester.pumpWidget(
+          _wrap(
+            Builder(
+              builder: (ctx) => Scaffold(
+                body: ElevatedButton(
+                  onPressed: () => showModalBottomSheet<void>(
+                    context: ctx,
+                    builder: (_) =>
+                        _wrap(AddChronicConditionSheet(onAdd: (_) {})),
+                  ),
+                  child: const Text('Abrir'),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Abrir'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'Diabetes');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Exit'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddChronicConditionSheet), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'triggers PopScope handler on system back gesture when changes exist',
+      (tester) async {
+        await tester.pumpWidget(_buildSubject(onAdd: (_) {}));
+
+        await tester.enterText(find.byType(TextField), 'Hipertensión');
+        await tester.pump();
+
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        popScope.onPopInvokedWithResult?.call(false, null);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'shows mandatory error message in Spanish when submitted empty',
+      (tester) async {
+        await tester.pumpWidget(_buildSubject(onAdd: (_) {}, locale: 'es'));
+
+        await tester.tap(find.byType(ElevatedButton));
+        await tester.pumpAndSettle();
+
+        expect(find.text('La condición médica es obligatoria'), findsOneWidget);
       },
     );
   });

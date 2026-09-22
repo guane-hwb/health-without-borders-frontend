@@ -668,4 +668,130 @@ void main() {
       );
     },
   );
+
+  // =========================================================================
+  // ADDITIONAL TESTS FOR 100% CODE COVERAGE IN EDIT_CHRONIC_PERSONAL_SHEET.DART
+  // =========================================================================
+
+  group(
+    'EditChronicPersonalSheet – Unsaved Changes Dialog & PopScope Handlers',
+    () {
+      testWidgets(
+        'shows warning dialog on close when text is modified from initial',
+        (tester) async {
+          await tester.pumpWidget(
+            _wrap(title: 'T', currentValue: 'Valor inicial', onConfirm: (_) {}),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.enterText(
+            find.byType(TextField).first,
+            'Valor modificado',
+          );
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(AlertDialog), findsOneWidget);
+        },
+      );
+
+      testWidgets('cancels closing when clicking Cancel in unsaved dialog', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _wrap(title: 'T', currentValue: 'Valor inicial', onConfirm: (_) {}),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byType(TextField).first,
+          'Valor modificado',
+        );
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(EditChronicPersonalSheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      });
+
+      testWidgets(
+        'confirms exit and closes sheet when clicking Exit in unsaved dialog',
+        (tester) async {
+          await tester.pumpWidget(
+            _LocaleWrapper(
+              locale: 'es',
+              child: MaterialApp(
+                home: Scaffold(
+                  body: Builder(
+                    builder: (ctx) => ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => _LocaleWrapper(
+                            locale: 'es',
+                            child: Scaffold(
+                              body: EditChronicPersonalSheet(
+                                title: 'T',
+                                currentValue: 'Valor inicial',
+                                onConfirm: (_) {},
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      child: const Text('Push'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          await tester.tap(find.text('Push'));
+          await tester.pumpAndSettle();
+
+          await tester.enterText(
+            find.byType(TextField).first,
+            'Valor modificado',
+          );
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.text('Salir'));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(EditChronicPersonalSheet), findsNothing);
+        },
+      );
+
+      testWidgets(
+        'triggers PopScope handler on system back gesture when changes exist',
+        (tester) async {
+          await tester.pumpWidget(
+            _wrap(title: 'T', currentValue: null, onConfirm: (_) {}),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.enterText(find.byType(TextField).first, 'Nuevo texto');
+          await tester.pump();
+
+          final popScope = tester.widget<PopScope>(find.byType(PopScope));
+          popScope.onPopInvokedWithResult?.call(false, null);
+          await tester.pumpAndSettle();
+
+          expect(find.byType(AlertDialog), findsOneWidget);
+        },
+      );
+    },
+  );
 }

@@ -514,4 +514,156 @@ void main() {
       },
     );
   });
+  group(
+    'EditVitalSignsSheet — Unsaved Changes Dialog, PopScope & Range Validations',
+    () {
+      testWidgets(
+        'shows error banner when entered weight is out of allowed range',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 1400);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
+
+          await tester.pumpWidget(_wrap(locale: 'es'));
+
+          final weightField = find.byType(TextField).first;
+          await tester.enterText(weightField, '500.0'); // Exceeds 350 kg
+          await tester.pump();
+
+          await tester.tap(find.byType(ElevatedButton).first);
+          await tester.pumpAndSettle();
+
+          expect(find.byIcon(Icons.error_outline), findsOneWidget);
+          expect(
+            find.text('El peso debe estar entre 0.2 kg y 350 kg'),
+            findsOneWidget,
+          );
+        },
+      );
+
+      testWidgets(
+        'shows error banner when entered height is out of allowed range',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 1400);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
+
+          await tester.pumpWidget(_wrap(locale: 'es'));
+
+          final heightField = find.byType(TextField).at(1);
+          await tester.enterText(heightField, '300'); // Exceeds 250 cm
+          await tester.pump();
+
+          await tester.tap(find.byType(ElevatedButton).first);
+          await tester.pumpAndSettle();
+
+          expect(find.byIcon(Icons.error_outline), findsOneWidget);
+          expect(
+            find.text('La altura debe estar entre 20 cm y 250 cm'),
+            findsOneWidget,
+          );
+        },
+      );
+
+      testWidgets('shows warning dialog on close when weight is modified', (
+        tester,
+      ) async {
+        await tester.pumpWidget(_wrap(weight: 70.0));
+
+        final weightField = find.byType(TextField).first;
+        await tester.enterText(weightField, '75.0');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      });
+
+      testWidgets('cancels closing when clicking Cancel in unsaved dialog', (
+        tester,
+      ) async {
+        await tester.pumpWidget(_wrap(weight: 70.0));
+
+        final weightField = find.byType(TextField).first;
+        await tester.enterText(weightField, '75.0');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(EditVitalSignsSheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      });
+
+      testWidgets(
+        'confirms exit and closes sheet when clicking Exit in unsaved dialog',
+        (tester) async {
+          await tester.pumpWidget(
+            AppLocale(
+              locale: 'es',
+              setLocale: (_) {},
+              child: MaterialApp(
+                home: Scaffold(
+                  body: Builder(
+                    builder: (ctx) => ElevatedButton(
+                      onPressed: () => showModalBottomSheet<void>(
+                        context: ctx,
+                        builder: (_) => EditVitalSignsSheet(
+                          weight: 70.0,
+                          onConfirm:
+                              ({
+                                String? bloodType,
+                                double? weight,
+                                double? height,
+                              }) {},
+                        ),
+                      ),
+                      child: const Text('Abrir'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          await tester.tap(find.text('Abrir'));
+          await tester.pumpAndSettle();
+
+          final weightField = find.byType(TextField).first;
+          await tester.enterText(weightField, '75.0');
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.text('Salir'));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(EditVitalSignsSheet), findsNothing);
+        },
+      );
+
+      testWidgets('triggers PopScope unsaved handler on back gesture', (
+        tester,
+      ) async {
+        await tester.pumpWidget(_wrap(weight: 70.0));
+
+        final weightField = find.byType(TextField).first;
+        await tester.enterText(weightField, '75.0');
+        await tester.pump();
+
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        popScope.onPopInvokedWithResult?.call(false, null);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      });
+    },
+  );
 }

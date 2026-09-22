@@ -591,4 +591,113 @@ void main() {
       },
     );
   });
+
+  // =========================================================================
+  // ADDITIONAL TESTS FOR 100% CODE COVERAGE IN ADD_MEDICATION_SHEET.DART
+  // =========================================================================
+
+  group(
+    'AddMedicationSheet – Unsaved Changes Dialog & Navigation Handlers',
+    () {
+      testWidgets(
+        'shows warning dialog when tapping close icon with unsaved dosage',
+        (tester) async {
+          await tester.pumpWidget(_buildViaBottomSheet(onAdd: (_) {}));
+          await _openSheet(tester);
+
+          await tester.ensureVisible(find.text(sEs.dosageHint));
+          await tester.enterText(find.byType(TextField).at(1), '1 cada 8h');
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(AlertDialog), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'shows warning dialog when status chip is changed from default active',
+        (tester) async {
+          await tester.pumpWidget(_buildViaBottomSheet(onAdd: (_) {}));
+          await _openSheet(tester);
+
+          await tester.ensureVisible(find.text(sEs.medStatusCompleted));
+          await tester.tap(find.text(sEs.medStatusCompleted));
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(AlertDialog), findsOneWidget);
+        },
+      );
+
+      testWidgets('cancels dismissal when clicking Cancel in unsaved dialog', (
+        tester,
+      ) async {
+        await tester.pumpWidget(_buildViaBottomSheet(onAdd: (_) {}));
+        await _openSheet(tester);
+
+        await tester.enterText(find.byType(TextField).first, 'Omeprazol');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddMedicationSheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      });
+
+      testWidgets('dismisses sheet when clicking Exit in unsaved dialog', (
+        tester,
+      ) async {
+        await tester.pumpWidget(_buildViaBottomSheet(onAdd: (_) {}));
+        await _openSheet(tester);
+
+        await tester.enterText(find.byType(TextField).first, 'Omeprazol');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Salir'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddMedicationSheet), findsNothing);
+      });
+
+      testWidgets('triggers PopScope unsaved handler on back gesture', (
+        tester,
+      ) async {
+        await tester.pumpWidget(_buildDirect(onAdd: (_) {}));
+
+        await tester.enterText(find.byType(TextField).first, 'Amoxicilina');
+        await tester.pump();
+
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        popScope.onPopInvokedWithResult?.call(false, null);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      });
+
+      testWidgets(
+        'displays mandatory error text in Spanish when submitted empty',
+        (tester) async {
+          await tester.pumpWidget(_buildDirect(onAdd: (_) {}, locale: 'es'));
+
+          await tester.tap(_confirmButton());
+          await tester.pumpAndSettle();
+
+          expect(find.text('El medicamento es obligatorio'), findsOneWidget);
+        },
+      );
+    },
+  );
 }
