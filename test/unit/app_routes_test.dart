@@ -446,4 +446,58 @@ void main() {
       },
     );
   });
+
+  group('AppRoutes /nfc/read — permisos por rol', () {
+    final deniedRoles = UserRole.values
+        .where((UserRole r) => !r.canReadPatients && !r.canScanNfc)
+        .toList();
+    final scanOnlyRoles = UserRole.values
+        .where((UserRole r) => !r.canReadPatients && r.canScanNfc)
+        .toList();
+
+    test('existe al menos un rol sin permiso de lectura ni escaneo NFC', () {
+      expect(deniedRoles, isNotEmpty);
+    });
+
+    for (final UserRole role in deniedRoles) {
+      testWidgets(
+        'Muestra Acceso Restringido en /nfc/read para el rol ${role.name} '
+        '(sin canReadPatients ni canScanNfc)',
+        (tester) async {
+          final session = _createSession(role);
+          when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+          await tester.pumpWidget(
+            buildTestableApp(
+              authRepository: mockAuthRepository,
+              initialRoute: AppRoutes.readNfc,
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          expect(find.text('Acceso Restringido'), findsOneWidget);
+          expect(find.byType(ReadNfcScreen), findsNothing);
+        },
+      );
+    }
+
+    for (final UserRole role in scanOnlyRoles) {
+      testWidgets('Permite /nfc/read al rol ${role.name} por canScanNfc', (
+        tester,
+      ) async {
+        final session = _createSession(role);
+        when(() => mockAuthRepository.currentUser).thenReturn(session);
+
+        await tester.pumpWidget(
+          buildTestableApp(
+            authRepository: mockAuthRepository,
+            initialRoute: AppRoutes.readNfc,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ReadNfcScreen), findsOneWidget);
+      });
+    }
+  });
 }

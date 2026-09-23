@@ -398,7 +398,9 @@ void main() {
     test('usa el MIME del guardián, no el de triage', () async {
       final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
       final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
-      await service.writeGuardianPayload(<String, dynamic>{'patientInfo': <String, dynamic>{}});
+      await service.writeGuardianPayload(<String, dynamic>{
+        'patientInfo': <String, dynamic>{},
+      });
       final record = ndef.written!.records.single;
       expect(String.fromCharCodes(record.type), kHwbGuardianMimeType);
     });
@@ -406,7 +408,9 @@ void main() {
     test('reporta capacidad y utilización del chip', () async {
       final ndef = _FakeNdef(maxSize: 888); // NTAG216
       final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
-      final result = await service.writeGuardianPayload(<String, dynamic>{'a': 1});
+      final result = await service.writeGuardianPayload(<String, dynamic>{
+        'a': 1,
+      });
       expect(result.chipCapacity, 888);
       expect(result.bytesWritten, 3);
       expect(result.utilizationPercent, lessThan(10));
@@ -576,9 +580,7 @@ void main() {
   group('readTriagePayload', () {
     test('devuelve el triage decodificado', () async {
       final payload = Uint8List.fromList([1, 2, 3]);
-      when(
-        () => codec.decodeDetailed(any()),
-      ).thenAnswer(
+      when(() => codec.decodeDetailed(any())).thenAnswer(
         (_) async => const NfcDecodeResult(
           data: <String, dynamic>{'fn': 'Martha'},
           keyVersion: 0,
@@ -688,9 +690,7 @@ void main() {
 
     test('guardian cuando el chip trae el registro del guardián', () async {
       final payload = Uint8List.fromList([5, 5]);
-      when(
-        () => codec.decodeDetailed(any()),
-      ).thenAnswer(
+      when(() => codec.decodeDetailed(any())).thenAnswer(
         (_) async => const NfcDecodeResult(
           data: <String, dynamic>{'patientId': 'x'},
           keyVersion: 0,
@@ -707,9 +707,7 @@ void main() {
     });
 
     test('triage cuando el chip solo trae el registro de triage', () async {
-      when(
-        () => codec.decodeDetailed(any()),
-      ).thenAnswer(
+      when(() => codec.decodeDetailed(any())).thenAnswer(
         (_) async => const NfcDecodeResult(
           data: <String, dynamic>{'fn': 'Martha'},
           keyVersion: 0,
@@ -731,9 +729,7 @@ void main() {
     test('prefiere el registro del guardián si el chip trae los dos', () async {
       // El del guardián es un superconjunto del de triage.
       final guardianPayload = Uint8List.fromList([9]);
-      when(
-        () => codec.decodeDetailed(any()),
-      ).thenAnswer(
+      when(() => codec.decodeDetailed(any())).thenAnswer(
         (_) async => const NfcDecodeResult(
           data: <String, dynamic>{'patientId': 'x'},
           keyVersion: 0,
@@ -831,6 +827,28 @@ void main() {
       // nfc_payload_service.dart: dos clases distintas con el mismo nombre que
       // ningún archivo podía importar a la vez.
       expect(NfcNotAvailableException().toString(), isNotEmpty);
+    });
+  });
+
+  group('constructor sin tagSource', () {
+    test('usa el NfcSessionManager singleton como fuente de tags', () {
+      final service = NfcPayloadService(codec: codec);
+
+      expect(service.codec, same(codec));
+      expect(NfcSessionManager.instance, isA<NfcTagSource>());
+    });
+
+    test('un tagSource explícito sigue teniendo prioridad', () async {
+      final tag = _blankChip();
+      final service = NfcPayloadService(
+        codec: codec,
+        tagSource: _FakeTagSource.tag(tag),
+      );
+
+      final result = await service.readHwbChip();
+
+      expect(result.uid, kExpectedUid);
+      expect(result.kind, HwbChipKind.none);
     });
   });
 }

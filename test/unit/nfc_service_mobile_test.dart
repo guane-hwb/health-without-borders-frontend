@@ -388,4 +388,50 @@ void main() {
       },
     );
   });
+
+  group('NfcService.resetForTest', () {
+    test(
+      'restaura la probe real, que sin plugin falla y se reporta como no disponible',
+      () async {
+        NfcService.availabilityProbe = () async => NfcAvailability.enabled;
+        expect(await NfcService.isAvailable, isTrue);
+
+        NfcService.resetForTest();
+
+        expect(await NfcService.isAvailable, isFalse);
+      },
+    );
+
+    test('limpia overrideReadDeviceUid', () {
+      NfcService.overrideReadDeviceUid = () async => '04:A1:B2:C3';
+
+      NfcService.resetForTest();
+
+      expect(NfcService.overrideReadDeviceUid, isNull);
+    });
+
+    test('restaura el tagSource por defecto y descarta el inyectado', () {
+      final fake = _FakeTagSource.tag(const HwbTag(uid: '04:AA'));
+      NfcService.tagSource = fake;
+
+      NfcService.resetForTest();
+
+      expect(NfcService.tagSource, isNot(same(fake)));
+      expect(NfcService.tagSource, isA<NfcTagSource>());
+    });
+
+    test(
+      'tras resetForTest la lectura ya no usa el override anterior',
+      () async {
+        NfcService.overrideReadDeviceUid = () async => '99:99';
+        NfcService.resetForTest();
+
+        final source = _FakeTagSource.tag(const HwbTag(uid: '04:BB'));
+        NfcService.tagSource = source;
+
+        expect(await NfcService.readDeviceUid(), '04:BB');
+        expect(source.calls, 1);
+      },
+    );
+  });
 }

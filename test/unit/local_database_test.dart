@@ -2504,4 +2504,293 @@ void main() {
       await expectLater(dbWeb.destroyEncryptionKey(), completes);
     });
   });
+
+  group('Cobertura adicional — LocalDatabase', () {
+    LocalDatabase buildWebDb(
+      Map<String, String> backend, {
+      Future<void> Function(String key, String value)? onSet,
+    }) {
+      return LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        forceWeb: true,
+        webGet: (String key) async => backend[key],
+        webSet: (String key, String value) async {
+          backend[key] = value;
+          if (onSet != null) await onSet(key, value);
+        },
+        webRemove: (String key) async => backend.remove(key),
+        webClearAll: () async => backend.clear(),
+        webList: (String prefix) async => backend.entries
+            .where((MapEntry<String, String> e) => e.key.startsWith(prefix))
+            .toList(growable: false),
+        webDeleteByPrefix: (String prefix) async =>
+            backend.removeWhere((String k, String _) => k.startsWith(prefix)),
+      );
+    }
+
+    // ── _withWebLock: reentrada real ────────────────────────────────────────
+
+    test('una llamada anidada desde dentro del lock reutiliza la zona y no se '
+        'bloquea', () async {
+      final backend = <String, String>{};
+      late final LocalDatabase db;
+      var reentered = false;
+      db = buildWebDb(
+        backend,
+        onSet: (String key, String _) async {
+          if (key.startsWith('hwb_web_patient::') && !reentered) {
+            reentered = true;
+            await db.deleteRecord('p-otro');
+          }
+        },
+      );
+
+      await db
+          .savePatient(_buildRecord(patientId: 'p-nest'), ownerUserId: 'u1')
+          .timeout(const Duration(seconds: 5));
+
+      expect(reentered, isTrue);
+      final all = await db.getAllRecords();
+      expect(all.map((LocalPatientEntry e) => e.patientId), contains('p-nest'));
+    });
+
+    // ── _decryptAuditPayload: rama de error ─────────────────────────────────
+
+    test('lanza AuditDecryptionException si el ciphertext de auditoría tiene '
+        'longitud válida pero no autentica', () async {
+      final localDb = LocalDatabase.instance;
+      await localDb.clearAll();
+
+      final raw = await rawConnection();
+      final unauthenticated = base64Encode(Uint8List(40));
+
+      await raw.insert('emergency_access_log', <String, Object?>{
+        'patient_uid': '04:BAD_MAC',
+        'patient_name': unauthenticated,
+        'reason': 'guardian_absent_offline',
+        'occurred_at': DateTime.now().toIso8601String(),
+        'is_synced': 0,
+      });
+
+      await expectLater(
+        localDb.pendingEmergencyAccessLogs(),
+        throwsA(isA<AuditDecryptionException>()),
+      );
+    });
+
+    test('lanza AuditDecryptionException si el payload de auditoría no es '
+        'base64 válido', () async {
+      final localDb = LocalDatabase.instance;
+      await localDb.clearAll();
+
+      final raw = await rawConnection();
+
+      await raw.insert('emergency_access_log', <String, Object?>{
+        'patient_uid': '04:BAD_B64',
+        'user_id': 'ey!!invalido==',
+        'reason': 'guardian_absent_offline',
+        'occurred_at': DateTime.now().toIso8601String(),
+        'is_synced': 0,
+      });
+
+      await expectLater(
+        localDb.pendingEmergencyAccessLogs(),
+        throwsA(isA<AuditDecryptionException>()),
+      );
+    });
+
+    // ── pendingEmergencyAccessLogs: filtro por ownerUserId ──────────────────
+
+    test('web: filtra los logs pendientes por ownerUserId', () async {
+      final db = buildWebDb(<String, String>{});
+      await db.logEmergencyAccess(
+        patientUid: '04:A',
+        patientName: 'Ana Pérez',
+        userId: 'doc-1',
+        ownerUserId: 'owner-A',
+      );
+      await db.logEmergencyAccess(
+        patientUid: '04:B',
+        patientName: 'Beto Ruiz',
+        userId: 'doc-2',
+        ownerUserId: 'owner-B',
+      );
+      await db.logEmergencyAccess(patientUid: '04:C');
+
+      final all = await db.pendingEmergencyAccessLogs();
+      expect(
+        all.map((Map<String, Object?> r) => r['patient_uid']),
+        unorderedEquals(<String>['04:A', '04:B', '04:C']),
+      );
+
+      final mine = await db.pendingEmergencyAccessLogs(ownerUserId: 'owner-A');
+      expect(mine, hasLength(1));
+      expect(mine.single['patient_uid'], equals('04:A'));
+      expect(mine.single['owner_user_id'], equals('owner-A'));
+
+      final none = await db.pendingEmergencyAccessLogs(
+        ownerUserId: 'owner-inexistente',
+      );
+      expect(none, isEmpty);
+    });
+
+    test(
+      'web: el filtro por owner excluye los logs ya sincronizados',
+      () async {
+        final db = buildWebDb(<String, String>{});
+        await db.logEmergencyAccess(
+          patientUid: '04:S1',
+          ownerUserId: 'owner-A',
+        );
+        await db.logEmergencyAccess(
+          patientUid: '04:S2',
+          ownerUserId: 'owner-A',
+        );
+
+        final pending = await db.pendingEmergencyAccessLogs(
+          ownerUserId: 'owner-A',
+        );
+        expect(pending, hasLength(2));
+
+        final syncedId = (pending.first['id'] as num).toInt();
+        await db.markEmergencyLogsSynced(<int>[syncedId]);
+
+        final remaining = await db.pendingEmergencyAccessLogs(
+          ownerUserId: 'owner-A',
+        );
+        expect(remaining, hasLength(1));
+        expect((remaining.single['id'] as num).toInt(), isNot(syncedId));
+      },
+    );
+
+    test('nativo: filtra los logs pendientes por ownerUserId', () async {
+      final db = LocalDatabase.instance;
+      await db.clearAll();
+
+      await db.logEmergencyAccess(
+        patientUid: '04:NA',
+        patientName: 'Ana Pérez',
+        userId: 'doc-1',
+        ownerUserId: 'owner-A',
+      );
+      await db.logEmergencyAccess(
+        patientUid: '04:NB',
+        patientName: 'Beto Ruiz',
+        userId: 'doc-2',
+        ownerUserId: 'owner-B',
+      );
+      await db.logEmergencyAccess(patientUid: '04:NC');
+
+      final all = await db.pendingEmergencyAccessLogs();
+      expect(
+        all.map((Map<String, Object?> r) => r['patient_uid']),
+        unorderedEquals(<String>['04:NA', '04:NB', '04:NC']),
+      );
+
+      final mine = await db.pendingEmergencyAccessLogs(ownerUserId: 'owner-A');
+      expect(mine, hasLength(1));
+      expect(mine.single['patient_uid'], equals('04:NA'));
+      expect(mine.single['owner_user_id'], equals('owner-A'));
+
+      final none = await db.pendingEmergencyAccessLogs(
+        ownerUserId: 'owner-inexistente',
+      );
+      expect(none, isEmpty);
+    });
+
+    test(
+      'nativo: el filtro por owner excluye los logs sincronizados',
+      () async {
+        final db = LocalDatabase.instance;
+        await db.clearAll();
+
+        await db.logEmergencyAccess(
+          patientUid: '04:NS1',
+          ownerUserId: 'owner-A',
+        );
+        await db.logEmergencyAccess(
+          patientUid: '04:NS2',
+          ownerUserId: 'owner-A',
+        );
+
+        final pending = await db.pendingEmergencyAccessLogs(
+          ownerUserId: 'owner-A',
+        );
+        expect(pending, hasLength(2));
+
+        final syncedId = (pending.first['id'] as num).toInt();
+        await db.markEmergencyLogsSynced(<int>[syncedId]);
+
+        final remaining = await db.pendingEmergencyAccessLogs(
+          ownerUserId: 'owner-A',
+        );
+        expect(remaining, hasLength(1));
+        expect((remaining.single['id'] as num).toInt(), isNot(syncedId));
+      },
+    );
+
+    // ── savePatient con isSynced: true ──────────────────────────────────────
+
+    test(
+      'web: savePatient con isSynced true fija is_synced y synced_at',
+      () async {
+        final db = buildWebDb(<String, String>{});
+
+        await db.savePatient(
+          _buildRecord(patientId: 'w-synced'),
+          ownerUserId: 'u1',
+          isSynced: true,
+        );
+
+        final entry = (await db.getAllRecords()).single;
+        expect(entry.isSynced, isTrue);
+        expect(entry.syncedAt, isNotNull);
+        expect(DateTime.tryParse(entry.syncedAt!), isNotNull);
+      },
+    );
+
+    test('web: savePatient sin isSynced deja synced_at en null', () async {
+      final db = buildWebDb(<String, String>{});
+
+      await db.savePatient(
+        _buildRecord(patientId: 'w-unsynced'),
+        ownerUserId: 'u1',
+      );
+
+      final entry = (await db.getAllRecords()).single;
+      expect(entry.isSynced, isFalse);
+      expect(entry.syncedAt, isNull);
+    });
+
+    test(
+      'nativo: savePatient con isSynced true fija is_synced y synced_at',
+      () async {
+        final db = LocalDatabase.instance;
+
+        await db.savePatient(
+          _buildRecord(patientId: 'n-synced'),
+          ownerUserId: 'u1',
+          isSynced: true,
+        );
+
+        final entry = (await db.getAllRecords()).single;
+        expect(entry.isSynced, isTrue);
+        expect(entry.syncedAt, isNotNull);
+        expect(DateTime.tryParse(entry.syncedAt!), isNotNull);
+      },
+    );
+
+    test('nativo: savePatient sin isSynced deja synced_at en null', () async {
+      final db = LocalDatabase.instance;
+
+      await db.savePatient(
+        _buildRecord(patientId: 'n-unsynced'),
+        ownerUserId: 'u1',
+      );
+
+      final entry = (await db.getAllRecords()).single;
+      expect(entry.isSynced, isFalse);
+      expect(entry.syncedAt, isNull);
+    });
+  });
 }
