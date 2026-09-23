@@ -61,16 +61,42 @@ void main() {
     });
 
     test('lanza ArgumentError en kReleaseMode con baseUrl http://', () {
-      // debugDefaultTargetPlatformOverride/kReleaseMode check:
-      // Ejecutamos en un zona/callback o simulando release mode override si fuera necesario,
-      // pero verificamos el check de baseUrl en la constante correspondiente.
       expect(
         () => ApiClient(
           baseUrl: 'http://api.example.com',
           client: MockClient((_) async => http.Response('', 200)),
         ),
-        // En tests unitarios kReleaseMode es false por defecto,
-        // así que el constructor pasa normalmente a menos que se fuerce.
+        returnsNormally,
+      );
+    });
+
+    test(
+      'lanza ArgumentError cuando se fuerza release mode con baseUrl http://',
+      () {
+        expect(
+          () => ApiClient(
+            baseUrl: 'http://api.example.com',
+            client: MockClient((_) async => http.Response('', 200)),
+            debugReleaseModeOverride: true,
+          ),
+          throwsA(
+            isA<ArgumentError>().having(
+              (e) => e.message,
+              'message',
+              contains('HTTPS'),
+            ),
+          ),
+        );
+      },
+    );
+
+    test('no lanza error en release mode forzado cuando baseUrl usa https', () {
+      expect(
+        () => ApiClient(
+          baseUrl: 'https://api.example.com',
+          client: MockClient((_) async => http.Response('', 200)),
+          debugReleaseModeOverride: true,
+        ),
         returnsNormally,
       );
     });

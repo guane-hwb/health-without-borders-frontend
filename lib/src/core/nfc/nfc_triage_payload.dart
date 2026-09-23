@@ -21,9 +21,7 @@ import '../../features/nfc/domain/patient_record.dart';
 ///
 /// This map is fed into [NfcPayloadCodec.encode] to produce the
 /// encrypted bytes written to the patient's NFC wristband.
-class NfcTriagePayload {
-  NfcTriagePayload._();
-
+abstract final class NfcTriagePayload {
   /// Builds the minimal triage map for the patient's NFC wristband.
   static Map<String, dynamic> buildPatientPayload({
     required PatientFullRecord record,

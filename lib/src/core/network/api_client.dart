@@ -22,9 +22,13 @@ abstract class TokenProvider {
 }
 
 class ApiClient {
-  ApiClient({required this.baseUrl, http.Client? client})
-    : _client = client ?? http.Client() {
-    if (kReleaseMode && baseUrl.startsWith('http://')) {
+  ApiClient({
+    required this.baseUrl,
+    http.Client? client,
+    @visibleForTesting bool? debugReleaseModeOverride,
+  }) : _client = client ?? http.Client() {
+    final bool isReleaseMode = debugReleaseModeOverride ?? kReleaseMode;
+    if (isReleaseMode && baseUrl.startsWith('http://')) {
       throw ArgumentError(
         'In release mode, baseUrl must use HTTPS to prevent cleartext traffic.',
       );

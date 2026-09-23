@@ -1331,4 +1331,133 @@ void main() {
       },
     );
   });
+
+  group('Retry-After acumulado dentro de un mismo lote', () {
+    void runTwoFailingEntries({
+      required Duration firstHint,
+      required Duration secondHint,
+      required Duration expectedRetryDelay,
+    }) {
+      fakeAsync((async) {
+        final shortEngine = SyncEngine(
+          patientRepository: patientRepo,
+          authRepository: authRepo,
+          localDatabase: localDb,
+          retryBackoff: const [Duration(milliseconds: 50)],
+        );
+
+        final entryA = buildEntry('A', record: MockPatientFullRecord());
+        final entryB = buildEntry('B', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entryA, entryB]);
+        when(
+          () => localDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 2);
+
+        final firstException = buildApiException(503, 'Servicio no disponible');
+        when(() => firstException.retryAfter).thenReturn(firstHint);
+        final secondException = buildApiException(429, 'Demasiadas peticiones');
+        when(() => secondException.retryAfter).thenReturn(secondHint);
+
+        var calls = 0;
+        when(() => patientRepo.syncPatient(any())).thenAnswer((_) async {
+          calls++;
+          throw calls.isOdd ? firstException : secondException;
+        });
+
+        shortEngine.syncAll();
+        async.elapse(Duration.zero);
+        expect(calls, 2);
+
+        clearInteractions(patientRepo);
+
+        async.elapse(expectedRetryDelay - const Duration(milliseconds: 100));
+        verifyNever(() => patientRepo.syncPatient(any()));
+
+        async.elapse(const Duration(milliseconds: 150));
+        verify(() => patientRepo.syncPatient(any())).called(2);
+
+        shortEngine.stop();
+      });
+    }
+
+    test(
+      'un segundo Retry-After mayor reemplaza al pendiente y fija el reintento',
+      () {
+        runTwoFailingEntries(
+          firstHint: const Duration(milliseconds: 300),
+          secondHint: const Duration(milliseconds: 500),
+          expectedRetryDelay: const Duration(milliseconds: 500),
+        );
+      },
+    );
+
+    test('un segundo Retry-After menor no reemplaza al pendiente', () {
+      runTwoFailingEntries(
+        firstHint: const Duration(milliseconds: 500),
+        secondHint: const Duration(milliseconds: 300),
+        expectedRetryDelay: const Duration(milliseconds: 500),
+      );
+    });
+  });
+
+  group('syncAll — errores que escapan del ciclo', () {
+    test('propaga el error a quien llamó a syncAll', () async {
+      when(() => authRepo.currentUser).thenThrow(StateError('sesión corrupta'));
+
+      await expectLater(engine.syncAll(), throwsA(isA<StateError>()));
+    });
+
+    test('tras fallar, el siguiente syncAll arranca un ciclo nuevo', () async {
+      when(() => authRepo.currentUser).thenThrow(StateError('sesión corrupta'));
+      await expectLater(engine.syncAll(), throwsA(isA<StateError>()));
+
+      await Future<void>.delayed(Duration.zero);
+
+      when(() => authRepo.currentUser).thenReturn(testUser);
+      await expectLater(engine.syncAll(), completion(isTrue));
+    });
+
+    test(
+      'propaga el error si el ciclo en espera de un syncOne también lanza',
+      () async {
+        var currentUserThrows = false;
+        when(() => authRepo.currentUser).thenAnswer((_) {
+          if (currentUserThrows) throw StateError('sesión corrupta');
+          return testUser;
+        });
+
+        final blocker = Completer<List<LocalPatientEntry>>();
+        final syncOneStarted = Completer<void>();
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) {
+          if (!syncOneStarted.isCompleted) syncOneStarted.complete();
+          return blocker.future;
+        });
+
+        final syncOneFuture = engine.syncOne('X');
+        await syncOneStarted.future;
+
+        final syncAllFuture = engine.syncAll();
+        final syncAllExpectation = expectLater(
+          syncAllFuture,
+          throwsA(isA<StateError>()),
+        );
+
+        currentUserThrows = true;
+        blocker.complete(<LocalPatientEntry>[]);
+
+        expect(await syncOneFuture, SyncOneResult.notFound);
+        await syncAllExpectation;
+      },
+    );
+  });
 }

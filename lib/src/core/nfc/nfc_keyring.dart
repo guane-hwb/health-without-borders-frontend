@@ -30,7 +30,10 @@ class NfcKeyring {
     : keys = Map<int, String>.unmodifiable(keys);
 
   /// A single-key ring, used by the legacy call path and by tests.
-  factory NfcKeyring.single(String hexKey, {int version = kLegacyNfcKeyVersion}) {
+  factory NfcKeyring.single(
+    String hexKey, {
+    int version = kLegacyNfcKeyVersion,
+  }) {
     return NfcKeyring(
       keys: <int, String>{version: hexKey},
       currentVersion: version,
@@ -78,8 +81,8 @@ class NfcKeyring {
     }
 
     // Only trust a declared version we actually hold a key for.
-    final int? current = (declaredVersion != null &&
-            keys.containsKey(declaredVersion))
+    final int? current =
+        (declaredVersion != null && keys.containsKey(declaredVersion))
         ? declaredVersion
         : null;
 

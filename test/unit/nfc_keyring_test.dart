@@ -45,19 +45,16 @@ void main() {
       );
     });
 
-    test(
-      'backend sin versionado: la llave única se toma como versión 0',
-      () {
-        final ring = NfcKeyring.fromResponse(<String, dynamic>{
-          'nfc_encryption_key': _keyV0,
-        });
+    test('backend sin versionado: la llave única se toma como versión 0', () {
+      final ring = NfcKeyring.fromResponse(<String, dynamic>{
+        'nfc_encryption_key': _keyV0,
+      });
 
-        expect(ring, isNotNull);
-        expect(ring!.versions, <int>[0]);
-        expect(ring.currentVersion, 0);
-        expect(ring.currentKey, _keyV0);
-      },
-    );
+      expect(ring, isNotNull);
+      expect(ring!.versions, <int>[0]);
+      expect(ring.currentVersion, 0);
+      expect(ring.currentKey, _keyV0);
+    });
 
     test('parsea el anillo completo y la versión actual', () {
       final ring = NfcKeyring.fromResponse(<String, dynamic>{
@@ -87,11 +84,7 @@ void main() {
     test('ignora entradas con versión no numérica o llave vacía', () {
       final ring = NfcKeyring.fromResponse(<String, dynamic>{
         'nfc_key_version': 0,
-        'nfc_keyring': <String, dynamic>{
-          '0': _keyV0,
-          'abc': _keyV1,
-          '3': '',
-        },
+        'nfc_keyring': <String, dynamic>{'0': _keyV0, 'abc': _keyV1, '3': ''},
       });
 
       expect(ring!.versions, <int>[0]);
@@ -159,6 +152,73 @@ void main() {
     test('toJson omite la versión actual cuando no hay', () {
       final ring = NfcKeyring(keys: <int, String>{0: _keyV0});
       expect(ring.toJson().containsKey('nfc_key_version'), isFalse);
+    });
+  });
+
+  group('NfcKeyring.toString', () {
+    test('incluye las versiones y la versión actual', () {
+      final ring = NfcKeyring(
+        keys: <int, String>{1: _keyV1, 0: _keyV0},
+        currentVersion: 1,
+      );
+
+      expect(ring.toString(), 'NfcKeyring(versions: [0, 1], current: 1)');
+    });
+
+    test('muestra current: null cuando no hay versión actual', () {
+      final ring = NfcKeyring(keys: <int, String>{1: _keyV1});
+
+      expect(ring.toString(), 'NfcKeyring(versions: [1], current: null)');
+    });
+
+    test('nunca expone el material de las llaves', () {
+      final ring = NfcKeyring.single(_keyV2, version: 2);
+      final text = ring.toString();
+
+      expect(text, 'NfcKeyring(versions: [2], current: 2)');
+      expect(text.contains(_keyV2), isFalse);
+    });
+  });
+
+  group('NfcKeyring — anillo vacío y entradas inválidas', () {
+    test('un anillo sin llaves es vacío y no puede escribir', () {
+      final ring = NfcKeyring(keys: <int, String>{});
+
+      expect(ring.isEmpty, isTrue);
+      expect(ring.isNotEmpty, isFalse);
+      expect(ring.canWrite, isFalse);
+      expect(ring.currentKey, isNull);
+      expect(ring.versions, isEmpty);
+      expect(ring.toString(), 'NfcKeyring(versions: [], current: null)');
+    });
+
+    test('un anillo con llaves no es vacío', () {
+      expect(NfcKeyring.single(_keyV0).isEmpty, isFalse);
+    });
+
+    test('ignora entradas del anillo con llave null', () {
+      final ring = NfcKeyring.fromResponse(<String, dynamic>{
+        'nfc_key_version': 1,
+        'nfc_keyring': <String, dynamic>{'0': null, '1': _keyV1},
+      });
+
+      expect(ring!.versions, <int>[1]);
+      expect(ring.currentVersion, 1);
+    });
+
+    test('un nfc_keyring que no es un mapa cae a la llave legacy', () {
+      final ring = NfcKeyring.fromResponse(<String, dynamic>{
+        'nfc_keyring': 'no-es-un-mapa',
+        'nfc_encryption_key': _keyV0,
+      });
+
+      expect(ring, isNotNull);
+      expect(ring!.versions, <int>[0]);
+      expect(ring.currentKey, _keyV0);
+    });
+
+    test('fromJson retorna null sin material de llave', () {
+      expect(NfcKeyring.fromJson(<String, dynamic>{}), isNull);
     });
   });
 }
