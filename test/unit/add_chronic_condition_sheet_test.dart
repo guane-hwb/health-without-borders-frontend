@@ -97,4 +97,32 @@ void main() {
       expect(canConfirm(), isFalse);
     });
   });
+
+  group('AddChronicConditionSheet – Unsaved Changes Evaluation', () {
+    late TextEditingController ctrl;
+
+    setUp(() {
+      ctrl = TextEditingController();
+    });
+
+    tearDown(() {
+      ctrl.dispose();
+    });
+
+    bool hasUnsavedChanges() => ctrl.text.trim().isNotEmpty;
+
+    test(
+      'hasUnsavedChanges returns false when text is blank or whitespace',
+      () {
+        expect(hasUnsavedChanges(), isFalse);
+        ctrl.text = '   ';
+        expect(hasUnsavedChanges(), isFalse);
+      },
+    );
+
+    test('hasUnsavedChanges returns true when valid text is typed', () {
+      ctrl.text = 'Hipertensión';
+      expect(hasUnsavedChanges(), isTrue);
+    });
+  });
 }

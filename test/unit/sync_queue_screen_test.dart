@@ -26,6 +26,7 @@ LocalPatientEntry makeEntry({
   String recordJson = '{"patientId":"p-001"}',
   bool isSynced = false,
   String? syncError,
+  int? syncErrorCode,
   String createdAt = '2024-05-01T10:00:00',
   String? syncedAt,
 }) => LocalPatientEntry(
@@ -35,6 +36,7 @@ LocalPatientEntry makeEntry({
   recordJson: recordJson,
   isSynced: isSynced,
   syncError: syncError,
+  syncErrorCode: syncErrorCode,
   createdAt: createdAt,
   syncedAt: syncedAt,
 );
@@ -91,6 +93,11 @@ void main() {
     test('syncError retains the error string payload when assigned', () {
       final e = makeEntry(syncError: 'Network timeout');
       expect(e.syncError, 'Network timeout');
+    });
+
+    test('syncErrorCode retains HTTP status code when provided', () {
+      final e = makeEntry(syncErrorCode: 403);
+      expect(e.syncErrorCode, equals(403));
     });
 
     test('createdAt is stored correctly', () {
@@ -197,7 +204,7 @@ void main() {
       () {
         final e = makeEntry(
           recordJson:
-              '{"patientId":"p-001","deviceUid":"dev-001","patientInfo":{"fullName":"Juan Diaz"}}',
+              '{"patientId":"p-001","deviceUid":"dev-001","patientInfo":{"firstName":"Juan","firstLastName":"Diaz","identification":{"documentType":"CC","documentNumber":"123"},"dob":"2000-01-01","biologicalSex":"M","address":{"city":"Bogotá","state":"Bogotá"}},"guardianInfo":{"name":"Maria","relationship":"01","phone":"123"}}',
         );
         expect(() => e.toPatientRecord(), returnsNormally);
       },
@@ -227,7 +234,7 @@ void main() {
       },
     );
 
-    test('mapeates integer flag value 1 onto boolean true for isSynced', () {
+    test('maps integer flag value 1 onto boolean true for isSynced', () {
       final row = {
         'patient_id': 'x',
         'device_uid': 'd',

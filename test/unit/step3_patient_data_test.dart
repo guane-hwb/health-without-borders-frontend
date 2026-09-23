@@ -319,7 +319,7 @@ void main() {
       expect(kSupportedNationalityCodes, isNot(contains('UNK')));
     });
 
-    test('todo código ofrecido tiene presentación en el catálogo', () {
+    test('todo código offered tiene presentación en el catálogo', () {
       for (final String code in kSupportedNationalityCodes) {
         if (code == 'OTHER') continue;
         expect(
@@ -328,6 +328,34 @@ void main() {
           reason: '"$code" cae al globo: falta en countryDisplay',
         );
       }
+    });
+  });
+
+  group('applyDemographicSentinelDefaults', () {
+    test('fills null demographic fields with default sentinel values', () {
+      final draft = RegisterDraft();
+      expect(draft.ethnicity, isNull);
+      expect(draft.disabilityCategory, isNull);
+      expect(draft.genderIdentity, isNull);
+
+      applyDemographicSentinelDefaults(draft);
+
+      expect(draft.ethnicity, equals('99'));
+      expect(draft.disabilityCategory, equals('08'));
+      expect(draft.genderIdentity, equals('05'));
+    });
+
+    test('preserves existing non-null demographic values', () {
+      final draft = RegisterDraft()
+        ..ethnicity = '1'
+        ..disabilityCategory = '01'
+        ..genderIdentity = '01';
+
+      applyDemographicSentinelDefaults(draft);
+
+      expect(draft.ethnicity, equals('1'));
+      expect(draft.disabilityCategory, equals('01'));
+      expect(draft.genderIdentity, equals('01'));
     });
   });
 }

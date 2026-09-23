@@ -513,7 +513,7 @@ void main() {
         verify(
           () => localDb.markSyncError(
             'A',
-            'Registro duplicado (409): El chip NFC ya pertenece a otro paciente',
+            'A patient is already registered with this device tag.',
             statusCode: 409,
             revision: 0,
           ),

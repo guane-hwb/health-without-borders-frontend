@@ -380,9 +380,20 @@ class _SyncCard extends StatelessWidget {
     String? errorMessage;
     if (hasErr) {
       if (isConflict) {
-        errorMessage = isEs
-            ? 'Este dispositivo ya está registrado para otro paciente. Registra al paciente con un dispositivo nuevo.'
-            : 'This device is already registered to another patient. Register the patient with a new device.';
+        final rawErr = entry.syncError?.toLowerCase() ?? '';
+        final isDocumentDuplicate =
+            rawErr.contains('identity document') ||
+            rawErr.contains('documento de identidad');
+
+        if (isDocumentDuplicate) {
+          errorMessage = isEs
+              ? 'Ya existe un paciente registrado con este número de documento.'
+              : 'A patient is already registered with this identity document.';
+        } else {
+          errorMessage = isEs
+              ? 'Este dispositivo ya está registrado para otro paciente. Registra al paciente con un dispositivo nuevo.'
+              : 'A patient is already registered with this device tag.';
+        }
       } else if (entry.syncErrorCode == 403) {
         errorMessage = isEs
             ? 'Acceso denegado (403): Tu rol no permite registrar historia médica completa.'

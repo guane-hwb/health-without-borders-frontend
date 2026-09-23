@@ -19,6 +19,7 @@ Widget _wrap(Widget child, {String locale = 'en'}) {
 Future<void> _pumpSheet(
   WidgetTester tester, {
   required ValueChanged<AllergyInfo> onAdd,
+  String locale = 'en',
 }) async {
   await tester.pumpWidget(
     _wrap(
@@ -31,6 +32,7 @@ Future<void> _pumpSheet(
           child: const Text('open'),
         ),
       ),
+      locale: locale,
     ),
   );
   await tester.tap(find.text('open'));
@@ -333,6 +335,116 @@ void main() {
       await _pumpSheet(tester, onAdd: (_) {});
 
       await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+    });
+  });
+
+  group('AddAllergySheet — unsaved changes & close flows', () {
+    testWidgets(
+      'closes immediately when clicking close icon if no changes exist',
+      (tester) async {
+        await _pumpSheet(tester, onAdd: (_) {});
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddAllergySheet), findsNothing);
+      },
+    );
+
+    testWidgets('shows warning dialog on close when allergen text is entered', (
+      tester,
+    ) async {
+      await _pumpSheet(tester, onAdd: (_) {});
+
+      await tester.enterText(find.byType(TextField).first, 'Dust');
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+    });
+
+    testWidgets('shows warning dialog on close when reaction text is entered', (
+      tester,
+    ) async {
+      await _pumpSheet(tester, onAdd: (_) {});
+
+      await tester.enterText(find.byType(TextField).last, 'Rash');
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+    });
+
+    testWidgets(
+      'cancels closing when clicking Cancel on unsaved changes dialog',
+      (tester) async {
+        await _pumpSheet(tester, onAdd: (_) {});
+
+        await tester.enterText(find.byType(TextField).first, 'Pollen');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddAllergySheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'confirms exit and closes sheet when clicking Exit on unsaved changes dialog',
+      (tester) async {
+        await _pumpSheet(tester, onAdd: (_) {});
+
+        await tester.enterText(find.byType(TextField).first, 'Pollen');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Exit'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddAllergySheet), findsNothing);
+      },
+    );
+
+    testWidgets('triggers PopScope unsaved dialog on back navigation gesture', (
+      tester,
+    ) async {
+      await _pumpSheet(tester, onAdd: (_) {});
+
+      await tester.enterText(find.byType(TextField).first, 'Cat dander');
+      await tester.pump();
+
+      final popScope = tester.widget<PopScope>(find.byType(PopScope));
+      popScope.onPopInvokedWithResult?.call(false, null);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+    });
+
+    testWidgets('validates Spanish mandatory allergen message', (tester) async {
+      await _pumpSheet(tester, onAdd: (_) {}, locale: 'es');
+
+      await tester.enterText(find.byType(TextField).first, '   ');
+      await tester.pump();
+
+      await tester.tap(_confirmButton());
+      await tester.pumpAndSettle();
+
+      expect(find.text('El alérgeno es obligatorio'), findsOneWidget);
     });
   });
 }
