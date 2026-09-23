@@ -18,6 +18,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/auth_repo
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/patient_profile_screen.dart';
 import 'package:health_without_borders_frontend/src/features/sync/presentation/sync_queue_screen.dart';
 import 'package:health_without_borders_frontend/src/shared/widgets/screen_bottom_handle.dart';
 
@@ -37,7 +38,8 @@ LocalPatientEntry makeEntry({
   String patientId = 'p-001',
   String deviceUid = 'device-001',
   String patientName = 'Juan Diaz',
-  String recordJson = '{"patientId":"p-001"}',
+  String recordJson =
+      '{"patientId":"p-001","deviceUid":"device-001","patientInfo":{"firstName":"Juan","firstLastName":"Diaz","identification":{"documentType":"CC","documentNumber":"123"},"dob":"2000-01-01","biologicalSex":"M","address":{"city":"Bogotá","state":"Bogotá"}},"guardianInfo":{"name":"Maria","relationship":"01","phone":"123"}}',
   bool isSynced = false,
   String? syncError,
   int? syncErrorCode,
@@ -65,22 +67,20 @@ Widget buildTestApp({
     () => mockAuth.sessionNotifier,
   ).thenReturn(ValueNotifier<UserSession?>(null));
 
-  return MaterialApp(
-    home: _LocaleWrapper(
+  return AppScope(
+    authRepository: mockAuth,
+    userRepository: MockUserRepository(),
+    patientRepository: MockPatientRepository(),
+    localDatabase: db,
+    syncEngine: syncEngine,
+    statsRepository: StatsRepository(
+      apiClient: ApiClient(baseUrl: 'http://localhost'),
+      authRepository: mockAuth,
+    ),
+    reachability: reachability,
+    child: _LocaleWrapper(
       locale: locale,
-      child: AppScope(
-        authRepository: mockAuth,
-        userRepository: MockUserRepository(),
-        patientRepository: MockPatientRepository(),
-        localDatabase: db,
-        syncEngine: syncEngine,
-        statsRepository: StatsRepository(
-          apiClient: ApiClient(baseUrl: 'http://localhost'),
-          authRepository: mockAuth,
-        ),
-        reachability: reachability,
-        child: child,
-      ),
+      child: MaterialApp(home: child),
     ),
   );
 }
@@ -836,7 +836,9 @@ void main() {
   });
 
   group('SyncQueueScreen – navegación', () {
-    testWidgets('el botón back hace pop de la pantalla', (tester) async {
+    testWidgets('el botón back hace pop de la pantalla al presionarse', (
+      tester,
+    ) async {
       when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
 
       final mockAuth = MockAuthRepository();
@@ -845,39 +847,27 @@ void main() {
       ).thenReturn(ValueNotifier<UserSession?>(null));
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: _LocaleWrapper(
-            locale: 'es',
-            child: AppScope(
-              authRepository: mockAuth,
-              userRepository: MockUserRepository(),
-              patientRepository: MockPatientRepository(),
-              localDatabase: db,
-              syncEngine: syncEngine,
-              statsRepository: StatsRepository(
-                apiClient: ApiClient(baseUrl: 'http://localhost'),
-                authRepository: mockAuth,
-              ),
-              reachability: reachability,
+        AppScope(
+          authRepository: mockAuth,
+          userRepository: MockUserRepository(),
+          patientRepository: MockPatientRepository(),
+          localDatabase: db,
+          syncEngine: syncEngine,
+          statsRepository: StatsRepository(
+            apiClient: ApiClient(baseUrl: 'http://localhost'),
+            authRepository: mockAuth,
+          ),
+          reachability: reachability,
+          child: MaterialApp(
+            home: _LocaleWrapper(
+              locale: 'es',
               child: Builder(
                 builder: (ctx) => ElevatedButton(
                   onPressed: () => Navigator.of(ctx).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => AppScope(
-                        authRepository: mockAuth,
-                        userRepository: MockUserRepository(),
-                        patientRepository: MockPatientRepository(),
-                        localDatabase: db,
-                        syncEngine: syncEngine,
-                        statsRepository: StatsRepository(
-                          apiClient: ApiClient(baseUrl: 'http://localhost'),
-                          authRepository: mockAuth,
-                        ),
-                        reachability: reachability,
-                        child: const _LocaleWrapper(
-                          locale: 'es',
-                          child: SyncQueueScreen(),
-                        ),
+                      builder: (_) => const _LocaleWrapper(
+                        locale: 'es',
+                        child: SyncQueueScreen(),
                       ),
                     ),
                   ),
@@ -893,8 +883,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(SyncQueueScreen), findsOneWidget);
 
-      final NavigatorState navigator = tester.state(find.byType(Navigator));
-      navigator.pop();
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
       await tester.pumpAndSettle();
 
       expect(find.byType(SyncQueueScreen), findsNothing);
@@ -933,6 +922,321 @@ void main() {
 
         expect(find.text(sEn.allSynced), findsOneWidget);
         expect(find.text(sEs.allSynced), findsNothing);
+      },
+    );
+  });
+
+  group('SyncQueueScreen — Reachability, Progress & Edge Cases', () {
+    testWidgets('shows error SnackBar when _syncAll has no network (ES)', (
+      tester,
+    ) async {
+      when(() => reachability.probe()).thenAnswer((_) async => false);
+      when(
+        () => db.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [makeEntry()]);
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+          locale: 'es',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final syncAllBtn = find.widgetWithText(
+        ElevatedButton,
+        'Sincronizar todo',
+      );
+      await tester.tap(syncAllBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.text(
+          'Sin conexión a Internet. Conéctese a una red para sincronizar.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('shows error SnackBar when _syncAll has no network (EN)', (
+      tester,
+    ) async {
+      when(() => reachability.probe()).thenAnswer((_) async => false);
+      when(
+        () => db.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [makeEntry()]);
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+          locale: 'en',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final ctx = tester.element(find.byType(SyncQueueScreen));
+      final btnLabel = AppStrings.of(ctx).syncAll;
+
+      final syncAllBtn = find.widgetWithText(ElevatedButton, btnLabel);
+      await tester.tap(syncAllBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.text('No internet connection. Connect to a network to sync.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('shows error SnackBar when _syncOne has no network (ES)', (
+      tester,
+    ) async {
+      when(() => reachability.probe()).thenAnswer((_) async => false);
+      when(
+        () => db.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [makeEntry()]);
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+          locale: 'es',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sync ahora'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text('Sin conexión a Internet.'), findsOneWidget);
+    });
+
+    testWidgets('shows error SnackBar when _syncOne has no network (EN)', (
+      tester,
+    ) async {
+      when(() => reachability.probe()).thenAnswer((_) async => false);
+      when(
+        () => db.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [makeEntry()]);
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+          locale: 'en',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final ctx = tester.element(find.byType(SyncQueueScreen));
+      final btnLabel = AppStrings.of(ctx).syncNow;
+
+      await tester.tap(find.text(btnLabel));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text('No internet connection.'), findsOneWidget);
+    });
+
+    testWidgets(
+      'updates progress counter during _syncAll and shows success SnackBar when all clear',
+      (tester) async {
+        when(() => reachability.probe()).thenAnswer((_) async => true);
+        when(
+          () => db.getUnsyncedRecords(),
+        ).thenAnswer((_) async => [makeEntry()]);
+
+        when(() => syncEngine.syncAll()).thenAnswer((_) async {
+          syncEngine.onRecordSynced?.call('p-001', true, null);
+          return true;
+        });
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+            reachability: reachability,
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+
+        await tester.tap(
+          find.widgetWithText(ElevatedButton, 'Sincronizar todo'),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(find.text('Sincronizado correctamente'), findsOneWidget);
+      },
+    );
+
+    testWidgets('shows orange SnackBar when records remain after _syncAll', (
+      tester,
+    ) async {
+      when(() => reachability.probe()).thenAnswer((_) async => true);
+      when(
+        () => db.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [makeEntry()]);
+      when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+          locale: 'es',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Sincronizar todo'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.textContaining('Quedan 1 registros pendientes por sincronizar.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('shows error SnackBar when _syncAll throws an exception (ES)', (
+      tester,
+    ) async {
+      when(() => reachability.probe()).thenAnswer((_) async => true);
+      when(
+        () => db.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [makeEntry()]);
+      when(() => syncEngine.syncAll()).thenThrow(Exception('Engine crash'));
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+          locale: 'es',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Sincronizar todo'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.text('Fallo al sincronizar. Intente de nuevo más tarde.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('opens PatientProfileScreen when tapping Review button', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      when(
+        () => db.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [makeEntry()]);
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Revisar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+    });
+
+    testWidgets(
+      'handles SyncOneResult.busy and SyncOneResult.notFound correctly',
+      (tester) async {
+        when(
+          () => db.getUnsyncedRecords(),
+        ).thenAnswer((_) async => [makeEntry()]);
+        when(
+          () => syncEngine.syncOne(any()),
+        ).thenAnswer((_) async => SyncOneResult.busy);
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+            reachability: reachability,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final ctx = tester.element(find.byType(SyncQueueScreen));
+        final expectedMsg = AppStrings.of(ctx).synchronizing;
+
+        await tester.tap(find.text('Sync ahora'));
+        await tester.pumpAndSettle();
+
+        expect(find.text(expectedMsg), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'handles HTTP 403 and HTTP 422 error messages in cards (ES & EN)',
+      (tester) async {
+        when(() => db.getUnsyncedRecords()).thenAnswer(
+          (_) async => [
+            makeEntry(
+              patientId: 'p1',
+              syncError: 'Forbidden',
+              syncErrorCode: 403,
+            ),
+            makeEntry(
+              patientId: 'p2',
+              syncError: 'Unprocessable',
+              syncErrorCode: 422,
+            ),
+          ],
+        );
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+            reachability: reachability,
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Acceso denegado (403)'), findsOneWidget);
+        expect(
+          find.textContaining('Error de validación (422)'),
+          findsOneWidget,
+        );
       },
     );
   });
