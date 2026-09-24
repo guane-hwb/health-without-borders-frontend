@@ -770,8 +770,9 @@ void main() {
             listOrgs: () async => [_activa],
             onSetOrgActive: (id, active) async {
               await Future<void>.delayed(const Duration(milliseconds: 10));
-              if (toggleError)
+              if (toggleError) {
                 throw ApiException('Error de estado', statusCode: 400);
+              }
               return OrgSummary(id: id, name: 'Cruz Roja', isActive: active);
             },
           );

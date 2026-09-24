@@ -975,4 +975,104 @@ void main() {
       expect(cardFinder, findsOneWidget);
     });
   });
+
+  group(
+    'HomeScreen — Cobertura adicional (_ActionCard sin subtítulo y refresco de SyncCard)',
+    () {
+      testWidgets('renderiza _ActionCard cuando subtitle es null', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  return SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        ElevatedButton(
+                          key: const Key('action_card_no_sub'),
+                          onPressed: () {},
+                          child: const Text('Test Card'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Test Card'), findsOneWidget);
+      });
+
+      testWidgets(
+        'refresca el conteo de pendientes al retornar de la pantalla SyncQueue',
+        (tester) async {
+          final user = _session(UserRole.doctor);
+          final apiClient = ApiClient(baseUrl: 'https://example.com');
+          final patientRepo = PatientRepository(
+            apiClient: apiClient,
+            authRepository: mockAuth,
+          );
+          final syncEngine = SyncEngine(
+            patientRepository: patientRepo,
+            localDatabase: mockDb,
+          );
+
+          mockAuth.currentUser = user;
+
+          await tester.pumpWidget(
+            AppLocale(
+              locale: 'es',
+              setLocale: (_) {},
+              child: AppScope(
+                authRepository: mockAuth,
+                userRepository: UserRepository(
+                  apiClient: apiClient,
+                  authRepository: mockAuth,
+                ),
+                patientRepository: patientRepo,
+                localDatabase: mockDb,
+                syncEngine: syncEngine,
+                statsRepository: StatsRepository(
+                  apiClient: apiClient,
+                  authRepository: mockAuth,
+                ),
+                reachability: Reachability(baseUrl: 'http://localhost'),
+                child: MaterialApp(
+                  routes: {
+                    '/': (_) => const HomeScreen(),
+                    '/sync/queue': (_) => Scaffold(
+                      body: ElevatedButton(
+                        onPressed: () => Navigator.of(
+                          tester.element(find.byType(Scaffold).last),
+                        ).pop(),
+                        child: const Text('Volver'),
+                      ),
+                    ),
+                  },
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final syncCard = find.byIcon(Icons.cloud_done_outlined);
+          await tester.scrollUntilVisible(syncCard, 100);
+          await tester.tap(syncCard);
+          await tester.pumpAndSettle();
+
+          expect(find.text('Volver'), findsOneWidget);
+
+          await tester.tap(find.text('Volver'));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(HomeScreen), findsOneWidget);
+        },
+      );
+    },
+  );
 }

@@ -1239,5 +1239,37 @@ void main() {
         );
       },
     );
+
+    testWidgets('shows error SnackBar when _syncOne returns failure', (
+      tester,
+    ) async {
+      when(() => reachability.probe()).thenAnswer((_) async => true);
+      when(
+        () => db.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [makeEntry(patientId: 'p-fail')]);
+      when(
+        () => syncEngine.syncOne('p-fail'),
+      ).thenAnswer((_) async => SyncOneResult.failure);
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+          locale: 'es',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sync ahora'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.text('Sincronización fallida — se reintentará'),
+        findsOneWidget,
+      );
+    });
   });
 }
