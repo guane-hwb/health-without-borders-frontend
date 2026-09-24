@@ -133,6 +133,52 @@ void main() {
   // =========================================================================
   // PatientInfo
   // =========================================================================
+  group('PatientInfo — nacionalidad', () {
+    Map<String, dynamic> infoJson(Object? nationalityCode) => <String, dynamic>{
+      'identification': <String, dynamic>{
+        'documentType': 'PT',
+        'documentNumber': 'SINT-1',
+      },
+      'firstLastName': 'García',
+      'firstName': 'Ana',
+      'dob': '2019-05-05',
+      'nationalityCode': ?nationalityCode,
+      'biologicalSex': 'F',
+      'address': <String, dynamic>{'city': 'Cúcuta', 'state': 'N. Santander'},
+    };
+
+    test('un registro antiguo con OTHER se lee como UNK', () {
+      final info = PatientInfo.fromJson(infoJson('OTHER'));
+      expect(info.nationalityCode, 'UNK');
+      expect(info.toJson()['nationalityCode'], 'UNK');
+    });
+
+    test('un código vacío se lee como UNK', () {
+      expect(PatientInfo.fromJson(infoJson('')).nationalityCode, 'UNK');
+    });
+
+    test('sin código se mantiene el valor por defecto COL', () {
+      expect(PatientInfo.fromJson(infoJson(null)).nationalityCode, 'COL');
+    });
+
+    test('un ISO alfa-3 se conserva', () {
+      expect(PatientInfo.fromJson(infoJson('ven')).nationalityCode, 'VEN');
+    });
+
+    test('toJson nunca envía OTHER aunque el modelo lo tenga en memoria', () {
+      final info = PatientInfo(
+        identification: _buildId(),
+        firstLastName: 'García',
+        firstName: 'Ana',
+        dob: '2019-05-05',
+        nationalityCode: 'OTHER',
+        biologicalSex: 'F',
+        address: _buildAddress(),
+      );
+      expect(info.toJson()['nationalityCode'], 'UNK');
+    });
+  });
+
   group('PatientInfo', () {
     test('constructor con todos los campos', () {
       final info = PatientInfo(

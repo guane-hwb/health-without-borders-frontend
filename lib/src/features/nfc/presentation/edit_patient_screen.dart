@@ -29,14 +29,8 @@ class _EditPatientScreenState extends State<EditPatientScreen> {
   late String _nationalityCode;
   bool _isSaving = false;
 
-  static const _offeredNationCodes = <String>[
-    'COL',
-    'VEN',
-    'ECU',
-    'PER',
-    'HTI',
-    'CUB',
-  ];
+  /// Same choices as registration, including "Otra / desconocida" (UNK).
+  static const _offeredNationCodes = kSupportedNationalityCodes;
 
   @override
   void initState() {
