@@ -1,6 +1,8 @@
 // lib/src/features/nfc/presentation/register/register_nfc_screen.dart
+
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/di/app_scope.dart';
 import '../../../../design/tokens/app_colors.dart';
@@ -12,6 +14,7 @@ import '../../domain/register_draft.dart';
 import '../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../core/nfc/nfc_payload_service.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../nfc_guided_write.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
@@ -31,6 +34,9 @@ class RegisterNfcScreen extends StatefulWidget {
 class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   int _step = 0;
   final RegisterDraft _draft = RegisterDraft();
+
+  late final String _patientId = const Uuid().v4();
+
   PatientFullRecord? _savedRecord;
   String? _lastConsultationTime;
   String? _lastVaccineTime;
@@ -52,6 +58,19 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   }
 
   void _stepBack() async {
+    if (_step > 0) {
+      setState(() => _step--);
+    } else {
+      await _goToHomeDirectly();
+    }
+  }
+
+  Future<void> _handleSystemPop() async {
+    if (_savedRecord != null || _step >= 4) {
+      Navigator.of(context).pop();
+      return;
+    }
+
     if (_step > 0) {
       setState(() => _step--);
     } else {
@@ -107,10 +126,30 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   }
 
   Future<void> _confirm() async {
-    final record = _draft.toRecord();
+    final draftRecord = _draft.toRecord();
+    final record = PatientFullRecord(
+      patientId: _patientId,
+      deviceUid: draftRecord.deviceUid,
+      patientInfo: draftRecord.patientInfo,
+      guardianInfo: draftRecord.guardianInfo,
+      guardian2Info: draftRecord.guardian2Info,
+      backgroundHistory: draftRecord.backgroundHistory,
+      allergies: draftRecord.allergies,
+      medicalHistory: draftRecord.medicalHistory,
+      vaccinationRecord: draftRecord.vaccinationRecord,
+    );
+
     final scope = AppScope.of(context);
+    var currentUser = scope.authRepository.currentUser;
+    currentUser ??= await scope.authRepository.restoreSession();
+
     try {
-      await scope.localDatabase.savePatient(record);
+      await scope.localDatabase.savePatient(
+        record,
+        ownerUserId: currentUser?.id,
+        organizationId: currentUser?.organizationId,
+        isSynced: false,
+      );
     } catch (_) {
       if (!mounted) return;
       final s = AppStrings.of(context);
@@ -120,8 +159,8 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           backgroundColor: AppColors.error,
           content: Text(
             isEs
-                ? 'No se pudo guardar el registro en este dispositivo. No continúes: los datos no se han conservado.'
-                : 'The record could not be saved on this device. Do not continue: the data was not kept.',
+                ? 'No se pudo guardar el registro en este dispositivo.'
+                : 'The record could not be saved on this device.',
           ),
         ),
       );
@@ -213,8 +252,26 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
   Future<void> _persistLocally(PatientFullRecord record) async {
     final scope = AppScope.of(context);
+    var currentUser = scope.authRepository.currentUser;
+    currentUser ??= await scope.authRepository.restoreSession();
+
     try {
-      await scope.localDatabase.savePatient(record);
+      final existingRecords = await scope.localDatabase.getAllRecords(
+        ownerUserId: currentUser?.id,
+      );
+      final existing = existingRecords.where(
+        (e) => e.patientId == record.patientId,
+      );
+      final bool alreadySynced = existing.isNotEmpty
+          ? existing.first.isSynced
+          : false;
+
+      await scope.localDatabase.savePatient(
+        record,
+        ownerUserId: currentUser?.id,
+        organizationId: currentUser?.organizationId,
+        isSynced: alreadySynced,
+      );
       if (mounted) setState(() => _savedRecord = record);
     } catch (_) {
       if (!mounted) return;
@@ -241,15 +298,49 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       return;
     }
 
-    final nfcKey = await scope.authRepository.getNfcEncryptionKey();
+    final keyring = await scope.authRepository.getNfcKeyring();
     if (!mounted) return;
 
-    if (nfcKey == null || nfcKey.isEmpty) {
+    if (keyring == null || !keyring.canWrite) {
+      // Finishing silently looks like the chips were written. Say so, or the
+      // patient leaves with a blank wristband nobody knows is blank.
+      final bool expired = await scope.authRepository.isNfcSessionExpired();
+      if (!mounted) return;
+      _warnChipsNotWritten(
+        expired
+            ? (AppStrings.of(context).isEs
+                  ? 'Su sesión expiró: el registro se guardó, pero los '
+                        'dispositivos NFC no se grabaron. Inicie sesión y '
+                        'grábelos desde el perfil.'
+                  : 'Your session expired: the record was saved, but the NFC '
+                        'devices were not written. Log in and write them from '
+                        'the profile.')
+            : (AppStrings.of(context).isEs
+                  ? 'No hay clave NFC disponible: el registro se guardó, pero '
+                        'los dispositivos no se grabaron.'
+                  : 'No NFC key available: the record was saved, but the '
+                        'devices were not written.'),
+      );
       _completeFinalize();
       return;
     }
 
-    final codec = NfcPayloadCodec(hexKey: nfcKey);
+    final NfcPayloadCodec codec;
+    try {
+      codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
+    } catch (e, stack) {
+      AppLogger.e('Anillo de llaves NFC inválido', error: e, stackTrace: stack);
+      if (!mounted) return;
+      _warnChipsNotWritten(
+        AppStrings.of(context).isEs
+            ? 'La clave NFC no es válida: el registro se guardó, pero los '
+                  'dispositivos no se grabaron. Contacte al administrador.'
+            : 'The NFC key is invalid: the record was saved, but the devices '
+                  'were not written. Contact your administrator.',
+      );
+      _completeFinalize();
+      return;
+    }
     final s = AppStrings.of(context);
     final isEs = s.isEs;
 
@@ -331,6 +422,20 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     _completeFinalize();
   }
 
+  /// Tells the user the record was saved but the chips were not written.
+  ///
+  /// The chips stay marked dirty, so they can be written later from the
+  /// patient profile; what must not happen is finishing in silence.
+  void _warnChipsNotWritten(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
   void _completeFinalize() {
     final scope = AppScope.of(context);
     unawaited(scope.syncEngine.syncAll());
@@ -351,29 +456,39 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final onSuccess = _step >= 4;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FB),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                _WizardHeader(
-                  title: s.newPatient,
-                  onBack: onSuccess ? null : _goToHomeDirectly,
-                  stepText: onSuccess ? null : '${_step + 1}/4',
-                ),
-                if (!onSuccess) _ProgressBar(step: _step, total: 4),
-                Expanded(child: _buildStep()),
-              ],
-            ),
-            const Positioned(
-              left: 116,
-              right: 116,
-              bottom: 14,
-              child: ScreenBottomHandle(),
-            ),
-          ],
+
+    final canPopDirectly = _savedRecord != null || _step >= 5;
+
+    return PopScope(
+      canPop: canPopDirectly,
+      onPopInvokedWithResult: (bool didPop, dynamic result) async {
+        if (didPop) return;
+        await _handleSystemPop();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF6F8FB),
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  _WizardHeader(
+                    title: s.newPatient,
+                    onBack: onSuccess ? null : _goToHomeDirectly,
+                    stepText: onSuccess ? null : '${_step + 1}/4',
+                  ),
+                  if (!onSuccess) _ProgressBar(step: _step, total: 4),
+                  Expanded(child: _buildStep()),
+                ],
+              ),
+              const Positioned(
+                left: 116,
+                right: 116,
+                bottom: 14,
+                child: ScreenBottomHandle(),
+              ),
+            ],
+          ),
         ),
       ),
     );

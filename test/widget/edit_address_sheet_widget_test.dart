@@ -82,8 +82,8 @@ void main() {
         expect(find.text('Editar residencia'), findsOneWidget);
         expect(find.text('Dirección y zona del paciente'), findsOneWidget);
         expect(find.text('Dirección'), findsOneWidget);
-        expect(find.text('Municipio'), findsOneWidget);
-        expect(find.text('Departamento'), findsOneWidget);
+        expect(find.text('Municipio *'), findsOneWidget);
+        expect(find.text('Departamento *'), findsOneWidget);
         expect(find.text('Zona'), findsOneWidget);
         expect(find.text('Urbana'), findsOneWidget);
         expect(find.text('Rural'), findsOneWidget);
@@ -103,8 +103,8 @@ void main() {
         expect(find.text('Edit residence'), findsOneWidget);
         expect(find.text('Patient address and zone'), findsOneWidget);
         expect(find.text('Address'), findsOneWidget);
-        expect(find.text('Municipality'), findsOneWidget);
-        expect(find.text('Department'), findsOneWidget);
+        expect(find.text('Municipality *'), findsOneWidget);
+        expect(find.text('Department *'), findsOneWidget);
         expect(find.text('Zone'), findsOneWidget);
         expect(find.text('Urban'), findsOneWidget);
         expect(find.text('Rural'), findsOneWidget);
@@ -221,7 +221,7 @@ void main() {
     );
 
     testWidgets(
-      'tapping close icon dismisses modal window instantly without committing actions',
+      'tapping close icon dismisses modal window instantly without committing actions when unchanged',
       (tester) async {
         var confirmCalled = false;
 
@@ -231,7 +231,7 @@ void main() {
           onConfirm: (_) => confirmCalled = true,
         );
 
-        await tester.tap(find.byIcon(Icons.close));
+        await tester.tap(find.byIcon(Icons.close_rounded));
         await tester.pumpAndSettle();
 
         expect(find.byType(EditAddressSheet), findsNothing);
@@ -239,4 +239,152 @@ void main() {
       },
     );
   });
+
+  group(
+    'EditAddressSheet — Unsaved Changes Dialog, Zone Selection & PopScope',
+    () {
+      testWidgets(
+        'toggling zone chips updates state and marks changes as unsaved',
+        (tester) async {
+          Address? captured;
+          await _pumpSheet(
+            tester,
+            address: baseAddress,
+            onConfirm: (a) => captured = a,
+          );
+
+          await tester.tap(find.text('Rural'));
+          await tester.pump();
+
+          await tester.tap(find.text('Urbana'));
+          await tester.pump();
+
+          await tester.tap(find.text('Rural'));
+          await tester.pump();
+
+          await tester.tap(find.text('Confirmar cambios'));
+          await tester.pumpAndSettle();
+
+          expect(captured?.zone, equals('02'));
+        },
+      );
+
+      testWidgets(
+        'shows warning dialog on close when address input is changed',
+        (tester) async {
+          await _pumpSheet(tester, address: baseAddress, onConfirm: (_) {});
+
+          final streetFieldFinder = find.byType(TextField).at(0);
+          await tester.enterText(streetFieldFinder, 'Calle Cambiada');
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(AlertDialog), findsOneWidget);
+        },
+      );
+
+      testWidgets('cancels closing when clicking Cancel in unsaved dialog', (
+        tester,
+      ) async {
+        await _pumpSheet(tester, address: baseAddress, onConfirm: (_) {});
+
+        final streetFieldFinder = find.byType(TextField).at(0);
+        await tester.enterText(streetFieldFinder, 'Calle Cambiada');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(EditAddressSheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      });
+
+      testWidgets(
+        'confirms exit and closes sheet when clicking Exit in unsaved dialog',
+        (tester) async {
+          await _pumpSheet(tester, address: baseAddress, onConfirm: (_) {});
+
+          final streetFieldFinder = find.byType(TextField).at(0);
+          await tester.enterText(streetFieldFinder, 'Calle Cambiada');
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.text('Salir'));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(EditAddressSheet), findsNothing);
+        },
+      );
+
+      testWidgets('triggers PopScope unsaved handler on back gesture', (
+        tester,
+      ) async {
+        await _pumpSheet(tester, address: baseAddress, onConfirm: (_) {});
+
+        final streetFieldFinder = find.byType(TextField).at(0);
+        await tester.enterText(streetFieldFinder, 'Calle Cambiada');
+        await tester.pump();
+
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        popScope.onPopInvokedWithResult?.call(false, null);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      });
+
+      testWidgets(
+        'displays validation error messages when submitting empty mandatory fields (es & en)',
+        (tester) async {
+          await _pumpSheet(
+            tester,
+            address: baseAddress,
+            onConfirm: (_) {},
+            locale: 'es',
+          );
+
+          final cityFieldFinder = find.byType(TextField).at(1);
+          final stateFieldFinder = find.byType(TextField).at(2);
+
+          await tester.enterText(cityFieldFinder, '');
+          await tester.enterText(stateFieldFinder, '');
+          await tester.pump();
+
+          await tester.tap(find.text('Confirmar cambios'));
+          await tester.pumpAndSettle();
+
+          expect(find.text('El municipio es obligatorio'), findsOneWidget);
+          expect(find.text('El departamento es obligatorio'), findsOneWidget);
+
+          await _pumpSheet(
+            tester,
+            address: baseAddress,
+            onConfirm: (_) {},
+            locale: 'en',
+          );
+
+          final cityFieldFinderEn = find.byType(TextField).at(1);
+          final stateFieldFinderEn = find.byType(TextField).at(2);
+
+          await tester.enterText(cityFieldFinderEn, '');
+          await tester.enterText(stateFieldFinderEn, '');
+          await tester.pump();
+
+          await tester.tap(find.text('Confirm changes'));
+          await tester.pumpAndSettle();
+
+          expect(find.text('Municipality is required'), findsOneWidget);
+          expect(find.text('Department is required'), findsOneWidget);
+        },
+      );
+    },
+  );
 }

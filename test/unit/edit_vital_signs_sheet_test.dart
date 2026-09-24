@@ -338,4 +338,61 @@ void main() {
       },
     );
   });
+
+  group('EditVitalSignsSheet — Unsaved Changes Evaluation', () {
+    bool hasUnsavedChanges({
+      required String weight,
+      required String height,
+      required String? bloodType,
+      required String initialWeightText,
+      required String initialHeightText,
+      required String? initialBloodType,
+    }) {
+      final weightChanged = weight.trim() != initialWeightText;
+      final heightChanged = height.trim() != initialHeightText;
+      final bloodTypeChanged = bloodType != initialBloodType;
+
+      return weightChanged || heightChanged || bloodTypeChanged;
+    }
+
+    test('returns false when fields are unmutated', () {
+      expect(
+        hasUnsavedChanges(
+          weight: '70.0',
+          height: '170',
+          bloodType: 'O+',
+          initialWeightText: '70.0',
+          initialHeightText: '170',
+          initialBloodType: 'O+',
+        ),
+        isFalse,
+      );
+    });
+
+    test('returns true when weight, height or bloodType changes', () {
+      expect(
+        hasUnsavedChanges(
+          weight: '75.0',
+          height: '170',
+          bloodType: 'O+',
+          initialWeightText: '70.0',
+          initialHeightText: '170',
+          initialBloodType: 'O+',
+        ),
+        isTrue,
+      );
+
+      expect(
+        hasUnsavedChanges(
+          weight: '70.0',
+          height: '170',
+          bloodType: 'A+',
+          initialWeightText: '70.0',
+          initialHeightText: '170',
+          initialBloodType: 'O+',
+        ),
+        isTrue,
+      );
+    });
+  });
 }

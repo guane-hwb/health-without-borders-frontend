@@ -3,10 +3,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/add_allergy_sheet.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/design/tokens/app_colors.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/add_allergy_sheet.dart';
 
 Widget _wrap(Widget child, {String locale = 'en'}) {
   return AppLocale(
@@ -19,6 +19,7 @@ Widget _wrap(Widget child, {String locale = 'en'}) {
 Future<void> _pumpSheet(
   WidgetTester tester, {
   required ValueChanged<AllergyInfo> onAdd,
+  String locale = 'en',
 }) async {
   await tester.pumpWidget(
     _wrap(
@@ -31,11 +32,14 @@ Future<void> _pumpSheet(
           child: const Text('open'),
         ),
       ),
+      locale: locale,
     ),
   );
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
 }
+
+Finder _confirmButton() => find.byType(ElevatedButton);
 
 void main() {
   setUp(() {
@@ -72,29 +76,27 @@ void main() {
       expect(find.byType(TextField), findsNWidgets(2));
     });
 
-    testWidgets('confirm button is disabled when allergen is empty', (
+    testWidgets('confirm button is present and renders by default', (
       tester,
     ) async {
       await _pumpSheet(tester, onAdd: (_) {});
 
-      final confirmBtn = tester.widget<ElevatedButton>(
-        find.widgetWithIcon(ElevatedButton, Icons.add),
-      );
-      expect(confirmBtn.onPressed, isNull);
+      expect(_confirmButton(), findsOneWidget);
     });
 
-    testWidgets('confirm button is enabled once allergen has text', (
+    testWidgets('confirm button triggers callback once allergen has text', (
       tester,
     ) async {
-      await _pumpSheet(tester, onAdd: (_) {});
+      AllergyInfo? captured;
+      await _pumpSheet(tester, onAdd: (info) => captured = info);
 
       await tester.enterText(find.byType(TextField).first, 'Penicillin');
       await tester.pump();
 
-      final confirmBtn = tester.widget<ElevatedButton>(
-        find.widgetWithIcon(ElevatedButton, Icons.add),
-      );
-      expect(confirmBtn.onPressed, isNotNull);
+      await tester.tap(_confirmButton());
+      await tester.pumpAndSettle();
+
+      expect(captured, isNotNull);
     });
   });
 
@@ -180,7 +182,7 @@ void main() {
         await tester.enterText(find.byType(TextField).first, 'Test');
         await tester.pump();
 
-        await tester.tap(find.widgetWithIcon(ElevatedButton, Icons.add));
+        await tester.tap(_confirmButton());
         await tester.pumpAndSettle();
 
         expect(captured?.category, entry.value);
@@ -197,25 +199,27 @@ void main() {
       await tester.enterText(find.byType(TextField).first, '  Aspirin  ');
       await tester.pump();
 
-      await tester.tap(find.widgetWithIcon(ElevatedButton, Icons.add));
+      await tester.tap(_confirmButton());
       await tester.pumpAndSettle();
 
       expect(captured?.allergen, 'Aspirin');
     });
 
-    testWidgets('confirm button remains disabled for whitespace-only input', (
-      tester,
-    ) async {
-      await _pumpSheet(tester, onAdd: (_) {});
+    testWidgets(
+      'confirm button prevents submission for whitespace-only input',
+      (tester) async {
+        bool called = false;
+        await _pumpSheet(tester, onAdd: (_) => called = true);
 
-      await tester.enterText(find.byType(TextField).first, '   ');
-      await tester.pump();
+        await tester.enterText(find.byType(TextField).first, '   ');
+        await tester.pump();
 
-      final confirmBtn = tester.widget<ElevatedButton>(
-        find.widgetWithIcon(ElevatedButton, Icons.add),
-      );
-      expect(confirmBtn.onPressed, isNull);
-    });
+        await tester.tap(_confirmButton());
+        await tester.pumpAndSettle();
+
+        expect(called, isFalse);
+      },
+    );
   });
 
   group('AddAllergySheet — reaction field', () {
@@ -227,7 +231,7 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'Penicillin');
       await tester.pump();
 
-      await tester.tap(find.widgetWithIcon(ElevatedButton, Icons.add));
+      await tester.tap(_confirmButton());
       await tester.pumpAndSettle();
 
       expect(captured?.reaction, isNull);
@@ -244,7 +248,7 @@ void main() {
       await tester.enterText(find.byType(TextField).last, '   ');
       await tester.pump();
 
-      await tester.tap(find.widgetWithIcon(ElevatedButton, Icons.add));
+      await tester.tap(_confirmButton());
       await tester.pumpAndSettle();
 
       expect(captured?.reaction, isNull);
@@ -259,7 +263,7 @@ void main() {
       await tester.enterText(find.byType(TextField).last, '  Hives and rash  ');
       await tester.pump();
 
-      await tester.tap(find.widgetWithIcon(ElevatedButton, Icons.add));
+      await tester.tap(_confirmButton());
       await tester.pumpAndSettle();
 
       expect(captured?.reaction, 'Hives and rash');
@@ -284,7 +288,7 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'Latex');
       await tester.pump();
 
-      await tester.tap(find.widgetWithIcon(ElevatedButton, Icons.add));
+      await tester.tap(_confirmButton());
       await tester.pumpAndSettle();
 
       expect(callCount, 1);
@@ -296,7 +300,7 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'Latex');
       await tester.pump();
 
-      await tester.tap(find.widgetWithIcon(ElevatedButton, Icons.add));
+      await tester.tap(_confirmButton());
       await tester.pumpAndSettle();
 
       expect(find.byType(AddAllergySheet), findsNothing);
@@ -316,7 +320,7 @@ void main() {
         await tester.enterText(find.byType(TextField).last, 'Anaphylaxis');
         await tester.pump();
 
-        await tester.tap(find.widgetWithIcon(ElevatedButton, Icons.add));
+        await tester.tap(_confirmButton());
         await tester.pumpAndSettle();
 
         expect(captured?.category, '02');
@@ -331,6 +335,116 @@ void main() {
       await _pumpSheet(tester, onAdd: (_) {});
 
       await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+    });
+  });
+
+  group('AddAllergySheet — unsaved changes & close flows', () {
+    testWidgets(
+      'closes immediately when clicking close icon if no changes exist',
+      (tester) async {
+        await _pumpSheet(tester, onAdd: (_) {});
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddAllergySheet), findsNothing);
+      },
+    );
+
+    testWidgets('shows warning dialog on close when allergen text is entered', (
+      tester,
+    ) async {
+      await _pumpSheet(tester, onAdd: (_) {});
+
+      await tester.enterText(find.byType(TextField).first, 'Dust');
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+    });
+
+    testWidgets('shows warning dialog on close when reaction text is entered', (
+      tester,
+    ) async {
+      await _pumpSheet(tester, onAdd: (_) {});
+
+      await tester.enterText(find.byType(TextField).last, 'Rash');
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+    });
+
+    testWidgets(
+      'cancels closing when clicking Cancel on unsaved changes dialog',
+      (tester) async {
+        await _pumpSheet(tester, onAdd: (_) {});
+
+        await tester.enterText(find.byType(TextField).first, 'Pollen');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddAllergySheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'confirms exit and closes sheet when clicking Exit on unsaved changes dialog',
+      (tester) async {
+        await _pumpSheet(tester, onAdd: (_) {});
+
+        await tester.enterText(find.byType(TextField).first, 'Pollen');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Exit'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddAllergySheet), findsNothing);
+      },
+    );
+
+    testWidgets('triggers PopScope unsaved dialog on back navigation gesture', (
+      tester,
+    ) async {
+      await _pumpSheet(tester, onAdd: (_) {});
+
+      await tester.enterText(find.byType(TextField).first, 'Cat dander');
+      await tester.pump();
+
+      final popScope = tester.widget<PopScope>(find.byType(PopScope));
+      popScope.onPopInvokedWithResult?.call(false, null);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+    });
+
+    testWidgets('validates Spanish mandatory allergen message', (tester) async {
+      await _pumpSheet(tester, onAdd: (_) {}, locale: 'es');
+
+      await tester.enterText(find.byType(TextField).first, '   ');
+      await tester.pump();
+
+      await tester.tap(_confirmButton());
+      await tester.pumpAndSettle();
+
+      expect(find.text('El alérgeno es obligatorio'), findsOneWidget);
     });
   });
 }

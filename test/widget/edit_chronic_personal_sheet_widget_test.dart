@@ -2,11 +2,68 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 
+import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
+import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
+import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/edit_chronic_personal_sheet.dart';
 
+// ─── Mocks ─────────────────────────────────────────────────────────────────
+
+class _MockAuthRepository extends Mock implements AuthRepository {}
+
+class _MockUserRepository extends Mock implements UserRepository {}
+
+class _MockPatientRepository extends Mock implements PatientRepository {}
+
+class _MockLocalDatabase extends Mock implements LocalDatabase {}
+
+class _MockSyncEngine extends Mock implements SyncEngine {}
+
+class _MockReachability extends Mock implements Reachability {}
+
 final _s = AppStrings.forTesting('es');
+
+AppScope _createMockScope({required Widget child}) {
+  final auth = _MockAuthRepository();
+  when(
+    () => auth.sessionNotifier,
+  ).thenReturn(ValueNotifier<UserSession?>(null));
+
+  final user = _MockUserRepository();
+  final patientRepo = _MockPatientRepository();
+  final db = _MockLocalDatabase();
+  final sync = _MockSyncEngine();
+  final reach = _MockReachability();
+
+  when(() => sync.isOnline).thenReturn(ValueNotifier<bool>(true));
+  when(() => sync.pendingCount).thenReturn(ValueNotifier<int>(0));
+  when(() => sync.blockedCount).thenReturn(ValueNotifier<int>(0));
+  when(() => reach.probe()).thenAnswer((_) async => true);
+
+  return AppScope(
+    authRepository: auth,
+    userRepository: user,
+    patientRepository: patientRepo,
+    localDatabase: db,
+    syncEngine: sync,
+    statsRepository: StatsRepository(
+      apiClient: ApiClient(baseUrl: 'http://localhost'),
+      authRepository: auth,
+    ),
+    reachability: reach,
+    child: child,
+  );
+}
 
 class _LocaleWrapper extends StatefulWidget {
   const _LocaleWrapper({required this.locale, required this.child});
@@ -28,10 +85,12 @@ class _LocaleWrapperState extends State<_LocaleWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    return AppLocale(
-      locale: _locale,
-      setLocale: (l) => setState(() => _locale = l),
-      child: widget.child,
+    return _createMockScope(
+      child: AppLocale(
+        locale: _locale,
+        setLocale: (l) => setState(() => _locale = l),
+        child: widget.child,
+      ),
     );
   }
 }
@@ -57,6 +116,21 @@ Widget _wrap({
 }
 
 void main() {
+  setUp(() {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first.physicalSize = const Size(
+      1600,
+      1200,
+    );
+    binding.platformDispatcher.views.first.devicePixelRatio = 1.0;
+  });
+
+  tearDown(() {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first.resetPhysicalSize();
+    binding.platformDispatcher.views.first.resetDevicePixelRatio();
+  });
+
   group('EditChronicPersonalSheet – Initial Rendering', () {
     testWidgets('Displays the title passed as a parameter', (tester) async {
       await tester.pumpWidget(
@@ -134,14 +208,14 @@ void main() {
     );
 
     testWidgets(
-      'Displays the close chevron action icon within the SheetScaffold layer boundary',
+      'Displays the close chevron action icon within the header boundary',
       (tester) async {
         await tester.pumpWidget(
           _wrap(title: 'T', currentValue: null, onConfirm: (_) {}),
         );
         await tester.pumpAndSettle();
 
-        expect(find.byIcon(Icons.close), findsOneWidget);
+        expect(find.byIcon(Icons.close_rounded), findsOneWidget);
       },
     );
 
@@ -395,7 +469,7 @@ void main() {
     );
 
     testWidgets(
-      'Tapping close icons pops navigator layout structures without invoking confirmation pipelines',
+      'Tapping close icons pops navigator layout structures without invoking confirmation pipelines when unchanged',
       (tester) async {
         var confirmCalled = false;
 
@@ -431,7 +505,7 @@ void main() {
         await tester.tap(find.text('Push'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byIcon(Icons.close));
+        await tester.tap(find.byIcon(Icons.close_rounded));
         await tester.pumpAndSettle();
 
         expect(find.byType(EditChronicPersonalSheet), findsNothing);
@@ -590,6 +664,132 @@ void main() {
 
           final tf = tester.widget<TextField>(find.byType(TextField).first);
           expect(tf.controller?.text, equals(textStringBound));
+        },
+      );
+    },
+  );
+
+  // =========================================================================
+  // ADDITIONAL TESTS FOR 100% CODE COVERAGE IN EDIT_CHRONIC_PERSONAL_SHEET.DART
+  // =========================================================================
+
+  group(
+    'EditChronicPersonalSheet – Unsaved Changes Dialog & PopScope Handlers',
+    () {
+      testWidgets(
+        'shows warning dialog on close when text is modified from initial',
+        (tester) async {
+          await tester.pumpWidget(
+            _wrap(title: 'T', currentValue: 'Valor inicial', onConfirm: (_) {}),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.enterText(
+            find.byType(TextField).first,
+            'Valor modificado',
+          );
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(AlertDialog), findsOneWidget);
+        },
+      );
+
+      testWidgets('cancels closing when clicking Cancel in unsaved dialog', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _wrap(title: 'T', currentValue: 'Valor inicial', onConfirm: (_) {}),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byType(TextField).first,
+          'Valor modificado',
+        );
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(EditChronicPersonalSheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      });
+
+      testWidgets(
+        'confirms exit and closes sheet when clicking Exit in unsaved dialog',
+        (tester) async {
+          await tester.pumpWidget(
+            _LocaleWrapper(
+              locale: 'es',
+              child: MaterialApp(
+                home: Scaffold(
+                  body: Builder(
+                    builder: (ctx) => ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => _LocaleWrapper(
+                            locale: 'es',
+                            child: Scaffold(
+                              body: EditChronicPersonalSheet(
+                                title: 'T',
+                                currentValue: 'Valor inicial',
+                                onConfirm: (_) {},
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      child: const Text('Push'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          await tester.tap(find.text('Push'));
+          await tester.pumpAndSettle();
+
+          await tester.enterText(
+            find.byType(TextField).first,
+            'Valor modificado',
+          );
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.text('Salir'));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(EditChronicPersonalSheet), findsNothing);
+        },
+      );
+
+      testWidgets(
+        'triggers PopScope handler on system back gesture when changes exist',
+        (tester) async {
+          await tester.pumpWidget(
+            _wrap(title: 'T', currentValue: null, onConfirm: (_) {}),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.enterText(find.byType(TextField).first, 'Nuevo texto');
+          await tester.pump();
+
+          final popScope = tester.widget<PopScope>(find.byType(PopScope));
+          popScope.onPopInvokedWithResult?.call(false, null);
+          await tester.pumpAndSettle();
+
+          expect(find.byType(AlertDialog), findsOneWidget);
         },
       );
     },

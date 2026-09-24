@@ -59,7 +59,10 @@ class StatsDateRange {
     final DateTime? end = to;
     if (start == null || end == null) return null;
 
-    final int spanDays = end.difference(start).inDays;
+    final startUtc = DateTime.utc(start.year, start.month, start.day);
+    final endUtc = DateTime.utc(end.year, end.month, end.day);
+    final int spanDays = endUtc.difference(startUtc).inDays;
+
     final DateTime previousEnd = DateTime(
       start.year,
       start.month,

@@ -1,4 +1,4 @@
-// test/unit/features/home/home_screen_test.dart
+// test/unit/home_screen_test.dart
 //
 // Unit tests for HomeScreen.
 // Covers the pure logic that does NOT require the widget tree:
@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 
 class FakeAuthRepository implements AuthRepository {
@@ -22,7 +23,10 @@ class FakeAuthRepository implements AuthRepository {
   bool clearSessionCalled = false;
 
   @override
-  Future<String?> getNfcEncryptionKey() async => null;
+  Future<NfcKeyring?> getNfcKeyring() async => null;
+
+  @override
+  Future<bool> isNfcSessionExpired() async => false;
 
   @override
   UserSession? get currentUser => session;
@@ -53,6 +57,9 @@ class FakeAuthRepository implements AuthRepository {
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
+  ValueListenable<bool> get sessionWindowClosed => ValueNotifier<bool>(false);
+
+  @override
   ValueNotifier<UserSession?> get sessionNotifier =>
       ValueNotifier<UserSession?>(session);
 
@@ -74,6 +81,9 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   bool get hasToken => session != null;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -266,5 +276,14 @@ void main() {
         expect(clinicalRoles, containsAll([UserRole.doctor, UserRole.nurse]));
       },
     );
+  });
+
+  // ── Group 6: _greeting hora nocturna y límites ─────────────────────────────
+  group('HomeScreen._greeting — cobertura nocturna', () {
+    test('devuelve evening para horas nocturnas (18 a 23)', () {
+      expect(_greetingForHour(18), equals('evening'));
+      expect(_greetingForHour(20), equals('evening'));
+      expect(_greetingForHour(23), equals('evening'));
+    });
   });
 }

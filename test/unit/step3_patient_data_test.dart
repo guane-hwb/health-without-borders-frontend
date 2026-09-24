@@ -55,10 +55,10 @@ void main() {
 
   group('patientHasEthnicity (símbolo real de producción)', () {
     test('null → false', () => expect(patientHasEthnicity(null), isFalse));
-    test("'6' → false ('Ninguno')", () {
-      expect(patientHasEthnicity('6'), isFalse);
+    test("'6' → true (Otras etnias, NO es el centinela 'Ninguna')", () {
+      expect(patientHasEthnicity('6'), isTrue);
     });
-    test("'99' → false (código heredado del backend para 'Ninguna')", () {
+    test("'99' → false (código del backend para 'Ninguna')", () {
       expect(patientHasEthnicity('99'), isFalse);
     });
     test("'1' → true (Indígena)", () {
@@ -86,12 +86,15 @@ void main() {
   });
 
   group('kEthnicityCodes / kDisabilityCodes (contrato real exportado)', () {
-    test('kEthnicityCodes contiene exactamente los 6 códigos esperados', () {
-      expect(kEthnicityCodes, equals(<String>['6', '1', '2', '3', '4', '5']));
+    test('kEthnicityCodes contiene exactamente los 7 códigos esperados', () {
+      expect(
+        kEthnicityCodes,
+        equals(<String>['99', '1', '2', '3', '4', '5', '6']),
+      );
     });
 
     test('kNoEthnicityCodes son los únicos códigos de "sin etnia"', () {
-      expect(kNoEthnicityCodes, equals(<String>['6', '99']));
+      expect(kNoEthnicityCodes, equals(<String>['99']));
       for (final code in kEthnicityCodes) {
         expect(
           patientHasEthnicity(code),
@@ -103,7 +106,7 @@ void main() {
     test('kDisabilityCodes contiene exactamente los 8 códigos esperados', () {
       expect(
         kDisabilityCodes,
-        equals(<String>['00', '01', '02', '03', '04', '05', '06', '07']),
+        equals(<String>['08', '01', '02', '03', '04', '05', '06', '07']),
       );
     });
 
@@ -316,7 +319,7 @@ void main() {
       expect(kSupportedNationalityCodes, isNot(contains('UNK')));
     });
 
-    test('todo código ofrecido tiene presentación en el catálogo', () {
+    test('todo código offered tiene presentación en el catálogo', () {
       for (final String code in kSupportedNationalityCodes) {
         if (code == 'OTHER') continue;
         expect(
@@ -325,6 +328,34 @@ void main() {
           reason: '"$code" cae al globo: falta en countryDisplay',
         );
       }
+    });
+  });
+
+  group('applyDemographicSentinelDefaults', () {
+    test('fills null demographic fields with default sentinel values', () {
+      final draft = RegisterDraft();
+      expect(draft.ethnicity, isNull);
+      expect(draft.disabilityCategory, isNull);
+      expect(draft.genderIdentity, isNull);
+
+      applyDemographicSentinelDefaults(draft);
+
+      expect(draft.ethnicity, equals('99'));
+      expect(draft.disabilityCategory, equals('08'));
+      expect(draft.genderIdentity, equals('05'));
+    });
+
+    test('preserves existing non-null demographic values', () {
+      final draft = RegisterDraft()
+        ..ethnicity = '1'
+        ..disabilityCategory = '01'
+        ..genderIdentity = '01';
+
+      applyDemographicSentinelDefaults(draft);
+
+      expect(draft.ethnicity, equals('1'));
+      expect(draft.disabilityCategory, equals('01'));
+      expect(draft.genderIdentity, equals('01'));
     });
   });
 }

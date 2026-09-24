@@ -489,4 +489,231 @@ void main() {
       },
     );
   });
+
+  group(
+    'EditGuardianSheet — Unsaved Changes Dialog, PopScope & Menu Interactivity',
+    () {
+      testWidgets(
+        'toggling menu anchor controller open and close on consecutive taps',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 1600);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+
+          await tester.pumpWidget(
+            _buildSubject(
+              guardian: _sampleGuardian(docType: 'CC', consent: fakeConsent),
+              guardianIndex: 1,
+              onConfirm: (_) {},
+            ),
+          );
+
+          final selectorInkWell = find.ancestor(
+            of: find.byIcon(Icons.credit_card_outlined).first,
+            matching: find.byType(InkWell),
+          );
+
+          await tester.ensureVisible(selectorInkWell);
+
+          await tester.tap(selectorInkWell);
+          await tester.pumpAndSettle();
+
+          await tester.tap(selectorInkWell);
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+        },
+      );
+
+      testWidgets(
+        'shows warning dialog on close when form fields are modified',
+        (tester) async {
+          await tester.pumpWidget(
+            _buildSubject(
+              guardian: _sampleGuardian(consent: fakeConsent),
+              guardianIndex: 1,
+              onConfirm: (_) {},
+            ),
+          );
+
+          final nameField = find.byWidgetPredicate(
+            (w) => w is TextField && w.controller?.text == 'María García',
+          );
+          await tester.enterText(nameField, 'María Modificada');
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(AlertDialog), findsOneWidget);
+        },
+      );
+
+      testWidgets('cancels closing when clicking Cancel in unsaved dialog', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(consent: fakeConsent),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+          ),
+        );
+
+        final nameField = find.byWidgetPredicate(
+          (w) => w is TextField && w.controller?.text == 'María García',
+        );
+        await tester.enterText(nameField, 'María Modificada');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(EditGuardianSheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      });
+
+      testWidgets(
+        'confirms exit and closes sheet when clicking Exit in unsaved dialog',
+        (tester) async {
+          await tester.pumpWidget(
+            _wrap(
+              Builder(
+                builder: (ctx) => ElevatedButton(
+                  onPressed: () => showModalBottomSheet<void>(
+                    context: ctx,
+                    builder: (_) => EditGuardianSheet(
+                      guardian: _sampleGuardian(consent: fakeConsent),
+                      guardianIndex: 1,
+                      onConfirm: (_) {},
+                    ),
+                  ),
+                  child: const Text('Abrir'),
+                ),
+              ),
+              locale: 'es',
+            ),
+          );
+
+          await tester.tap(find.text('Abrir'));
+          await tester.pumpAndSettle();
+
+          final nameField = find.byWidgetPredicate(
+            (w) => w is TextField && w.controller?.text == 'María García',
+          );
+          await tester.enterText(nameField, 'María Modificada');
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.text('Salir'));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(EditGuardianSheet), findsNothing);
+        },
+      );
+
+      testWidgets('triggers PopScope unsaved handler on back gesture', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(consent: fakeConsent),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+          ),
+        );
+
+        final nameField = find.byWidgetPredicate(
+          (w) => w is TextField && w.controller?.text == 'María García',
+        );
+        await tester.enterText(nameField, 'María Modificada');
+        await tester.pump();
+
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        popScope.onPopInvokedWithResult?.call(false, null);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      });
+
+      testWidgets(
+        'displays validation error messages when submitting empty mandatory fields in Spanish',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 1600);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+
+          await tester.pumpWidget(
+            _buildSubject(
+              guardian: _sampleGuardian(consent: fakeConsent),
+              guardianIndex: 1,
+              onConfirm: (_) {},
+              locale: 'es',
+            ),
+          );
+
+          final textFields = find.byType(TextField);
+          await tester.enterText(textFields.at(0), '');
+          await tester.enterText(textFields.at(1), '');
+          await tester.enterText(textFields.at(2), '');
+          await tester.pump();
+
+          final confirmBtn = find.text('Confirmar cambios');
+          await tester.ensureVisible(confirmBtn);
+          await tester.tap(confirmBtn);
+          await tester.pumpAndSettle();
+
+          expect(
+            find.text('El nombre del guardián es obligatorio'),
+            findsOneWidget,
+          );
+          expect(find.text('El teléfono es obligatorio'), findsOneWidget);
+          expect(find.text('El documento es obligatorio'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'displays validation error messages when submitting empty mandatory fields in English',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 1600);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+
+          await tester.pumpWidget(
+            _buildSubject(
+              guardian: _sampleGuardian(consent: fakeConsent),
+              guardianIndex: 1,
+              onConfirm: (_) {},
+              locale: 'en',
+            ),
+          );
+
+          final textFields = find.byType(TextField);
+          await tester.enterText(textFields.at(0), '');
+          await tester.enterText(textFields.at(1), '');
+          await tester.enterText(textFields.at(2), '');
+          await tester.pump();
+
+          final confirmBtn = find.text('Confirm changes');
+          await tester.ensureVisible(confirmBtn);
+          await tester.tap(confirmBtn);
+          await tester.pumpAndSettle();
+
+          expect(find.text('Guardian name is required'), findsOneWidget);
+          expect(find.text('Phone number is required'), findsOneWidget);
+          expect(find.text('Document number is required'), findsOneWidget);
+        },
+      );
+    },
+  );
 }

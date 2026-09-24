@@ -1,18 +1,15 @@
 // lib/src/core/storage/web_storage_stub.dart
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+Future<String?> getWebStorageItem(String key) async => null;
 
-Never _unsupported() => throw UnsupportedError(
-  'web_storage: se seleccionó el stub no-op estando en web. Revisa la '
-  'importación condicional de web_storage.dart (predicado del target).',
-);
+Future<void> setWebStorageItem(String key, String value) async {}
 
-String? getWebStorageItem(String key) => kIsWeb ? _unsupported() : null;
+Future<void> removeWebStorageItem(String key) async {}
 
-void setWebStorageItem(String key, String value) {
-  if (kIsWeb) _unsupported();
-}
+Future<void> clearAllWebStorage() async {}
 
-void removeWebStorageItem(String key) {
-  if (kIsWeb) _unsupported();
-}
+Future<List<MapEntry<String, String>>> listWebStorageEntries(
+  String prefix,
+) async => const <MapEntry<String, String>>[];
+
+Future<void> deleteWebStorageByPrefix(String prefix) async {}

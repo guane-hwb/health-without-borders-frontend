@@ -103,4 +103,70 @@ void main() {
       },
     );
   });
+
+  group('EditAddressSheet — Unsaved Changes Logic', () {
+    bool hasUnsavedChanges({
+      required String street,
+      required String city,
+      required String state,
+      required String zone,
+      required String initialStreet,
+      required String initialCity,
+      required String initialState,
+      required String initialZone,
+    }) {
+      final streetChanged = street.trim() != initialStreet;
+      final cityChanged = city.trim() != initialCity;
+      final stateChanged = state.trim() != initialState;
+      final zoneChanged = zone != initialZone;
+
+      return streetChanged || cityChanged || stateChanged || zoneChanged;
+    }
+
+    test('returns false when fields remain unmodified', () {
+      expect(
+        hasUnsavedChanges(
+          street: 'Calle 10',
+          city: 'Riohacha',
+          state: 'La Guajira',
+          zone: '01',
+          initialStreet: 'Calle 10',
+          initialCity: 'Riohacha',
+          initialState: 'La Guajira',
+          initialZone: '01',
+        ),
+        isFalse,
+      );
+    });
+
+    test('returns true when any field or zone changes', () {
+      expect(
+        hasUnsavedChanges(
+          street: 'Calle 20',
+          city: 'Riohacha',
+          state: 'La Guajira',
+          zone: '01',
+          initialStreet: 'Calle 10',
+          initialCity: 'Riohacha',
+          initialState: 'La Guajira',
+          initialZone: '01',
+        ),
+        isTrue,
+      );
+
+      expect(
+        hasUnsavedChanges(
+          street: 'Calle 10',
+          city: 'Riohacha',
+          state: 'La Guajira',
+          zone: '02',
+          initialStreet: 'Calle 10',
+          initialCity: 'Riohacha',
+          initialState: 'La Guajira',
+          initialZone: '01',
+        ),
+        isTrue,
+      );
+    });
+  });
 }

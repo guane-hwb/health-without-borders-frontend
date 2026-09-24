@@ -3,6 +3,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
@@ -11,25 +12,29 @@ import 'package:health_without_borders_frontend/src/core/network/api_client.dart
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
-
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Helpers test
+//  Helpers test & Mocks
 // ─────────────────────────────────────────────────────────────────────────────
+
+class MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class FakeAuthRepository implements AuthRepository {
   FakeAuthRepository({this.currentUser});
 
   @override
-  Future<String?> getNfcEncryptionKey() async => null;
+  Future<NfcKeyring?> getNfcKeyring() async => null;
+
+  @override
+  Future<bool> isNfcSessionExpired() async => false;
 
   @override
   UserSession? currentUser;
@@ -65,6 +70,9 @@ class FakeAuthRepository implements AuthRepository {
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
+  ValueListenable<bool> get sessionWindowClosed => ValueNotifier<bool>(false);
+
+  @override
   Future<void> clearSession() async {
     clearSessionCalled = true;
     currentUser = null;
@@ -84,107 +92,22 @@ class FakeAuthRepository implements AuthRepository {
   @override
   ValueNotifier<UserSession?> get sessionNotifier =>
       ValueNotifier<UserSession?>(currentUser);
-}
-
-class FakeLocalDatabase implements LocalDatabase {
-  FakeLocalDatabase({this.pendingCount = 0});
-
-  int pendingCount;
 
   @override
-  Future<void> logEmergencyAccess({
-    required String patientUid,
-    String? patientName,
-    String? userId,
-    String reason = 'guardian_absent_offline',
-  }) async {}
+  VoidCallback? onSessionInvalidated;
 
   @override
-  Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs() async =>
-      <Map<String, Object?>>[];
+  Future<void> discardForeignPendingData() async {}
 
   @override
-  Future<int> getUnsyncedEmergencyLogCount() async => pendingCount;
+  Future<List<Map<String, Object?>>>
+  pendingForeignEmergencyLogsForReview() async => <Map<String, Object?>>[];
 
   @override
-  Future<void> clearAll() async {}
-
-  @override
-  Future<void> deleteRecord(String patientId) async {}
-
-  @override
-  Future<List<LocalPatientEntry>> getAllRecords({String? ownerUserId}) async =>
+  Future<List<LocalPatientEntry>> pendingForeignRecordsForReview() async =>
       <LocalPatientEntry>[];
-
-  @override
-  Future<int> getUnsyncedCount({String? ownerUserId}) async => pendingCount;
-
-  @override
-  Future<List<LocalPatientEntry>> getUnsyncedRecords({
-    String? ownerUserId,
-  }) async => <LocalPatientEntry>[];
-
-  @override
-  Future<void> markSyncError(
-    String patientId,
-    String error, {
-    int? statusCode,
-    int? revision,
-  }) async {}
-
-  @override
-  Future<void> markSynced(
-    String patientId, {
-    String? createdAt,
-    String? recordJson,
-    int? revision,
-  }) async {}
-
-  @override
-  Future<void> destroyEncryptionKey() async {}
-
-  @override
-  Future<void> markEmergencyLogsSynced(List<int> logIds) async {}
-
-  @override
-  Future<void> savePatient(
-    PatientFullRecord record, {
-    String? ownerUserId,
-    String? organizationId,
-    String? retiredDeviceReason,
-  }) async {}
-
-  @override
-  Future<NfcChipStatus?> getChipStatus(String patientId) async => null;
-
-  @override
-  Future<void> markChipsDirty(
-    String patientId, {
-    bool patient = false,
-    bool guardian = false,
-  }) async {}
-
-  @override
-  Future<void> clearChipsDirty(
-    String patientId, {
-    bool patient = false,
-    bool guardian = false,
-  }) async {}
-
-  @override
-  Future<void> purgeStalePermanentErrors({
-    Duration maxAge = const Duration(days: 30),
-  }) async {}
-
-  @override
-  Future<int> getBlockedCount({String? ownerUserId}) async => 0;
-
-  @override
-  Future<int> getRetryablePendingCount({String? ownerUserId}) async =>
-      pendingCount;
 }
 
-/// Create a [UserSession] with the specified role.
 UserSession _session(UserRole role, {String name = 'Ana Rodríguez'}) =>
     UserSession(
       id: 'uid-001',
@@ -195,9 +118,9 @@ UserSession _session(UserRole role, {String name = 'Ana Rodríguez'}) =>
     );
 
 late FakeAuthRepository mockAuth;
-late FakeLocalDatabase mockDb;
+late MockLocalDatabase mockDb;
 
-Widget _wrapHome({required UserSession? user}) {
+Widget _wrapHome({required UserSession? user, bool isOnline = true}) {
   mockAuth.currentUser = user;
 
   final apiClient = ApiClient(baseUrl: 'https://example.com');
@@ -213,6 +136,7 @@ Widget _wrapHome({required UserSession? user}) {
     patientRepository: patientRepository,
     localDatabase: mockDb,
   );
+  syncEngine.isOnline.value = isOnline;
 
   return AppLocale(
     locale: 'es',
@@ -229,7 +153,11 @@ Widget _wrapHome({required UserSession? user}) {
       ),
       reachability: Reachability(baseUrl: 'http://localhost'),
       child: MaterialApp(
-        routes: {'/login': (_) => const LoginScreen()},
+        routes: {
+          '/login': (_) => const LoginScreen(),
+          '/nfc/loss-wristband': (_) =>
+              const Scaffold(body: Text('Loss Wristband Screen')),
+        },
         home: const HomeScreen(),
       ),
     ),
@@ -238,17 +166,28 @@ Widget _wrapHome({required UserSession? user}) {
 
 void _setUpMocks() {
   mockAuth = FakeAuthRepository();
-  mockDb = FakeLocalDatabase(pendingCount: 0);
-}
+  mockDb = MockLocalDatabase();
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Tests
-// ─────────────────────────────────────────────────────────────────────────────
+  when(
+    () =>
+        mockDb.getRetryablePendingCount(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => 0);
+  when(
+    () => mockDb.getBlockedCount(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => 0);
+  when(
+    () => mockDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => 0);
+  when(
+    () => mockDb.getUnsyncedEmergencyLogCount(
+      ownerUserId: any(named: 'ownerUserId'),
+    ),
+  ).thenAnswer((_) async => 0);
+}
 
 void main() {
   setUp(_setUpMocks);
 
-  // ── Group 1: Session-free redirection ───────────────────────────────────────
   group('HomeScreen — sin usuario activo', () {
     testWidgets('muestra LoginScreen cuando currentUser es null', (
       tester,
@@ -260,7 +199,6 @@ void main() {
     });
   });
 
-  // ── Group 2: Header ───────────────────────────────────────────────────────
   group('HomeScreen — header', () {
     testWidgets('muestra el nombre completo del usuario', (tester) async {
       final user = _session(UserRole.doctor, name: 'Carlos Mejía');
@@ -303,7 +241,6 @@ void main() {
     });
   });
 
-  // ── Group 3: Body superadmin ──────────────────────────────────────────────
   group('HomeScreen — body superadmin', () {
     testWidgets('muestra card de Gestionar organizaciones', (tester) async {
       final user = _session(UserRole.superadmin);
@@ -340,7 +277,6 @@ void main() {
     });
   });
 
-  // ── Group 4: Body orgAdmin ────────────────────────────────────────────────
   group('HomeScreen — body orgAdmin', () {
     testWidgets('muestra card de Gestionar usuarios', (tester) async {
       final user = _session(UserRole.orgAdmin);
@@ -384,7 +320,6 @@ void main() {
     });
   });
 
-  // ── Group 5: Body clínico (doctor / nurse) ────────────────────────────────
   group('HomeScreen — body clínico', () {
     for (final role in [UserRole.doctor, UserRole.nurse]) {
       testWidgets('$role — muestra card Leer NFC', (tester) async {
@@ -425,12 +360,60 @@ void main() {
     }
   });
 
-  // ── Group 6: _SyncCard — state with pending ────────────────────────────
+  group('HomeScreen — validación offline en búsqueda de paciente', () {
+    testWidgets(
+      'muestra SnackBar preventivo estando offline al tocar Buscar Paciente',
+      (tester) async {
+        final user = _session(UserRole.doctor);
+        await tester.pumpWidget(_wrapHome(user: user, isOnline: false));
+        await tester.pumpAndSettle();
+
+        final searchCard = find.byIcon(Icons.search_rounded);
+        await tester.scrollUntilVisible(searchCard, 80);
+        await tester.ensureVisible(searchCard);
+        await tester.pumpAndSettle();
+
+        await tester.tap(searchCard);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(
+          find.text(
+            'Sin conexión a Internet. Por favor, conéctese a una red para realizar búsquedas.',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('navega a la pantalla de búsqueda estando online', (
+      tester,
+    ) async {
+      final user = _session(UserRole.doctor);
+      await tester.pumpWidget(_wrapHome(user: user, isOnline: true));
+      await tester.pumpAndSettle();
+
+      final searchCard = find.byIcon(Icons.search_rounded);
+      await tester.scrollUntilVisible(searchCard, 80);
+      await tester.ensureVisible(searchCard);
+      await tester.pumpAndSettle();
+
+      await tester.tap(searchCard);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Loss Wristband Screen'), findsOneWidget);
+    });
+  });
+
   group('_SyncCard — badge de pendientes', () {
     testWidgets(
       'sin pendientes muestra cloud_done y NO muestra badge numérico',
       (tester) async {
-        mockDb.pendingCount = 0;
+        when(
+          () => mockDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 0);
         final user = _session(UserRole.nurse);
         await tester.pumpWidget(_wrapHome(user: user));
         await tester.pumpAndSettle();
@@ -443,7 +426,11 @@ void main() {
     testWidgets('con 3 pendientes muestra cloud_upload y badge "3"', (
       tester,
     ) async {
-      mockDb.pendingCount = 3;
+      when(
+        () => mockDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 3);
       final user = _session(UserRole.doctor);
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
@@ -455,7 +442,11 @@ void main() {
     testWidgets('el badge numérico está presente con pendientes', (
       tester,
     ) async {
-      mockDb.pendingCount = 5;
+      when(
+        () => mockDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 5);
       final user = _session(UserRole.doctor);
       await tester.pumpWidget(_wrapHome(user: user));
       await tester.pumpAndSettle();
@@ -464,7 +455,6 @@ void main() {
     });
   });
 
-  // ── Group 7: Logout dialog ────────────────────────────────────────────
   group('HomeScreen — logout dialog', () {
     Future<void> tapLogout(WidgetTester tester) async {
       final logoutIcon = find.byIcon(Icons.logout_rounded);
@@ -507,24 +497,30 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
     });
 
-    testWidgets('confirmar logout llama clearSession', (tester) async {
-      final user = _session(UserRole.nurse);
-      await tester.pumpWidget(_wrapHome(user: user));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'confirmar logout llama clearSession y muestra spinner de carga',
+      (tester) async {
+        final user = _session(UserRole.nurse);
+        await tester.pumpWidget(_wrapHome(user: user));
+        await tester.pumpAndSettle();
 
-      await tapLogout(tester);
+        await tapLogout(tester);
 
-      final confirmBtn = find
-          .descendant(
-            of: find.byType(AlertDialog),
-            matching: find.byType(TextButton),
-          )
-          .last;
-      await tester.tap(confirmBtn);
-      await tester.pumpAndSettle();
+        final confirmBtn = find
+            .descendant(
+              of: find.byType(AlertDialog),
+              matching: find.byType(TextButton),
+            )
+            .last;
+        await tester.tap(confirmBtn);
+        await tester.pump();
 
-      expect(mockAuth.clearSessionCalled, isTrue);
-    });
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+        await tester.pumpAndSettle();
+        expect(mockAuth.clearSessionCalled, isTrue);
+      },
+    );
 
     testWidgets('el diálogo tiene exactamente 2 botones', (tester) async {
       final user = _session(UserRole.superadmin);
@@ -554,7 +550,6 @@ void main() {
     });
   });
 
-  // ── Group 8: Locale switcher ──────────────────────────────────────────────
   group('HomeScreen — selector de idioma', () {
     testWidgets('muestra botones ES y EN', (tester) async {
       final user = _session(UserRole.doctor);
@@ -566,7 +561,6 @@ void main() {
     });
   });
 
-  // ── Group 9: ActionCard — visual structure ───────────────────────────────
   group('_ActionCard — estructura visual', () {
     testWidgets('cada card tiene ícono de flecha derecha', (tester) async {
       final user = _session(UserRole.doctor);
@@ -586,6 +580,399 @@ void main() {
           .where((m) => m.color == AppColors.white)
           .toList();
       expect(whiteCards.length, greaterThanOrEqualTo(3));
+    });
+  });
+
+  group(
+    'HomeScreen — Navegación de tarjetas (Superadmin, OrgAdmin, Clínico)',
+    () {
+      testWidgets(
+        'Superadmin: tap en Gestionar organizaciones y Estadísticas',
+        (tester) async {
+          final user = _session(UserRole.superadmin);
+          await tester.pumpWidget(
+            AppLocale(
+              locale: 'es',
+              setLocale: (_) {},
+              child: AppScope(
+                authRepository: mockAuth,
+                userRepository: UserRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                patientRepository: PatientRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                localDatabase: mockDb,
+                syncEngine: SyncEngine(
+                  patientRepository: PatientRepository(
+                    apiClient: ApiClient(baseUrl: 'http://localhost'),
+                    authRepository: mockAuth,
+                  ),
+                  localDatabase: mockDb,
+                ),
+                statsRepository: StatsRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                reachability: Reachability(baseUrl: 'http://localhost'),
+                child: MaterialApp(
+                  routes: {
+                    '/': (_) {
+                      mockAuth.currentUser = user;
+                      return const HomeScreen();
+                    },
+                    '/admin/manage-orgs': (_) =>
+                        const Scaffold(body: Text('Manage Orgs Screen')),
+                    '/admin/brigade-stats': (_) =>
+                        const Scaffold(body: Text('Brigade Stats Screen')),
+                  },
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.business_outlined));
+          await tester.pumpAndSettle();
+          expect(find.text('Manage Orgs Screen'), findsOneWidget);
+
+          Navigator.of(tester.element(find.text('Manage Orgs Screen'))).pop();
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.bar_chart_rounded));
+          await tester.pumpAndSettle();
+          expect(find.text('Brigade Stats Screen'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'OrgAdmin: tap en Gestionar usuarios, Buscar y Estadísticas Org',
+        (tester) async {
+          final user = _session(UserRole.orgAdmin);
+          await tester.pumpWidget(
+            AppLocale(
+              locale: 'es',
+              setLocale: (_) {},
+              child: AppScope(
+                authRepository: mockAuth,
+                userRepository: UserRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                patientRepository: PatientRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                localDatabase: mockDb,
+                syncEngine: SyncEngine(
+                  patientRepository: PatientRepository(
+                    apiClient: ApiClient(baseUrl: 'http://localhost'),
+                    authRepository: mockAuth,
+                  ),
+                  localDatabase: mockDb,
+                ),
+                statsRepository: StatsRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                reachability: Reachability(baseUrl: 'http://localhost'),
+                child: MaterialApp(
+                  routes: {
+                    '/': (_) {
+                      mockAuth.currentUser = user;
+                      return const HomeScreen();
+                    },
+                    '/admin/manage-users': (_) =>
+                        const Scaffold(body: Text('Manage Users Screen')),
+                    '/nfc/loss-wristband': (_) =>
+                        const Scaffold(body: Text('Loss Wristband Screen')),
+                    '/admin/brigade-stats-org': (_) =>
+                        const Scaffold(body: Text('Brigade Stats Org Screen')),
+                  },
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.people_alt_outlined));
+          await tester.pumpAndSettle();
+          expect(find.text('Manage Users Screen'), findsOneWidget);
+
+          Navigator.of(tester.element(find.text('Manage Users Screen'))).pop();
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+          expect(find.text('Loss Wristband Screen'), findsOneWidget);
+
+          Navigator.of(
+            tester.element(find.text('Loss Wristband Screen')),
+          ).pop();
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.bar_chart_rounded));
+          await tester.pumpAndSettle();
+          expect(find.text('Brigade Stats Org Screen'), findsOneWidget);
+        },
+      );
+
+      testWidgets('Clínico: tap en Leer NFC, Nuevo paciente y SyncQueue', (
+        tester,
+      ) async {
+        final user = _session(UserRole.doctor);
+        await tester.pumpWidget(
+          AppLocale(
+            locale: 'es',
+            setLocale: (_) {},
+            child: AppScope(
+              authRepository: mockAuth,
+              userRepository: UserRepository(
+                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                authRepository: mockAuth,
+              ),
+              patientRepository: PatientRepository(
+                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                authRepository: mockAuth,
+              ),
+              localDatabase: mockDb,
+              syncEngine: SyncEngine(
+                patientRepository: PatientRepository(
+                  apiClient: ApiClient(baseUrl: 'http://localhost'),
+                  authRepository: mockAuth,
+                ),
+                localDatabase: mockDb,
+              ),
+              statsRepository: StatsRepository(
+                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                authRepository: mockAuth,
+              ),
+              reachability: Reachability(baseUrl: 'http://localhost'),
+              child: MaterialApp(
+                routes: {
+                  '/': (_) {
+                    mockAuth.currentUser = user;
+                    return const HomeScreen();
+                  },
+                  '/nfc/read': (_) =>
+                      const Scaffold(body: Text('Read NFC Screen')),
+                  '/nfc/register': (_) =>
+                      const Scaffold(body: Text('Register NFC Screen')),
+                  '/sync/queue': (_) =>
+                      const Scaffold(body: Text('Sync Queue Screen')),
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.nfc_rounded));
+        await tester.pumpAndSettle();
+        expect(find.text('Read NFC Screen'), findsOneWidget);
+
+        Navigator.of(tester.element(find.text('Read NFC Screen'))).pop();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.person_add_alt_1_rounded));
+        await tester.pumpAndSettle();
+        expect(find.text('Register NFC Screen'), findsOneWidget);
+
+        Navigator.of(tester.element(find.text('Register NFC Screen'))).pop();
+        await tester.pumpAndSettle();
+
+        final syncCard = find.byIcon(Icons.cloud_done_outlined);
+        await tester.scrollUntilVisible(syncCard, 100);
+        await tester.tap(syncCard);
+        await tester.pumpAndSettle();
+        expect(find.text('Sync Queue Screen'), findsOneWidget);
+      });
+    },
+  );
+
+  group('_SyncCard — Estados avanzados y listeners de SyncEngine', () {
+    testWidgets(
+      'Muestra subtítulo y estilos de alerta cuando hay registros bloqueados',
+      (tester) async {
+        when(
+          () => mockDb.getBlockedCount(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => 2);
+        when(
+          () => mockDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 0);
+
+        final user = _session(UserRole.doctor);
+        final apiClient = ApiClient(baseUrl: 'https://example.com');
+        final patientRepo = PatientRepository(
+          apiClient: apiClient,
+          authRepository: mockAuth,
+        );
+        final syncEngine = SyncEngine(
+          patientRepository: patientRepo,
+          localDatabase: mockDb,
+        );
+
+        syncEngine.pendingCount.value = 0;
+        syncEngine.blockedCount.value = 2;
+
+        mockAuth.currentUser = user;
+
+        await tester.pumpWidget(
+          AppLocale(
+            locale: 'es',
+            setLocale: (_) {},
+            child: AppScope(
+              authRepository: mockAuth,
+              userRepository: UserRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              patientRepository: patientRepo,
+              localDatabase: mockDb,
+              syncEngine: syncEngine,
+              statsRepository: StatsRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              reachability: Reachability(baseUrl: 'http://localhost'),
+              child: const MaterialApp(home: HomeScreen()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('2 requieren intervención'), findsOneWidget);
+        expect(find.byIcon(Icons.cloud_upload_outlined), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Muestra subtítulo combinado cuando hay pendientes y bloqueados',
+      (tester) async {
+        when(
+          () => mockDb.getBlockedCount(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => 1);
+        when(
+          () => mockDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 3);
+
+        final user = _session(UserRole.doctor);
+        final apiClient = ApiClient(baseUrl: 'https://example.com');
+        final patientRepo = PatientRepository(
+          apiClient: apiClient,
+          authRepository: mockAuth,
+        );
+        final syncEngine = SyncEngine(
+          patientRepository: patientRepo,
+          localDatabase: mockDb,
+        );
+
+        syncEngine.pendingCount.value = 3;
+        syncEngine.blockedCount.value = 1;
+
+        mockAuth.currentUser = user;
+
+        await tester.pumpWidget(
+          AppLocale(
+            locale: 'es',
+            setLocale: (_) {},
+            child: AppScope(
+              authRepository: mockAuth,
+              userRepository: UserRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              patientRepository: patientRepo,
+              localDatabase: mockDb,
+              syncEngine: syncEngine,
+              statsRepository: StatsRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              reachability: Reachability(baseUrl: 'http://localhost'),
+              child: const MaterialApp(home: HomeScreen()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('1 requieren intervención'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Dispara callbacks de onSyncStatusChanged, onRecordSynced y ValueNotifier',
+      (tester) async {
+        final user = _session(UserRole.doctor);
+        final apiClient = ApiClient(baseUrl: 'https://example.com');
+        final patientRepo = PatientRepository(
+          apiClient: apiClient,
+          authRepository: mockAuth,
+        );
+        final syncEngine = SyncEngine(
+          patientRepository: patientRepo,
+          localDatabase: mockDb,
+        );
+
+        bool prevStatusCalled = false;
+        bool prevSyncedCalled = false;
+        syncEngine.onSyncStatusChanged = (_) => prevStatusCalled = true;
+        syncEngine.onRecordSynced = (_, _, _) => prevSyncedCalled = true;
+
+        mockAuth.currentUser = user;
+
+        await tester.pumpWidget(
+          AppLocale(
+            locale: 'es',
+            setLocale: (_) {},
+            child: AppScope(
+              authRepository: mockAuth,
+              userRepository: UserRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              patientRepository: patientRepo,
+              localDatabase: mockDb,
+              syncEngine: syncEngine,
+              statsRepository: StatsRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              reachability: Reachability(baseUrl: 'http://localhost'),
+              child: const MaterialApp(home: HomeScreen()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        syncEngine.onSyncStatusChanged?.call(5);
+        syncEngine.onRecordSynced?.call('p-1', true, null);
+        syncEngine.pendingCount.value = 4;
+
+        await tester.pumpAndSettle();
+
+        expect(prevStatusCalled, isTrue);
+        expect(prevSyncedCalled, isTrue);
+      },
+    );
+  });
+
+  group('_ActionCard — Renderizado sin subtítulo', () {
+    testWidgets('Renderiza correctamente la tarjeta cuando subtitle es null', (
+      tester,
+    ) async {
+      final user = _session(UserRole.superadmin);
+      await tester.pumpWidget(_wrapHome(user: user));
+      await tester.pumpAndSettle();
+
+      final cardFinder = find.byType(InkWell).first;
+      expect(cardFinder, findsOneWidget);
     });
   });
 }

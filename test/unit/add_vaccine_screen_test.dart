@@ -694,6 +694,275 @@ void main() {
       },
     );
   });
+
+  group('Cobertura total de flujos y casos bordes en AddVaccineScreen', () {
+    testWidgets('NFC scan asigna correctamente el paciente recibido', (
+      tester,
+    ) async {
+      final scope = _defaultScope();
+      when(
+        () => scope.patientRepository.scanDevice(any()),
+      ).thenAnswer((_) async => _fakePatient(name: 'Ana García'));
+
+      NfcService.overrideReadDeviceUid = () async => 'UID-SUCCESS';
+
+      await tester.pumpWidget(_buildApp(scope: scope));
+      await tester.tap(find.byIcon(Icons.nfc_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ana García'), findsOneWidget);
+      NfcService.overrideReadDeviceUid = null;
+    });
+
+    testWidgets('NFC scan captura ApiException y muestra e.message', (
+      tester,
+    ) async {
+      final scope = _defaultScope();
+      when(() => scope.patientRepository.scanDevice(any())).thenThrow(
+        ApiException('Error de conexión con el servidor', statusCode: 500),
+      );
+
+      NfcService.overrideReadDeviceUid = () async => 'UID-API-ERR';
+
+      await tester.pumpWidget(_buildApp(scope: scope));
+      await tester.tap(find.byIcon(Icons.nfc_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Error de conexión con el servidor'), findsOneWidget);
+      NfcService.overrideReadDeviceUid = null;
+    });
+
+    testWidgets(
+      'NFC scan captura excepción genérica y muestra texto de error',
+      (tester) async {
+        final scope = _defaultScope();
+        when(
+          () => scope.patientRepository.scanDevice(any()),
+        ).thenThrow(Exception('Error no controlado'));
+
+        NfcService.overrideReadDeviceUid = () async => 'UID-GENERIC-ERR';
+
+        await tester.pumpWidget(_buildApp(scope: scope));
+        await tester.tap(find.byIcon(Icons.nfc_rounded));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('No se pudo leer el dispositivo. Inténtalo de nuevo.'),
+          findsOneWidget,
+        );
+        NfcService.overrideReadDeviceUid = null;
+      },
+    );
+
+    testWidgets('Búsqueda manual en diálogo procesa UID y asigna paciente', (
+      tester,
+    ) async {
+      final scope = _defaultScope();
+      when(
+        () => scope.patientRepository.scanDevice('UID-MANUAL-123'),
+      ).thenAnswer((_) async => _fakePatient(name: 'Carlos Ruiz'));
+
+      await tester.pumpWidget(_buildApp(scope: scope));
+      await tester.tap(find.text('Buscar paciente'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'UID del dispositivo NFC'),
+        'UID-MANUAL-123',
+      );
+      await tester.tap(find.text('Buscar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Carlos Ruiz'), findsOneWidget);
+    });
+
+    testWidgets(
+      'Búsqueda manual en diálogo maneja error al fallar scanDevice',
+      (tester) async {
+        final scope = _defaultScope();
+        final completer = Completer<PatientFullRecord>();
+        when(
+          () => scope.patientRepository.scanDevice('UID-FAIL'),
+        ).thenAnswer((_) => completer.future);
+
+        await tester.pumpWidget(_buildApp(scope: scope));
+        await tester.tap(find.text('Buscar paciente'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.widgetWithText(TextField, 'UID del dispositivo NFC'),
+          'UID-FAIL',
+        );
+        await tester.tap(find.text('Buscar'));
+        await tester.pump();
+
+        completer.completeError(ApiException('Paciente no encontrado'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Paciente no encontrado'), findsOneWidget);
+      },
+    );
+
+    testWidgets('Selección de fecha de administración mediante DatePicker', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+      await tester.pumpAndSettle();
+
+      final now = DateTime.now();
+      final dateText =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+      final datePickerButton = find.text(dateText);
+      await tester.ensureVisible(datePickerButton);
+      await tester.tap(datePickerButton);
+      await tester.pumpAndSettle();
+
+      final dialogButtons = find.descendant(
+        of: find.byType(Dialog),
+        matching: find.byType(TextButton),
+      );
+      if (dialogButtons.evaluate().isNotEmpty) {
+        await tester.tap(dialogButtons.last);
+        await tester.pumpAndSettle();
+      }
+
+      expect(find.text(dateText), findsOneWidget);
+    });
+
+    testWidgets(
+      'Guardado de múltiples vacunas muestra SnackBar pluralizado y se reinicia sesión',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final scope = _defaultScope();
+        when(
+          () => scope.localDatabase.savePatient(any()),
+        ).thenAnswer((_) async {});
+        when(
+          () => scope.localDatabase.markChipsDirty(
+            any(),
+            guardian: any(named: 'guardian'),
+          ),
+        ).thenAnswer((_) async {});
+        when(
+          () => scope.syncEngine.refreshPendingCount(),
+        ).thenAnswer((_) async => 0);
+        when(() => scope.syncEngine.syncAll()).thenAnswer((_) async => true);
+
+        await tester.pumpWidget(
+          _buildApp(patient: _fakePatient(), scope: scope),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          textFieldWithHint(_hintVaccineName).first,
+          'BCG',
+        );
+        await tester.enterText(textFieldWithHint(_hintCvxCode).first, '19');
+
+        final addBtn = find.text('Agregar');
+        await tester.ensureVisible(addBtn);
+        await tester.tap(addBtn);
+        await tester.pumpAndSettle();
+
+        final v2Name = textFieldWithHint(_hintVaccineName).at(1);
+        await tester.ensureVisible(v2Name);
+        await tester.enterText(v2Name, 'Hepatitis B');
+
+        final v2Code = textFieldWithHint(_hintCvxCode).at(1);
+        await tester.ensureVisible(v2Code);
+        await tester.enterText(v2Code, '08');
+
+        final adminBy = textFieldWithHint(_hintAdminBy);
+        await tester.ensureVisible(adminBy);
+        await tester.enterText(adminBy, 'Dr. Ruiz');
+
+        final adminAt = textFieldWithHint(_hintAdminAt);
+        await tester.ensureVisible(adminAt);
+        await tester.enterText(adminAt, 'Clínica Central');
+        await tester.pump();
+
+        await _tapGuardar(tester, entriesCount: 2);
+        await tester.pumpAndSettle();
+
+        expect(find.text('2 vacunas guardadas exitosamente'), findsWidgets);
+
+        await tester.tap(find.text('Registrar otra sesión'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Escanear paciente'), findsOneWidget);
+      },
+    );
+
+    testWidgets('Botón Atrás en el paso de éxito navega correctamente', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final scope = _defaultScope();
+      when(
+        () => scope.localDatabase.savePatient(any()),
+      ).thenAnswer((_) async {});
+      when(
+        () => scope.localDatabase.markChipsDirty(
+          any(),
+          guardian: any(named: 'guardian'),
+        ),
+      ).thenAnswer((_) async {});
+      when(
+        () => scope.syncEngine.refreshPendingCount(),
+      ).thenAnswer((_) async => 0);
+      when(() => scope.syncEngine.syncAll()).thenAnswer((_) async => true);
+
+      await tester.pumpWidget(_buildApp(patient: _fakePatient(), scope: scope));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(textFieldWithHint(_hintVaccineName).first, 'BCG');
+      await tester.enterText(textFieldWithHint(_hintCvxCode).first, '19');
+      await tester.enterText(textFieldWithHint(_hintAdminBy), 'Dr. Ruiz');
+      await tester.enterText(
+        textFieldWithHint(_hintAdminAt),
+        'Clínica Central',
+      );
+      await tester.pump();
+
+      await _tapGuardar(tester);
+      await tester.pumpAndSettle();
+
+      final backBtn = find.widgetWithText(OutlinedButton, 'Atrás');
+      expect(backBtn, findsOneWidget);
+      await tester.tap(backBtn);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Header ejecuta la navegación de regreso', (tester) async {
+      await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+      await tester.pumpAndSettle();
+
+      final backIcon = find.byIcon(Icons.arrow_back);
+      expect(backIcon, findsOneWidget);
+      await tester.tap(backIcon);
+      await tester.pumpAndSettle();
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------

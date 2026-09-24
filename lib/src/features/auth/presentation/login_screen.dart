@@ -8,6 +8,8 @@ import '../../../core/network/api_client.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/hwb_logo.dart';
 import '../../home/presentation/home_screen.dart';
+import '../data/auth_repository.dart';
+import 'foreign_data_reconciliation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.showSessionExpired = false});
@@ -325,11 +327,28 @@ class _LoginScreenState extends State<LoginScreen> {
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
       );
+    } on ForeignPendingDataException catch (e) {
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ForeignDataReconciliationScreen(
+            authRepository: AppScope.of(context).authRepository,
+            exception: e,
+          ),
+        ),
+      );
     } on ApiException catch (e) {
       if (!mounted) return;
+      final isNetworkError =
+          e.message.toLowerCase().contains('socketexception') ||
+          e.message.toLowerCase().contains('network') ||
+          e.message.toLowerCase().contains('connection');
+
+      final errorMessage = isNetworkError ? s.loginNetworkRequired : e.message;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.message),
+          content: Text(errorMessage),
           backgroundColor: Colors.red.shade700,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -338,11 +357,21 @@ class _LoginScreenState extends State<LoginScreen> {
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         ),
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
+      final errStr = e.toString().toLowerCase();
+      final isNetworkError =
+          errStr.contains('socketexception') ||
+          errStr.contains('network') ||
+          errStr.contains('failed host lookup');
+
+      final errorMessage = isNetworkError
+          ? s.loginNetworkRequired
+          : s.loginFailed;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(s.loginFailed),
+          content: Text(errorMessage),
           backgroundColor: Colors.red.shade700,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(

@@ -12,6 +12,7 @@ import 'package:health_without_borders_frontend/src/core/network/api_client.dart
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
@@ -32,7 +33,10 @@ class FakeAuthRepository implements AuthRepository {
   loginHandler;
 
   @override
-  Future<String?> getNfcEncryptionKey() async => null;
+  Future<NfcKeyring?> getNfcKeyring() async => null;
+
+  @override
+  Future<bool> isNfcSessionExpired() async => false;
 
   @override
   Future<UserSession> login({
@@ -69,6 +73,10 @@ class FakeAuthRepository implements AuthRepository {
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
+  ValueListenable<bool> get sessionWindowClosed =>
+      ValueNotifier<bool>(false);
+
+  @override
   Future<void> clearSession() async {
     _session = null;
   }
@@ -87,6 +95,9 @@ class FakeAuthRepository implements AuthRepository {
   @override
   ValueNotifier<UserSession?> get sessionNotifier =>
       ValueNotifier<UserSession?>(_session);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

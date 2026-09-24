@@ -1,10 +1,4 @@
 // test/unit/api_client_test.dart
-//
-// Exercises the auto-refresh interceptor baked into ApiClient: on a 401 from a
-// protected route it renews the access token once (via the injected
-// TokenProvider) and replays the request with the fresh bearer. Public routes
-// (login / refresh) never trigger a refresh, and without a provider a 401
-// simply propagates.
 
 import 'dart:convert';
 
@@ -31,7 +25,7 @@ void main() {
 
       expect(
         exception.toString(),
-        'ApiException(statusCode: 500, message: algo falló)',
+        'ApiException(statusCode: 500, message: algo falló, retryAfter: null)',
       );
     });
 
@@ -42,7 +36,7 @@ void main() {
       expect(exception.message, 'sin status');
       expect(
         exception.toString(),
-        'ApiException(statusCode: null, message: sin status)',
+        'ApiException(statusCode: null, message: sin status, retryAfter: null)',
       );
     });
   });
@@ -64,6 +58,47 @@ void main() {
       final result = await client.getJson(path: '/ping');
 
       expect(result, {'ok': true});
+    });
+
+    test('lanza ArgumentError en kReleaseMode con baseUrl http://', () {
+      expect(
+        () => ApiClient(
+          baseUrl: 'http://api.example.com',
+          client: MockClient((_) async => http.Response('', 200)),
+        ),
+        returnsNormally,
+      );
+    });
+
+    test(
+      'lanza ArgumentError cuando se fuerza release mode con baseUrl http://',
+      () {
+        expect(
+          () => ApiClient(
+            baseUrl: 'http://api.example.com',
+            client: MockClient((_) async => http.Response('', 200)),
+            debugReleaseModeOverride: true,
+          ),
+          throwsA(
+            isA<ArgumentError>().having(
+              (e) => e.message,
+              'message',
+              contains('HTTPS'),
+            ),
+          ),
+        );
+      },
+    );
+
+    test('no lanza error en release mode forzado cuando baseUrl usa https', () {
+      expect(
+        () => ApiClient(
+          baseUrl: 'https://api.example.com',
+          client: MockClient((_) async => http.Response('', 200)),
+          debugReleaseModeOverride: true,
+        ),
+        returnsNormally,
+      );
     });
   });
 
@@ -712,9 +747,226 @@ void main() {
       expect(capturedHosts, isNot(contains('exfil.example')));
     });
   });
+
+  group('Retry-After parsing', () {
+    test('parsea segundos enteros (incluyendo negativos)', () async {
+      final client = buildClient((request) async {
+        return http.Response(
+          jsonEncode({'detail': 'Too Many Requests'}),
+          429,
+          headers: {'retry-after': '120'},
+        );
+      });
+
+      await expectLater(
+        () => client.getJson(path: '/rate-limited'),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.retryAfter,
+            'retryAfter',
+            const Duration(seconds: 120),
+          ),
+        ),
+      );
+    });
+
+    test(
+      'parsea segundos negativos y los convierte en Duration.zero',
+      () async {
+        final client = buildClient((request) async {
+          return http.Response(
+            jsonEncode({'detail': 'Too Many Requests'}),
+            429,
+            headers: {'retry-after': '-10'},
+          );
+        });
+
+        await expectLater(
+          () => client.getJson(path: '/rate-limited'),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.retryAfter,
+              'retryAfter',
+              Duration.zero,
+            ),
+          ),
+        );
+      },
+    );
+
+    test('parsea formato de fecha HTTP GMT en el futuro', () async {
+      final futureDate = DateTime.now().toUtc().add(const Duration(minutes: 5));
+      final httpDateStr = _formatHttpDate(futureDate);
+
+      final client = buildClient((request) async {
+        return http.Response(
+          jsonEncode({'detail': 'Service Unavailable'}),
+          503,
+          headers: {'retry-after': httpDateStr},
+        );
+      });
+
+      await expectLater(
+        () => client.getJson(path: '/maintenance'),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.retryAfter != null && !e.retryAfter!.isNegative,
+            'retryAfter is non-negative duration',
+            isTrue,
+          ),
+        ),
+      );
+    });
+
+    test(
+      'parsea fecha HTTP GMT en el pasado y retorna Duration.zero',
+      () async {
+        const pastHttpDateStr = 'Sun, 06 Nov 1994 08:49:37 GMT';
+
+        final client = buildClient((request) async {
+          return http.Response(
+            jsonEncode({'detail': 'Service Unavailable'}),
+            503,
+            headers: {'retry-after': pastHttpDateStr},
+          );
+        });
+
+        await expectLater(
+          () => client.getJson(path: '/maintenance'),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.retryAfter,
+              'retryAfter',
+              Duration.zero,
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
+      'retorna retryAfter null cuando la cadena está vacía o solo espacios',
+      () async {
+        final client = buildClient((request) async {
+          return http.Response(
+            jsonEncode({'detail': 'Error'}),
+            500,
+            headers: {'retry-after': '   '},
+          );
+        });
+
+        await expectLater(
+          () => client.getJson(path: '/err'),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.retryAfter,
+              'retryAfter',
+              isNull,
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
+      'retorna retryAfter null ante un formato de fecha HTTP invalido',
+      () async {
+        final client = buildClient((request) async {
+          return http.Response(
+            jsonEncode({'detail': 'Error'}),
+            500,
+            headers: {'retry-after': 'Invalid-Date-Format'},
+          );
+        });
+
+        await expectLater(
+          () => client.getJson(path: '/err'),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.retryAfter,
+              'retryAfter',
+              isNull,
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
+      'retorna retryAfter null ante un mes no reconocido en fecha HTTP',
+      () async {
+        final client = buildClient((request) async {
+          return http.Response(
+            jsonEncode({'detail': 'Error'}),
+            500,
+            headers: {'retry-after': 'Sun, 06 Xyz 1994 08:49:37 GMT'},
+          );
+        });
+
+        await expectLater(
+          () => client.getJson(path: '/err'),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.retryAfter,
+              'retryAfter',
+              isNull,
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
+      'retorna retryAfter null si la fecha lanza excepción al parsear números inválidos',
+      () async {
+        final client = buildClient((request) async {
+          return http.Response(
+            jsonEncode({'detail': 'Error'}),
+            500,
+            headers: {'retry-after': 'Sun, 99 Nov 99999999999999 08:49:37 GMT'},
+          );
+        });
+
+        await expectLater(
+          () => client.getJson(path: '/err'),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.retryAfter,
+              'retryAfter',
+              isNull,
+            ),
+          ),
+        );
+      },
+    );
+  });
 }
 
-// Helpers used by the tests below ------------------------------------------------
+String _formatHttpDate(DateTime date) {
+  const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  final wday = weekDays[date.weekday % 7];
+  final day = date.day.toString().padLeft(2, '0');
+  final month = months[date.month - 1];
+  final year = date.year;
+  final hour = date.hour.toString().padLeft(2, '0');
+  final min = date.minute.toString().padLeft(2, '0');
+  final sec = date.second.toString().padLeft(2, '0');
+  return '$wday, $day $month $year $hour:$min:$sec GMT';
+}
 
 http.Response _json(Map<String, dynamic> body, int status) => http.Response(
   jsonEncode(body),

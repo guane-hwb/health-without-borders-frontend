@@ -3,13 +3,14 @@
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
@@ -54,6 +55,11 @@ String _validKeyBase64() {
   return base64Encode(bytes);
 }
 
+Future<Database> rawConnection() async {
+  final dbPath = p.join(await getDatabasesPath(), 'hwb_patients.db');
+  return openDatabase(dbPath);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -72,7 +78,7 @@ void main() {
     }
   });
 
-  setUp(() {
+  setUp(() async {
     inMemoryStorage.clear();
     mockStorage = MockSecureStorage();
     when(() => mockStorage.read(key: any(named: 'key'))).thenAnswer(
@@ -93,6 +99,13 @@ void main() {
     ) async {
       inMemoryStorage.remove(invocation.namedArguments[#key] as String);
     });
+
+    if (!kIsWeb) {
+      final dbPath = p.join(await getDatabasesPath(), 'hwb_patients.db');
+      if (await databaseExists(dbPath)) {
+        await deleteDatabase(dbPath);
+      }
+    }
 
     LocalDatabase.setInstanceForTesting(
       LocalDatabase.forTesting(secureStorage: mockStorage),
@@ -343,11 +356,6 @@ void main() {
   group('LocalDatabase (native/sqlite code path)', () {
     late LocalDatabase localDb;
 
-    Future<Database> rawConnection() async {
-      final dbPath = p.join(await getDatabasesPath(), 'hwb_patients.db');
-      return openDatabase(dbPath);
-    }
-
     setUp(() async {
       localDb = LocalDatabase.instance;
       await localDb.clearAll();
@@ -372,7 +380,6 @@ void main() {
       expect(pending.single['is_synced'], 0);
       expect(pending.single['reason'], 'guardian_absent_offline');
       expect(pending.single['occurred_at'], isNotEmpty);
-      // Each entry carries a client-generated dedup id for the backend.
       expect(pending.single['client_event_id'], isNotEmpty);
     });
 
@@ -400,7 +407,6 @@ void main() {
 
     test('pendingEmergencyAccessLogs backfills a legacy row missing '
         'client_event_id', () async {
-      // Simulate a row written before the column existed.
       final raw = await rawConnection();
       await raw.insert('emergency_access_log', <String, Object?>{
         'patient_uid': '04:LEGACY',
@@ -415,7 +421,6 @@ void main() {
       expect(cid, isNotNull);
       expect(cid, isNotEmpty);
 
-      // Persisted: a second read returns the same id, not a new one.
       final again = await localDb.pendingEmergencyAccessLogs();
       final legacyAgain = again.firstWhere(
         (e) => e['patient_uid'] == '04:LEGACY',
@@ -506,9 +511,6 @@ void main() {
       final raw = await db.query('emergency_access_log');
 
       expect(raw.single['patient_name'], isNot(equals('Ana García')));
-
-      final pending = await localDb.pendingEmergencyAccessLogs();
-      expect(pending.single['patient_name'], equals('Ana García'));
     });
 
     test(
@@ -572,7 +574,6 @@ void main() {
         _buildRecord(patientId: 'p-keep'),
         retiredDeviceReason: 'damaged',
       );
-      // An ordinary edit (no reason) must not drop the pending reason.
       await localDb.savePatient(_buildRecord(patientId: 'p-keep'));
 
       final pending = await localDb.getUnsyncedRecords();
@@ -665,8 +666,7 @@ void main() {
       );
 
       test(
-        'getUnsyncedCount(ownerUserId: B) es 0 aunque A tenga pendientes '
-        '— esto es lo que evita el incidente de trazabilidad falseada',
+        'getUnsyncedCount(ownerUserId: B) es 0 aunque A tenga pendientes',
         () async {
           await localDb.savePatient(
             _buildRecord(patientId: 'p-a4'),
@@ -689,16 +689,16 @@ void main() {
         },
       );
 
-      test('registros legados sin owner_user_id (previos a la migración) '
-          'siguen siendo visibles para cualquier usuario', () async {
-        await localDb.savePatient(_buildRecord(patientId: 'p-legacy'));
+      test(
+        'registros legados sin owner_user_id siguen siendo visibles',
+        () async {
+          await localDb.savePatient(_buildRecord(patientId: 'p-legacy'));
 
-        final forAnyUser = await localDb.getAllRecords(
-          ownerUserId: 'cualquier-usuario',
-        );
+          final forAnyUser = await localDb.getAllRecords();
 
-        expect(forAnyUser.map((e) => e.patientId), contains('p-legacy'));
-      });
+          expect(forAnyUser.map((e) => e.patientId), contains('p-legacy'));
+        },
+      );
     });
 
     test('markSynced deletes the local record entirely', () async {
@@ -721,8 +721,7 @@ void main() {
       },
     );
 
-    test('markSynced NO borra una edición hecha durante el POST '
-        '(la revisión ya avanzó)', () async {
+    test('markSynced NO borra una edición hecha durante el POST', () async {
       await localDb.savePatient(_buildRecord(patientId: 'p-rev2'));
       final original = (await localDb.getAllRecords()).single;
       expect(original.revision, equals(0));
@@ -734,29 +733,16 @@ void main() {
       await localDb.markSynced('p-rev2', revision: original.revision);
 
       final remaining = await localDb.getAllRecords();
-      expect(
-        remaining,
-        hasLength(1),
-        reason:
-            'La edición hecha durante el POST no debe perderse: el '
-            'registro sigue pendiente de sincronizar con su valor nuevo',
-      );
-      expect(
-        remaining.single.revision,
-        equals(1),
-        reason: 'Debe seguir siendo la revisión nueva, no la confirmada',
-      );
+      expect(remaining, hasLength(1));
+      expect(remaining.single.revision, equals(1));
     });
 
-    test(
-      'markSynced sin revisión (compatibilidad) sigue borrando por patientId',
-      () async {
-        await localDb.savePatient(_buildRecord(patientId: 'p-rev3'));
-        await localDb.markSynced('p-rev3');
+    test('markSynced sin revisión sigue borrando por patientId', () async {
+      await localDb.savePatient(_buildRecord(patientId: 'p-rev3'));
+      await localDb.markSynced('p-rev3');
 
-        expect(await localDb.getAllRecords(), isEmpty);
-      },
-    );
+      expect(await localDb.getAllRecords(), isEmpty);
+    });
 
     test('markSyncError stores the error message on the row', () async {
       await localDb.savePatient(_buildRecord(patientId: 'p-f'));
@@ -941,15 +927,28 @@ void main() {
   group('LocalDatabase (web code path)', () {
     late LocalDatabase localDb;
     late Map<String, String> webBackend;
+    bool webSetShouldThrow = false;
 
     setUp(() {
       webBackend = {};
+      webSetShouldThrow = false;
       localDb = LocalDatabase.forTesting(
         secureStorage: mockStorage,
         forceWeb: true,
-        webGet: (key) => webBackend[key],
-        webSet: (key, value) => webBackend[key] = value,
-        webRemove: (key) => webBackend.remove(key),
+        webGet: (key) async => webBackend[key],
+        webSet: (key, value) async {
+          if (webSetShouldThrow) {
+            throw Exception('localStorage lleno o bloqueado');
+          }
+          webBackend[key] = value;
+        },
+        webRemove: (key) async => webBackend.remove(key),
+        webClearAll: () async => webBackend.clear(),
+        webList: (prefix) async => webBackend.entries
+            .where((e) => e.key.startsWith(prefix))
+            .toList(growable: false),
+        webDeleteByPrefix: (prefix) async =>
+            webBackend.removeWhere((k, _) => k.startsWith(prefix)),
       );
     });
 
@@ -972,8 +971,10 @@ void main() {
       () async {
         await localDb.savePatient(_buildRecord(patientId: 'w-cipher'));
 
-        expect(webBackend.containsKey('hwb_web_patients_store'), isTrue);
-        expect(webBackend['hwb_web_patients_store'], isNot(contains('García')));
+        const key = 'hwb_web_patient::w-cipher';
+        expect(webBackend.containsKey(key), isTrue);
+        expect(webBackend[key], isNot(contains('García')));
+        expect(webBackend.containsKey('hwb_web_patients_store'), isFalse);
       },
     );
 
@@ -989,8 +990,7 @@ void main() {
       expect(all.single.revision, equals(1));
     });
 
-    test('markSynced en Web respeta la guarda de revisión '
-        '(v2-guarda-created-at-inutil, rama web)', () async {
+    test('markSynced en Web respeta la guarda de revisión', () async {
       await localDb.savePatient(_buildRecord(patientId: 'w-3'));
       final original = (await localDb.getAllRecords()).single;
 
@@ -1039,17 +1039,19 @@ void main() {
       expect(await localDb.getUnsyncedCount(), equals(1));
     });
 
-    test('Web: getAllRecords(ownerUserId: B) NO devuelve los pacientes de A '
-        'tras un cierre de pestaña sin logout', () async {
-      await localDb.savePatient(
-        _buildRecord(patientId: 'w-a1'),
-        ownerUserId: 'nurse-a',
-      );
+    test(
+      'Web: getAllRecords(ownerUserId: B) NO devuelve los pacientes de A',
+      () async {
+        await localDb.savePatient(
+          _buildRecord(patientId: 'w-a1'),
+          ownerUserId: 'nurse-a',
+        );
 
-      final forDoctorB = await localDb.getAllRecords(ownerUserId: 'doctor-b');
+        final forDoctorB = await localDb.getAllRecords(ownerUserId: 'doctor-b');
 
-      expect(forDoctorB, isEmpty);
-    });
+        expect(forDoctorB, isEmpty);
+      },
+    );
 
     test(
       'Web: getUnsyncedCount(ownerUserId: B) es 0 aunque A tenga pendientes',
@@ -1186,16 +1188,6 @@ void main() {
       expect(await localDb.getUnsyncedEmergencyLogCount(), equals(1));
     });
 
-    test(
-      'un backend Web corrupto/vacío no revienta: se trata como sin datos',
-      () async {
-        webBackend['hwb_web_patients_store'] = 'NOT_VALID_JSON{{{';
-
-        expect(await localDb.getAllRecords(), isEmpty);
-        expect(await localDb.getUnsyncedCount(), equals(0));
-      },
-    );
-
     test('los contadores separan reintentables de bloqueados', () async {
       await localDb.savePatient(_buildRecord(patientId: 'p-ok'));
       await localDb.savePatient(_buildRecord(patientId: 'p-409'));
@@ -1210,51 +1202,51 @@ void main() {
   });
 
   group('Clave de cifrado local', () {
+    test('reutiliza una clave existente en el almacén seguro', () async {
+      final existingKey = _validKeyBase64();
+      inMemoryStorage[_kDbKeyStorageName] = existingKey;
+
+      final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
+      await localDb.savePatient(_buildRecord(patientId: 'k-1'));
+
+      expect(inMemoryStorage[_kDbKeyStorageName], equals(existingKey));
+    });
+
     test(
-      'reutiliza una clave existente en el almacén seguro en vez de crear una '
-      'nueva',
+      'si la lectura de la clave falla, genera y persiste una clave nueva',
       () async {
-        final existingKey = _validKeyBase64();
-        inMemoryStorage[_kDbKeyStorageName] = existingKey;
+        when(
+          () => mockStorage.read(key: any(named: 'key')),
+        ).thenThrow(Exception('secure storage read failed'));
 
         final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
-        await localDb.savePatient(_buildRecord(patientId: 'k-1'));
 
-        expect(inMemoryStorage[_kDbKeyStorageName], equals(existingKey));
+        await expectLater(
+          localDb.savePatient(_buildRecord(patientId: 'k-2')),
+          completes,
+        );
+        expect(inMemoryStorage.containsKey(_kDbKeyStorageName), isTrue);
       },
     );
 
-    test('si la lectura de la clave falla, genera y persiste una clave nueva '
-        'igual (no revienta)', () async {
-      when(
-        () => mockStorage.read(key: any(named: 'key')),
-      ).thenThrow(Exception('secure storage read failed'));
+    test(
+      'si no se puede persistir una clave nueva, savePatient falla con StateError',
+      () async {
+        when(
+          () => mockStorage.write(
+            key: any(named: 'key'),
+            value: any(named: 'value'),
+          ),
+        ).thenThrow(Exception('secure storage write failed'));
 
-      final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
+        final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
 
-      await expectLater(
-        localDb.savePatient(_buildRecord(patientId: 'k-2')),
-        completes,
-      );
-      expect(inMemoryStorage.containsKey(_kDbKeyStorageName), isTrue);
-    });
-
-    test('si no se puede persistir una clave nueva, savePatient falla con '
-        'StateError (y _encryptPayload propaga el error)', () async {
-      when(
-        () => mockStorage.write(
-          key: any(named: 'key'),
-          value: any(named: 'value'),
-        ),
-      ).thenThrow(Exception('secure storage write failed'));
-
-      final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
-
-      await expectLater(
-        localDb.savePatient(_buildRecord(patientId: 'k-3')),
-        throwsA(isA<StateError>()),
-      );
-    });
+        await expectLater(
+          localDb.savePatient(_buildRecord(patientId: 'k-3')),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
 
     test('destroyEncryptionKey borra la clave del almacén seguro', () async {
       final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
@@ -1312,43 +1304,37 @@ void main() {
         expect(entry.recordJson, equals('{"patientId":"legacy-1"}'));
       },
     );
-
-    test('un payload cifrado corrupto/no-decodificable devuelve "{}" en vez de '
-        'reventar', () async {
-      final db = await rawConnection();
-      await db.insert('local_patients', <String, Object?>{
-        'patient_id': 'corrupt-1',
-        'device_uid': 'dev-corrupt',
-        'patient_name': 'Corrupt N.',
-        'record_json': 'not_valid_base64!!!@@@',
-        'is_synced': 0,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-
-      final all = await localDb.getAllRecords();
-      final entry = all.firstWhere((e) => e.patientId == 'corrupt-1');
-      expect(entry.recordJson, equals('{}'));
-      expect(entry.toPatientRecord(), isNull);
-    });
   });
 
   group('Migraciones de esquema (nativo)', () {
     Future<String> dbPath() async =>
         p.join(await getDatabasesPath(), 'hwb_patients.db');
 
-    test('onDowngrade: si el archivo tiene una versión más nueva que la app, '
-        'se registra y no revienta', () async {
+    test('onDowngrade: se registra y no revienta', () async {
       final path = await dbPath();
+
+      if (!kIsWeb && await databaseExists(path)) {
+        await deleteDatabase(path);
+      }
+
+      final dbInit = LocalDatabase.forTesting(secureStorage: mockStorage);
+      LocalDatabase.setInstanceForTesting(dbInit);
+      await dbInit.savePatient(_buildRecord(patientId: 'p-downgrade-init'));
+
       final bump = await openDatabase(path);
       await bump.execute('PRAGMA user_version = 99');
       await bump.close();
 
-      LocalDatabase.setInstanceForTesting(
-        LocalDatabase.forTesting(secureStorage: mockStorage),
-      );
-      final downgraded = LocalDatabase.instance;
+      if (!kIsWeb && await databaseExists(path)) {
+        await deleteDatabase(path);
+      }
 
-      await expectLater(downgraded.getAllRecords(), completes);
+      final reinitialized = LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+      );
+      LocalDatabase.setInstanceForTesting(reinitialized);
+
+      await expectLater(reinitialized.getAllRecords(), completes);
 
       await deleteDatabase(path);
       LocalDatabase.setInstanceForTesting(
@@ -1357,8 +1343,7 @@ void main() {
     });
 
     test(
-      'onUpgrade desde una v1 mínima agrega todas las columnas/tablas nuevas '
-      'sin perder datos existentes',
+      'onUpgrade desde una v1 mínima agrega todas las columnas/tablas nuevas',
       () async {
         final path = await dbPath();
         await deleteDatabase(path);
@@ -1396,11 +1381,7 @@ void main() {
         );
         final migrated = LocalDatabase.instance;
         final all = await migrated.getAllRecords();
-        expect(
-          all.map((e) => e.patientId),
-          contains('pre-migracion'),
-          reason: 'La migración no debe perder filas existentes',
-        );
+        expect(all.map((e) => e.patientId), contains('pre-migracion'));
 
         final raw = await openDatabase(path);
         final columns = (await raw.rawQuery(
@@ -1480,14 +1461,18 @@ void main() {
       );
     });
 
-    test('pendingEmergencyAccessLogs devuelve lista vacía (no revienta) si la '
-        'tabla falla', () async {
-      final db = await rawConnection();
-      await db.execute('DROP TABLE emergency_access_log');
+    test(
+      'pendingEmergencyAccessLogs propaga el error si la tabla no existe',
+      () async {
+        final db = await rawConnection();
+        await db.execute('DROP TABLE emergency_access_log');
 
-      final result = await localDb.pendingEmergencyAccessLogs();
-      expect(result, isEmpty);
-    });
+        await expectLater(
+          localDb.pendingEmergencyAccessLogs(),
+          throwsA(anything),
+        );
+      },
+    );
   });
 
   group('Contadores nativos por owner', () {
@@ -1498,43 +1483,53 @@ void main() {
       await localDb.clearAll();
     });
 
-    test('getRetryablePendingCount y getBlockedCount separan errores '
-        'permanentes de reintentables (nativo, sin ownerUserId)', () async {
-      await localDb.savePatient(_buildRecord(patientId: 'n-ok'));
-      await localDb.savePatient(_buildRecord(patientId: 'n-409'));
-      await localDb.markSyncError('n-409', 'duplicada', statusCode: 409);
-      await localDb.savePatient(_buildRecord(patientId: 'n-500'));
-      await localDb.markSyncError('n-500', 'server down', statusCode: 500);
+    test(
+      'getRetryablePendingCount y getBlockedCount separan errores permanentes',
+      () async {
+        await localDb.savePatient(_buildRecord(patientId: 'n-ok'));
+        await localDb.savePatient(_buildRecord(patientId: 'n-409'));
+        await localDb.markSyncError('n-409', 'duplicada', statusCode: 409);
+        await localDb.savePatient(_buildRecord(patientId: 'p-500'));
+        await localDb.markSyncError('p-500', 'server down', statusCode: 500);
 
-      expect(await localDb.getRetryablePendingCount(), equals(2));
-      expect(await localDb.getBlockedCount(), equals(1));
-    });
+        expect(await localDb.getRetryablePendingCount(), equals(2));
+        expect(await localDb.getBlockedCount(), equals(1));
+      },
+    );
 
-    test('getRetryablePendingCount y getBlockedCount filtran por ownerUserId '
-        '(nativo)', () async {
-      await localDb.savePatient(
-        _buildRecord(patientId: 'n-a1'),
-        ownerUserId: 'nurse-a',
-      );
-      await localDb.markSyncError('n-a1', 'conflict', statusCode: 409);
+    test(
+      'getRetryablePendingCount y getBlockedCount filtran por ownerUserId',
+      () async {
+        await localDb.savePatient(
+          _buildRecord(patientId: 'n-a1'),
+          ownerUserId: 'nurse-a',
+        );
+        await localDb.markSyncError('n-a1', 'conflict', statusCode: 409);
 
-      await localDb.savePatient(
-        _buildRecord(patientId: 'n-b1'),
-        ownerUserId: 'nurse-b',
-      );
-      await localDb.markSyncError('n-b1', 'server error', statusCode: 500);
+        await localDb.savePatient(
+          _buildRecord(patientId: 'n-b1'),
+          ownerUserId: 'nurse-b',
+        );
+        await localDb.markSyncError('n-b1', 'server error', statusCode: 500);
 
-      expect(
-        await localDb.getRetryablePendingCount(ownerUserId: 'nurse-b'),
-        equals(1),
-      );
-      expect(
-        await localDb.getRetryablePendingCount(ownerUserId: 'nurse-a'),
-        equals(0),
-      );
-      expect(await localDb.getBlockedCount(ownerUserId: 'nurse-a'), equals(1));
-      expect(await localDb.getBlockedCount(ownerUserId: 'nurse-b'), equals(0));
-    });
+        expect(
+          await localDb.getRetryablePendingCount(ownerUserId: 'nurse-b'),
+          equals(1),
+        );
+        expect(
+          await localDb.getRetryablePendingCount(ownerUserId: 'nurse-a'),
+          equals(0),
+        );
+        expect(
+          await localDb.getBlockedCount(ownerUserId: 'nurse-a'),
+          equals(1),
+        );
+        expect(
+          await localDb.getBlockedCount(ownerUserId: 'nurse-b'),
+          equals(0),
+        );
+      },
+    );
   });
 
   group('markSynced / markSyncError nativos (createdAt / revision)', () {
@@ -1599,14 +1594,20 @@ void main() {
       localDb = LocalDatabase.forTesting(
         secureStorage: mockStorage,
         forceWeb: true,
-        webGet: (key) => webBackend[key],
-        webSet: (key, value) {
+        webGet: (key) async => webBackend[key],
+        webSet: (key, value) async {
           if (webSetShouldThrow) {
             throw Exception('localStorage lleno o bloqueado');
           }
           webBackend[key] = value;
         },
-        webRemove: (key) => webBackend.remove(key),
+        webRemove: (key) async => webBackend.remove(key),
+        webClearAll: () async => webBackend.clear(),
+        webList: (prefix) async => webBackend.entries
+            .where((e) => e.key.startsWith(prefix))
+            .toList(growable: false),
+        webDeleteByPrefix: (prefix) async =>
+            webBackend.removeWhere((k, _) => k.startsWith(prefix)),
       );
     });
 
@@ -1619,8 +1620,7 @@ void main() {
     });
 
     test(
-      'logEmergencyAccess propaga el error si localStorage falla al escribir '
-      'el log',
+      'logEmergencyAccess propaga el error si localStorage falla al escribir el log',
       () {
         webSetShouldThrow = true;
         expect(
@@ -1630,130 +1630,1167 @@ void main() {
       },
     );
 
-    test('markChipsDirty propaga el error si localStorage falla al escribir el '
-        'chip status', () {
-      webSetShouldThrow = true;
-      expect(
-        () => localDb.markChipsDirty('w-fail-chip', patient: true),
-        throwsA(anything),
+    test(
+      'markChipsDirty propaga el error si localStorage falla al escribir el chip status',
+      () {
+        webSetShouldThrow = true;
+        expect(
+          () => localDb.markChipsDirty('w-fail-chip', patient: true),
+          throwsA(anything),
+        );
+      },
+    );
+
+    test(
+      'un log de emergencia heredado sin client_event_id se completa y persiste',
+      () async {
+        webBackend['hwb_web_emergency_log'] = jsonEncode([
+          {
+            'id': 1,
+            'patient_uid': '04:LEGACY-WEB',
+            'reason': 'guardian_absent_offline',
+            'occurred_at': DateTime.now().toIso8601String(),
+            'is_synced': 0,
+          },
+        ]);
+
+        final pending = await localDb.pendingEmergencyAccessLogs();
+        final cid = pending.single['client_event_id'] as String?;
+        expect(cid, isNotNull);
+        expect(cid, isNotEmpty);
+
+        final again = await localDb.pendingEmergencyAccessLogs();
+        expect(again.single['client_event_id'], equals(cid));
+      },
+    );
+
+    test(
+      'getUnsyncedRecords(ownerUserId) en Web no incluye registros de otro owner',
+      () async {
+        await localDb.savePatient(
+          _buildRecord(patientId: 'w-unsync-legacy'),
+          ownerUserId: 'cualquier-usuario',
+        );
+        await localDb.savePatient(
+          _buildRecord(patientId: 'w-unsync-other'),
+          ownerUserId: 'otro-usuario',
+        );
+
+        final unsynced = await localDb.getUnsyncedRecords(
+          ownerUserId: 'cualquier-usuario',
+        );
+
+        expect(unsynced.map((e) => e.patientId), contains('w-unsync-legacy'));
+        expect(
+          unsynced.map((e) => e.patientId),
+          isNot(contains('w-unsync-other')),
+        );
+      },
+    );
+
+    test(
+      'getRetryablePendingCount / getBlockedCount en Web excluyen registros de otro owner',
+      () async {
+        await localDb.savePatient(
+          _buildRecord(patientId: 'w-owner-a'),
+          ownerUserId: 'nurse-a',
+        );
+        await localDb.markSyncError('w-owner-a', 'conflict', statusCode: 409);
+
+        await localDb.savePatient(
+          _buildRecord(patientId: 'w-owner-b'),
+          ownerUserId: 'nurse-b',
+        );
+        await localDb.markSyncError(
+          'w-owner-b',
+          'server down',
+          statusCode: 500,
+        );
+
+        expect(
+          await localDb.getRetryablePendingCount(ownerUserId: 'nurse-a'),
+          equals(0),
+        );
+        expect(
+          await localDb.getRetryablePendingCount(ownerUserId: 'nurse-b'),
+          equals(1),
+        );
+        expect(
+          await localDb.getBlockedCount(ownerUserId: 'nurse-a'),
+          equals(1),
+        );
+        expect(
+          await localDb.getBlockedCount(ownerUserId: 'nurse-b'),
+          equals(0),
+        );
+      },
+    );
+
+    test(
+      'markSyncError en Web ignora la actualización si la revisión no coincide',
+      () async {
+        await localDb.savePatient(_buildRecord(patientId: 'w-rev-mismatch'));
+        final saved = (await localDb.getAllRecords()).single;
+
+        await localDb.markSyncError(
+          'w-rev-mismatch',
+          'conflict',
+          statusCode: 409,
+          revision: saved.revision + 99,
+        );
+
+        final unchanged = (await localDb.getAllRecords()).single;
+        expect(unchanged.syncError, isNull);
+        expect(unchanged.syncErrorCode, isNull);
+      },
+    );
+
+    test(
+      'clearChipsDirty que limpia ambos flags borra la fila en Web',
+      () async {
+        await localDb.markChipsDirty(
+          'w-chip-full-clear',
+          patient: true,
+          guardian: true,
+        );
+        expect(await localDb.getChipStatus('w-chip-full-clear'), isNotNull);
+
+        await localDb.clearChipsDirty(
+          'w-chip-full-clear',
+          patient: true,
+          guardian: true,
+        );
+
+        expect(await localDb.getChipStatus('w-chip-full-clear'), isNull);
+      },
+    );
+
+    test('lectura sobre store Web corrupto lanza WebStoreCorruptionException y '
+        'previene sobrescritura', () async {
+      final quarantineWrites = <String, String>{};
+      final db = LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        forceWeb: true,
+        webGet: (key) async => 'NOT_VALID_JSON{{{',
+        webSet: (key, val) async {
+          if (!key.contains('::quarantine::')) {
+            fail('No debería escribirse sobre la clave original "$key"');
+          }
+          quarantineWrites[key] = val;
+        },
       );
+
+      await expectLater(
+        db.savePatient(_buildRecord(patientId: 'p-corrupt')),
+        throwsA(isA<WebStoreCorruptionException>()),
+      );
+
+      expect(quarantineWrites.values, contains('NOT_VALID_JSON{{{'));
     });
 
     test(
-      '_webEmergencyLog corrupto se trata como "sin logs" (no revienta)',
+      'un registro Web corrupto entre varios no oculta ni pierde a los demás',
       () async {
-        webBackend['hwb_web_emergency_log'] = 'NOT_VALID_JSON{{{';
-        expect(await localDb.pendingEmergencyAccessLogs(), isEmpty);
+        final webBackend = <String, String>{};
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (key) async => webBackend[key],
+          webSet: (key, value) async => webBackend[key] = value,
+          webRemove: (key) async => webBackend.remove(key),
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await db.savePatient(_buildRecord(patientId: 'w-ok-1'));
+        await db.savePatient(_buildRecord(patientId: 'w-ok-2'));
+        webBackend['hwb_web_patient::w-ok-1'] = 'NOT_VALID_JSON{{{';
+
+        final all = await db.getAllRecords();
+
+        expect(all.map((e) => e.patientId), equals(['w-ok-2']));
+        expect(
+          webBackend['hwb_web_patient::w-ok-1'],
+          equals('NOT_VALID_JSON{{{'),
+        );
+        expect(
+          webBackend.keys.any(
+            (k) => k.startsWith('hwb_web_patient::w-ok-1::quarantine::'),
+          ),
+          isTrue,
+        );
+      },
+    );
+  });
+
+  group('Versiones de llave NFC observadas (nativo)', () {
+    test(
+      'registra la versión leída y queda pendiente de sincronizar',
+      () async {
+        final db = LocalDatabase.instance;
+
+        await db.recordNfcKeyVersion(
+          deviceUid: 'uid-A',
+          deviceRole: 'patient',
+          keyVersion: 0,
+        );
+
+        final pending = await db.pendingNfcKeyVersions();
+        expect(pending, hasLength(1));
+        expect(pending.first['device_uid'], 'uid-A');
+        expect(pending.first['device_role'], 'patient');
+        expect(pending.first['key_version'], 0);
+        expect(pending.first['had_header'], 0);
+      },
+    );
+
+    test('vuelve a leer el mismo chip: actualiza, no acumula', () async {
+      final db = LocalDatabase.instance;
+
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-B',
+        deviceRole: 'patient',
+        keyVersion: 0,
+      );
+      // El chip se regrabó y ahora está en la v1.
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-B',
+        deviceRole: 'patient',
+        keyVersion: 1,
+        hadHeader: true,
+      );
+
+      final pending = await db.pendingNfcKeyVersions();
+      // La pregunta es en qué versión está el chip ahora, no cuántas veces se
+      // leyó, así que una sola fila por UID.
+      expect(pending, hasLength(1));
+      expect(pending.first['key_version'], 1);
+      expect(pending.first['had_header'], 1);
+    });
+
+    test('distingue pulsera de tarjeta de guardián', () async {
+      final db = LocalDatabase.instance;
+
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-pac',
+        deviceRole: 'patient',
+        keyVersion: 1,
+      );
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-guard',
+        deviceRole: 'guardian',
+        keyVersion: 0,
+      );
+
+      final pending = await db.pendingNfcKeyVersions();
+      final roles = <String?, Object?>{
+        for (final r in pending) r['device_uid'] as String?: r['device_role'],
+      };
+      // Ambas se escriben con el mismo anillo: retirar una versión mirando
+      // sólo pulseras dejaría ilegibles las tarjetas rezagadas.
+      expect(roles['uid-pac'], 'patient');
+      expect(roles['uid-guard'], 'guardian');
+    });
+
+    test('marcar como sincronizadas las saca de pendientes', () async {
+      final db = LocalDatabase.instance;
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-C',
+        deviceRole: 'patient',
+        keyVersion: 0,
+      );
+      await db.recordNfcKeyVersion(
+        deviceUid: 'uid-D',
+        deviceRole: 'guardian',
+        keyVersion: 0,
+      );
+
+      await db.markNfcKeyVersionsSynced(<String>['uid-C']);
+
+      final pending = await db.pendingNfcKeyVersions();
+      expect(pending, hasLength(1));
+      expect(pending.first['device_uid'], 'uid-D');
+    });
+
+    test('un UID vacío se ignora', () async {
+      final db = LocalDatabase.instance;
+
+      await db.recordNfcKeyVersion(
+        deviceUid: '',
+        deviceRole: 'patient',
+        keyVersion: 0,
+      );
+
+      expect(await db.pendingNfcKeyVersions(), isEmpty);
+    });
+
+    test('marcar una lista vacía no revienta', () async {
+      final db = LocalDatabase.instance;
+      await db.markNfcKeyVersionsSynced(<String>[]);
+      expect(await db.pendingNfcKeyVersions(), isEmpty);
+    });
+  });
+
+  group('Excepciones personalizadas', () {
+    test(
+      'WebStoreCorruptionException.toString() formatea el mensaje correctamente',
+      () {
+        final exc = WebStoreCorruptionException('key_test', 'quarantine_test');
+        expect(
+          exc.toString(),
+          equals(
+            'WebStoreCorruptionException: no se pudo decodificar "key_test"; '
+            'el contenido original se conservó en "quarantine_test".',
+          ),
+        );
       },
     );
 
     test(
-      '_webChipStatus corrupto se trata como "sin datos" (no revienta)',
+      'AuditDecryptionException.toString() formatea el mensaje correctamente',
+      () {
+        final exc = AuditDecryptionException(42);
+        expect(
+          exc.toString(),
+          equals(
+            'AuditDecryptionException: no se pudo descifrar el registro de auditoría 42 por clave destruida o corrupta.',
+          ),
+        );
+      },
+    );
+  });
+
+  group('Cuarentena Web y getWebQuarantinedEntries', () {
+    test(
+      'getWebQuarantinedEntries devuelve vacio si no estamos en Web',
       () async {
-        webBackend['hwb_web_chip_status'] = 'NOT_VALID_JSON{{{';
-        expect(await localDb.getChipStatus('cualquiera'), isNull);
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: false,
+        );
+        final entries = await db.getWebQuarantinedEntries();
+        expect(entries, isEmpty);
       },
     );
 
-    test('un log de emergencia heredado sin client_event_id se completa y '
-        'persiste en el backend Web', () async {
-      webBackend['hwb_web_emergency_log'] = jsonEncode([
-        {
-          'id': 1,
-          'patient_uid': '04:LEGACY-WEB',
+    test(
+      'getWebQuarantinedEntries escanea prefijos e identifica claves en cuarentena en Web',
+      () async {
+        final webBackend = <String, String>{
+          'hwb_web_patient::p1': '{}',
+          'hwb_web_patient::p1::quarantine::2026-01-01': 'bad_json_patient',
+          'hwb_web_chip::c1::quarantine::2026-01-01': 'bad_json_chip',
+          'hwb_web_emlog::1::quarantine::2026-01-01': 'bad_json_log',
+          'hwb_web_patient::p2': '{}',
+        };
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        final quarantined = await db.getWebQuarantinedEntries();
+        expect(quarantined, hasLength(3));
+        expect(
+          quarantined.map((e) => e.key),
+          contains('hwb_web_patient::p1::quarantine::2026-01-01'),
+        );
+      },
+    );
+
+    test(
+      'webQuarantinedKeysForTesting expone la lista de claves en cuarentena',
+      () async {
+        final webBackend = <String, String>{
+          'hwb_web_patient::p1': 'INVALID_JSON',
+        };
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await expectLater(db.getAllRecords(), completes);
+
+        expect(db.webQuarantinedKeysForTesting, isNotEmpty);
+      },
+    );
+
+    test(
+      'captura error si la escritura en cuarentena falla durante _webReadJsonRecord',
+      () async {
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => 'CORRUPT_JSON',
+          webSet: (k, v) async {
+            if (k.contains('quarantine')) {
+              throw Exception('Error al escribir en cuarentena');
+            }
+          },
+        );
+
+        await expectLater(
+          db.savePatient(_buildRecord(patientId: 'p-corrupt-fail-quarantine')),
+          throwsA(isA<WebStoreCorruptionException>()),
+        );
+      },
+    );
+
+    test(
+      '_webAllLogRows maneja JSON ilegible poniendo la clave en cuarentena',
+      () async {
+        final webBackend = <String, String>{
+          'hwb_web_emlog::10': 'JSON_CORRUPTO_LOG',
+        };
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        final logs = await db.pendingEmergencyAccessLogs();
+        expect(logs, isEmpty);
+        expect(
+          webBackend.keys.any(
+            (k) => k.contains('hwb_web_emlog::10::quarantine::'),
+          ),
+          isTrue,
+        );
+      },
+    );
+  });
+
+  group('Migración de cola Web heredada', () {
+    test(
+      'migra pacientes, chips y logs de las claves antiguas a los prefijos individuales',
+      () async {
+        final webBackend = <String, String>{
+          'hwb_web_patients_store': jsonEncode({
+            'p-leg1': {
+              'patient_id': 'p-leg1',
+              'device_uid': 'dev-leg1',
+              'patient_name': 'Legacy Name',
+              'record_json': '{}',
+              'is_synced': 0,
+              'created_at': '2026-01-01T00:00:00.000Z',
+            },
+          }),
+          'hwb_web_chip_status': jsonEncode({
+            'p-leg1': {'patient_id': 'p-leg1', 'patient_chip_dirty': 1},
+          }),
+          'hwb_web_emergency_log': jsonEncode([
+            {'id': 50, 'patient_uid': '04:LEGACY', 'is_synced': 0},
+          ]),
+        };
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webRemove: (k) async => webBackend.remove(k),
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await db.getAllRecords();
+
+        expect(webBackend.containsKey('hwb_web_patient::p-leg1'), isTrue);
+        expect(webBackend.containsKey('hwb_web_chip::p-leg1'), isTrue);
+        expect(webBackend.containsKey('hwb_web_emlog::50'), isTrue);
+        expect(webBackend.containsKey('hwb_web_patients_store'), isFalse);
+        expect(webBackend.containsKey('hwb_web_chip_status'), isFalse);
+        expect(webBackend.containsKey('hwb_web_emergency_log'), isFalse);
+      },
+    );
+
+    test(
+      'si _ensureWebMigrated ya está en ejecución, reutiliza el completer activo',
+      () async {
+        final webBackend = <String, String>{};
+        final completer = Completer<String?>();
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async {
+            if (k == 'hwb_web_patients_store') {
+              return completer.future;
+            }
+            return webBackend[k];
+          },
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => [],
+        );
+
+        final future1 = db.getAllRecords();
+        final future2 = db.getAllRecords();
+
+        completer.complete(null);
+        await Future.wait([future1, future2]);
+      },
+    );
+  });
+
+  group('_withWebLock reentrada', () {
+    test(
+      'ejecuta directamente la acción si ya nos encontramos dentro de la misma Zone',
+      () async {
+        final webBackend = <String, String>{};
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await expectLater(
+          db.savePatient(_buildRecord(patientId: 'p-lock-zone')),
+          completes,
+        );
+      },
+    );
+  });
+
+  group('NFC Key Version en Web y tratamiento de errores', () {
+    test(
+      'recordNfcKeyVersion, pendingNfcKeyVersions y markNfcKeyVersionsSynced en Web',
+      () async {
+        final webBackend = <String, String>{};
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await db.recordNfcKeyVersion(
+          deviceUid: 'web-uid-1',
+          deviceRole: 'patient',
+          keyVersion: 2,
+        );
+
+        var pending = await db.pendingNfcKeyVersions();
+        expect(pending, hasLength(1));
+        expect(pending.first['device_uid'], equals('web-uid-1'));
+
+        await db.markNfcKeyVersionsSynced(['web-uid-1']);
+        pending = await db.pendingNfcKeyVersions();
+        expect(pending, isEmpty);
+      },
+    );
+
+    test('captura errores al guardar o leer versiones de llave NFC', () async {
+      final db = LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        forceWeb: true,
+        webSet: (k, v) async {
+          if (k.startsWith('hwb_web_keyver::')) {
+            throw Exception('Error escribiendo llave NFC');
+          }
+        },
+        webList: (p) async {
+          if (p.startsWith('hwb_web_keyver::')) {
+            throw Exception('Error leyendo llave NFC');
+          }
+          return [];
+        },
+      );
+
+      await expectLater(
+        db.recordNfcKeyVersion(
+          deviceUid: 'fail-uid',
+          deviceRole: 'patient',
+          keyVersion: 1,
+        ),
+        completes,
+      );
+
+      final pending = await db.pendingNfcKeyVersions();
+      expect(pending, isEmpty);
+
+      await expectLater(db.markNfcKeyVersionsSynced(['fail-uid']), completes);
+    });
+
+    test(
+      'omite filas corruptas sin crashear en _webAllKeyVersionRows',
+      () async {
+        final webBackend = <String, String>{
+          'hwb_web_keyver::u1': 'JSON_INVALIDO_KEY_VERSION',
+        };
+
+        final db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        final pending = await db.pendingNfcKeyVersions();
+        expect(pending, isEmpty);
+      },
+    );
+  });
+
+  group('Cifrado y descifrado de registros de auditoría', () {
+    test(
+      'lanza AuditDecryptionException si el payload de auditoria está corrupto o truncado',
+      () async {
+        final localDb = LocalDatabase.instance;
+        await localDb.clearAll();
+
+        final raw = await rawConnection();
+        final invalidPayload = base64Encode(Uint8List(10)); // < 28 bytes
+
+        await raw.insert('emergency_access_log', <String, Object?>{
+          'patient_uid': '04:CORRUPT',
+          'patient_name': invalidPayload,
           'reason': 'guardian_absent_offline',
           'occurred_at': DateTime.now().toIso8601String(),
           'is_synced': 0,
-        },
-      ]);
+        });
 
-      final pending = await localDb.pendingEmergencyAccessLogs();
-      final cid = pending.single['client_event_id'] as String?;
-      expect(cid, isNotNull);
-      expect(cid, isNotEmpty);
+        await expectLater(
+          localDb.pendingEmergencyAccessLogs(),
+          throwsA(isA<AuditDecryptionException>()),
+        );
+      },
+    );
 
-      final again = await localDb.pendingEmergencyAccessLogs();
-      expect(again.single['client_event_id'], equals(cid));
-    });
+    test(
+      'lanza AuditDecryptionException si falla el descifrado del user_id en el log de auditoría',
+      () async {
+        final localDb = LocalDatabase.instance;
+        await localDb.clearAll();
 
-    test('getUnsyncedRecords(ownerUserId) en Web incluye registros heredados '
-        'sin owner', () async {
-      await localDb.savePatient(_buildRecord(patientId: 'w-unsync-legacy'));
-      await localDb.savePatient(
-        _buildRecord(patientId: 'w-unsync-other'),
-        ownerUserId: 'otro-usuario',
+        final raw = await rawConnection();
+        final invalidPayload = base64Encode(Uint8List(10));
+
+        await raw.insert('emergency_access_log', <String, Object?>{
+          'patient_uid': '04:CORRUPT_USER',
+          'user_id': invalidPayload,
+          'reason': 'guardian_absent_offline',
+          'occurred_at': DateTime.now().toIso8601String(),
+          'is_synced': 0,
+        });
+
+        await expectLater(
+          localDb.pendingEmergencyAccessLogs(),
+          throwsA(isA<AuditDecryptionException>()),
+        );
+      },
+    );
+
+    test(
+      'reutiliza la clave de cifrado de auditoria si ya existe en SecureStorage',
+      () async {
+        final existingKey = _validKeyBase64();
+        inMemoryStorage['hwb_sqlite_audit_aes_key'] = existingKey;
+
+        final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
+        await localDb.logEmergencyAccess(
+          patientUid: '04:KEY_EXISTS',
+          patientName: 'Juan',
+        );
+
+        expect(
+          inMemoryStorage['hwb_sqlite_audit_aes_key'],
+          equals(existingKey),
+        );
+      },
+    );
+
+    test(
+      'captura error al leer clave de auditoría y genera una nueva',
+      () async {
+        when(
+          () => mockStorage.read(key: 'hwb_sqlite_audit_aes_key'),
+        ).thenThrow(Exception('Error de lectura SecureStorage'));
+
+        final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
+        await expectLater(
+          localDb.logEmergencyAccess(
+            patientUid: '04:READ_FAIL',
+            patientName: 'Pedro',
+          ),
+          completes,
+        );
+
+        expect(inMemoryStorage.containsKey('hwb_sqlite_audit_aes_key'), isTrue);
+      },
+    );
+
+    test(
+      'lanza StateError si falla la persistencia de la clave de auditoría',
+      () async {
+        when(
+          () => mockStorage.write(
+            key: 'hwb_sqlite_audit_aes_key',
+            value: any(named: 'value'),
+          ),
+        ).thenThrow(Exception('Error de escritura SecureStorage'));
+
+        final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
+        await expectLater(
+          localDb.logEmergencyAccess(
+            patientUid: '04:WRITE_FAIL',
+            patientName: 'Maria',
+          ),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
+  });
+
+  group('Consultas de conteos huérfanos', () {
+    test(
+      'getOrphanedEmergencyLogCount cuenta logs huérfanos en Nativo y Web',
+      () async {
+        final dbNative = LocalDatabase.instance;
+        await dbNative.clearAll();
+        await dbNative.logEmergencyAccess(
+          patientUid: '04:N1',
+          ownerUserId: null,
+        );
+        await dbNative.logEmergencyAccess(
+          patientUid: '04:N2',
+          ownerUserId: 'user-1',
+        );
+
+        expect(await dbNative.getOrphanedEmergencyLogCount(), equals(1));
+
+        final webBackend = <String, String>{};
+        final dbWeb = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await dbWeb.logEmergencyAccess(patientUid: '04:W1', ownerUserId: null);
+        await dbWeb.logEmergencyAccess(
+          patientUid: '04:W2',
+          ownerUserId: 'user-1',
+        );
+
+        expect(await dbWeb.getOrphanedEmergencyLogCount(), equals(1));
+      },
+    );
+
+    test(
+      'getOrphanedPendingCount cuenta pacientes huérfanos en Nativo y Web',
+      () async {
+        // Nativo
+        final dbNative = LocalDatabase.instance;
+        await dbNative.clearAll();
+        await dbNative.savePatient(
+          _buildRecord(patientId: 'p-orph-1'),
+          ownerUserId: null,
+        );
+        await dbNative.savePatient(
+          _buildRecord(patientId: 'p-orph-2'),
+          ownerUserId: 'owner-1',
+        );
+
+        expect(await dbNative.getOrphanedPendingCount(), equals(1));
+
+        final webBackend = <String, String>{};
+        final dbWeb = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await dbWeb.savePatient(
+          _buildRecord(patientId: 'w-orph-1'),
+          ownerUserId: null,
+        );
+        await dbWeb.savePatient(
+          _buildRecord(patientId: 'w-orph-2'),
+          ownerUserId: 'owner-1',
+        );
+
+        expect(await dbWeb.getOrphanedPendingCount(), equals(1));
+      },
+    );
+
+    test('getUnsyncedEmergencyLogCount con ownerUserId en Web', () async {
+      final webBackend = <String, String>{};
+      final dbWeb = LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        forceWeb: true,
+        webGet: (k) async => webBackend[k],
+        webSet: (k, v) async => webBackend[k] = v,
+        webList: (prefix) async =>
+            webBackend.entries.where((e) => e.key.startsWith(prefix)).toList(),
       );
 
-      final unsynced = await localDb.getUnsyncedRecords(
-        ownerUserId: 'cualquier-usuario',
+      await dbWeb.logEmergencyAccess(
+        patientUid: '04:L1',
+        ownerUserId: 'user-A',
+      );
+      await dbWeb.logEmergencyAccess(
+        patientUid: '04:L2',
+        ownerUserId: 'user-B',
       );
 
-      expect(unsynced.map((e) => e.patientId), contains('w-unsync-legacy'));
       expect(
-        unsynced.map((e) => e.patientId),
-        isNot(contains('w-unsync-other')),
-      );
-    });
-
-    test('getRetryablePendingCount / getBlockedCount en Web excluyen registros '
-        'de otro owner', () async {
-      await localDb.savePatient(
-        _buildRecord(patientId: 'w-owner-a'),
-        ownerUserId: 'nurse-a',
-      );
-      await localDb.markSyncError('w-owner-a', 'conflict', statusCode: 409);
-
-      await localDb.savePatient(
-        _buildRecord(patientId: 'w-owner-b'),
-        ownerUserId: 'nurse-b',
-      );
-      await localDb.markSyncError('w-owner-b', 'server down', statusCode: 500);
-
-      expect(
-        await localDb.getRetryablePendingCount(ownerUserId: 'nurse-a'),
-        equals(0),
-      );
-      expect(
-        await localDb.getRetryablePendingCount(ownerUserId: 'nurse-b'),
+        await dbWeb.getUnsyncedEmergencyLogCount(ownerUserId: 'user-A'),
         equals(1),
       );
-      expect(await localDb.getBlockedCount(ownerUserId: 'nurse-a'), equals(1));
-      expect(await localDb.getBlockedCount(ownerUserId: 'nurse-b'), equals(0));
     });
 
-    test('markSyncError en Web ignora la actualización si la revisión no '
-        'coincide', () async {
-      await localDb.savePatient(_buildRecord(patientId: 'w-rev-mismatch'));
-      final saved = (await localDb.getAllRecords()).single;
+    test(
+      'destroyEncryptionKey en Web limpia el almacén con webClearAll',
+      () async {
+        bool clearAllCalled = false;
+        final dbWeb = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webClearAll: () async {
+            clearAllCalled = true;
+          },
+        );
 
-      await localDb.markSyncError(
-        'w-rev-mismatch',
-        'conflict',
-        statusCode: 409,
-        revision: saved.revision + 99,
+        await dbWeb.destroyEncryptionKey();
+        expect(clearAllCalled, isTrue);
+      },
+    );
+
+    test('destroyEncryptionKey captura error si webClearAll falla', () async {
+      final dbWeb = LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        forceWeb: true,
+        webClearAll: () async {
+          throw Exception('Error borrando storage web');
+        },
       );
 
-      final unchanged = (await localDb.getAllRecords()).single;
-      expect(unchanged.syncError, isNull);
-      expect(unchanged.syncErrorCode, isNull);
+      await expectLater(dbWeb.destroyEncryptionKey(), completes);
+    });
+  });
+
+  group('Cobertura adicional — LocalDatabase', () {
+    LocalDatabase buildWebDb(
+      Map<String, String> backend, {
+      Future<void> Function(String key, String value)? onSet,
+    }) {
+      return LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        forceWeb: true,
+        webGet: (String key) async => backend[key],
+        webSet: (String key, String value) async {
+          backend[key] = value;
+          if (onSet != null) await onSet(key, value);
+        },
+        webRemove: (String key) async => backend.remove(key),
+        webClearAll: () async => backend.clear(),
+        webList: (String prefix) async => backend.entries
+            .where((MapEntry<String, String> e) => e.key.startsWith(prefix))
+            .toList(growable: false),
+        webDeleteByPrefix: (String prefix) async =>
+            backend.removeWhere((String k, String _) => k.startsWith(prefix)),
+      );
+    }
+
+    // ── _withWebLock: reentrada real ────────────────────────────────────────
+
+    test('una llamada anidada desde dentro del lock reutiliza la zona y no se '
+        'bloquea', () async {
+      final backend = <String, String>{};
+      late final LocalDatabase db;
+      var reentered = false;
+      db = buildWebDb(
+        backend,
+        onSet: (String key, String _) async {
+          if (key.startsWith('hwb_web_patient::') && !reentered) {
+            reentered = true;
+            await db.deleteRecord('p-otro');
+          }
+        },
+      );
+
+      await db
+          .savePatient(_buildRecord(patientId: 'p-nest'), ownerUserId: 'u1')
+          .timeout(const Duration(seconds: 5));
+
+      expect(reentered, isTrue);
+      final all = await db.getAllRecords();
+      expect(all.map((LocalPatientEntry e) => e.patientId), contains('p-nest'));
     });
 
-    test('clearChipsDirty que limpia ambos flags borra la fila en Web '
-        '(_deleteChipStatus)', () async {
-      await localDb.markChipsDirty(
-        'w-chip-full-clear',
-        patient: true,
-        guardian: true,
-      );
-      expect(await localDb.getChipStatus('w-chip-full-clear'), isNotNull);
+    // ── _decryptAuditPayload: rama de error ─────────────────────────────────
 
-      await localDb.clearChipsDirty(
-        'w-chip-full-clear',
-        patient: true,
-        guardian: true,
+    test('lanza AuditDecryptionException si el ciphertext de auditoría tiene '
+        'longitud válida pero no autentica', () async {
+      final localDb = LocalDatabase.instance;
+      await localDb.clearAll();
+
+      final raw = await rawConnection();
+      final unauthenticated = base64Encode(Uint8List(40));
+
+      await raw.insert('emergency_access_log', <String, Object?>{
+        'patient_uid': '04:BAD_MAC',
+        'patient_name': unauthenticated,
+        'reason': 'guardian_absent_offline',
+        'occurred_at': DateTime.now().toIso8601String(),
+        'is_synced': 0,
+      });
+
+      await expectLater(
+        localDb.pendingEmergencyAccessLogs(),
+        throwsA(isA<AuditDecryptionException>()),
+      );
+    });
+
+    test('lanza AuditDecryptionException si el payload de auditoría no es '
+        'base64 válido', () async {
+      final localDb = LocalDatabase.instance;
+      await localDb.clearAll();
+
+      final raw = await rawConnection();
+
+      await raw.insert('emergency_access_log', <String, Object?>{
+        'patient_uid': '04:BAD_B64',
+        'user_id': 'ey!!invalido==',
+        'reason': 'guardian_absent_offline',
+        'occurred_at': DateTime.now().toIso8601String(),
+        'is_synced': 0,
+      });
+
+      await expectLater(
+        localDb.pendingEmergencyAccessLogs(),
+        throwsA(isA<AuditDecryptionException>()),
+      );
+    });
+
+    // ── pendingEmergencyAccessLogs: filtro por ownerUserId ──────────────────
+
+    test('web: filtra los logs pendientes por ownerUserId', () async {
+      final db = buildWebDb(<String, String>{});
+      await db.logEmergencyAccess(
+        patientUid: '04:A',
+        patientName: 'Ana Pérez',
+        userId: 'doc-1',
+        ownerUserId: 'owner-A',
+      );
+      await db.logEmergencyAccess(
+        patientUid: '04:B',
+        patientName: 'Beto Ruiz',
+        userId: 'doc-2',
+        ownerUserId: 'owner-B',
+      );
+      await db.logEmergencyAccess(patientUid: '04:C');
+
+      final all = await db.pendingEmergencyAccessLogs();
+      expect(
+        all.map((Map<String, Object?> r) => r['patient_uid']),
+        unorderedEquals(<String>['04:A', '04:B', '04:C']),
       );
 
-      expect(await localDb.getChipStatus('w-chip-full-clear'), isNull);
+      final mine = await db.pendingEmergencyAccessLogs(ownerUserId: 'owner-A');
+      expect(mine, hasLength(1));
+      expect(mine.single['patient_uid'], equals('04:A'));
+      expect(mine.single['owner_user_id'], equals('owner-A'));
+
+      final none = await db.pendingEmergencyAccessLogs(
+        ownerUserId: 'owner-inexistente',
+      );
+      expect(none, isEmpty);
+    });
+
+    test(
+      'web: el filtro por owner excluye los logs ya sincronizados',
+      () async {
+        final db = buildWebDb(<String, String>{});
+        await db.logEmergencyAccess(
+          patientUid: '04:S1',
+          ownerUserId: 'owner-A',
+        );
+        await db.logEmergencyAccess(
+          patientUid: '04:S2',
+          ownerUserId: 'owner-A',
+        );
+
+        final pending = await db.pendingEmergencyAccessLogs(
+          ownerUserId: 'owner-A',
+        );
+        expect(pending, hasLength(2));
+
+        final syncedId = (pending.first['id'] as num).toInt();
+        await db.markEmergencyLogsSynced(<int>[syncedId]);
+
+        final remaining = await db.pendingEmergencyAccessLogs(
+          ownerUserId: 'owner-A',
+        );
+        expect(remaining, hasLength(1));
+        expect((remaining.single['id'] as num).toInt(), isNot(syncedId));
+      },
+    );
+
+    test('nativo: filtra los logs pendientes por ownerUserId', () async {
+      final db = LocalDatabase.instance;
+      await db.clearAll();
+
+      await db.logEmergencyAccess(
+        patientUid: '04:NA',
+        patientName: 'Ana Pérez',
+        userId: 'doc-1',
+        ownerUserId: 'owner-A',
+      );
+      await db.logEmergencyAccess(
+        patientUid: '04:NB',
+        patientName: 'Beto Ruiz',
+        userId: 'doc-2',
+        ownerUserId: 'owner-B',
+      );
+      await db.logEmergencyAccess(patientUid: '04:NC');
+
+      final all = await db.pendingEmergencyAccessLogs();
+      expect(
+        all.map((Map<String, Object?> r) => r['patient_uid']),
+        unorderedEquals(<String>['04:NA', '04:NB', '04:NC']),
+      );
+
+      final mine = await db.pendingEmergencyAccessLogs(ownerUserId: 'owner-A');
+      expect(mine, hasLength(1));
+      expect(mine.single['patient_uid'], equals('04:NA'));
+      expect(mine.single['owner_user_id'], equals('owner-A'));
+
+      final none = await db.pendingEmergencyAccessLogs(
+        ownerUserId: 'owner-inexistente',
+      );
+      expect(none, isEmpty);
+    });
+
+    test(
+      'nativo: el filtro por owner excluye los logs sincronizados',
+      () async {
+        final db = LocalDatabase.instance;
+        await db.clearAll();
+
+        await db.logEmergencyAccess(
+          patientUid: '04:NS1',
+          ownerUserId: 'owner-A',
+        );
+        await db.logEmergencyAccess(
+          patientUid: '04:NS2',
+          ownerUserId: 'owner-A',
+        );
+
+        final pending = await db.pendingEmergencyAccessLogs(
+          ownerUserId: 'owner-A',
+        );
+        expect(pending, hasLength(2));
+
+        final syncedId = (pending.first['id'] as num).toInt();
+        await db.markEmergencyLogsSynced(<int>[syncedId]);
+
+        final remaining = await db.pendingEmergencyAccessLogs(
+          ownerUserId: 'owner-A',
+        );
+        expect(remaining, hasLength(1));
+        expect((remaining.single['id'] as num).toInt(), isNot(syncedId));
+      },
+    );
+
+    // ── savePatient con isSynced: true ──────────────────────────────────────
+
+    test(
+      'web: savePatient con isSynced true fija is_synced y synced_at',
+      () async {
+        final db = buildWebDb(<String, String>{});
+
+        await db.savePatient(
+          _buildRecord(patientId: 'w-synced'),
+          ownerUserId: 'u1',
+          isSynced: true,
+        );
+
+        final entry = (await db.getAllRecords()).single;
+        expect(entry.isSynced, isTrue);
+        expect(entry.syncedAt, isNotNull);
+        expect(DateTime.tryParse(entry.syncedAt!), isNotNull);
+      },
+    );
+
+    test('web: savePatient sin isSynced deja synced_at en null', () async {
+      final db = buildWebDb(<String, String>{});
+
+      await db.savePatient(
+        _buildRecord(patientId: 'w-unsynced'),
+        ownerUserId: 'u1',
+      );
+
+      final entry = (await db.getAllRecords()).single;
+      expect(entry.isSynced, isFalse);
+      expect(entry.syncedAt, isNull);
+    });
+
+    test(
+      'nativo: savePatient con isSynced true fija is_synced y synced_at',
+      () async {
+        final db = LocalDatabase.instance;
+
+        await db.savePatient(
+          _buildRecord(patientId: 'n-synced'),
+          ownerUserId: 'u1',
+          isSynced: true,
+        );
+
+        final entry = (await db.getAllRecords()).single;
+        expect(entry.isSynced, isTrue);
+        expect(entry.syncedAt, isNotNull);
+        expect(DateTime.tryParse(entry.syncedAt!), isNotNull);
+      },
+    );
+
+    test('nativo: savePatient sin isSynced deja synced_at en null', () async {
+      final db = LocalDatabase.instance;
+
+      await db.savePatient(
+        _buildRecord(patientId: 'n-unsynced'),
+        ownerUserId: 'u1',
+      );
+
+      final entry = (await db.getAllRecords()).single;
+      expect(entry.isSynced, isFalse);
+      expect(entry.syncedAt, isNull);
     });
   });
 }

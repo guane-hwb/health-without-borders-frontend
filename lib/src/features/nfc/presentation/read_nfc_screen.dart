@@ -40,6 +40,10 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   bool _scanning = false;
   String? _errorMessage;
 
+  /// Set when a scan found no keyring because the session window closed, so the
+  /// offline fallback can say "log in again" rather than blame the chip.
+  bool _nfcSessionExpired = false;
+
   // ── Stored values across steps ──
   String? _patientDeviceUid;
 
@@ -57,21 +61,45 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
 
   // ── Patient scan ──────────────────────────────────────────────────────────
 
+  /// Notes which key version this chip decrypted with.
+  ///
+  /// Fire-and-forget by design: this is telemetry for deciding when a key
+  /// version can be retired, and it must never interfere with a read.
+  Future<void> _recordChipKeyVersion(payload.HwbChipReadResult chip) async {
+    final int? version = chip.keyVersion;
+    if (version == null || chip.uid.isEmpty) return;
+    if (!mounted) return;
+    await AppScope.of(context).localDatabase.recordNfcKeyVersion(
+      deviceUid: chip.uid,
+      deviceRole: chip.kind == payload.HwbChipKind.guardian
+          ? 'guardian'
+          : 'patient',
+      keyVersion: version,
+      hadHeader: chip.hadHeader ?? false,
+    );
+  }
+
   Future<void> _scanPatient() async {
     setState(() {
       _scanning = true;
       _errorMessage = null;
     });
+    _nfcSessionExpired = false;
 
     payload.HwbChipReadResult? chip;
     try {
-      final key = await AppScope.of(
-        context,
-      ).authRepository.getNfcEncryptionKey();
-      if (key != null && key.isNotEmpty) {
+      final authRepository = AppScope.of(context).authRepository;
+      final alertMessage = _nfcAlert(guardian: false);
+      final keyring = await authRepository.getNfcKeyring();
+      if (keyring != null && keyring.isNotEmpty) {
         chip = await payload.NfcPayloadService(
-          codec: NfcPayloadCodec(hexKey: key),
-        ).readHwbChip(alertMessage: _nfcAlert(guardian: false));
+          codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
+        ).readHwbChip(alertMessage: alertMessage);
+        await _recordChipKeyVersion(chip);
+      } else {
+        // No keyring: the scan can still resolve the patient online from the
+        // chip UID, so only remember the reason for the offline fallback.
+        _nfcSessionExpired = await authRepository.isNfcSessionExpired();
       }
     } on payload.NfcNotAvailableException {
       if (mounted) {
@@ -189,15 +217,26 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
           patientDeviceUid: chip.uid,
         );
         if (!mounted) return;
+        // Read-only: the wristband alone rebuilds a genuinely partial record —
+        // no patientId and an empty address — and the server takes declarative
+        // fields from whatever it is sent, so syncing an edit made from it
+        // would blank the patient's address. Making this editable needs the
+        // sync to carry only what changed, not the whole record.
         await _openProfile(record, readOnly: true, offline: true);
       } else {
         final s = AppStrings.of(context);
         final isEs = s.isEs;
         setState(() {
           _scanning = false;
-          _errorMessage = isEs
-              ? 'Sin conexión y sin respaldo legible en el chip.'
-              : 'Offline and no readable backup on the chip.';
+          _errorMessage = _nfcSessionExpired
+              ? (isEs
+                    ? 'Sin conexión y su sesión expiró: inicie sesión de nuevo '
+                          'para leer el respaldo del chip.'
+                    : 'Offline and your session expired: log in again to read '
+                          'the chip backup.')
+              : (isEs
+                    ? 'Sin conexión y sin respaldo legible en el chip.'
+                    : 'Offline and no readable backup on the chip.');
         });
       }
     }
@@ -230,17 +269,25 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
     try {
-      final key = await AppScope.of(
-        context,
-      ).authRepository.getNfcEncryptionKey();
-      if (key == null || key.isEmpty) {
+      final authRepository = AppScope.of(context).authRepository;
+      final keyring = await authRepository.getNfcKeyring();
+      if (keyring == null || keyring.isEmpty) {
+        final bool expired = await authRepository.isNfcSessionExpired();
         throw NfcSessionException(
-          isEs ? 'No hay llave NFC disponible.' : 'No NFC key available.',
+          expired
+              ? (isEs
+                    ? 'Su sesión expiró. Inicie sesión de nuevo para leer '
+                          'dispositivos NFC.'
+                    : 'Your session expired. Log in again to read NFC devices.')
+              : (isEs
+                    ? 'No hay llave NFC disponible.'
+                    : 'No NFC key available.'),
         );
       }
       final chip = await payload.NfcPayloadService(
-        codec: NfcPayloadCodec(hexKey: key),
+        codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
       ).readHwbChip(alertMessage: _nfcAlert(guardian: true));
+      await _recordChipKeyVersion(chip);
       if (!mounted) return;
 
       final expected = <String>[
@@ -275,7 +322,14 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         patientDeviceUid: _patientDeviceUid ?? '',
       );
       if (!mounted) return;
-      await _openProfile(record, readOnly: true, offline: true);
+      // Editable, unlike the other offline paths. The guardian card carries the
+      // whole record — it only bounds the consultation and vaccination lists
+      // and strips the consent signature, and the server merges those lists by
+      // identifier and restores the signature, so syncing an edit made from
+      // this card cannot drop anything. A brigade offline with the guardian
+      // present is the ordinary case, not an exception, and it needs to be able
+      // to record a consultation.
+      await _openProfile(record, offline: true);
     } on NfcNotAvailableException {
       if (!mounted) return;
       setState(() {
@@ -369,6 +423,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       patientDeviceUid: _patientDeviceUid ?? '',
     );
     if (!mounted) return;
+    // Read-only by design: break-glass exists to see emergency data when no
+    // guardian is present, not to record care.
     await _openProfile(record, readOnly: true, offline: true, emergency: true);
   }
 

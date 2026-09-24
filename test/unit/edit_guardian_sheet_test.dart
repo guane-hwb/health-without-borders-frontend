@@ -276,4 +276,83 @@ void main() {
       },
     );
   });
+
+  group('EditGuardianSheet — Unsaved Changes Evaluation', () {
+    bool hasUnsavedChanges({
+      required String name,
+      required String phone,
+      required String docNumber,
+      required String relationship,
+      required String docType,
+      required String initialName,
+      required String initialPhone,
+      required String initialDocNumber,
+      required String initialRelationship,
+      required String initialDocType,
+    }) {
+      final nameChanged = name.trim() != initialName;
+      final phoneChanged = phone.trim() != initialPhone;
+      final docNumChanged = docNumber.trim() != initialDocNumber;
+      final relChanged = relationship != initialRelationship;
+      final docTypeChanged = docType != initialDocType;
+
+      return nameChanged ||
+          phoneChanged ||
+          docNumChanged ||
+          relChanged ||
+          docTypeChanged;
+    }
+
+    test('returns false when fields are unmutated', () {
+      expect(
+        hasUnsavedChanges(
+          name: 'María',
+          phone: '300',
+          docNumber: '123',
+          relationship: '01',
+          docType: 'CC',
+          initialName: 'María',
+          initialPhone: '300',
+          initialDocNumber: '123',
+          initialRelationship: '01',
+          initialDocType: 'CC',
+        ),
+        isFalse,
+      );
+    });
+
+    test('returns true when any field or selector mutates', () {
+      expect(
+        hasUnsavedChanges(
+          name: 'María José',
+          phone: '300',
+          docNumber: '123',
+          relationship: '01',
+          docType: 'CC',
+          initialName: 'María',
+          initialPhone: '300',
+          initialDocNumber: '123',
+          initialRelationship: '01',
+          initialDocType: 'CC',
+        ),
+        isTrue,
+      );
+
+      expect(
+        hasUnsavedChanges(
+          name: 'María',
+          phone: '300',
+          docNumber: '123',
+          relationship: '02',
+          docType: 'CC',
+          initialName: 'María',
+          initialPhone: '300',
+          initialDocNumber: '123',
+          initialRelationship: '01',
+          initialDocType: 'CC',
+        ),
+        isTrue,
+      );
+    });
+  });
 }

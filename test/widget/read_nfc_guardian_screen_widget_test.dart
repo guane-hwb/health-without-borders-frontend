@@ -2,15 +2,52 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 
+import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
+import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
+import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/read_nfc_guardian_screen.dart';
 
 // =============================================================================
-// Test Infrastructure
+// Test Mocks & Infrastructure
 // =============================================================================
+
+class MockAuthRepository extends Mock implements AuthRepository {}
+
+class MockUserRepository extends Mock implements UserRepository {}
+
+class MockPatientRepository extends Mock implements PatientRepository {}
+
+class MockLocalDatabase extends Mock implements LocalDatabase {}
+
+class MockSyncEngine extends Mock implements SyncEngine {}
+
+class MockReachability extends Mock implements Reachability {}
+
+class FakePatientFullRecord extends Fake implements PatientFullRecord {}
+
+class FakeNfcChipStatus extends Fake implements NfcChipStatus {
+  FakeNfcChipStatus({
+    this.patientChipDirty = false,
+    this.guardianChipDirty = false,
+  });
+
+  @override
+  final bool patientChipDirty;
+
+  @override
+  final bool guardianChipDirty;
+}
 
 class _AppLocaleProvider extends StatefulWidget {
   const _AppLocaleProvider({required this.locale, required this.child});
@@ -83,7 +120,6 @@ class _FakeAppScope extends InheritedWidget {
   bool updateShouldNotify(_FakeAppScope old) => old.repo != repo;
 }
 
-/// Localization provider wraps MaterialApp so that pushed routes retain locale context.
 Widget _wrap(
   Widget child, {
   String locale = 'es',
@@ -94,6 +130,69 @@ Widget _wrap(
     locale: locale,
     child: _FakeAppScope(
       repo: fakeRepo,
+      child: MaterialApp(home: child),
+    ),
+  );
+}
+
+late MockAuthRepository mockAuth;
+late MockUserRepository mockUser;
+late MockPatientRepository mockPatientRepo;
+late MockLocalDatabase mockDb;
+late MockSyncEngine mockSync;
+late MockReachability mockReach;
+
+Widget _wrapFullScope(Widget child, {String locale = 'es'}) {
+  mockAuth = MockAuthRepository();
+  mockUser = MockUserRepository();
+  mockPatientRepo = MockPatientRepository();
+  mockDb = MockLocalDatabase();
+  mockSync = MockSyncEngine();
+  mockReach = MockReachability();
+
+  final activeUser = UserSession(
+    id: 'user-123',
+    fullName: 'Dr. Test',
+    email: 'test@hwb.org',
+    role: UserRole.doctor,
+    organizationId: 'org-01',
+  );
+
+  when(() => mockAuth.currentUser).thenReturn(activeUser);
+  when(
+    () => mockAuth.sessionNotifier,
+  ).thenReturn(ValueNotifier<UserSession?>(activeUser));
+  when(() => mockAuth.getNfcKeyring()).thenAnswer((_) async => null);
+  when(() => mockAuth.isNfcSessionExpired()).thenAnswer((_) async => false);
+
+  when(() => mockSync.isOnline).thenReturn(ValueNotifier<bool>(true));
+  when(() => mockSync.pendingCount).thenReturn(ValueNotifier<int>(0));
+  when(() => mockSync.blockedCount).thenReturn(ValueNotifier<int>(0));
+  when(() => mockSync.syncAll()).thenAnswer((_) async => true);
+
+  when(() => mockDb.getChipStatus(any())).thenAnswer((_) async => null);
+  when(
+    () => mockDb.clearChipsDirty(
+      any(),
+      patient: any(named: 'patient'),
+      guardian: any(named: 'guardian'),
+    ),
+  ).thenAnswer((_) async {});
+
+  return AppLocale(
+    locale: locale,
+    setLocale: (_) {},
+    child: AppScope(
+      authRepository: mockAuth,
+      userRepository: mockUser,
+      patientRepository: mockPatientRepo,
+      localDatabase: mockDb,
+      syncEngine: mockSync,
+      statsRepository: StatsRepository(
+        apiClient: ApiClient(baseUrl: 'http://localhost'),
+        authRepository: mockAuth,
+      ),
+      reachability: mockReach,
       child: MaterialApp(home: child),
     ),
   );
@@ -150,7 +249,13 @@ GuardianInfo _guardian({
   String name = 'María García',
   String relationship = 'Madre',
   String phone = '3001112233',
-}) => GuardianInfo(name: name, relationship: relationship, phone: phone);
+  String? deviceUid,
+}) => GuardianInfo(
+  name: name,
+  relationship: relationship,
+  phone: phone,
+  deviceUid: deviceUid,
+);
 
 AllergyInfo _allergy({
   String allergen = 'Penicilina',
@@ -186,6 +291,7 @@ PatientFullRecord _record({
   double? weight = 62.0,
   double? height = 1.65,
   String? bloodType = 'O+',
+  String? guardianDeviceUid,
 }) => PatientFullRecord(
   patientId: 'uuid-test',
   deviceUid: 'NFC-TEST',
@@ -195,7 +301,7 @@ PatientFullRecord _record({
     height: height,
     bloodType: bloodType,
   ),
-  guardianInfo: _guardian(),
+  guardianInfo: _guardian(deviceUid: guardianDeviceUid),
   allergies: allergies ?? [],
   medicalHistory: medicalHistory ?? [],
   vaccinationRecord: vaccinationRecord ?? [],
@@ -209,6 +315,11 @@ final _s = AppStrings.forTesting('es');
 // =============================================================================
 
 void main() {
+  setUpAll(() {
+    registerFallbackValue(FakePatientFullRecord());
+    registerFallbackValue(FakeNfcChipStatus());
+  });
+
   group('ReadNfcGuardianScreen – Rendering', () {
     testWidgets('renders without errors using minimal patient record', (
       tester,
@@ -968,9 +1079,126 @@ void main() {
       );
     },
   );
+
+  group('ReadNfcGuardianScreen – Cobertura 100% de Sync y Editores', () {
+    testWidgets('Editor updates state when returning non-null patient record', (
+      tester,
+    ) async {
+      final initialRecord = _record();
+      final updatedRecord = _record(sex: 'M');
+
+      await tester.pumpWidget(
+        _wrapFullScope(
+          Builder(
+            builder: (ctx) => TextButton(
+              onPressed: () async {
+                final res = await Navigator.of(ctx).push<PatientFullRecord>(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ReadNfcGuardianScreen(patient: initialRecord),
+                  ),
+                );
+                expect(res, isNotNull);
+              },
+              child: const Text('OpenScreen'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('OpenScreen'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.edit).first);
+      await tester.pumpAndSettle();
+
+      tester
+          .state<NavigatorState>(find.byType(Navigator).last)
+          .pop(updatedRecord);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Masculino'), findsOneWidget);
+    });
+
+    testWidgets(
+      '_syncPatient muestra SnackBar cuando la sesión o clave NFC vencieron/inválida',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(
+          _wrapFullScope(ReadNfcGuardianScreen(patient: _record())),
+        );
+        await tester.pumpAndSettle();
+
+        when(() => mockDb.getChipStatus(any())).thenAnswer(
+          (_) async => FakeNfcChipStatus(
+            patientChipDirty: true,
+            guardianChipDirty: false,
+          ),
+        );
+        when(() => mockAuth.getNfcKeyring()).thenAnswer((_) async => null);
+        when(
+          () => mockAuth.isNfcSessionExpired(),
+        ).thenAnswer((_) async => true);
+
+        final syncBtn = find.text('Actualizar paciente');
+        await tester.ensureVisible(syncBtn);
+        await tester.tap(syncBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(find.textContaining('Su sesión expiró'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '_syncPatient valida que no hay clave NFC disponible cuando keyring es nulo y la sesión no expiró',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(
+          _wrapFullScope(
+            ReadNfcGuardianScreen(patient: _record(guardianDeviceUid: '')),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        when(() => mockDb.getChipStatus(any())).thenAnswer(
+          (_) async => FakeNfcChipStatus(
+            patientChipDirty: true,
+            guardianChipDirty: false,
+          ),
+        );
+        when(() => mockAuth.getNfcKeyring()).thenAnswer((_) async => null);
+        when(
+          () => mockAuth.isNfcSessionExpired(),
+        ).thenAnswer((_) async => false);
+
+        final syncBtn = find.text('Actualizar paciente');
+        await tester.ensureVisible(syncBtn);
+        await tester.tap(syncBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(
+          find.textContaining('No hay clave NFC disponible'),
+          findsOneWidget,
+        );
+      },
+    );
+  });
 }
 
-/// Helper method extension matching required PatientFullRecord specifications.
 extension on PatientFullRecord {
   Widget toWidgetScreen() => ReadNfcGuardianScreen(patient: this);
 }

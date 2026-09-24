@@ -130,6 +130,7 @@ void main() {
                   context,
                   onSync: () async {
                     syncCalled = true;
+                    return true;
                   },
                 ),
                 child: const Text('Abrir Flujo'),
@@ -168,6 +169,7 @@ void main() {
                     if (executions == 1) {
                       throw Exception('Error de Conexión NFC');
                     }
+                    return true;
                   },
                 ),
                 child: const Text('Abrir Flujo'),

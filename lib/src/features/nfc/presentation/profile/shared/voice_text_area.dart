@@ -4,8 +4,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import '../../../../../design/tokens/app_colors.dart';
+
+import '../../../../../core/di/app_scope.dart';
 import '../../../../../core/i18n/app_strings.dart';
+import '../../../../../design/tokens/app_colors.dart';
 
 class VoiceTextArea extends StatefulWidget {
   const VoiceTextArea({
@@ -160,6 +162,7 @@ class _VoiceTextAreaState extends State<VoiceTextArea>
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
+    final isOnlineNotifier = AppScope.of(context).syncEngine.isOnline;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -173,65 +176,77 @@ class _VoiceTextAreaState extends State<VoiceTextArea>
           ),
         ),
         const SizedBox(height: 6),
-        Stack(
-          children: [
-            TextField(
-              controller: widget.controller,
-              maxLines: widget.maxLines,
-              style: const TextStyle(fontSize: 14),
-              onChanged: widget.onChanged,
-              decoration: InputDecoration(
-                hintText: widget.hint,
-                hintStyle: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.disabled,
-                ),
-                contentPadding: const EdgeInsets.only(
-                  left: 12,
-                  right: 12,
-                  top: 12,
-                  bottom: 44,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(
-                    color: _isListening ? AppColors.primary : AppColors.divider,
-                    width: _isListening ? 2 : 1.5,
+        ValueListenableBuilder<bool>(
+          valueListenable: isOnlineNotifier,
+          builder: (context, isOnline, _) {
+            return Stack(
+              children: [
+                TextField(
+                  controller: widget.controller,
+                  maxLines: widget.maxLines,
+                  style: const TextStyle(fontSize: 14),
+                  onChanged: widget.onChanged,
+                  decoration: InputDecoration(
+                    hintText: widget.hint,
+                    hintStyle: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.disabled,
+                    ),
+                    contentPadding: EdgeInsets.only(
+                      left: 12,
+                      right: 12,
+                      top: 12,
+                      bottom: isOnline ? 44 : 12,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: _isListening
+                            ? AppColors.primary
+                            : AppColors.divider,
+                        width: _isListening ? 2 : 1.5,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: AppColors.primary,
+                        width: 2,
+                      ),
+                    ),
                   ),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: AppColors.primary,
-                    width: 2,
+                if (isOnline)
+                  Positioned(
+                    right: 8,
+                    bottom: 8,
+                    child: GestureDetector(
+                      onTap: _toggleListening,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: _isListening
+                              ? AppColors.primary
+                              : AppColors.primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          _isListening
+                              ? Icons.stop_rounded
+                              : Icons.mic_none_rounded,
+                          size: 18,
+                          color: _isListening
+                              ? AppColors.white
+                              : AppColors.primary,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
-            Positioned(
-              right: 8,
-              bottom: 8,
-              child: GestureDetector(
-                onTap: _toggleListening,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: _isListening
-                        ? AppColors.primary
-                        : AppColors.primary.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    _isListening ? Icons.stop_rounded : Icons.mic_none_rounded,
-                    size: 18,
-                    color: _isListening ? AppColors.white : AppColors.primary,
-                  ),
-                ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
         if (_isListening)
           Padding(

@@ -1,4 +1,6 @@
 // test/unit/app_strings_test.dart
+
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 
@@ -7443,5 +7445,86 @@ void main() {
       expect(es.monMarString, equals(es.monMar));
       expect(en.monMarString, equals(en.monMar));
     });
+  });
+
+  group('AppStrings - coverage completion', () {
+    test('adminBrigadeHistorySub interpolates {n} correctly (es)', () {
+      final es = AppStrings.forTesting('es');
+      expect(es.adminBrigadeHistorySub(0), contains('0'));
+      expect(es.adminBrigadeHistorySub(1), contains('1'));
+      expect(es.adminBrigadeHistorySub(42), contains('42'));
+      expect(es.adminBrigadeHistorySub(5), isNot(contains('{n}')));
+    });
+
+    test('adminBrigadeHistorySub interpolates {n} correctly (en)', () {
+      final en = AppStrings.forTesting('en');
+      expect(en.adminBrigadeHistorySub(0), contains('0'));
+      expect(en.adminBrigadeHistorySub(1), contains('1'));
+      expect(en.adminBrigadeHistorySub(42), contains('42'));
+      expect(en.adminBrigadeHistorySub(5), isNot(contains('{n}')));
+    });
+
+    test('loginNetworkRequired returns a non-empty String (es and en)', () {
+      final es = AppStrings.forTesting('es');
+      final en = AppStrings.forTesting('en');
+
+      expect(es.loginNetworkRequired, isA<String>());
+      expect(
+        es.loginNetworkRequired.isNotEmpty,
+        isTrue,
+        reason: 'loginNetworkRequired (es) should not be empty',
+      );
+      expect(es.loginNetworkRequired, isNot('loginNetworkRequired'));
+
+      expect(en.loginNetworkRequired, isA<String>());
+      expect(
+        en.loginNetworkRequired.isNotEmpty,
+        isTrue,
+        reason: 'loginNetworkRequired (en) should not be empty',
+      );
+      expect(en.loginNetworkRequired, isNot('loginNetworkRequired'));
+    });
+
+    testWidgets(
+      'AppLocale.of throws a StateError when no AppLocale ancestor exists',
+      (tester) async {
+        late BuildContext capturedContext;
+
+        await tester.pumpWidget(
+          Builder(
+            builder: (context) {
+              capturedContext = context;
+              return const SizedBox.shrink();
+            },
+          ),
+        );
+
+        expect(() => AppLocale.of(capturedContext), throwsStateError);
+      },
+    );
+
+    testWidgets(
+      'AppLocale.of returns the enclosing AppLocale when one exists',
+      (tester) async {
+        late BuildContext capturedContext;
+        var currentLocale = 'es';
+
+        await tester.pumpWidget(
+          AppLocale(
+            locale: currentLocale,
+            setLocale: (locale) => currentLocale = locale,
+            child: Builder(
+              builder: (context) {
+                capturedContext = context;
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        );
+
+        final resolved = AppLocale.of(capturedContext);
+        expect(resolved.locale, 'es');
+      },
+    );
   });
 }

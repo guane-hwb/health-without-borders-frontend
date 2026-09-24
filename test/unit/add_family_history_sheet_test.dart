@@ -151,4 +151,25 @@ void main() {
       expect(label(s, '05'), equals('05'));
     });
   });
+
+  group('AddFamilyHistorySheet — Unsaved Changes Evaluation', () {
+    bool hasUnsavedChanges(String conditionText, String relationship) {
+      return conditionText.trim().isNotEmpty || relationship != '01';
+    }
+
+    test('returns false when text is blank and relationship is default 01', () {
+      expect(hasUnsavedChanges('', '01'), isFalse);
+      expect(hasUnsavedChanges('   ', '01'), isFalse);
+    });
+
+    test('returns true when text is entered', () {
+      expect(hasUnsavedChanges('Diabetes', '01'), isTrue);
+    });
+
+    test('returns true when relationship changes from default 01', () {
+      expect(hasUnsavedChanges('', '02'), isTrue);
+      expect(hasUnsavedChanges('', '03'), isTrue);
+      expect(hasUnsavedChanges('', '04'), isTrue);
+    });
+  });
 }

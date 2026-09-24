@@ -9,6 +9,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
@@ -42,6 +43,8 @@ class MockLocalDatabase extends Mock implements LocalDatabase {}
 class MockSyncEngine extends Mock implements SyncEngine {}
 
 class MockStatsRepository extends Mock implements StatsRepository {}
+
+class MockNfcKeyring extends Mock implements NfcKeyring {}
 
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
 
@@ -111,12 +114,35 @@ void main() {
   void stubDefaults() {
     final activeUser = user();
     when(() => auth.currentUser).thenReturn(activeUser);
+    when(() => auth.getCurrentUser()).thenAnswer((_) async => activeUser);
+    when(() => auth.restoreSession()).thenAnswer((_) async => activeUser);
     when(
       () => auth.sessionNotifier,
     ).thenReturn(ValueNotifier<UserSession?>(activeUser));
-    when(() => auth.getNfcEncryptionKey()).thenAnswer((_) async => null);
+    when(() => auth.getNfcKeyring()).thenAnswer((_) async => null);
+    when(() => auth.isNfcSessionExpired()).thenAnswer((_) async => false);
     when(() => auth.logout()).thenAnswer((_) async {});
-    when(() => db.savePatient(any())).thenAnswer((_) async {});
+
+    when(() => sync.isOnline).thenReturn(ValueNotifier<bool>(true));
+
+    when(() => patientRepo.syncPatient(any())).thenAnswer(
+      (_) async =>
+          PatientSyncResponse(status: 'success', internalId: '', message: ''),
+    );
+
+    when(
+      () => db.savePatient(
+        any(),
+        ownerUserId: any(named: 'ownerUserId'),
+        organizationId: any(named: 'organizationId'),
+        retiredDeviceReason: any(named: 'retiredDeviceReason'),
+        isSynced: any(named: 'isSynced'),
+      ),
+    ).thenAnswer((_) async {});
+    when(() => db.markSynced(any())).thenAnswer((_) async {});
+    when(
+      () => db.getAllRecords(ownerUserId: any(named: 'ownerUserId')),
+    ).thenAnswer((_) async => []);
     when(
       () => db.clearChipsDirty(
         any(),
@@ -140,7 +166,7 @@ void main() {
   });
 
   Future<void> pumpScreen(WidgetTester tester, {String locale = 'es'}) async {
-    tester.view.physicalSize = const Size(600, 2000);
+    tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -174,17 +200,17 @@ void main() {
 
   Future<void> goToStep1(WidgetTester tester) async {
     tester.widget<Step3PatientData>(find.byType(Step3PatientData)).onContinue();
-    await tester.pump();
+    await tester.pumpAndSettle();
   }
 
   Future<void> goToStep2(WidgetTester tester) async {
     tester.widget<Step2Guardian>(find.byType(Step2Guardian)).onContinue();
-    await tester.pump();
+    await tester.pumpAndSettle();
   }
 
   Future<void> goToStep3(WidgetTester tester) async {
     tester.widget<Step4Background>(find.byType(Step4Background)).onContinue();
-    await tester.pump();
+    await tester.pumpAndSettle();
   }
 
   Future<void> advanceToReview(WidgetTester tester) async {
@@ -196,7 +222,7 @@ void main() {
   Future<void> advanceToHub(WidgetTester tester) async {
     await advanceToReview(tester);
     await tester.widget<Step5Review>(find.byType(Step5Review)).onConfirm();
-    await tester.pump();
+    await tester.pumpAndSettle();
   }
 
   Future<void> pumpFrames(WidgetTester tester, [int times = 8]) async {
@@ -264,7 +290,7 @@ void main() {
       expect(find.byType(Step2Guardian), findsOneWidget);
 
       tester.widget<Step2Guardian>(find.byType(Step2Guardian)).onBack();
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.byType(Step3PatientData), findsOneWidget);
       expect(find.text('1/4'), findsOneWidget);
@@ -276,7 +302,7 @@ void main() {
         await pumpScreen(tester);
         await advanceToHub(tester);
         expect(find.text('5/4'), findsNothing);
-        expect(find.byIcon(Icons.arrow_back), findsNothing);
+        expect(find.text('1/4'), findsNothing);
       },
     );
   });
@@ -325,9 +351,17 @@ void main() {
       await advanceToReview(tester);
 
       await tester.widget<Step5Review>(find.byType(Step5Review)).onConfirm();
-      await tester.pump();
+      await tester.pumpAndSettle();
 
-      verify(() => db.savePatient(any())).called(1);
+      verify(
+        () => db.savePatient(
+          any(),
+          ownerUserId: any(named: 'ownerUserId'),
+          organizationId: any(named: 'organizationId'),
+          retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          isSynced: any(named: 'isSynced'),
+        ),
+      ).called(1);
       expect(find.byType(Step6Success), findsOneWidget);
       final success = tester.widget<Step6Success>(find.byType(Step6Success));
       expect(success.sealed, isFalse);
@@ -370,10 +404,17 @@ void main() {
         Navigator.of(tester.element(find.byType(AddConsultationScreen))).pop(
           MedicalHistoryItem(startDateTime: DateTime.now().toIso8601String()),
         );
-        await tester.pump();
-        await tester.pump();
+        await tester.pumpAndSettle();
 
-        verify(() => db.savePatient(any())).called(2);
+        verify(
+          () => db.savePatient(
+            any(),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+            isSynced: any(named: 'isSynced'),
+          ),
+        ).called(2);
         expect(find.byType(SnackBar).last, findsOneWidget);
         final success = tester.widget<Step6Success>(find.byType(Step6Success));
         expect(success.lastConsultationTime, isNotNull);
@@ -418,10 +459,17 @@ void main() {
             administratedAt: 'Clinic 1',
           ),
         ]);
-        await tester.pump();
-        await tester.pump();
+        await tester.pumpAndSettle();
 
-        verify(() => db.savePatient(any())).called(2);
+        verify(
+          () => db.savePatient(
+            any(),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+            isSynced: any(named: 'isSynced'),
+          ),
+        ).called(2);
         expect(find.byType(SnackBar).last, findsOneWidget);
         final success = tester.widget<Step6Success>(find.byType(Step6Success));
         expect(success.lastVaccineTime, isNotNull);
@@ -432,36 +480,37 @@ void main() {
   group(
     'RegisterNfcScreen — _finalize / _completeFinalize (sin llave NFC)',
     () {
-      testWidgets(
-        'sin nfcKey: no abre overlay de escritura, sincroniza y sella (paso 5)',
-        (tester) async {
-          await pumpScreen(tester);
-          await advanceToHub(tester);
+      testWidgets('sin anillo NFC: no graba los chips, avisa y sella igual', (
+        tester,
+      ) async {
+        await pumpScreen(tester);
+        await advanceToHub(tester);
 
-          tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
-          await tester.pump();
-          await tester.pump();
+        tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+        await tester.pumpAndSettle();
 
-          verify(() => sync.syncAll()).called(1);
-          expect(find.byType(Step6Success), findsOneWidget);
-          final success = tester.widget<Step6Success>(
-            find.byType(Step6Success),
-          );
-          expect(success.sealed, isTrue);
-          expect(success.onGoHome, isNotNull);
-        },
-      );
+        verify(() => sync.syncAll()).called(1);
+        expect(find.byType(Step6Success), findsOneWidget);
+        final success = tester.widget<Step6Success>(find.byType(Step6Success));
+        expect(success.sealed, isTrue);
+        expect(success.onGoHome, isNotNull);
+      });
 
       testWidgets(
         'desde la pantalla sellada, "Ir al inicio" navega a HomeScreen',
         (tester) async {
           await pumpScreen(tester);
           await advanceToHub(tester);
-          tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
-          await tester.pump();
-          await tester.pump();
 
-          tester.widget<Step6Success>(find.byType(Step6Success)).onGoHome!();
+          tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+          await tester.pumpAndSettle();
+
+          final success = tester.widget<Step6Success>(
+            find.byType(Step6Success),
+          );
+          expect(success.sealed, isTrue);
+
+          success.onGoHome!();
           await tester.pumpAndSettle();
 
           expect(find.byType(HomeScreen), findsOneWidget);
@@ -479,8 +528,8 @@ void main() {
         'sin tarjeta de guardián: solo intenta la pulsera del paciente',
         (tester) async {
           when(
-            () => auth.getNfcEncryptionKey(),
-          ).thenAnswer((_) async => validHexKey);
+            () => auth.getNfcKeyring(),
+          ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
 
           await pumpScreen(tester);
           await advanceToHub(tester);
@@ -488,13 +537,11 @@ void main() {
           tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
           await tester.pump();
           await tester.pump();
+          await pumpFrames(tester, 2);
 
-          final navigator = Navigator.of(
-            tester.element(find.byType(Step6Success)),
-          );
-          navigator.pop(true);
-          await tester.pump();
-          await tester.pump();
+          final nav = Navigator.of(tester.element(find.byType(Step6Success)));
+          nav.pop(true);
+          await tester.pumpAndSettle();
 
           verify(() => sync.syncAll()).called(1);
           final success = tester.widget<Step6Success>(
@@ -508,8 +555,8 @@ void main() {
         'con tarjeta de guardián registrada: también intenta la tarjeta del guardián',
         (tester) async {
           when(
-            () => auth.getNfcEncryptionKey(),
-          ).thenAnswer((_) async => validHexKey);
+            () => auth.getNfcKeyring(),
+          ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
 
           await pumpScreen(tester);
           tester
@@ -519,21 +566,21 @@ void main() {
               'AA:BB:CC:DD';
           await advanceToHub(tester);
 
-          tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+          final onFinish = tester
+              .widget<Step6Success>(find.byType(Step6Success))
+              .onFinish;
+          onFinish();
           await tester.pump();
           await tester.pump();
+          await pumpFrames(tester, 2);
 
-          final navigator = Navigator.of(
-            tester.element(find.byType(Step6Success)),
-          );
+          final nav = Navigator.of(tester.element(find.byType(Step6Success)));
+          nav.pop(true);
+          await tester.pump();
+          await pumpFrames(tester, 2);
 
-          navigator.pop(true);
-          await tester.pump();
-          await tester.pump();
-
-          navigator.pop(true);
-          await tester.pump();
-          await tester.pump();
+          nav.pop(true);
+          await tester.pumpAndSettle();
 
           verify(() => sync.syncAll()).called(1);
           final success = tester.widget<Step6Success>(
@@ -565,5 +612,217 @@ void main() {
         expect(find.byType(Step3PatientData), findsOneWidget);
       },
     );
+  });
+
+  group('RegisterNfcScreen — Unsaved Discard Dialog, System Pop & Errors', () {
+    testWidgets(
+      'shows confirm discard dialog on pop back when draft has entered data',
+      (tester) async {
+        await pumpScreen(tester);
+
+        final step3 = tester.widget<Step3PatientData>(
+          find.byType(Step3PatientData),
+        );
+        step3.draft.firstName = 'Juan';
+        await tester.pump();
+
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        popScope.onPopInvokedWithResult?.call(false, null);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(find.text('¿Descartar registro?'), findsOneWidget);
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RegisterNfcScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets('confirms discard dialog when clicking Discard button', (
+      tester,
+    ) async {
+      await pumpScreen(tester);
+
+      final step3 = tester.widget<Step3PatientData>(
+        find.byType(Step3PatientData),
+      );
+      step3.draft.firstName = 'Juan';
+      await tester.pump();
+
+      final popScope = tester.widget<PopScope>(find.byType(PopScope));
+      popScope.onPopInvokedWithResult?.call(false, null);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Descartar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(HomeScreen), findsOneWidget);
+    });
+
+    testWidgets('shows error snackbar when DB save fails in _confirm', (
+      tester,
+    ) async {
+      when(
+        () => db.savePatient(
+          any(),
+          ownerUserId: any(named: 'ownerUserId'),
+          organizationId: any(named: 'organizationId'),
+          retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          isSynced: any(named: 'isSynced'),
+        ),
+      ).thenThrow(Exception('Database error'));
+
+      await pumpScreen(tester);
+      await advanceToReview(tester);
+
+      await tester.widget<Step5Review>(find.byType(Step5Review)).onConfirm();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.text('No se pudo guardar el registro en este dispositivo.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('handles expired NFC session warning in _finalize', (
+      tester,
+    ) async {
+      when(() => auth.getNfcKeyring()).thenAnswer((_) async => null);
+      when(() => auth.isNfcSessionExpired()).thenAnswer((_) async => true);
+
+      await pumpScreen(tester);
+      await advanceToHub(tester);
+
+      tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.textContaining('Su sesión expiró: el registro se guardó'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('handles invalid keyring exception in _finalize', (
+      tester,
+    ) async {
+      final mockKeyring = MockNfcKeyring();
+      when(() => mockKeyring.canWrite).thenReturn(true);
+      when(() => mockKeyring.isEmpty).thenThrow(Exception('Invalid keyring'));
+      when(() => auth.getNfcKeyring()).thenAnswer((_) async => mockKeyring);
+
+      await pumpScreen(tester);
+      await advanceToHub(tester);
+
+      tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.textContaining('La clave NFC no es válida: el registro se guardó'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('shows multiple vaccines saved snackbar when length > 1', (
+      tester,
+    ) async {
+      await pumpScreen(tester);
+      await advanceToHub(tester);
+
+      tester.widget<Step6Success>(find.byType(Step6Success)).onAddVaccine();
+      await pumpFrames(tester);
+
+      Navigator.of(tester.element(find.byType(AddVaccineScreen))).pop([
+        VaccinationRecordItem(
+          date: '2025-01-01',
+          vaccineName: 'BCG',
+          vaccineCode: '19',
+          dose: 1,
+          administratedBy: 'Dr. Ana',
+          administratedAt: 'Clinic 1',
+        ),
+        VaccinationRecordItem(
+          date: '2025-01-01',
+          vaccineName: 'Hepatitis B',
+          vaccineCode: '20',
+          dose: 1,
+          administratedBy: 'Dr. Ana',
+          administratedAt: 'Clinic 1',
+        ),
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 vacunas guardadas exitosamente ✓'), findsOneWidget);
+    });
+
+    testWidgets(
+      'triggers sealed step 5 dummy callbacks without throwing exceptions',
+      (tester) async {
+        await pumpScreen(tester);
+        await advanceToHub(tester);
+
+        tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+        await tester.pumpAndSettle();
+
+        final sealedSuccess = tester.widget<Step6Success>(
+          find.byType(Step6Success),
+        );
+        expect(sealedSuccess.sealed, isTrue);
+
+        sealedSuccess.onAddConsultation();
+        sealedSuccess.onAddVaccine();
+        sealedSuccess.onFinish();
+
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('handles two guardians during guided NFC write in _finalize', (
+      tester,
+    ) async {
+      final validHexKey = List.filled(32, 'ab').join();
+      when(
+        () => auth.getNfcKeyring(),
+      ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
+
+      await pumpScreen(tester);
+
+      final step3 = tester.widget<Step3PatientData>(
+        find.byType(Step3PatientData),
+      );
+      step3.draft.guardianDeviceUid = 'AA:BB:CC:DD';
+      step3.draft.guardian2Name = 'Carlos Torres';
+      step3.draft.guardian2DeviceUid = 'EE:FF:GG:HH';
+
+      await advanceToHub(tester);
+
+      final onFinish = tester
+          .widget<Step6Success>(find.byType(Step6Success))
+          .onFinish;
+      onFinish();
+      await tester.pump();
+      await tester.pump();
+      await pumpFrames(tester, 2);
+
+      final nav = Navigator.of(tester.element(find.byType(Step6Success)));
+      nav.pop(true);
+      await tester.pump();
+      await pumpFrames(tester, 2);
+
+      nav.pop(true);
+      await tester.pump();
+      await pumpFrames(tester, 2);
+
+      nav.pop(true);
+      await tester.pumpAndSettle();
+
+      verify(() => sync.syncAll()).called(1);
+      final success = tester.widget<Step6Success>(find.byType(Step6Success));
+      expect(success.sealed, isTrue);
+    });
   });
 }

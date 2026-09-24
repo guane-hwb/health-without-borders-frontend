@@ -9,7 +9,9 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/features/admin/domain/brigade_stats.dart';
+import 'package:health_without_borders_frontend/src/features/admin/presentation/brigade_stats_screen.dart';
 import 'package:health_without_borders_frontend/src/shared/country_display.dart';
 
 // ============================================================================
@@ -176,10 +178,15 @@ void main() {
       expect(stats.maxVaccineCount, 90);
     });
 
-    test('maxVaccineCount is zero for an empty list, so bars never divide by 0', () {
-      final stats = BrigadeStats.fromJson(_payload(vaccines: <Map<String, dynamic>>[]));
-      expect(stats.maxVaccineCount, 0);
-    });
+    test(
+      'maxVaccineCount is zero for an empty list, so bars never divide by 0',
+      () {
+        final stats = BrigadeStats.fromJson(
+          _payload(vaccines: <Map<String, dynamic>>[]),
+        );
+        expect(stats.maxVaccineCount, 0);
+      },
+    );
 
     test('allergyCategoryCount counts distinct categories, not entries', () {
       final stats = BrigadeStats.fromJson(
@@ -269,16 +276,105 @@ void main() {
       expect(countryDisplay('').nameEs, 'Sin registrar');
     });
 
-    test('an unrecognised code falls back to the globe rather than vanishing', () {
-      expect(isKnownCountry('ZZZ'), isFalse);
-      expect(countryDisplay('ZZZ').flag, '🌍');
-      expect(countryDisplay('ZZZ').nameEs, 'Otros');
-    });
+    test(
+      'an unrecognised code falls back to the globe rather than vanishing',
+      () {
+        expect(isKnownCountry('ZZZ'), isFalse);
+        expect(countryDisplay('ZZZ').flag, '🌍');
+        expect(countryDisplay('ZZZ').nameEs, 'Otros');
+      },
+    );
 
     test('the others bucket is the globe', () {
       expect(othersDisplay.flag, '🌍');
       expect(othersDisplay.name(isEs: true), 'Otros');
       expect(othersDisplay.name(isEs: false), 'Other');
+    });
+  });
+
+  group('generatedAt time zone handling', () {
+    test('convierte correctamente cadenas UTC (Z) a hora local', () {
+      final json = _payload();
+      json['generated_at'] = '2026-07-09T19:22:01Z';
+      final stats = BrigadeStats.fromJson(json);
+
+      expect(stats.generatedAt, isNotNull);
+      final local = stats.generatedAt!.toLocal();
+      expect(local.isUtc, isFalse);
+    });
+
+    test(
+      'convierte correctamente cadenas con offset (-05:00) a hora local',
+      () {
+        final json = _payload();
+        json['generated_at'] = '2026-07-09T14:22:01-05:00';
+        final stats = BrigadeStats.fromJson(json);
+
+        expect(stats.generatedAt, isNotNull);
+        final local = stats.generatedAt!.toLocal();
+        expect(local.isUtc, isFalse);
+      },
+    );
+  });
+  group('formatGeneratedAt — texto renderizado', () {
+    final es = AppStrings.forTesting('es');
+
+    test('"Z" y "-05:00" para el MISMO instante producen exactamente el '
+        'mismo texto (ambos son las 19:22 UTC = 14:22 en Bogotá)', () {
+      final viaZ = formatGeneratedAt(
+        DateTime.parse('2026-07-09T19:22:01Z'),
+        es,
+      );
+      final viaOffset = formatGeneratedAt(
+        DateTime.parse('2026-07-09T14:22:01-05:00'),
+        es,
+      );
+      expect(viaZ, viaOffset);
+    });
+
+    test('el texto usa la hora LOCAL del dispositivo, no los componentes UTC '
+        'crudos del DateTime parseado', () {
+      final instant = DateTime.parse('2026-07-09T19:22:01Z');
+      final local = instant.toLocal();
+      final rendered = formatGeneratedAt(instant, es);
+
+      final localHhMm =
+          '${local.hour.toString().padLeft(2, '0')}:'
+          '${local.minute.toString().padLeft(2, '0')}';
+      expect(
+        rendered,
+        contains(localHhMm),
+        reason:
+            'formatGeneratedAt debe mostrar la hora local ($localHhMm), '
+            'no la hora UTC cruda del DateTime.',
+      );
+
+      if (local.hour != instant.hour || local.minute != instant.minute) {
+        final rawUtcHhMm =
+            '${instant.hour.toString().padLeft(2, '0')}:'
+            '${instant.minute.toString().padLeft(2, '0')}';
+        expect(
+          rendered,
+          isNot(contains(rawUtcHhMm)),
+          reason:
+              'formatGeneratedAt no debe filtrar la hora UTC cruda '
+              '($rawUtcHhMm) cuando difiere de la hora local.',
+        );
+      }
+    });
+
+    test('el texto incluye el offset UTC explícito entre paréntesis', () {
+      final rendered = formatGeneratedAt(
+        DateTime.parse('2026-07-09T19:22:01Z'),
+        es,
+      );
+      expect(rendered, matches(RegExp(r'\(UTC[+-]\d{2}:\d{2}\)$')));
+    });
+
+    test('utcOffsetLabel formatea signo, horas y minutos con cero a la '
+        'izquierda', () {
+      final label = utcOffsetLabel(DateTime.now());
+      expect(label, matches(RegExp(r'^UTC[+-]\d{2}:\d{2}$')));
     });
   });
 }

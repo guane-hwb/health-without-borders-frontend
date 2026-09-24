@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'src/app.dart';
+import 'src/core/config/app_env.dart';
 import 'src/core/storage/local_database.dart';
 
 Future<void> main() async {
@@ -12,6 +13,8 @@ Future<void> main() async {
     defaultValue: '.env',
   );
   await dotenv.load(fileName: envFile, isOptional: true);
+
+  AppEnv.apiBaseUrl;
 
   // Initialise SQLite — required for Flutter Web (sqflite_common_ffi_web).
   // No-op on mobile.

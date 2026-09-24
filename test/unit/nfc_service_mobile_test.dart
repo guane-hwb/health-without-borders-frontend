@@ -9,15 +9,7 @@ import 'package:health_without_borders_frontend/src/core/nfc/nfc_service_mobile.
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_session_manager.dart';
 
 // ── Fakes ───────────────────────────────────────────────────────────────────
-//
-// Nothing here touches nfc_manager. v4 seals its tag types (`final class
-// NfcTag`, `@protected Object data`, an unexported TagPigeon), so the old
-// approach — building fake NfcTags and mocking the plugin's method channel —
-// is not expressible any more. The seam is NfcTagSource instead, which is
-// where it should have been all along: these tests now describe HWB's
-// behaviour rather than the plugin's wire format.
 
-/// An [NfcTagSource] that hands [action] whatever tag it is told to.
 class _FakeTagSource implements NfcTagSource {
   _FakeTagSource.tag(this._tag);
   _FakeTagSource.throws(this._error);
@@ -147,9 +139,6 @@ void main() {
       expect(source.lastCancel, same(token));
     });
 
-    // Antes de la migración estos tres casos eran indistinguibles: en Android
-    // el plugin nunca invocaba onError, así que cualquiera de ellos dejaba el
-    // botón girando para siempre en vez de fallar.
     test('propaga NfcTimeoutException', () async {
       NfcService.tagSource = _FakeTagSource.throws(
         NfcTimeoutException(const Duration(seconds: 20)),
@@ -296,14 +285,6 @@ void main() {
     });
   });
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // Contrato de excepciones — la regresión que dejó "No chip detected" sin
-  // atrapar. Las 8 pantallas hacen `on NfcSessionException catch (e)`; toda
-  // falla recuperable de la radio DEBE ser un NfcSessionException para que ese
-  // catch la muestre. La única excepción es NfcNotAvailableException, que cada
-  // pantalla atrapa aparte a propósito.
-  // ══════════════════════════════════════════════════════════════════════════
-
   group('jerarquía de excepciones', () {
     test('NfcTimeoutException es un NfcSessionException', () {
       expect(
@@ -333,8 +314,6 @@ void main() {
     });
 
     test('NfcNotAvailableException NO es un NfcSessionException', () {
-      // Se atrapa por separado en cada pantalla; si heredara, el catch genérico
-      // se la tragaría y no se mostraría el estado "sin hardware NFC".
       expect(NfcNotAvailableException(), isNot(isA<NfcSessionException>()));
     });
 
@@ -357,7 +336,6 @@ void main() {
       NfcService.tagSource = _FakeTagSource.throws(
         NfcTimeoutException(const Duration(seconds: 20)),
       );
-      // Esto es lo que hacen las pantallas; antes se escapaba como no atrapada.
       Object? caught;
       try {
         await NfcService.readDeviceUid();
@@ -388,5 +366,72 @@ void main() {
       final token = NfcCancelToken()..cancel();
       expect(token.cancel, returnsNormally);
     });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Cobertura de líneas privadas y lambdas por defecto
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('cobertura de lineas privadas y lambdas por defecto', () {
+    test('ejecuta la lambda availabilityProbe por defecto', () async {
+      final isAvailable = await NfcService.isAvailable;
+      expect(isAvailable, isA<bool>());
+    });
+
+    test(
+      'resetForTest reasigna la lambda por defecto de availabilityProbe',
+      () async {
+        NfcService.availabilityProbe = () async => NfcAvailability.enabled;
+        NfcService.resetForTest();
+        final isAvailable = await NfcService.isAvailable;
+        expect(isAvailable, isA<bool>());
+      },
+    );
+  });
+
+  group('NfcService.resetForTest', () {
+    test(
+      'restaura la probe real, que sin plugin falla y se reporta como no disponible',
+      () async {
+        NfcService.availabilityProbe = () async => NfcAvailability.enabled;
+        expect(await NfcService.isAvailable, isTrue);
+
+        NfcService.resetForTest();
+
+        expect(await NfcService.isAvailable, isFalse);
+      },
+    );
+
+    test('limpia overrideReadDeviceUid', () {
+      NfcService.overrideReadDeviceUid = () async => '04:A1:B2:C3';
+
+      NfcService.resetForTest();
+
+      expect(NfcService.overrideReadDeviceUid, isNull);
+    });
+
+    test('restaura el tagSource por defecto y descarta el inyectado', () {
+      final fake = _FakeTagSource.tag(const HwbTag(uid: '04:AA'));
+      NfcService.tagSource = fake;
+
+      NfcService.resetForTest();
+
+      expect(NfcService.tagSource, isNot(same(fake)));
+      expect(NfcService.tagSource, isA<NfcTagSource>());
+    });
+
+    test(
+      'tras resetForTest la lectura ya no usa el override anterior',
+      () async {
+        NfcService.overrideReadDeviceUid = () async => '99:99';
+        NfcService.resetForTest();
+
+        final source = _FakeTagSource.tag(const HwbTag(uid: '04:BB'));
+        NfcService.tagSource = source;
+
+        expect(await NfcService.readDeviceUid(), '04:BB');
+        expect(source.calls, 1);
+      },
+    );
   });
 }

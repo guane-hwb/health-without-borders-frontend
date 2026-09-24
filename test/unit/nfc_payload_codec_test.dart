@@ -1,6 +1,10 @@
 // test/unit/nfc_payload_codec_test.dart
 
+import 'dart:io' show ZLibEncoder;
 import 'dart:typed_data';
+
+import 'package:cbor/cbor.dart' as cbor;
+import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
 
@@ -46,10 +50,13 @@ void main() {
       );
     });
 
-    test('lanza FormatException si el hex tiene longitud impar', () {
+    test('lanza ArgumentError si el hex tiene longitud impar', () {
+      // El constructor ahora reporta de forma uniforme «no queda ninguna llave
+      // usable», sin importar por qué la llave era inválida: antes el hex
+      // impar se distinguía con FormatException.
       expect(
         () => NfcPayloadCodec(hexKey: 'abc'),
-        throwsA(isA<FormatException>()),
+        throwsA(isA<ArgumentError>()),
       );
     });
   });
@@ -232,5 +239,62 @@ void main() {
         expect(result, isNull);
       },
     );
+  });
+
+  group('NfcPayloadCodec — decode: raíz CBOR que no es un mapa', () {
+    Future<Uint8List> packV0(Object? root, String hexKey) async {
+      final cborBytes = cbor.cborEncode(cbor.CborValue(root));
+      final deflated = Uint8List.fromList(
+        ZLibEncoder(level: 9, raw: true).convert(cborBytes),
+      );
+      final key = <int>[
+        for (var i = 0; i < hexKey.length; i += 2)
+          int.parse(hexKey.substring(i, i + 2), radix: 16),
+      ];
+      final nonce = List<int>.generate(12, (int i) => i + 1);
+      final box = await crypto.AesGcm.with256bits().encrypt(
+        deflated,
+        secretKey: crypto.SecretKey(key),
+        nonce: nonce,
+      );
+      return Uint8List.fromList(<int>[
+        ...nonce,
+        ...box.cipherText,
+        ...box.mac.bytes,
+      ]);
+    }
+
+    late NfcPayloadCodec codec;
+
+    setUp(() {
+      codec = NfcPayloadCodec(hexKey: _validHexKey);
+    });
+
+    test(
+      'el helper produce un payload válido cuando la raíz es un mapa',
+      () async {
+        final packed = await packV0(<String, dynamic>{'a': 1}, _validHexKey);
+
+        expect(await codec.decode(packed), <String, dynamic>{'a': 1});
+      },
+    );
+
+    test('decode retorna null si la raíz CBOR es una lista', () async {
+      final packed = await packV0(<int>[1, 2, 3], _validHexKey);
+
+      expect(await codec.decode(packed), isNull);
+    });
+
+    test('decode retorna null si la raíz CBOR es un escalar', () async {
+      final packed = await packV0('no-soy-un-mapa', _validHexKey);
+
+      expect(await codec.decode(packed), isNull);
+    });
+
+    test('decodeDetailed también retorna null con raíz no-mapa', () async {
+      final packed = await packV0(<int>[1, 2, 3], _validHexKey);
+
+      expect(await codec.decodeDetailed(packed), isNull);
+    });
   });
 }

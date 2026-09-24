@@ -122,7 +122,7 @@ packages:
     source: hosted
     version: "0.7.12"
   fake_async:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: fake_async
       sha256: "5368f224a74523e8d2e7399ea1638b37aecfca824a3cc4dfdf77bf1fa905ac44"
@@ -277,6 +277,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
+  idb_shim:
+    dependency: "direct main"
+    description:
+      name: idb_shim
+      sha256: "48be1c95f06c4b059d0f5b9888dc5d7384e4a9e4d71824ae2deeb1e1546c6c07"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.9.2"
   intl:
     dependency: transitive
     description:
@@ -501,6 +509,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  sembast:
+    dependency: transitive
+    description:
+      name: sembast
+      sha256: "93654267ad36e72ef130ffc05970287f42955b40f07d0efd264e64f7215fa1de"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.8.7"
   sky_engine:
     dependency: transitive
     description: flutter

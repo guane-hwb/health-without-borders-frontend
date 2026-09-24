@@ -2,10 +2,67 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 
-import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/add_family_history_sheet.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
+import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
+import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/add_family_history_sheet.dart';
+
+// ─── Mocks ─────────────────────────────────────────────────────────────────
+
+class _MockAuthRepository extends Mock implements AuthRepository {}
+
+class _MockUserRepository extends Mock implements UserRepository {}
+
+class _MockPatientRepository extends Mock implements PatientRepository {}
+
+class _MockLocalDatabase extends Mock implements LocalDatabase {}
+
+class _MockSyncEngine extends Mock implements SyncEngine {}
+
+class _MockReachability extends Mock implements Reachability {}
+
+AppScope _createMockScope({required Widget child}) {
+  final auth = _MockAuthRepository();
+  when(
+    () => auth.sessionNotifier,
+  ).thenReturn(ValueNotifier<UserSession?>(null));
+
+  final user = _MockUserRepository();
+  final patientRepo = _MockPatientRepository();
+  final db = _MockLocalDatabase();
+  final sync = _MockSyncEngine();
+  final reach = _MockReachability();
+
+  when(() => sync.isOnline).thenReturn(ValueNotifier<bool>(true));
+  when(() => sync.pendingCount).thenReturn(ValueNotifier<int>(0));
+  when(() => sync.blockedCount).thenReturn(ValueNotifier<int>(0));
+  when(() => reach.probe()).thenAnswer((_) async => true);
+
+  return AppScope(
+    authRepository: auth,
+    userRepository: user,
+    patientRepository: patientRepo,
+    localDatabase: db,
+    syncEngine: sync,
+    statsRepository: StatsRepository(
+      apiClient: ApiClient(baseUrl: 'http://localhost'),
+      authRepository: auth,
+    ),
+    reachability: reach,
+    child: child,
+  );
+}
 
 Widget _buildSheet({
   required ValueChanged<FamilyHistoryItem> onAdd,
@@ -29,13 +86,30 @@ class _LocaleWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppLocale(locale: locale, setLocale: (_) {}, child: child);
+    return _createMockScope(
+      child: AppLocale(locale: locale, setLocale: (_) {}, child: child),
+    );
   }
 }
 
 void main() {
   final sEs = AppStrings.forTesting('es');
   final sEn = AppStrings.forTesting('en');
+
+  setUp(() {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first.physicalSize = const Size(
+      1600,
+      1200,
+    );
+    binding.platformDispatcher.views.first.devicePixelRatio = 1.0;
+  });
+
+  tearDown(() {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first.resetPhysicalSize();
+    binding.platformDispatcher.views.first.resetDevicePixelRatio();
+  });
 
   group('Initial UI Layout Rendering', () {
     testWidgets('Displays the primary sheet action title header', (
@@ -71,28 +145,18 @@ void main() {
       (tester) async {
         await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
 
-        expect(find.text(sEs.condition), findsOneWidget);
+        expect(find.text('${sEs.condition} *'), findsOneWidget);
         expect(find.text(sEs.chronicConditionHint), findsOneWidget);
       },
     );
 
     testWidgets(
-      'Commit submission button starts completely disabled with empty inputs',
+      'Commit submission button is present and renders properly with empty inputs',
       (tester) async {
         await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
 
-        final confirmFinder = find.text(sEs.confirm);
+        final confirmFinder = find.byType(ElevatedButton);
         expect(confirmFinder, findsOneWidget);
-
-        final button = tester.widget<ElevatedButton>(
-          find
-              .ancestor(
-                of: confirmFinder,
-                matching: find.byType(ElevatedButton),
-              )
-              .first,
-        );
-        expect(button.onPressed, isNull);
       },
     );
   });
@@ -110,11 +174,6 @@ void main() {
     testWidgets(
       'Selecting Siblings updates the underlying active code parameters configuration',
       (tester) async {
-        await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
-
-        await tester.tap(find.text(sEs.relSiblings));
-        await tester.pump();
-
         FamilyHistoryItem? captured;
         await tester.pumpWidget(_buildSheet(onAdd: (item) => captured = item));
 
@@ -124,12 +183,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Diabetes');
         await tester.pump();
 
-        final confirmBtn = find
-            .ancestor(
-              of: find.text(sEs.confirm),
-              matching: find.byType(ElevatedButton),
-            )
-            .first;
+        final confirmBtn = find.byType(ElevatedButton).first;
         await tester.tap(confirmBtn);
         await tester.pump();
 
@@ -149,12 +203,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Hipertensión');
         await tester.pump();
 
-        final confirmBtn = find
-            .ancestor(
-              of: find.text(sEs.confirm),
-              matching: find.byType(ElevatedButton),
-            )
-            .first;
+        final confirmBtn = find.byType(ElevatedButton).first;
         await tester.tap(confirmBtn);
         await tester.pump();
 
@@ -174,12 +223,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Cáncer');
         await tester.pump();
 
-        final confirmBtn = find
-            .ancestor(
-              of: find.text(sEs.confirm),
-              matching: find.byType(ElevatedButton),
-            )
-            .first;
+        final confirmBtn = find.byType(ElevatedButton).first;
         await tester.tap(confirmBtn);
         await tester.pump();
 
@@ -201,12 +245,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Diabetes');
         await tester.pump();
 
-        final confirmBtn = find
-            .ancestor(
-              of: find.text(sEs.confirm),
-              matching: find.byType(ElevatedButton),
-            )
-            .first;
+        final confirmBtn = find.byType(ElevatedButton).first;
         await tester.tap(confirmBtn);
         await tester.pump();
 
@@ -217,49 +256,44 @@ void main() {
 
   group('Condition Text Field Input Gate Validation Lifecycle', () {
     testWidgets(
-      'Enables confirm button immediately once non-empty values are entered',
+      'Enables form confirmation execution when valid values are entered',
       (tester) async {
-        await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
+        FamilyHistoryItem? captured;
+        await tester.pumpWidget(_buildSheet(onAdd: (item) => captured = item));
 
         await tester.enterText(find.byType(TextField), 'Hipertensión');
         await tester.pump();
 
-        final button = tester.widget<ElevatedButton>(
-          find
-              .ancestor(
-                of: find.text(sEs.confirm),
-                matching: find.byType(ElevatedButton),
-              )
-              .first,
-        );
-        expect(button.onPressed, isNotNull);
+        final confirmBtn = find.byType(ElevatedButton).first;
+        await tester.tap(confirmBtn);
+        await tester.pump();
+
+        expect(captured, isNotNull);
       },
     );
 
     testWidgets(
-      'Disables confirm button when entry fields contain only whitespace characters',
+      'Prevents callback execution when entry fields contain only whitespace characters',
       (tester) async {
-        await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
+        bool called = false;
+        await tester.pumpWidget(_buildSheet(onAdd: (_) => called = true));
 
         await tester.enterText(find.byType(TextField), '   ');
         await tester.pump();
 
-        final button = tester.widget<ElevatedButton>(
-          find
-              .ancestor(
-                of: find.text(sEs.confirm),
-                matching: find.byType(ElevatedButton),
-              )
-              .first,
-        );
-        expect(button.onPressed, isNull);
+        final confirmBtn = find.byType(ElevatedButton).first;
+        await tester.tap(confirmBtn);
+        await tester.pumpAndSettle();
+
+        expect(called, isFalse);
       },
     );
 
     testWidgets(
-      'Disables confirm button automatically when populated text strings are erased',
+      'Prevents callback execution automatically when populated text strings are erased',
       (tester) async {
-        await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
+        bool called = false;
+        await tester.pumpWidget(_buildSheet(onAdd: (_) => called = true));
 
         await tester.enterText(find.byType(TextField), 'Asma');
         await tester.pump();
@@ -267,15 +301,11 @@ void main() {
         await tester.enterText(find.byType(TextField), '');
         await tester.pump();
 
-        final button = tester.widget<ElevatedButton>(
-          find
-              .ancestor(
-                of: find.text(sEs.confirm),
-                matching: find.byType(ElevatedButton),
-              )
-              .first,
-        );
-        expect(button.onPressed, isNull);
+        final confirmBtn = find.byType(ElevatedButton).first;
+        await tester.tap(confirmBtn);
+        await tester.pumpAndSettle();
+
+        expect(called, isFalse);
       },
     );
   });
@@ -290,12 +320,7 @@ void main() {
         await tester.enterText(find.byType(TextField), '  Diabetes tipo 2  ');
         await tester.pump();
 
-        final confirmBtn = find
-            .ancestor(
-              of: find.text(sEs.confirm),
-              matching: find.byType(ElevatedButton),
-            )
-            .first;
+        final confirmBtn = find.byType(ElevatedButton).first;
         await tester.tap(confirmBtn);
         await tester.pump();
 
@@ -313,12 +338,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Cáncer de colon');
         await tester.pump();
 
-        final confirmBtn = find
-            .ancestor(
-              of: find.text(sEs.confirm),
-              matching: find.byType(ElevatedButton),
-            )
-            .first;
+        final confirmBtn = find.byType(ElevatedButton).first;
         await tester.tap(confirmBtn);
         await tester.pump();
 
@@ -339,12 +359,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Asma bronquial');
         await tester.pump();
 
-        final confirmBtn = find
-            .ancestor(
-              of: find.text(sEs.confirm),
-              matching: find.byType(ElevatedButton),
-            )
-            .first;
+        final confirmBtn = find.byType(ElevatedButton).first;
         await tester.tap(confirmBtn);
         await tester.pump();
 
@@ -388,12 +403,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Hipertensión');
         await tester.pump();
 
-        final confirmBtn = find
-            .ancestor(
-              of: find.text(sEs.confirm),
-              matching: find.byType(ElevatedButton),
-            )
-            .first;
+        final confirmBtn = find.byType(ElevatedButton).last;
         await tester.tap(confirmBtn);
         await tester.pumpAndSettle();
 
@@ -415,7 +425,7 @@ void main() {
         expect(find.text(sEn.relSiblings), findsOneWidget);
         expect(find.text(sEn.relUncles), findsOneWidget);
         expect(find.text(sEn.relGrandparents), findsOneWidget);
-        expect(find.text(sEn.condition), findsOneWidget);
+        expect(find.text('${sEn.condition} *'), findsOneWidget);
         expect(find.text(sEn.confirm), findsOneWidget);
       },
     );
@@ -434,17 +444,163 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Hypertension');
         await tester.pump();
 
-        final confirmBtn = find
-            .ancestor(
-              of: find.text(sEn.confirm),
-              matching: find.byType(ElevatedButton),
-            )
-            .first;
+        final confirmBtn = find.byType(ElevatedButton).first;
         await tester.tap(confirmBtn);
         await tester.pump();
 
         expect(captured!.relationship, equals('04'));
         expect(captured!.conditionDescription, equals('Hypertension'));
+      },
+    );
+  });
+
+  group('AddFamilyHistorySheet – Unsaved Changes Dialog & Close Handlers', () {
+    testWidgets(
+      'closes modal directly without alert when tapping close button if unmutated',
+      (tester) async {
+        await tester.pumpWidget(
+          _LocaleWrapper(
+            locale: 'es',
+            child: MaterialApp(
+              home: Scaffold(
+                body: Builder(
+                  builder: (ctx) => ElevatedButton(
+                    onPressed: () => showModalBottomSheet<void>(
+                      context: ctx,
+                      builder: (_) => AddFamilyHistorySheet(onAdd: (_) {}),
+                    ),
+                    child: const Text('Open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddFamilyHistorySheet), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'shows warning dialog when tapping close button with unsaved text',
+      (tester) async {
+        await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
+
+        await tester.enterText(find.byType(TextField), 'Asma');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'shows warning dialog when relationship chip changes even if text is empty',
+      (tester) async {
+        await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
+
+        await tester.tap(find.text(sEs.relSiblings));
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'cancels closing when clicking Cancel in unsaved changes dialog',
+      (tester) async {
+        await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
+
+        await tester.enterText(find.byType(TextField), 'Diabetes');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddFamilyHistorySheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'confirms exit and closes sheet when clicking Exit in unsaved changes dialog',
+      (tester) async {
+        await tester.pumpWidget(
+          _LocaleWrapper(
+            locale: 'es',
+            child: MaterialApp(
+              home: Scaffold(
+                body: Builder(
+                  builder: (ctx) => ElevatedButton(
+                    onPressed: () => showModalBottomSheet<void>(
+                      context: ctx,
+                      builder: (_) => AddFamilyHistorySheet(onAdd: (_) {}),
+                    ),
+                    child: const Text('Open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'Diabetes');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Salir'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddFamilyHistorySheet), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'triggers PopScope handler on system back gesture when changes exist',
+      (tester) async {
+        await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
+
+        await tester.enterText(find.byType(TextField), 'Hipertensión');
+        await tester.pump();
+
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        popScope.onPopInvokedWithResult?.call(false, null);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'shows mandatory error message in Spanish when submitted empty',
+      (tester) async {
+        await tester.pumpWidget(_buildSheet(onAdd: (_) {}, locale: 'es'));
+
+        await tester.tap(find.byType(ElevatedButton));
+        await tester.pumpAndSettle();
+
+        expect(find.text('La condición médica es obligatoria'), findsOneWidget);
       },
     );
   });

@@ -298,7 +298,7 @@ void main() {
       expect(userRepo.callCount, 1);
       expect(find.text('Todas'), findsOneWidget);
 
-      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.tap(find.text('Todas'));
       await tester.pumpAndSettle();
 
       expect(find.text('Org A'), findsOneWidget);
@@ -317,7 +317,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.tap(find.text('Todas'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Org B'));
@@ -339,7 +339,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.tap(find.text('Todas'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Todas').last);
@@ -576,7 +576,7 @@ void main() {
       await _pump(
         tester,
         _buildScreen(
-          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          userRepo: FakeUserRepository(orgsResult: [_org('o1', 'Org A')]),
           statsRepo: FakeStatsRepository(_stats(patientsDelta: null)),
           locale: 'en',
         ),
@@ -592,18 +592,20 @@ void main() {
       await _pump(
         tester,
         _buildScreen(
-          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          userRepo: FakeUserRepository(orgsResult: [_org('o1', 'Org A')]),
           statsRepo: FakeStatsRepository(_stats(patientsDelta: null)),
           locale: 'es',
         ),
       );
 
       expect(find.text('— sin referencia previa'), findsOneWidget);
+      expect(find.text('Todas'), findsOneWidget);
 
       await tester.tap(find.text('EN'));
       await tester.pumpAndSettle();
 
       expect(find.text('— no prior data'), findsOneWidget);
+      expect(find.text('All'), findsOneWidget);
     });
   });
 
@@ -809,6 +811,33 @@ void main() {
           findsOneWidget,
         );
         await _expectAfterScroll(tester, find.textContaining('Generado el'));
+      },
+    );
+
+    testWidgets(
+      'cambiar idioma actualiza dinámicamente la opción "Todas / All"',
+      (tester) async {
+        final userRepo = FakeUserRepository(orgsResult: [_org('o1', 'Org A')]);
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: userRepo,
+            statsRepo: FakeStatsRepository(_stats()),
+            locale: 'es',
+          ),
+        );
+
+        expect(find.text('Todas'), findsOneWidget);
+
+        await tester.tap(find.text('EN'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('All'), findsOneWidget);
+
+        await tester.tap(find.text('ES'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Todas'), findsOneWidget);
       },
     );
   });

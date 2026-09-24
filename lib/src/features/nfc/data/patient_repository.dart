@@ -110,4 +110,46 @@ class PatientRepository {
       headers: await _authHeaders(),
     );
   }
+
+  /// Normalises a stored timestamp to UTC ISO-8601.
+  ///
+  /// Rows written by a build that stored naive local time are still pending on
+  /// upgraded devices, and a chip nobody reads again keeps its row forever. The
+  /// whole batch is one request, so a single stale row would be enough to have
+  /// the server reject every observation alongside it. Converting here fixes
+  /// those rows on their way out instead of stranding them.
+  static String? _asUtcIso(Object? value) {
+    final String raw = value?.toString() ?? '';
+    if (raw.isEmpty) return null;
+    final DateTime? parsed = DateTime.tryParse(raw);
+    // tryParse reads a suffix-less value as local time, which is exactly how
+    // the old rows were written.
+    return parsed?.toUtc().toIso8601String() ?? raw;
+  }
+
+  /// Reports which NFC key version each scanned chip was found on.
+  ///
+  /// Only the four telemetry fields are sent — UID, role, version, timestamp.
+  /// Whatever else the local row carries (sync bookkeeping) stays on the
+  /// device, so the wire payload cannot drift into holding anything else.
+  Future<void> reportNfcKeyVersions(List<Map<String, Object?>> entries) async {
+    if (entries.isEmpty) return;
+    await _apiClient.postJson(
+      path: '/api/v1/patients/nfc-key-versions',
+      body: <String, dynamic>{
+        'entries': entries
+            .map(
+              (Map<String, Object?> e) => <String, dynamic>{
+                'device_uid': e['device_uid'],
+                'device_role': e['device_role'],
+                'key_version': e['key_version'],
+                'had_header': (e['had_header'] as num?)?.toInt() == 1,
+                'observed_at': _asUtcIso(e['observed_at']),
+              },
+            )
+            .toList(),
+      },
+      headers: await _authHeaders(),
+    );
+  }
 }

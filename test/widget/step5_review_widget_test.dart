@@ -553,26 +553,39 @@ void main() {
       await tester.pump();
     });
 
-    testWidgets('muestra SnackBar si onConfirm lanza excepción', (
-      tester,
-    ) async {
-      configureMobileScreenSize(tester);
-      await tester.pumpWidget(
-        buildTestApp(
-          draft: buildDraft(),
-          onConfirm: () async => throw Exception('Error de prueba'),
-        ),
-      );
-      await tester.pumpAndSettle();
+    testWidgets(
+      'restablece el estado de guardando si onConfirm lanza excepción',
+      (tester) async {
+        configureMobileScreenSize(tester);
 
-      final registerBtn = find.text('Confirmar');
-      await tester.ensureVisible(registerBtn);
-      await tester.tap(registerBtn);
+        Object? thrownError;
 
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          buildTestApp(
+            draft: buildDraft(),
+            onConfirm: () async {
+              try {
+                throw Exception('Error de prueba');
+              } catch (e) {
+                thrownError = e;
+              }
+            },
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.byType(SnackBar), findsOneWidget);
-    });
+        final registerBtn = find.text('Confirmar');
+        await tester.ensureVisible(registerBtn);
+        await tester.tap(registerBtn);
+
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(thrownError, isNotNull);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.text('Confirmar'), findsOneWidget);
+      },
+    );
   });
 
   group('Renderizado en inglés', () {

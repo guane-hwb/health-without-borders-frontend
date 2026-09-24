@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
@@ -118,12 +119,18 @@ class _FakeAuthRepository extends AuthRepository {
   UserSession? get currentUser => _fakeUser;
 
   @override
-  Future<String?> getNfcEncryptionKey() async {
+  Future<NfcKeyring?> getNfcKeyring() async {
     getNfcEncryptionKeyCallCount++;
     if (keyDelay != null) await Future<void>.delayed(keyDelay!);
-    return key ??
+    final String hex =
+        key ??
         '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF';
+    if (hex.isEmpty) return null;
+    return NfcKeyring.single(hex);
   }
+
+  @override
+  Future<bool> isNfcSessionExpired() async => false;
 }
 
 class _FaultyLocalDatabase extends LocalDatabase {
@@ -136,9 +143,13 @@ class _FaultyLocalDatabase extends LocalDatabase {
     : _memoryStore = store,
       super.forTesting(
         forceWeb: true,
-        webGet: (key) => store[key],
-        webSet: (key, value) => store[key] = value,
-        webRemove: (key) => store.remove(key),
+        webGet: (key) async => store[key],
+        webSet: (key, value) async {
+          store[key] = value;
+        },
+        webRemove: (key) async {
+          store.remove(key);
+        },
       );
 
   final Map<String, String> _memoryStore;
@@ -162,6 +173,7 @@ class _FaultyLocalDatabase extends LocalDatabase {
   @override
   Future<void> savePatient(
     PatientFullRecord record, {
+    bool isSynced = false,
     String? ownerUserId,
     String? organizationId,
     String? retiredDeviceReason,
@@ -227,6 +239,28 @@ class _FakeSyncEngine extends SyncEngine {
     if (shouldThrow) throw Exception('Error de sincronización simulado');
     return true;
   }
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  void stop() {}
+}
+
+class _DelayedFakeSyncEngine extends _FakeSyncEngine {
+  Completer<bool>? _pending;
+
+  @override
+  Future<bool> syncAll() {
+    callCount++;
+    _pending = Completer<bool>();
+    return _pending!.future;
+  }
+
+  void complete({bool success = true}) {
+    _pending?.complete(success);
+    _pending = null;
+  }
 }
 
 class _LocaleWrapper extends StatefulWidget {
@@ -286,28 +320,26 @@ Widget _wrap(
     onFakesReady(_Fakes(auth: fakeAuth, syncEngine: fakeSyncEngine, db: db));
   }
 
-  return _LocaleWrapper(
-    locale: locale,
-    child: MaterialApp(
-      home: AppScope(
-        authRepository: fakeAuth,
-        userRepository: UserRepository(
-          apiClient: const _NullApiClient(),
-          authRepository: fakeAuth,
-        ),
-        reachability: Reachability(baseUrl: 'http://localhost'),
-        patientRepository: PatientRepository(
-          apiClient: const _NullApiClient(),
-          authRepository: fakeAuth,
-        ),
-        localDatabase: db,
-        syncEngine: fakeSyncEngine,
-        statsRepository: StatsRepository(
-          apiClient: ApiClient(baseUrl: 'http://localhost'),
-          authRepository: fakeAuth,
-        ),
-        child: child,
-      ),
+  return AppScope(
+    authRepository: fakeAuth,
+    userRepository: UserRepository(
+      apiClient: const _NullApiClient(),
+      authRepository: fakeAuth,
+    ),
+    reachability: Reachability(baseUrl: 'http://localhost'),
+    patientRepository: PatientRepository(
+      apiClient: const _NullApiClient(),
+      authRepository: fakeAuth,
+    ),
+    localDatabase: db,
+    syncEngine: fakeSyncEngine,
+    statsRepository: StatsRepository(
+      apiClient: ApiClient(baseUrl: 'http://localhost'),
+      authRepository: fakeAuth,
+    ),
+    child: _LocaleWrapper(
+      locale: locale,
+      child: MaterialApp(home: child),
     ),
   );
 }
@@ -1458,7 +1490,7 @@ void main() {
             ({
               required context,
               required record,
-              required nfcKey,
+              required keyring,
               required patientChipDirty,
               required guardianChipDirty,
             }) async => true;
@@ -1479,7 +1511,7 @@ void main() {
           ({
             required context,
             required record,
-            required nfcKey,
+            required keyring,
             required patientChipDirty,
             required guardianChipDirty,
           }) async => false;
@@ -1500,7 +1532,7 @@ void main() {
             ({
               required context,
               required record,
-              required nfcKey,
+              required keyring,
               required patientChipDirty,
               required guardianChipDirty,
             }) async {
@@ -1895,22 +1927,34 @@ void main() {
       '98. Guardado exitoso con conexión dispara sincronización silenciosa',
       (tester) async {
         late _Fakes fakes;
+
         await _pumpScreen(tester, _record(), onFakesReady: (f) => fakes = f);
+        await tester.pumpAndSettle();
+
+        final initialCalls = fakes.syncEngine.callCount;
+
         final summary = tester.widget<ProfileTabSummary>(
           find.byType(ProfileTabSummary),
         );
         summary.onEditAddress();
         await tester.pumpAndSettle();
 
-        await tester.runAsync(() async {
-          tester
-              .widget<EditAddressSheet>(find.byType(EditAddressSheet))
-              .onConfirm(Address(city: 'Cali', state: 'Valle'));
-          await Future<void>.delayed(const Duration(milliseconds: 200));
-        });
+        final sheet = tester.widget<EditAddressSheet>(
+          find.byType(EditAddressSheet),
+        );
+        sheet.onConfirm(
+          Address(
+            street: 'Calle Nueva 123',
+            city: 'Medellín',
+            state: 'Antioquia',
+          ),
+        );
+
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
         await tester.pumpAndSettle();
 
-        expect(fakes.syncEngine.callCount, greaterThanOrEqualTo(1));
+        expect(fakes.syncEngine.callCount, greaterThan(initialCalls));
       },
     );
 
@@ -2441,5 +2485,144 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AddVaccineScreen), findsNothing);
     });
+  });
+
+  group('ProfileHeader — spinner de sincronización (isSyncing)', () {
+    testWidgets(
+      '122. Antes de sincronizar: ícono de sync visible, botón habilitado, '
+      'semántica enabled: true',
+      (tester) async {
+        final engine = _DelayedFakeSyncEngine();
+        await _pumpScreen(tester, _record(), syncEng: engine);
+
+        final header = tester.widget<ProfileHeader>(find.byType(ProfileHeader));
+        expect(header.isSyncing, isFalse);
+
+        expect(find.byIcon(Icons.sync_rounded), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+
+        final semantics = tester.widget<Semantics>(
+          find.byWidgetPredicate(
+            (w) =>
+                w is Semantics &&
+                w.properties.label?.contains('Sincronizar') == true,
+          ),
+        );
+        expect(semantics.properties.enabled, isTrue);
+
+        final syncButton = tester.widget<IconButton>(
+          find.descendant(
+            of: find.byWidgetPredicate(
+              (w) =>
+                  w is Semantics &&
+                  w.properties.label?.contains('Sincronizar') == true,
+            ),
+            matching: find.byType(IconButton),
+          ),
+        );
+        expect(syncButton.onPressed, isNotNull);
+      },
+    );
+
+    testWidgets('123. Mientras isSyncing es true: spinner visible, botón '
+        'deshabilitado, semántica enabled: false', (tester) async {
+      final engine = _DelayedFakeSyncEngine();
+      await _pumpScreen(tester, _record(), syncEng: engine);
+
+      final headerBefore = tester.widget<ProfileHeader>(
+        find.byType(ProfileHeader),
+      );
+      headerBefore.onSync!();
+      await tester.pump();
+
+      final headerDuring = tester.widget<ProfileHeader>(
+        find.byType(ProfileHeader),
+      );
+      expect(headerDuring.isSyncing, isTrue);
+
+      expect(find.byIcon(Icons.sync_rounded), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsWidgets);
+
+      final semantics = tester.widget<Semantics>(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.label?.contains('Sincronizar') == true,
+        ),
+      );
+      expect(semantics.properties.enabled, isFalse);
+
+      final syncButton = tester.widget<IconButton>(
+        find.descendant(
+          of: find.byWidgetPredicate(
+            (w) =>
+                w is Semantics &&
+                w.properties.label?.contains('Sincronizar') == true,
+          ),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(syncButton.onPressed, isNull);
+
+      engine.complete();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      '124. Una segunda pulsación mientras sincroniza no dispara otro '
+      'syncAll (botón deshabilitado ⇒ callback nunca se invoca de nuevo)',
+      (tester) async {
+        final engine = _DelayedFakeSyncEngine();
+        await _pumpScreen(tester, _record(), syncEng: engine);
+
+        final header = tester.widget<ProfileHeader>(find.byType(ProfileHeader));
+        header.onSync!();
+        await tester.pump();
+        expect(engine.callCount, 1);
+
+        final syncButtonFinder = find.descendant(
+          of: find.byWidgetPredicate(
+            (w) =>
+                w is Semantics &&
+                w.properties.label?.contains('Sincronizar') == true,
+          ),
+          matching: find.byType(IconButton),
+        );
+        await tester.tap(syncButtonFinder, warnIfMissed: false);
+        await tester.pump();
+
+        expect(engine.callCount, 1);
+
+        engine.complete();
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      '125. Al completar la sincronización, isSyncing vuelve a false y el '
+      'ícono de sync reaparece',
+      (tester) async {
+        final engine = _DelayedFakeSyncEngine();
+        await _pumpScreen(tester, _record(), syncEng: engine);
+
+        final header = tester.widget<ProfileHeader>(find.byType(ProfileHeader));
+        header.onSync!();
+        await tester.pump();
+        expect(
+          tester.widget<ProfileHeader>(find.byType(ProfileHeader)).isSyncing,
+          isTrue,
+        );
+
+        engine.complete();
+        await tester.pumpAndSettle();
+
+        final headerAfter = tester.widget<ProfileHeader>(
+          find.byType(ProfileHeader),
+        );
+        expect(headerAfter.isSyncing, isFalse);
+        expect(find.byIcon(Icons.sync_rounded), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+      },
+    );
   });
 }

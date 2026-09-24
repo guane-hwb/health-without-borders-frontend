@@ -632,4 +632,31 @@ void main() {
       expect(called, isTrue);
     });
   });
+
+  group('J. Offline Guardian Gate & Exception Mapping', () {
+    test(
+      'J-01 handleGuardianCardMismatch asigna el mensaje de tarjeta no correspondiente',
+      () {
+        final state = _FakeReadNfcState()..patientDeviceUid = 'AA:BB';
+        state.handleGuardianApiError(
+          ApiException(
+            'Esa tarjeta no corresponde al guardián de este paciente.',
+            statusCode: 400,
+          ),
+        );
+        expect(state.errorMessage, contains('no corresponde'));
+      },
+    );
+
+    test('J-02 handleGuardianBlankCard asigna el mensaje de tarjeta vacía', () {
+      final state = _FakeReadNfcState()..patientDeviceUid = 'AA:BB';
+      state.handleGuardianApiError(
+        ApiException(
+          'La tarjeta del guardián está vacía o no se pudo leer.',
+          statusCode: 400,
+        ),
+      );
+      expect(state.errorMessage, contains('vacía o no se pudo leer'));
+    });
+  });
 }

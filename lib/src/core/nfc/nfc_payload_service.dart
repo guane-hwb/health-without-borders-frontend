@@ -277,12 +277,14 @@ class NfcPayloadService {
           return NfcReadResult(uid: uid, triage: null);
         }
 
-        final decoded = await codec.decode(payload);
+        final decoded = await codec.decodeDetailed(payload);
         return NfcReadResult(
           uid: uid,
           triage: decoded != null
-              ? NfcTriagePayload.fromPayload(decoded)
+              ? NfcTriagePayload.fromPayload(decoded.data)
               : null,
+          keyVersion: decoded?.keyVersion,
+          hadHeader: decoded?.hadHeader,
         );
       },
       timeout: timeout,
@@ -308,24 +310,28 @@ class NfcPayloadService {
 
         final guardianPayload = _findRecord(tag, kHwbGuardianMimeType);
         if (guardianPayload != null) {
-          final decoded = await codec.decode(guardianPayload);
+          final decoded = await codec.decodeDetailed(guardianPayload);
           return HwbChipReadResult(
             uid: uid,
             kind: decoded != null ? HwbChipKind.guardian : HwbChipKind.none,
-            guardianRecord: decoded,
+            guardianRecord: decoded?.data,
+            keyVersion: decoded?.keyVersion,
+            hadHeader: decoded?.hadHeader,
           );
         }
 
         final triagePayload = _findRecord(tag, kHwbNdefMimeType);
         if (triagePayload != null) {
-          final decoded = await codec.decode(triagePayload);
+          final decoded = await codec.decodeDetailed(triagePayload);
           final triage = decoded != null
-              ? NfcTriagePayload.fromPayload(decoded)
+              ? NfcTriagePayload.fromPayload(decoded.data)
               : null;
           return HwbChipReadResult(
             uid: uid,
             kind: triage != null ? HwbChipKind.triage : HwbChipKind.none,
             triage: triage,
+            keyVersion: decoded?.keyVersion,
+            hadHeader: decoded?.hadHeader,
           );
         }
 
@@ -395,9 +401,20 @@ class NfcWriteResult {
 }
 
 class NfcReadResult {
-  const NfcReadResult({required this.uid, required this.triage});
+  const NfcReadResult({
+    required this.uid,
+    required this.triage,
+    this.keyVersion,
+    this.hadHeader,
+  });
   final String uid;
   final TriageSummary? triage;
+
+  /// Key version that decrypted this chip, or null when nothing was decoded.
+  final int? keyVersion;
+
+  /// Whether the payload carried a version header (version 1 or later).
+  final bool? hadHeader;
 }
 
 /// Which HWB payload a chip carries.
@@ -415,12 +432,23 @@ class HwbChipReadResult {
     required this.kind,
     this.triage,
     this.guardianRecord,
+    this.keyVersion,
+    this.hadHeader,
   });
 
   final String uid;
   final HwbChipKind kind;
   final TriageSummary? triage;
   final Map<String, dynamic>? guardianRecord;
+
+  /// Key version that decrypted this chip, or null when nothing was decoded.
+  ///
+  /// Recorded so a rotation can be measured instead of guessed: retiring a
+  /// version while chips are still on it makes them unreadable offline.
+  final int? keyVersion;
+
+  /// Whether the payload carried a version header (version 1 or later).
+  final bool? hadHeader;
 }
 
 // ── Exceptions ──────────────────────────────────────────────────────────────

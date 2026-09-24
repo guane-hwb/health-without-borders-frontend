@@ -3,9 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/add_medication_sheet.dart';
-import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/sheets/add_medication_sheet.dart';
 
 class _LocaleWrapper extends StatelessWidget {
   const _LocaleWrapper({required this.locale, required this.child});
@@ -52,9 +52,7 @@ Widget _buildViaBottomSheet({
   ),
 );
 
-Finder _confirmButton() => find.byWidgetPredicate(
-  (widget) => widget is ElevatedButton && widget.child is! Text,
-);
+Finder _confirmButton() => find.byType(ElevatedButton);
 
 Future<void> _openSheet(WidgetTester tester) async {
   await tester.tap(find.text('Abrir'));
@@ -64,6 +62,21 @@ Future<void> _openSheet(WidgetTester tester) async {
 void main() {
   final sEs = AppStrings.forTesting('es');
   final sEn = AppStrings.forTesting('en');
+
+  setUp(() {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first.physicalSize = const Size(
+      1600,
+      1200,
+    );
+    binding.platformDispatcher.views.first.devicePixelRatio = 1.0;
+  });
+
+  tearDown(() {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first.resetPhysicalSize();
+    binding.platformDispatcher.views.first.resetDevicePixelRatio();
+  });
 
   group('Initial Rendering', () {
     testWidgets('Displays the expected sheet header title', (tester) async {
@@ -82,7 +95,7 @@ void main() {
       'Displays form input label and associated placeholder hints for Medication names',
       (tester) async {
         await tester.pumpWidget(_buildDirect(onAdd: (_) {}));
-        expect(find.text(sEs.medicationLabel), findsOneWidget);
+        expect(find.text('${sEs.medicationLabel} *'), findsOneWidget);
         expect(find.text(sEs.medicationHint), findsOneWidget);
       },
     );
@@ -123,12 +136,12 @@ void main() {
     );
 
     testWidgets(
-      'Commit action button initializes completely disabled by default',
+      'Commit action button is present and renders properly by default',
       (tester) async {
         await tester.pumpWidget(_buildDirect(onAdd: (_) {}));
 
-        final btn = tester.widget<ElevatedButton>(_confirmButton());
-        expect(btn.onPressed, isNull);
+        final btn = _confirmButton();
+        expect(btn, findsOneWidget);
       },
     );
 
@@ -144,9 +157,10 @@ void main() {
 
   group('Confirm Button — Validation triggers based on medication content', () {
     testWidgets(
-      'Activates confirmation button when name strings are populated',
+      'Activates confirmation button execution when name strings are populated',
       (tester) async {
-        await tester.pumpWidget(_buildDirect(onAdd: (_) {}));
+        MedicationStatementItem? captured;
+        await tester.pumpWidget(_buildDirect(onAdd: (item) => captured = item));
 
         await tester.enterText(
           find.byType(TextField).first,
@@ -154,65 +168,78 @@ void main() {
         );
         await tester.pump();
 
-        final btn = tester.widget<ElevatedButton>(_confirmButton());
-        expect(btn.onPressed, isNotNull);
+        await tester.tap(_confirmButton());
+        await tester.pump();
+
+        expect(captured, isNotNull);
       },
     );
 
     testWidgets(
-      'Retains disabled button state when inputs contain only whitespace parameters',
+      'Prevents callback execution when inputs contain only whitespace parameters',
       (tester) async {
-        await tester.pumpWidget(_buildDirect(onAdd: (_) {}));
+        bool called = false;
+        await tester.pumpWidget(_buildDirect(onAdd: (_) => called = true));
 
         await tester.enterText(find.byType(TextField).first, '   ');
         await tester.pump();
 
-        final btn = tester.widget<ElevatedButton>(_confirmButton());
-        expect(btn.onPressed, isNull);
+        await tester.tap(_confirmButton());
+        await tester.pumpAndSettle();
+
+        expect(called, isFalse);
       },
     );
 
+    testWidgets('Prevents callback execution once text strings are cleared', (
+      tester,
+    ) async {
+      bool called = false;
+      await tester.pumpWidget(_buildDirect(onAdd: (_) => called = true));
+
+      await tester.enterText(find.byType(TextField).first, 'Aspirina');
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField).first, '');
+      await tester.pump();
+
+      await tester.tap(_confirmButton());
+      await tester.pumpAndSettle();
+
+      expect(called, isFalse);
+    });
+
     testWidgets(
-      'Reverts to a disabled button layout once text strings are cleared',
+      'Button execution is prevented if dosage parameters are filled without specifying a name',
       (tester) async {
-        await tester.pumpWidget(_buildDirect(onAdd: (_) {}));
-
-        await tester.enterText(find.byType(TextField).first, 'Aspirina');
-        await tester.pump();
-
-        await tester.enterText(find.byType(TextField).first, '');
-        await tester.pump();
-
-        final btn = tester.widget<ElevatedButton>(_confirmButton());
-        expect(btn.onPressed, isNull);
-      },
-    );
-
-    testWidgets(
-      'Button remains disabled if dosage parameters are filled without specifying a name',
-      (tester) async {
-        await tester.pumpWidget(_buildDirect(onAdd: (_) {}));
+        bool called = false;
+        await tester.pumpWidget(_buildDirect(onAdd: (_) => called = true));
 
         await tester.ensureVisible(find.text(sEs.dosageHint));
         await tester.enterText(find.byType(TextField).at(1), '1 tableta/día');
         await tester.pump();
 
-        final btn = tester.widget<ElevatedButton>(_confirmButton());
-        expect(btn.onPressed, isNull);
+        await tester.tap(_confirmButton());
+        await tester.pumpAndSettle();
+
+        expect(called, isFalse);
       },
     );
 
     testWidgets(
-      'Button remains disabled if notes are filled without specifying a name',
+      'Button execution is prevented if notes are filled without specifying a name',
       (tester) async {
-        await tester.pumpWidget(_buildDirect(onAdd: (_) {}));
+        bool called = false;
+        await tester.pumpWidget(_buildDirect(onAdd: (_) => called = true));
 
         await tester.ensureVisible(find.text(sEs.notesHint));
         await tester.enterText(find.byType(TextField).at(2), 'Solo notas');
         await tester.pump();
 
-        final btn = tester.widget<ElevatedButton>(_confirmButton());
-        expect(btn.onPressed, isNull);
+        await tester.tap(_confirmButton());
+        await tester.pumpAndSettle();
+
+        expect(called, isFalse);
       },
     );
   });
@@ -491,7 +518,7 @@ void main() {
         await tester.enterText(find.byType(TextField).first, 'Aspirina');
         await tester.pump();
 
-        await tester.tap(_confirmButton());
+        await tester.tap(_confirmButton().last);
         await tester.pumpAndSettle();
 
         expect(called, isTrue);
@@ -511,7 +538,7 @@ void main() {
         );
         await _openSheet(tester);
 
-        await tester.tap(find.byIcon(Icons.close));
+        await tester.tap(find.byIcon(Icons.close_rounded));
         await tester.pumpAndSettle();
 
         expect(called, isFalse);
@@ -528,7 +555,7 @@ void main() {
 
         expect(find.text(sEn.addMedicationTitle), findsOneWidget);
         expect(find.text(sEn.addMedicationSubtitle), findsOneWidget);
-        expect(find.text(sEn.medicationLabel), findsOneWidget);
+        expect(find.text('${sEn.medicationLabel} *'), findsOneWidget);
 
         await tester.ensureVisible(find.text(sEn.statusLabel));
         expect(find.text(sEn.statusLabel), findsOneWidget);
@@ -564,4 +591,113 @@ void main() {
       },
     );
   });
+
+  // =========================================================================
+  // ADDITIONAL TESTS FOR 100% CODE COVERAGE IN ADD_MEDICATION_SHEET.DART
+  // =========================================================================
+
+  group(
+    'AddMedicationSheet – Unsaved Changes Dialog & Navigation Handlers',
+    () {
+      testWidgets(
+        'shows warning dialog when tapping close icon with unsaved dosage',
+        (tester) async {
+          await tester.pumpWidget(_buildViaBottomSheet(onAdd: (_) {}));
+          await _openSheet(tester);
+
+          await tester.ensureVisible(find.text(sEs.dosageHint));
+          await tester.enterText(find.byType(TextField).at(1), '1 cada 8h');
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(AlertDialog), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'shows warning dialog when status chip is changed from default active',
+        (tester) async {
+          await tester.pumpWidget(_buildViaBottomSheet(onAdd: (_) {}));
+          await _openSheet(tester);
+
+          await tester.ensureVisible(find.text(sEs.medStatusCompleted));
+          await tester.tap(find.text(sEs.medStatusCompleted));
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(AlertDialog), findsOneWidget);
+        },
+      );
+
+      testWidgets('cancels dismissal when clicking Cancel in unsaved dialog', (
+        tester,
+      ) async {
+        await tester.pumpWidget(_buildViaBottomSheet(onAdd: (_) {}));
+        await _openSheet(tester);
+
+        await tester.enterText(find.byType(TextField).first, 'Omeprazol');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddMedicationSheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      });
+
+      testWidgets('dismisses sheet when clicking Exit in unsaved dialog', (
+        tester,
+      ) async {
+        await tester.pumpWidget(_buildViaBottomSheet(onAdd: (_) {}));
+        await _openSheet(tester);
+
+        await tester.enterText(find.byType(TextField).first, 'Omeprazol');
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Salir'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddMedicationSheet), findsNothing);
+      });
+
+      testWidgets('triggers PopScope unsaved handler on back gesture', (
+        tester,
+      ) async {
+        await tester.pumpWidget(_buildDirect(onAdd: (_) {}));
+
+        await tester.enterText(find.byType(TextField).first, 'Amoxicilina');
+        await tester.pump();
+
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        popScope.onPopInvokedWithResult?.call(false, null);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+      });
+
+      testWidgets(
+        'displays mandatory error text in Spanish when submitted empty',
+        (tester) async {
+          await tester.pumpWidget(_buildDirect(onAdd: (_) {}, locale: 'es'));
+
+          await tester.tap(_confirmButton());
+          await tester.pumpAndSettle();
+
+          expect(find.text('El medicamento es obligatorio'), findsOneWidget);
+        },
+      );
+    },
+  );
 }

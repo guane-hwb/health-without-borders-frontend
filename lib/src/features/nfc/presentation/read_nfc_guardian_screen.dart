@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
+import '../../../core/nfc/nfc_payload_codec.dart';
+import '../../../core/nfc/nfc_payload_service.dart';
+import '../../../core/nfc/nfc_triage_payload.dart';
+import '../../../core/utils/app_logger.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
@@ -11,6 +15,7 @@ import 'edit_guardian_screen.dart';
 import 'edit_medical_history_screen.dart';
 import 'edit_medical_staff_screen.dart';
 import 'edit_patient_screen.dart';
+import 'nfc_guided_write.dart';
 import 'nfc_save_flow.dart';
 import 'shared_read_nfc_header.dart';
 import 'show_allergens_screen.dart';
@@ -38,6 +43,15 @@ class _ReadNfcGuardianScreenState extends State<ReadNfcGuardianScreen> {
       MaterialPageRoute<PatientFullRecord>(
         builder: (_) => EditPatientScreen(patient: _p),
       ),
+    );
+    if (updated != null && mounted) {
+      setState(() => _p = updated);
+    }
+  }
+
+  Future<void> _pushEditor(Widget screen) async {
+    final updated = await Navigator.of(context).push<PatientFullRecord>(
+      MaterialPageRoute<PatientFullRecord>(builder: (_) => screen),
     );
     if (updated != null && mounted) {
       setState(() => _p = updated);
@@ -129,9 +143,133 @@ class _ReadNfcGuardianScreenState extends State<ReadNfcGuardianScreen> {
   void _push(Widget w) =>
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => w));
 
-  void _syncPatient(BuildContext ctx) {
-    final engine = AppScope.of(ctx).syncEngine;
-    showNfcSaveFlow(ctx, onSync: () async => engine.syncAll());
+  Future<void> _syncPatient(BuildContext ctx) async {
+    final scope = AppScope.of(ctx);
+    final s = AppStrings.of(ctx);
+    final isEs = s.isEs;
+
+    final status = await scope.localDatabase.getChipStatus(_p.patientId);
+    final needsPatientWrite = status?.patientChipDirty ?? false;
+    final needsGuardianWrite = status?.guardianChipDirty ?? false;
+
+    if (needsPatientWrite || needsGuardianWrite) {
+      // Build the codec from the whole keyring, not a single key: the write
+      // must be stamped with the ring's current version. Using the bare-key
+      // constructor here stamped version 0 while encrypting with whatever the
+      // current key was, which after a rotation produces a wristband no reader
+      // can decrypt.
+      final keyring = await scope.authRepository.getNfcKeyring();
+      if (!ctx.mounted) return;
+      if (keyring == null || !keyring.canWrite) {
+        // Refuse rather than fall back to a placeholder key. Writing patient
+        // data under a guessable key would expose it and produce a wristband
+        // no legitimate device could read.
+        final bool expired = await scope.authRepository.isNfcSessionExpired();
+        if (!ctx.mounted) return;
+        _showSyncError(
+          ctx,
+          expired
+              ? (isEs
+                    ? 'Su sesión expiró. Inicie sesión de nuevo para grabar.'
+                    : 'Your session expired. Log in again to write.')
+              : (isEs
+                    ? 'No hay clave NFC disponible para grabar.'
+                    : 'No NFC key available to write.'),
+        );
+        return;
+      }
+
+      final NfcPayloadCodec codec;
+      try {
+        codec = NfcPayloadCodec.fromKeyring(keyring: keyring);
+      } catch (e, stack) {
+        AppLogger.e(
+          'Anillo de llaves NFC inválido',
+          error: e,
+          stackTrace: stack,
+        );
+        if (!ctx.mounted) return;
+        _showSyncError(
+          ctx,
+          isEs
+              ? 'La clave NFC no es válida. Contacte al administrador.'
+              : 'The NFC key is invalid. Contact your administrator.',
+        );
+        return;
+      }
+
+      if (needsPatientWrite) {
+        final expectedUid = _p.deviceUid;
+        final patientOk = await showNfcGuidedWrite(
+          ctx,
+          title: isEs ? 'Pulsera del paciente' : 'Patient wristband',
+          instruction: isEs
+              ? 'Acerque la pulsera del paciente al teléfono para actualizarla'
+              : 'Bring the patient wristband to the phone to update it',
+          write: () => NfcPayloadService(codec: codec).writeTriagePayload(
+            NfcTriagePayload.buildPatientPayload(record: _p),
+            expectedUid: expectedUid,
+          ),
+        );
+        if (!ctx.mounted) return;
+        if (!patientOk) {
+          _showSyncError(
+            ctx,
+            isEs
+                ? 'No se pudo regrabar la pulsera del paciente. No se sincronizó con el servidor.'
+                : 'Could not rewrite the patient wristband. Nothing was synced to the server.',
+          );
+          return;
+        }
+        await scope.localDatabase.clearChipsDirty(_p.patientId, patient: true);
+        if (!ctx.mounted) return;
+      }
+
+      if (needsGuardianWrite) {
+        final expectedUid = (_p.guardianInfo.deviceUid ?? '').trim();
+        if (expectedUid.isEmpty) {
+          _showSyncError(
+            ctx,
+            isEs
+                ? 'El acudiente no tiene un chip asociado; no se puede regrabar.'
+                : 'The guardian has no associated chip to rewrite.',
+          );
+          return;
+        }
+        final guardianOk = await showNfcGuidedWrite(
+          ctx,
+          title: isEs ? 'Tarjeta del acudiente' : 'Guardian card',
+          instruction: isEs
+              ? 'Acerque la tarjeta del acudiente al teléfono para actualizarla'
+              : 'Bring the guardian card to the phone to update it',
+          write: () => NfcPayloadService(codec: codec).writeGuardianRecord(
+            buildFit: guardianFitBuilder(record: _p, codec: codec),
+            expectedUid: expectedUid,
+          ),
+        );
+        if (!ctx.mounted) return;
+        if (!guardianOk) {
+          _showSyncError(
+            ctx,
+            isEs
+                ? 'No se pudo regrabar la tarjeta del acudiente. No se sincronizó con el servidor.'
+                : 'Could not rewrite the guardian card. Nothing was synced to the server.',
+          );
+          return;
+        }
+        await scope.localDatabase.clearChipsDirty(_p.patientId, guardian: true);
+        if (!ctx.mounted) return;
+      }
+    }
+
+    if (!ctx.mounted) return;
+    await showNfcSaveFlow(ctx, onSync: () async => scope.syncEngine.syncAll());
+  }
+
+  void _showSyncError(BuildContext ctx, String message) {
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(backgroundColor: AppColors.error, content: Text(message)),
+    );
   }
 
   Widget _buildTabContent(AppStrings s) {
@@ -139,17 +277,17 @@ class _ReadNfcGuardianScreenState extends State<ReadNfcGuardianScreen> {
       case 1:
         return _MedicalHistoryTab(
           patient: _p,
-          onEdit: () => _push(EditMedicalHistoryScreen(patient: _p)),
+          onEdit: () => _pushEditor(EditMedicalHistoryScreen(patient: _p)),
         );
       case 2:
         return _MedicalStaffTab(
           patient: _p,
-          onEdit: () => _push(EditMedicalStaffScreen(patient: _p)),
+          onEdit: () => _pushEditor(EditMedicalStaffScreen(patient: _p)),
         );
       default:
         return _GuardianTab(
           patient: _p,
-          onEdit: () => _push(EditGuardianScreen(patient: _p)),
+          onEdit: () => _pushEditor(EditGuardianScreen(patient: _p)),
         );
     }
   }

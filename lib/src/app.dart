@@ -20,6 +20,7 @@ import 'features/auth/data/auth_repository.dart';
 import 'features/auth/data/user_repository.dart';
 import 'features/auth/presentation/auth_gate.dart';
 import 'features/auth/presentation/login_screen.dart';
+import 'features/auth/presentation/session_window_banner.dart';
 import 'features/nfc/data/patient_repository.dart';
 
 class HealthWithoutBordersApp extends StatefulWidget {
@@ -57,6 +58,7 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
   late final LocalDatabase _localDatabase = LocalDatabase.instance;
   late final SyncEngine _syncEngine = SyncEngine(
     patientRepository: _patientRepository,
+    authRepository: _authRepository,
     localDatabase: _localDatabase,
     reachability: _reachability,
   );
@@ -66,8 +68,13 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _apiClient.tokenProvider = _authRepository;
+    _authRepository.onSessionInvalidated = _syncEngine.stop;
     _authRepository.sessionExpired.addListener(_onSessionExpired);
-    _syncEngine.start();
+
+    _authRepository.restoreSession().then((_) {
+      _syncEngine.start();
+    });
+
     unawaited(NfcSessionManager.instance.attach());
   }
 
@@ -128,6 +135,13 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
           darkTheme: AppTheme.dark(),
           themeMode: ThemeMode.light,
           onGenerateRoute: AppRoutes.onGenerateRoute,
+          // Wraps every route, so the warning follows the person around
+          // instead of living on one screen they may never open.
+          builder: (BuildContext context, Widget? child) =>
+              SessionWindowBanner(
+                windowClosed: _authRepository.sessionWindowClosed,
+                child: child ?? const SizedBox.shrink(),
+              ),
           home: AuthGate(authRepository: _authRepository),
         ),
       ),
