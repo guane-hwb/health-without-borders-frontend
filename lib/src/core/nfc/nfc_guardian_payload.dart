@@ -121,10 +121,8 @@ class NfcGuardianPayload {
       // neither one is starved unnecessarily.
       if (n >= m && n > 0) {
         n--;
-      } else if (m > 0) {
-        m--;
       } else {
-        n--;
+        m--;
       }
       payload = buildGuardianPayload(
         record: record,
