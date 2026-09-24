@@ -41,6 +41,13 @@ void main() {
 
   tearDown(NfcService.resetForTest);
 
+  test(
+    'la probe real por defecto falla sin plugin y isAvailable reporta false',
+    () async {
+      expect(await NfcService.isAvailable, isFalse);
+    },
+  );
+
   // ══════════════════════════════════════════════════════════════════════════
   // overrideReadDeviceUid
   // ══════════════════════════════════════════════════════════════════════════

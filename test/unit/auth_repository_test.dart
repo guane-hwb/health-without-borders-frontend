@@ -275,9 +275,6 @@ void main() {
 
         await repo.login(email: 'doc@hwb.org', password: 'x');
 
-        // Un backend sin versionado entrega sólo nfc_encryption_key: se guarda
-        // como el anillo con la llave en la versión 0, que es exactamente con
-        // la que descifran las pulseras ya escritas.
         final List<Object?> captured = verify(
           () => storage.write(
             key: AuthRepository.nfcKeyringKey,
@@ -293,8 +290,6 @@ void main() {
         expect(persisted!.currentVersion, kLegacyNfcKeyVersion);
         expect(persisted.keyFor(0), 'super-secret-nfc');
 
-        // La llave suelta queda superada por el anillo: no se deja el mismo
-        // material en dos lugares.
         verify(() => storage.delete(key: AuthRepository.nfcKeyKey)).called(1);
         verifyNever(
           () => storage.write(
@@ -1076,8 +1071,6 @@ void main() {
       when(
         () => storage.read(key: AuthRepository.nfcKeyKey),
       ).thenAnswer((_) async => 'my-nfc-key');
-      // La llave sólo se entrega dentro de la ventana de sesión, así que el
-      // caso positivo necesita un refresh token vigente.
       when(
         () => storage.read(key: AuthRepository.refreshKey),
       ).thenAnswer((_) async => _refreshJwt());
@@ -1592,7 +1585,10 @@ void main() {
 
     test('login absorbe el anillo y lo deja disponible en memoria', () async {
       when(
-        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
       ).thenAnswer(
         (_) async => <String, dynamic>{
           'access_token': _validJwt('doc@hwb.org'),
@@ -1603,10 +1599,14 @@ void main() {
         },
       );
       when(
-        () =>
-            api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
       ).thenAnswer((_) async => _meResponse());
-      when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+      when(
+        () => storage.read(key: any(named: 'key')),
+      ).thenAnswer((_) async => null);
 
       await repo.login(email: 'doc@hwb.org', password: 'x');
 
@@ -1615,38 +1615,47 @@ void main() {
       expect(ring!.currentVersion, 1);
       expect(ring.keyFor(0), keyV0);
       expect(ring.keyFor(1), keyV1);
-      // La llave de escritura sigue siendo la versión actual.
+
       expect(ring.currentKey, keyV1);
     });
 
-    test('el anillo se persiste para que un arranque en frío lo recupere',
-        () async {
-      when(
-        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
-      ).thenAnswer(
-        (_) async => <String, dynamic>{
-          'access_token': _validJwt('doc@hwb.org'),
-          'nfc_key_version': 1,
-          'nfc_keyring': <String, dynamic>{'0': keyV0, '1': keyV1},
-        },
-      );
-      when(
-        () =>
-            api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
-      ).thenAnswer((_) async => _meResponse());
-      when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+    test(
+      'el anillo se persiste para que un arranque en frío lo recupere',
+      () async {
+        when(
+          () => api.postForm(
+            path: any(named: 'path'),
+            form: any(named: 'form'),
+          ),
+        ).thenAnswer(
+          (_) async => <String, dynamic>{
+            'access_token': _validJwt('doc@hwb.org'),
+            'nfc_key_version': 1,
+            'nfc_keyring': <String, dynamic>{'0': keyV0, '1': keyV1},
+          },
+        );
+        when(
+          () => api.getJson(
+            path: any(named: 'path'),
+            headers: any(named: 'headers'),
+          ),
+        ).thenAnswer((_) async => _meResponse());
+        when(
+          () => storage.read(key: any(named: 'key')),
+        ).thenAnswer((_) async => null);
 
-      await repo.login(email: 'doc@hwb.org', password: 'x');
+        await repo.login(email: 'doc@hwb.org', password: 'x');
 
-      verify(
-        () => storage.write(
-          key: AuthRepository.nfcKeyringKey,
-          value: any(named: 'value'),
-        ),
-      ).called(1);
-      // La llave suelta queda superada por el anillo.
-      verify(() => storage.delete(key: AuthRepository.nfcKeyKey)).called(1);
-    });
+        verify(
+          () => storage.write(
+            key: AuthRepository.nfcKeyringKey,
+            value: any(named: 'value'),
+          ),
+        ).called(1);
+
+        verify(() => storage.delete(key: AuthRepository.nfcKeyKey)).called(1);
+      },
+    );
 
     test('reconstruye el anillo desde el almacenamiento', () async {
       final stored = jsonEncode(
@@ -1691,18 +1700,21 @@ void main() {
     );
 
     test('sin material de llave devuelve null', () async {
-      when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+      when(
+        () => storage.read(key: any(named: 'key')),
+      ).thenAnswer((_) async => null);
 
       expect(await repo.getNfcKeyring(), isNull);
     });
 
-    test('clearSession borra el anillo persistido', () async {
-      await repo.clearSession();
+    test('storage lanza excepción → devuelve null (silenciado)', () async {
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyKey),
+      ).thenThrow(Exception('hardware error'));
 
-      verify(() => storage.delete(key: AuthRepository.nfcKeyringKey)).called(1);
+      expect(await repo.getNfcKeyring(), isNull);
     });
   });
-
 
   // ───────────────────────────────────────────────────────────────────────────
   // Ventana de sesión de la llave NFC (exp del refresh token)
@@ -1736,7 +1748,6 @@ void main() {
       expect(await repo.getNfcKeyring(), isNull);
       expect(await repo.isNfcSessionExpired(), isTrue);
 
-      // No basta con negar el acceso: el material se retira del disco.
       verify(
         () => storage.delete(key: AuthRepository.nfcKeyringKey),
       ).called(greaterThanOrEqualTo(1));
@@ -1753,7 +1764,6 @@ void main() {
         () => storage.read(key: AuthRepository.refreshKey),
       ).thenAnswer((_) async => null);
 
-      // Sin refresh token la sesión no es renovable: se trata como vencida.
       expect(await repo.getNfcKeyring(), isNull);
       expect(await repo.isNfcSessionExpired(), isTrue);
     });
@@ -1780,22 +1790,19 @@ void main() {
       expect(await repo.getNfcKeyring(), isNull);
     });
 
-    test(
-      'la ventana también aplica a la llave suelta heredada',
-      () async {
-        when(
-          () => storage.read(key: AuthRepository.nfcKeyringKey),
-        ).thenAnswer((_) async => null);
-        when(
-          () => storage.read(key: AuthRepository.nfcKeyKey),
-        ).thenAnswer((_) async => keyV0);
-        when(
-          () => storage.read(key: AuthRepository.refreshKey),
-        ).thenAnswer((_) async => _refreshJwt(days: -1));
+    test('la ventana también aplica a la llave suelta heredada', () async {
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => null);
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyKey),
+      ).thenAnswer((_) async => keyV0);
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => _refreshJwt(days: -1));
 
-        expect(await repo.getNfcKeyring(), isNull);
-      },
-    );
+      expect(await repo.getNfcKeyring(), isNull);
+    });
 
     test(
       'ni el anillo ni la llave heredada salen fuera de la ventana',
@@ -1815,7 +1822,6 @@ void main() {
     );
   });
 
-
   // ───────────────────────────────────────────────────────────────────────────
   // Ventana evaluada al restaurar, borrado no perezoso y reloj monótono
   // ───────────────────────────────────────────────────────────────────────────
@@ -1826,7 +1832,9 @@ void main() {
     String storedRing() => jsonEncode(NfcKeyring.single(keyV0).toJson());
 
     void stubStorage({required String? refresh, String? ring}) {
-      when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+      when(
+        () => storage.read(key: any(named: 'key')),
+      ).thenAnswer((_) async => null);
       when(
         () => storage.read(key: AuthRepository.tokenKey),
       ).thenAnswer((_) async => _validJwt('doc@hwb.org'));
@@ -1844,7 +1852,6 @@ void main() {
       await repo.restoreSession();
 
       expect(repo.sessionWindowClosed.value, isFalse);
-      // La sesión no se fuerza al login: eso es sessionExpired, otra cosa.
       expect(repo.sessionExpired.value, isFalse);
     });
 
@@ -1856,8 +1863,6 @@ void main() {
         final session = await repo.restoreSession();
 
         expect(repo.sessionWindowClosed.value, isTrue);
-        // Se conserva el acceso a lo que ya está en el dispositivo: puede
-        // haber registros sin sincronizar que la persona necesita ver.
         expect(session, isNotNull);
         expect(repo.sessionExpired.value, isFalse);
       },
@@ -1870,8 +1875,6 @@ void main() {
 
         await repo.restoreSession();
 
-        // Antes el material seguía en disco hasta que algo llamara a
-        // getNfcKeyring(), que podía no ocurrir nunca.
         verify(
           () => storage.delete(key: AuthRepository.nfcKeyringKey),
         ).called(greaterThanOrEqualTo(1));
@@ -1885,11 +1888,8 @@ void main() {
 
     String storedRing() => jsonEncode(NfcKeyring.single(keyV0).toJson());
 
-    String mark(Duration fromNow) => DateTime.now()
-        .toUtc()
-        .add(fromNow)
-        .millisecondsSinceEpoch
-        .toString();
+    String mark(Duration fromNow) =>
+        DateTime.now().toUtc().add(fromNow).millisecondsSinceEpoch.toString();
 
     test('un retroceso dentro de la tolerancia no cierra la ventana', () async {
       when(
@@ -1898,8 +1898,6 @@ void main() {
       when(
         () => storage.read(key: AuthRepository.refreshKey),
       ).thenAnswer((_) async => _refreshJwt());
-      // La marca quedó 12 h adelante: dentro de las 24 h de holgura para
-      // correcciones de NTP o cambios de zona horaria.
       when(
         () => storage.read(key: AuthRepository.clockMarkKey),
       ).thenAnswer((_) async => mark(const Duration(hours: 12)));
@@ -1914,8 +1912,6 @@ void main() {
       when(
         () => storage.read(key: AuthRepository.refreshKey),
       ).thenAnswer((_) async => _refreshJwt());
-      // La marca quedó 10 días adelante del reloj actual: alguien atrasó la
-      // fecha para reabrir una ventana ya vencida.
       when(
         () => storage.read(key: AuthRepository.clockMarkKey),
       ).thenAnswer((_) async => mark(const Duration(days: 10)));
@@ -1939,7 +1935,9 @@ void main() {
     });
 
     test('la marca se persiste al evaluar la ventana', () async {
-      when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+      when(
+        () => storage.read(key: any(named: 'key')),
+      ).thenAnswer((_) async => null);
       when(
         () => storage.read(key: AuthRepository.nfcKeyringKey),
       ).thenAnswer((_) async => storedRing());
@@ -1958,7 +1956,6 @@ void main() {
     });
   });
 
-
   // ───────────────────────────────────────────────────────────────────────────
   // Reanclaje de la marca de reloj al reloj del servidor
   // ───────────────────────────────────────────────────────────────────────────
@@ -1968,48 +1965,52 @@ void main() {
 
     String storedRing() => jsonEncode(NfcKeyring.single(keyV0).toJson());
 
-    String futureMark(Duration ahead) => DateTime.now()
-        .toUtc()
-        .add(ahead)
-        .millisecondsSinceEpoch
-        .toString();
+    String futureMark(Duration ahead) =>
+        DateTime.now().toUtc().add(ahead).millisecondsSinceEpoch.toString();
 
-    test('un login correcto reancla una marca que quedó en el futuro', () async {
-      // El reloj del dispositivo estuvo diez días adelantado: sin reanclaje la
-      // marca lo deja sin NFC hasta que el tiempo real la alcance.
-      when(
-        () => storage.read(key: AuthRepository.clockMarkKey),
-      ).thenAnswer((_) async => futureMark(const Duration(days: 10)));
-      when(
-        () => storage.read(key: AuthRepository.nfcKeyringKey),
-      ).thenAnswer((_) async => storedRing());
-      when(
-        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
-      ).thenAnswer(
-        (_) async => <String, dynamic>{
-          'access_token': _validJwt('doc@hwb.org'),
-          'refresh_token': _refreshJwt(),
-          'nfc_encryption_key': keyV0,
-          'nfc_key_version': 0,
-          'nfc_keyring': <String, dynamic>{'0': keyV0},
-        },
-      );
-      when(
-        () =>
-            api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
-      ).thenAnswer((_) async => _meResponse());
+    test(
+      'un login correcto reancla una marca que quedó en el futuro',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.clockMarkKey),
+        ).thenAnswer((_) async => futureMark(const Duration(days: 10)));
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyringKey),
+        ).thenAnswer((_) async => storedRing());
+        when(
+          () => api.postForm(
+            path: any(named: 'path'),
+            form: any(named: 'form'),
+          ),
+        ).thenAnswer(
+          (_) async => <String, dynamic>{
+            'access_token': _validJwt('doc@hwb.org'),
+            'refresh_token': _refreshJwt(),
+            'nfc_encryption_key': keyV0,
+            'nfc_key_version': 0,
+            'nfc_keyring': <String, dynamic>{'0': keyV0},
+          },
+        );
+        when(
+          () => api.getJson(
+            path: any(named: 'path'),
+            headers: any(named: 'headers'),
+          ),
+        ).thenAnswer((_) async => _meResponse());
 
-      await repo.login(email: 'doc@hwb.org', password: 'x');
+        await repo.login(email: 'doc@hwb.org', password: 'x');
 
-      // El `iat` del refresh token es la única fuente que puede mover la marca
-      // hacia atrás con seguridad.
-      expect(await repo.getNfcKeyring(), isNotNull);
-      expect(await repo.isNfcSessionExpired(), isFalse);
-    });
+        expect(await repo.getNfcKeyring(), isNotNull);
+        expect(await repo.isNfcSessionExpired(), isFalse);
+      },
+    );
 
     test('el login persiste la marca reanclada', () async {
       when(
-        () => api.postForm(path: any(named: 'path'), form: any(named: 'form')),
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
       ).thenAnswer(
         (_) async => <String, dynamic>{
           'access_token': _validJwt('doc@hwb.org'),
@@ -2017,10 +2018,14 @@ void main() {
         },
       );
       when(
-        () =>
-            api.getJson(path: any(named: 'path'), headers: any(named: 'headers')),
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
       ).thenAnswer((_) async => _meResponse());
-      when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+      when(
+        () => storage.read(key: any(named: 'key')),
+      ).thenAnswer((_) async => null);
 
       await repo.login(email: 'doc@hwb.org', password: 'x');
 
@@ -2032,21 +2037,22 @@ void main() {
       ).called(greaterThanOrEqualTo(1));
     });
 
-    test('sin reanclaje, un retroceso real sigue cerrando la ventana', () async {
-      when(
-        () => storage.read(key: AuthRepository.nfcKeyringKey),
-      ).thenAnswer((_) async => storedRing());
-      when(
-        () => storage.read(key: AuthRepository.refreshKey),
-      ).thenAnswer((_) async => _refreshJwt());
-      when(
-        () => storage.read(key: AuthRepository.clockMarkKey),
-      ).thenAnswer((_) async => futureMark(const Duration(days: 10)));
+    test(
+      'sin reanclaje, un retroceso real sigue cerrando la ventana',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyringKey),
+        ).thenAnswer((_) async => storedRing());
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => _refreshJwt());
+        when(
+          () => storage.read(key: AuthRepository.clockMarkKey),
+        ).thenAnswer((_) async => futureMark(const Duration(days: 10)));
 
-      // El reanclaje sólo ocurre con contacto real con el servidor; sin él la
-      // protección contra atrasar el reloj sigue intacta.
-      expect(await repo.getNfcKeyring(), isNull);
-    });
+        expect(await repo.getNfcKeyring(), isNull);
+      },
+    );
 
     test('clearSession borra la marca', () async {
       await repo.clearSession();
@@ -2057,4 +2063,102 @@ void main() {
     });
   });
 
+  group('ForeignPendingDataException', () {
+    test('toString formats exception attributes correctly', () {
+      final exc = ForeignPendingDataException(
+        previousOwnerUserId: 'user-1',
+        newUserId: 'user-2',
+        pendingPatients: 3,
+        pendingEmergencyLogs: 1,
+      );
+
+      expect(
+        exc.toString(),
+        equals(
+          'ForeignPendingDataException(previousOwner: user-1, '
+          'newUser: user-2, pendingPatients: 3, '
+          'pendingEmergencyLogs: 1)',
+        ),
+      );
+    });
+  });
+
+  group('Foreign Data Methods & Session Callbacks', () {
+    test('pendingForeignRecordsForReview queries local database', () async {
+      when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
+
+      final result = await repo.pendingForeignRecordsForReview();
+
+      expect(result, isEmpty);
+      verify(() => localDb.getUnsyncedRecords()).called(1);
+    });
+
+    test(
+      'pendingForeignEmergencyLogsForReview queries emergency logs',
+      () async {
+        when(
+          () => localDb.pendingEmergencyAccessLogs(),
+        ).thenAnswer((_) async => []);
+
+        final result = await repo.pendingForeignEmergencyLogsForReview();
+
+        expect(result, isEmpty);
+        verify(() => localDb.pendingEmergencyAccessLogs()).called(1);
+      },
+    );
+
+    test(
+      'discardForeignPendingData clears local db, encryption key and lastUserIdKey',
+      () async {
+        await repo.discardForeignPendingData();
+
+        verify(() => localDb.clearAll()).called(1);
+        verify(() => localDb.destroyEncryptionKey()).called(1);
+        verify(
+          () => storage.delete(key: AuthRepository.lastUserIdKey),
+        ).called(1);
+      },
+    );
+
+    test(
+      'discardForeignPendingData catches storage deletion errors gracefully',
+      () async {
+        when(
+          () => storage.delete(key: AuthRepository.lastUserIdKey),
+        ).thenThrow(Exception('Storage error'));
+
+        await expectLater(repo.discardForeignPendingData(), completes);
+
+        verify(() => localDb.clearAll()).called(1);
+        verify(() => localDb.destroyEncryptionKey()).called(1);
+      },
+    );
+
+    test(
+      'clearSession invokes onSessionInvalidated callback and handles error',
+      () async {
+        var callbackCalled = false;
+        repo.onSessionInvalidated = () {
+          callbackCalled = true;
+          throw Exception('Callback failure');
+        };
+
+        await expectLater(repo.clearSession(), completes);
+        expect(callbackCalled, isTrue);
+      },
+    );
+
+    test(
+      'wipeLocalPhi returns false and logs error when exception is thrown',
+      () async {
+        when(
+          () => localDb.getUnsyncedCount(),
+        ).thenThrow(Exception('Database locked'));
+
+        final success = await repo.wipeLocalPhi();
+
+        expect(success, isFalse);
+      },
+    );
+  });
 }

@@ -1,3 +1,5 @@
+// test/widget/foreign_data_reconciliation_screen_widget_test.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -333,6 +335,82 @@ void main() {
 
         expect(find.text('¿Descartar los datos pendientes?'), findsNothing);
         verifyNever(() => mockAuthRepository.discardForeignPendingData());
+      },
+    );
+
+    testWidgets(
+      'pantalla de revisión abre correctamente cuando no hay registros ni logs',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+
+        when(
+          () => mockAuthRepository.pendingForeignRecordsForReview(),
+        ).thenAnswer((_) async => []);
+
+        when(
+          () => mockAuthRepository.pendingForeignEmergencyLogsForReview(),
+        ).thenAnswer((_) async => []);
+
+        await tester.pumpWidget(buildTestableWidget());
+
+        await tester.tap(find.text('Exportar / revisar antes de decidir'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Revisión de datos pendientes'), findsOneWidget);
+        expect(
+          find.textContaining('=== Pacientes pendientes (0) ==='),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('=== Accesos de emergencia pendientes (0) ==='),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'flujo de confirmación de descarte ejecuta la limpieza en el repositorio',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+
+        when(
+          () => mockAuthRepository.discardForeignPendingData(),
+        ).thenAnswer((_) async {});
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => ForeignDataReconciliationScreen(
+                      authRepository: mockAuthRepository,
+                      exception: testException,
+                    ),
+                  ),
+                ),
+                child: const Text('Abrir'),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Abrir'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Descartar y continuar como usuario nuevo'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Sí, descartar'));
+        await tester.pumpAndSettle();
+
+        verify(() => mockAuthRepository.discardForeignPendingData()).called(1);
+        expect(find.byType(ForeignDataReconciliationScreen), findsNothing);
       },
     );
   });

@@ -2975,4 +2975,60 @@ void main() {
       expect(entry.syncedAt, isNull);
     });
   });
+
+  group('onDowngrade real (archivo con versión mayor a la de la app)', () {
+    test(
+      'reabrir una base con user_version mayor conserva los datos y alinea la versión',
+      () async {
+        final path = p.join(await getDatabasesPath(), 'hwb_patients.db');
+        if (await databaseExists(path)) await deleteDatabase(path);
+
+        final future = await openDatabase(
+          path,
+          version: 99,
+          onCreate: (Database db, int version) async {
+            await db.execute('''
+              CREATE TABLE local_patients (
+                patient_id    TEXT PRIMARY KEY,
+                device_uid    TEXT NOT NULL,
+                patient_name  TEXT NOT NULL,
+                record_json   TEXT NOT NULL,
+                is_synced     INTEGER NOT NULL DEFAULT 0,
+                sync_error    TEXT,
+                sync_error_code INTEGER,
+                created_at    TEXT NOT NULL,
+                synced_at     TEXT,
+                revision      INTEGER NOT NULL DEFAULT 0,
+                owner_user_id TEXT,
+                organization_id TEXT,
+                pending_retired_reason TEXT
+              )
+            ''');
+          },
+        );
+        await future.insert('local_patients', <String, Object?>{
+          'patient_id': 'p-futuro',
+          'device_uid': 'dev-futuro',
+          'patient_name': 'Futuro N.',
+          'record_json': '{"patientId":"p-futuro"}',
+          'is_synced': 0,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+        await future.close();
+
+        final reopened = LocalDatabase.forTesting(secureStorage: mockStorage);
+        LocalDatabase.setInstanceForTesting(reopened);
+
+        final all = await reopened.getAllRecords();
+
+        expect(all.map((LocalPatientEntry e) => e.patientId), <String>[
+          'p-futuro',
+        ]);
+
+        final check = await openDatabase(path);
+        final versionRow = await check.rawQuery('PRAGMA user_version');
+        expect(versionRow.first['user_version'] as int, lessThan(99));
+      },
+    );
+  });
 }

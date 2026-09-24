@@ -617,8 +617,9 @@ class AuthRepository implements TokenProvider {
 
   DateTime? _jwtInstant(String token, String claim) {
     final Object? value = _jwtPayload(token)?[claim];
-    final int? seconds =
-        value is int ? value : int.tryParse(value?.toString() ?? '');
+    final int? seconds = value is int
+        ? value
+        : int.tryParse(value?.toString() ?? '');
     if (seconds == null) return null;
     return DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
   }

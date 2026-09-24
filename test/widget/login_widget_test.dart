@@ -17,6 +17,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
+import 'package:health_without_borders_frontend/src/features/auth/presentation/foreign_data_reconciliation_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
@@ -73,8 +74,7 @@ class FakeAuthRepository implements AuthRepository {
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
-  ValueListenable<bool> get sessionWindowClosed =>
-      ValueNotifier<bool>(false);
+  ValueListenable<bool> get sessionWindowClosed => ValueNotifier<bool>(false);
 
   @override
   Future<void> clearSession() async {
@@ -198,13 +198,11 @@ void main() {
 
     testWidgets('muestra el enlace de olvide mi contrasena', (tester) async {
       await tester.pumpWidget(buildSubject());
-      // Search for the "forgot password" TextButton by its content
       expect(find.byType(TextButton), findsOneWidget);
     });
 
     testWidgets('la contrasena se muestra oculta por defecto', (tester) async {
       await tester.pumpWidget(buildSubject());
-      // Before tapping the icon, the closed visibility icon must be displayed.
       expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
     });
   });
@@ -217,7 +215,6 @@ void main() {
       await tester.pumpWidget(buildSubject());
       await tester.tap(find.byType(ElevatedButton));
       await tester.pumpAndSettle();
-      // The actual messages are "Enter your email..." and "Enter your password..."
       expect(find.textContaining('Ingresa'), findsWidgets);
     });
 
@@ -227,7 +224,6 @@ void main() {
       await tester.pumpWidget(buildSubject());
       await tester.enterText(find.byType(TextFormField).first, 'noesvalido');
       await tester.pump();
-      // Actual message: "Invalid email address"
       expect(find.textContaining('no v'), findsOneWidget);
     });
 
@@ -237,7 +233,6 @@ void main() {
       await tester.pumpWidget(buildSubject());
       await tester.enterText(find.byType(TextFormField).last, '123');
       await tester.pump();
-      // Actual message: "The password must be at least 6 characters long"
       expect(find.textContaining('al menos 6'), findsOneWidget);
     });
 
@@ -251,7 +246,6 @@ void main() {
       );
       await tester.enterText(find.byType(TextFormField).last, 'password123');
       await tester.pump();
-      // Use the exact error strings to avoid confusion with the hintText
       expect(find.text('Ingresa tu correo electrónico'), findsNothing);
       expect(find.text('Ingresa tu contraseña'), findsNothing);
       expect(find.textContaining('no válido'), findsNothing);
@@ -265,7 +259,6 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(buildSubject());
-      // Before tapping, the icon must be the closed visibility icon
       expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
 
       await tester.tap(find.byIcon(Icons.visibility_outlined));
@@ -325,12 +318,10 @@ void main() {
       );
       await tester.enterText(find.byType(TextFormField).last, 'password123');
       await tester.tap(find.byType(ElevatedButton));
-      // Flush microtasks + a frame for setState(_isLoading=true) to be processed
       await tester.pump();
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-      // Complete the Future to avoid leaving any timers open.
       completer.complete(UserSession.fromEmail('usuario@test.com'));
       await tester.pumpAndSettle();
     });
@@ -362,7 +353,7 @@ void main() {
     ) async {
       mockAuthRepo.loginHandler =
           ({required String email, required String password}) async {
-            throw Exception('Error de red');
+            throw Exception('Error genérico');
           };
 
       await tester.pumpWidget(buildSubject());
@@ -412,7 +403,6 @@ void main() {
       await tester.pumpWidget(buildSubject());
       await tester.tap(find.byType(TextButton));
       await tester.pumpAndSettle();
-      // El botón usa s.ok cuyo valor en español es "Entendido"
       await tester.tap(find.text('Entendido'));
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsNothing);
@@ -451,5 +441,108 @@ void main() {
       final checkbox = tester.widget<Checkbox>(find.byType(Checkbox));
       expect(checkbox.value, isFalse);
     });
+  });
+
+  group('LoginScreen — Uncovered Branches & Keyboard Submissions', () {
+    testWidgets('onSubmitted en email solicita foco al campo de contraseña', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject());
+
+      final emailField = find.byType(TextFormField).first;
+      await tester.showKeyboard(emailField);
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('onSubmitted en contraseña ejecuta el método de login', (
+      tester,
+    ) async {
+      mockAuthRepo.loginHandler =
+          ({required String email, required String password}) async {
+            return UserSession.fromEmail(email);
+          };
+
+      await tester.pumpWidget(buildSubject());
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
+      await tester.enterText(find.byType(TextFormField).last, 'password123');
+
+      final passwordField = find.byType(TextFormField).last;
+      await tester.showKeyboard(passwordField);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(mockAuthRepo.loginCalled, isTrue);
+    });
+
+    testWidgets(
+      'navega a ForeignDataReconciliationScreen al lanzar ForeignPendingDataException',
+      (tester) async {
+        mockAuthRepo.loginHandler =
+            ({required String email, required String password}) async {
+              throw ForeignPendingDataException(
+                previousOwnerUserId: 'previo-123',
+                newUserId: 'nuevo-456',
+                pendingPatients: 2,
+                pendingEmergencyLogs: 1,
+              );
+            };
+
+        await tester.pumpWidget(buildSubject());
+        await tester.enterText(
+          find.byType(TextFormField).first,
+          'usuario@test.com',
+        );
+        await tester.enterText(find.byType(TextFormField).last, 'password123');
+        await tester.tap(find.byType(ElevatedButton));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ForeignDataReconciliationScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'muestra SnackBar de conexión requerida al capturar un error genérico de SocketException',
+      (tester) async {
+        mockAuthRepo.loginHandler =
+            ({required String email, required String password}) async {
+              throw Exception(
+                'SocketException: Failed host lookup: api.example.com',
+              );
+            };
+
+        await tester.pumpWidget(buildSubject());
+        await tester.enterText(
+          find.byType(TextFormField).first,
+          'usuario@test.com',
+        );
+        await tester.enterText(find.byType(TextFormField).last, 'password123');
+        await tester.tap(find.byType(ElevatedButton));
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(find.text(s.loginNetworkRequired), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'tocar el texto de _RememberCheckbox conmuta el valor de la casilla',
+      (tester) async {
+        await tester.pumpWidget(buildSubject());
+
+        final s = AppStrings.forTesting('es');
+        await tester.tap(find.text(s.rememberSession));
+        await tester.pump();
+
+        final checkbox = tester.widget<Checkbox>(find.byType(Checkbox));
+        expect(checkbox.value, isFalse);
+      },
+    );
   });
 }
