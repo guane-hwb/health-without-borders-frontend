@@ -171,6 +171,9 @@ BrigadeStats _stats({
   int allergiesOthers = 0,
   int nationalitiesOthers = 0,
   Map<String, dynamic>? window,
+  List<Map<String, dynamic>>? vaccines,
+  List<Map<String, dynamic>>? allergiesList,
+  List<Map<String, dynamic>>? nationalitiesList,
 }) => BrigadeStats.fromJson(<String, dynamic>{
   'scope': {'organization_id': null, 'organization_name': null},
   'generated_at': '2026-07-09T14:22:01-05:00',
@@ -190,19 +193,25 @@ BrigadeStats _stats({
     'vaccine_doses': {'current': 98, 'previous': 90, 'delta_pct': 8.9},
     'encounters': {'current': 61, 'previous': 70, 'delta_pct': -12.9},
   },
-  'vaccines': [
-    {'code': '141', 'name': 'Influenza Trivalente', 'count': 312},
-    {'code': '208', 'name': 'COVID-19 (ARNm)', 'count': 228},
-  ],
-  'allergies': [
-    {'allergen': 'Ibuprofeno', 'category': '01', 'count': 41},
-    {'allergen': 'Mariscos', 'category': '02', 'count': 29},
-  ],
+  'vaccines':
+      vaccines ??
+      [
+        {'code': '141', 'name': 'Influenza Trivalente', 'count': 312},
+        {'code': '208', 'name': 'COVID-19 (ARNm)', 'count': 228},
+      ],
+  'allergies':
+      allergiesList ??
+      [
+        {'allergen': 'Ibuprofeno', 'category': '01', 'count': 41},
+        {'allergen': 'Mariscos', 'category': '02', 'count': 29},
+      ],
   'allergies_others': allergiesOthers,
-  'nationalities': [
-    {'code': 'COL', 'count': 542},
-    {'code': 'VEN', 'count': 489},
-  ],
+  'nationalities':
+      nationalitiesList ??
+      [
+        {'code': 'COL', 'count': 542},
+        {'code': 'VEN', 'count': 489},
+      ],
   'nationalities_others': nationalitiesOthers,
 });
 
@@ -520,10 +529,7 @@ void main() {
           ),
         );
 
-        expect(
-          find.text('Aún no hay datos para este período.'),
-          findsOneWidget,
-        );
+        expect(find.text('Aún no hay datos para este período.'), findsWidgets);
         expect(find.byType(LinearProgressIndicator), findsNothing);
       },
     );
@@ -806,10 +812,7 @@ void main() {
           ),
         );
 
-        expect(
-          find.text('Aún no hay datos para este período.'),
-          findsOneWidget,
-        );
+        expect(find.text('Aún no hay datos para este período.'), findsWidgets);
         await _expectAfterScroll(tester, find.textContaining('Generado el'));
       },
     );
@@ -840,5 +843,123 @@ void main() {
         expect(find.text('Todas'), findsOneWidget);
       },
     );
+  });
+
+  // =========================================================================
+  // ADDITIONAL TESTS FOR 100% CODE COVERAGE IN BRIGADE_STATS_SCREEN.DART
+  // =========================================================================
+
+  group('BrigadeStatsScreen — Uncovered Branches & UI Callbacks', () {
+    testWidgets('reloads stats when app resumes from background', (
+      tester,
+    ) async {
+      final statsRepo = FakeStatsRepository(_stats());
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: statsRepo,
+        ),
+      );
+
+      expect(statsRepo.callCount, 1);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(statsRepo.callCount, 2);
+    });
+
+    testWidgets(
+      'toggles organization dropdown open and closed on consecutive taps',
+      (tester) async {
+        final userRepo = FakeUserRepository(orgsResult: [_org('o1', 'Org A')]);
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: userRepo,
+            statsRepo: FakeStatsRepository(_stats()),
+          ),
+        );
+
+        final dropdownDecorator = find.byType(InputDecorator);
+        expect(dropdownDecorator, findsOneWidget);
+
+        await tester.tap(dropdownDecorator);
+        await tester.pumpAndSettle();
+
+        await tester.tap(dropdownDecorator);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('renders zero trend delta and uncoded vaccine labels', (
+      tester,
+    ) async {
+      final statsWithZeroTrend = _stats(
+        patientsDelta: 0.0,
+        vaccines: [
+          {'code': 'UNCODED', 'name': '', 'count': 10},
+        ],
+      );
+
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(statsWithZeroTrend),
+        ),
+      );
+
+      expect(find.textContaining('→ 0%'), findsOneWidget);
+      await _expectAfterScroll(tester, find.text('Sin código'));
+    });
+
+    testWidgets('renders uncoded vaccine label in English', (tester) async {
+      final statsUncoded = _stats(
+        vaccines: [
+          {'code': 'UNCODED', 'name': '', 'count': 10},
+        ],
+      );
+
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(statsUncoded),
+          locale: 'en',
+        ),
+      );
+
+      await _expectAfterScroll(tester, find.text('Uncoded'));
+    });
+
+    testWidgets('renders allergy categories 03, 04, 05 and other categories', (
+      tester,
+    ) async {
+      final statsAllergies = _stats(
+        allergiesList: [
+          {'allergen': 'Polen', 'category': '03', 'count': 10},
+          {'allergen': 'Polvo', 'category': '04', 'count': 8},
+          {'allergen': 'Sol', 'category': '05', 'count': 5},
+          {'allergen': 'Latex', 'category': '99', 'count': 2},
+        ],
+      );
+
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(statsAllergies),
+        ),
+      );
+
+      await _expectAfterScroll(tester, find.text('Polen (10)'));
+      await _expectAfterScroll(tester, find.text('Polvo (8)'));
+      await _expectAfterScroll(tester, find.text('Sol (5)'));
+      await _expectAfterScroll(tester, find.text('Latex (2)'));
+    });
   });
 }

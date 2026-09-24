@@ -50,11 +50,17 @@ class _StubSync implements SyncEngine {
 }
 
 class _FakeRepo implements UserRepository {
-  _FakeRepo({Future<List<OrgSummary>> Function()? listOrgs, this.onCreateOrg})
-    : _listOrgs = listOrgs ?? (() async => []);
+  _FakeRepo({
+    Future<List<OrgSummary>> Function()? listOrgs,
+    this.onCreateOrg,
+    this.onSetOrgActive,
+    this.onDeleteOrg,
+  }) : _listOrgs = listOrgs ?? (() async => []);
 
   final Future<List<OrgSummary>> Function() _listOrgs;
   final Future<OrgSummary> Function(String)? onCreateOrg;
+  final Future<OrgSummary> Function(String, bool)? onSetOrgActive;
+  final Future<void> Function(String)? onDeleteOrg;
   int listCallCount = 0;
 
   @override
@@ -116,12 +122,14 @@ class _FakeRepo implements UserRepository {
   @override
   Future<OrgSummary> setOrganizationActive(String id, bool isActive) async {
     await Future<void>.delayed(const Duration(milliseconds: 10));
+    if (onSetOrgActive != null) return onSetOrgActive!(id, isActive);
     return OrgSummary(id: id, name: 'Org', isActive: isActive);
   }
 
   @override
   Future<void> deleteOrganization(String id) async {
     await Future<void>.delayed(const Duration(milliseconds: 10));
+    if (onDeleteOrg != null) await onDeleteOrg!(id);
   }
 
   @override
@@ -572,7 +580,6 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byIcon(Icons.visibility), findsOneWidget);
 
-      // Seteamos la contraseña válida final
       await t.enterText(fieldsStep2.at(2), 'passwordSeguro123');
       await t.pumpAndSettle();
 
@@ -749,4 +756,153 @@ void main() {
       },
     );
   });
+
+  group(
+    'ManageOrganizationsScreen — Toggle Active, Update Callback & Delete Error',
+    () {
+      testWidgets(
+        'toggles organization active status updating local card state and handles error',
+        (t) async {
+          configureMobileScreenSize(t);
+          var toggleError = false;
+
+          final repo = _FakeRepo(
+            listOrgs: () async => [_activa],
+            onSetOrgActive: (id, active) async {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+              if (toggleError)
+                throw ApiException('Error de estado', statusCode: 400);
+              return OrgSummary(id: id, name: 'Cruz Roja', isActive: active);
+            },
+          );
+
+          await t.pumpWidget(_build(repo));
+          await t.pumpAndSettle();
+
+          await t.tap(find.text('Cruz Roja'));
+          await t.pumpAndSettle();
+
+          final deactivateBtn = find.widgetWithText(
+            OutlinedButton,
+            'Desactivar',
+          );
+          await t.runAsync(() async {
+            await t.tap(deactivateBtn);
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          });
+          await t.pumpAndSettle();
+
+          expect(find.text('Reactivar'), findsOneWidget);
+
+          toggleError = true;
+          final reactivateBtn = find.widgetWithText(
+            OutlinedButton,
+            'Reactivar',
+          );
+          await t.runAsync(() async {
+            await t.tap(reactivateBtn);
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          });
+          await t.pumpAndSettle();
+
+          expect(find.text('Error de estado'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'disables delete button and displays notice when organization has patients',
+        (t) async {
+          configureMobileScreenSize(t);
+          const orgWithPatients = OrgSummary(
+            id: '1',
+            name: 'Cruz Roja',
+            isActive: true,
+            patientCount: 5,
+            userCount: 2,
+          );
+
+          final repo = _FakeRepo(listOrgs: () async => [orgWithPatients]);
+          await t.pumpWidget(_build(repo));
+          await t.pumpAndSettle();
+
+          await t.tap(find.text('Cruz Roja'));
+          await t.pumpAndSettle();
+
+          expect(
+            find.text(
+              'No puedes eliminar organizaciones con pacientes. Desactívala para retirarla.',
+            ),
+            findsOneWidget,
+          );
+
+          final deleteBtn = t.widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'Eliminar Organización'),
+          );
+          expect(deleteBtn.onPressed, isNull);
+        },
+      );
+
+      testWidgets(
+        'shows user cascade deletion notice in delete confirmation dialog when userCount > 0',
+        (t) async {
+          configureMobileScreenSize(t);
+          const orgWithUsers = OrgSummary(
+            id: '1',
+            name: 'Cruz Roja',
+            isActive: true,
+            patientCount: 0,
+            userCount: 3,
+          );
+
+          final repo = _FakeRepo(listOrgs: () async => [orgWithUsers]);
+          await t.pumpWidget(_build(repo));
+          await t.pumpAndSettle();
+
+          await t.tap(find.text('Cruz Roja'));
+          await t.pumpAndSettle();
+
+          final s = AppStrings.forTesting('es');
+          await t.tap(find.widgetWithText(OutlinedButton, s.orgDeleteButton));
+          await t.pumpAndSettle();
+
+          expect(
+            find.textContaining('Se eliminarán también sus usuarios.'),
+            findsOneWidget,
+          );
+        },
+      );
+
+      testWidgets(
+        'handles error when organization deletion fails with exception',
+        (t) async {
+          configureMobileScreenSize(t);
+          final repo = _FakeRepo(
+            listOrgs: () async => [_activa],
+            onDeleteOrg: (id) async {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+              throw Exception('Fallo genérico de red');
+            },
+          );
+
+          await t.pumpWidget(_build(repo));
+          await t.pumpAndSettle();
+
+          await t.tap(find.text('Cruz Roja'));
+          await t.pumpAndSettle();
+
+          final s = AppStrings.forTesting('es');
+          await t.tap(find.widgetWithText(OutlinedButton, s.orgDeleteButton));
+          await t.pumpAndSettle();
+
+          await t.runAsync(() async {
+            await t.tap(find.widgetWithText(TextButton, s.delete));
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          });
+          await t.pumpAndSettle();
+
+          expect(find.text('Exception: Fallo genérico de red'), findsOneWidget);
+        },
+      );
+    },
+  );
 }

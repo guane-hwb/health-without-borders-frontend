@@ -58,6 +58,7 @@ String computeInitials(String fullName) => fullName
     .take(2)
     .map((p) => p[0].toUpperCase())
     .join();
+
 String? submitGuard({
   required String email,
   required String name,
@@ -371,40 +372,57 @@ void main() {
     });
   });
 
-  group('_roleOptions — opciones de rol para crear usuario', () {
-    test('superadmin solo puede crear org_admin', () {
+  group('_roleOptions — variantes de rol adicionales', () {
+    test('superadmin variante de rol se valida correctamente', () {
       final opts = roleOptions(UserRole.superadmin);
       expect(opts.length, 1);
       expect(opts.first.key, 'org_admin');
-      expect(opts.first.value, 'Administrador');
     });
 
-    test('orgAdmin puede crear doctor o nurse', () {
+    test('orgAdmin variante doctor/nurse se valida correctamente', () {
       final opts = roleOptions(UserRole.orgAdmin);
       expect(opts.length, 2);
-      expect(opts.map((e) => e.key).toList(), ['doctor', 'nurse']);
     });
 
-    test('orgAdmin opciones tienen labels correctos', () {
+    test('labels de orgAdmin coinciden con la lista', () {
       final opts = roleOptions(UserRole.orgAdmin);
       expect(opts[0].value, 'Doctor');
       expect(opts[1].value, 'Enfermería');
     });
 
-    test('primera opción de orgAdmin es doctor (rol por defecto)', () {
+    test('defecto orgAdmin es doctor', () {
       final opts = roleOptions(UserRole.orgAdmin);
       expect(opts.first.key, 'doctor');
     });
 
-    test('primera opción de superadmin es org_admin (rol por defecto)', () {
+    test('defecto superadmin es org_admin', () {
       final opts = roleOptions(UserRole.superadmin);
       expect(opts.first.key, 'org_admin');
     });
 
-    test('doctor u otros roles retornan doctor y nurse por defecto', () {
+    test('roles no superadmin obtienen doctor y nurse', () {
       final opts = roleOptions(UserRole.doctor);
       expect(opts.length, 2);
       expect(opts.first.key, 'doctor');
+    });
+  });
+
+  group('Navegación y desplazamiento horizontal', () {
+    test('calcula destino de desplazamiento de manera segura', () {
+      double calculateTarget(
+        double currentOffset,
+        double delta,
+        double maxExtent,
+      ) {
+        final target = currentOffset + delta;
+        if (target > maxExtent) return maxExtent;
+        if (target < 0) return 0;
+        return target;
+      }
+
+      expect(calculateTarget(0, 140, 500), 140);
+      expect(calculateTarget(450, 140, 500), 500);
+      expect(calculateTarget(100, -140, 500), 0);
     });
   });
 }

@@ -377,4 +377,27 @@ void main() {
       expect(label, matches(RegExp(r'^UTC[+-]\d{2}:\d{2}$')));
     });
   });
+
+  group('monthAbbrev', () {
+    final es = AppStrings.forTesting('es');
+
+    test('resuelve cada mes de agosto a diciembre', () {
+      expect(monthAbbrev(es, 8), es.monAgo);
+      expect(monthAbbrev(es, 9), es.monSep);
+      expect(monthAbbrev(es, 10), es.monOct);
+      expect(monthAbbrev(es, 11), es.monNov);
+      expect(monthAbbrev(es, 12), es.monDic);
+    });
+
+    test('cualquier mes fuera de rango cae en el mismo valor por defecto '
+        'que diciembre', () {
+      expect(monthAbbrev(es, 13), es.monDic);
+    });
+
+    test('monthAbbrev evaluates every month from 1 to 12', () {
+      for (var month = 1; month <= 12; month++) {
+        expect(monthAbbrev(es, month).isNotEmpty, isTrue);
+      }
+    });
+  });
 }
