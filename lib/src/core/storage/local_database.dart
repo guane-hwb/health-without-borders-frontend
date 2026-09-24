@@ -602,8 +602,23 @@ class LocalDatabase {
     }
   }
 
+  static final RegExp _unpaddedBase64 = RegExp(r'^[A-Za-z0-9+/]{40,}$');
+
+  /// Whether [value] is what [_encryptAuditPayload] produces, as opposed to a
+  /// plaintext value stored before audit fields were encrypted.
+  ///
+  /// Checking only for "ey" or "=" missed every ciphertext whose byte length
+  /// is a multiple of 3 (no padding): about a third of them, e.g. any name of
+  /// 2, 5, 8… bytes. Those were uploaded still encrypted. A ciphertext is at
+  /// least nonce + MAC (28 bytes, 40 base64 chars); a name or a UUID in clear
+  /// has spaces or hyphens, or is shorter.
+  static bool _looksLikeAuditCiphertext(String value) =>
+      value.startsWith('ey') ||
+      value.contains('=') ||
+      (value.length % 4 == 0 && _unpaddedBase64.hasMatch(value));
+
   Future<String> _decryptAuditPayload(String cipherBase64) async {
-    if (!cipherBase64.startsWith('ey') && !cipherBase64.contains('=')) {
+    if (!_looksLikeAuditCiphertext(cipherBase64)) {
       return cipherBase64;
     }
 
@@ -995,6 +1010,17 @@ class LocalDatabase {
     }
   }
 
+  /// Unsynced break-glass entries.
+  ///
+  /// With [ownerUserId], only the entries that user may upload: their own,
+  /// plus the ownerless rows they recorded. Builds before the owner was set at
+  /// write time left every row ownerless, so none was ever uploaded and each
+  /// one blocked the next user's login. Such a row is adopted (its owner set)
+  /// when its decrypted actor is [ownerUserId], or when it has no actor at
+  /// all: a device only holds one user's pending data between wipes. A row
+  /// whose actor is someone else is left for that user to upload.
+  ///
+  /// Without [ownerUserId], every unsynced entry, untouched (review/export).
   Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs({
     String? ownerUserId,
   }) async {
@@ -1004,13 +1030,15 @@ class LocalDatabase {
               .where(
                 (Map<String, Object?> r) =>
                     (r['is_synced'] as num?)?.toInt() == 0 &&
-                    (ownerUserId == null || r['owner_user_id'] == ownerUserId),
+                    (ownerUserId == null ||
+                        r['owner_user_id'] == null ||
+                        r['owner_user_id'] == ownerUserId),
               )
               .toList()
         : await db.query(
             _emergencyLogTable,
             where: ownerUserId != null
-                ? 'is_synced = 0 AND owner_user_id = ?'
+                ? 'is_synced = 0 AND (owner_user_id = ? OR owner_user_id IS NULL)'
                 : 'is_synced = 0',
             whereArgs: ownerUserId != null ? [ownerUserId] : null,
           );
@@ -1018,34 +1046,60 @@ class LocalDatabase {
     final out = <Map<String, Object?>>[];
     for (final r in rows) {
       final mutable = Map<String, Object?>.from(r);
+      final int? id = (mutable['id'] as num?)?.toInt();
+      final uId = mutable['user_id'] as String?;
+      if (uId != null && uId.isNotEmpty) {
+        final decryptedUserId = await _decryptAuditPayload(uId);
+        if (decryptedUserId == '[CORRUPTED_KEY_MISSING]') {
+          throw AuditDecryptionException(id ?? 0);
+        }
+        mutable['user_id'] = decryptedUserId;
+      }
+      if (ownerUserId != null && mutable['owner_user_id'] == null) {
+        final actor = mutable['user_id'] as String?;
+        if (actor != null && actor.isNotEmpty && actor != ownerUserId) {
+          continue;
+        }
+        await _adoptEmergencyLog(id, ownerUserId);
+        mutable['owner_user_id'] = ownerUserId;
+      }
       final existingCid = mutable['client_event_id'] as String?;
       if (existingCid == null || existingCid.isEmpty) {
         final cid = const Uuid().v4();
         mutable['client_event_id'] = cid;
-        await _persistEmergencyClientEventId(
-          (mutable['id'] as num?)?.toInt(),
-          cid,
-        );
+        await _persistEmergencyClientEventId(id, cid);
       }
       final name = mutable['patient_name'] as String?;
       if (name != null && name.isNotEmpty) {
         final decryptedName = await _decryptAuditPayload(name);
         if (decryptedName == '[CORRUPTED_KEY_MISSING]') {
-          throw AuditDecryptionException((mutable['id'] as num?)?.toInt() ?? 0);
+          throw AuditDecryptionException(id ?? 0);
         }
         mutable['patient_name'] = decryptedName;
-      }
-      final uId = mutable['user_id'] as String?;
-      if (uId != null && uId.isNotEmpty) {
-        final decryptedUserId = await _decryptAuditPayload(uId);
-        if (decryptedUserId == '[CORRUPTED_KEY_MISSING]') {
-          throw AuditDecryptionException((mutable['id'] as num?)?.toInt() ?? 0);
-        }
-        mutable['user_id'] = decryptedUserId;
       }
       out.add(mutable);
     }
     return out;
+  }
+
+  Future<void> _adoptEmergencyLog(int? id, String ownerUserId) async {
+    if (id == null) return;
+    if (_isWeb) {
+      await _withWebLock(() async {
+        final row = await _webGetLogRow(id);
+        if (row == null || row['owner_user_id'] != null) return;
+        row['owner_user_id'] = ownerUserId;
+        await _webPutLogRow(id, row);
+      });
+      return;
+    }
+    final db = await _database;
+    await db?.update(
+      _emergencyLogTable,
+      <String, Object?>{'owner_user_id': ownerUserId},
+      where: 'id = ? AND owner_user_id IS NULL',
+      whereArgs: [id],
+    );
   }
 
   Future<int> getOrphanedEmergencyLogCount() async {

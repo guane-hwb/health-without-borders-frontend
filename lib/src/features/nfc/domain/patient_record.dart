@@ -7,6 +7,8 @@
 // Reference: Resolution 866/2021 & 1888/2025 (RDA elements)
 // =============================================================================
 
+import '../../../shared/country_display.dart';
+
 // ---------------------------------------------------------------------------
 // Equality helper — v2-modelos-sin-copywith-ni-equals (Hallazgo 24)
 //
@@ -232,7 +234,11 @@ class PatientInfo {
       firstName: json['firstName']?.toString() ?? '',
       secondName: json['secondName']?.toString(),
       dob: json['dob']?.toString() ?? '',
-      nationalityCode: json['nationalityCode']?.toString() ?? 'COL',
+      // Records saved by older builds may hold "OTHER"; read them as "UNK" so
+      // they show, edit and sync like the code the backend now stores.
+      nationalityCode: json['nationalityCode'] == null
+          ? 'COL'
+          : normalizeNationalityCode(json['nationalityCode'].toString()),
       nationalityName: json['nationalityName']?.toString(),
       biologicalSex: json['biologicalSex']?.toString() ?? 'I',
       genderIdentity: json['genderIdentity']?.toString(),
@@ -364,7 +370,7 @@ class PatientInfo {
     'firstName': firstName,
     if (secondName != null) 'secondName': secondName,
     'dob': dob,
-    'nationalityCode': nationalityCode,
+    'nationalityCode': normalizeNationalityCode(nationalityCode),
     if (nationalityName != null) 'nationalityName': nationalityName,
     'biologicalSex': biologicalSex,
     if (genderIdentity != null) 'genderIdentity': genderIdentity,

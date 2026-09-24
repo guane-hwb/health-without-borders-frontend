@@ -182,6 +182,8 @@ Widget _buildTestableWidget({
       patientUid: any(named: 'patientUid'),
       patientName: any(named: 'patientName'),
       userId: any(named: 'userId'),
+      ownerUserId: any(named: 'ownerUserId'),
+      organizationId: any(named: 'organizationId'),
     ),
   ).thenAnswer((_) async {});
 

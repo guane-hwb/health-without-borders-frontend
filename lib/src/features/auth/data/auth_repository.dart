@@ -149,6 +149,11 @@ class AuthRepository implements TokenProvider {
     if (lastUserId != null &&
         lastUserId.isNotEmpty &&
         lastUserId != fetchedSession.id) {
+      // Counted without an owner filter on purpose: clearAll() and
+      // destroyEncryptionKey() below erase whatever a filter would leave out.
+      // Every row counted here can still be uploaded by its own user — the
+      // sync selects owned rows and adopts the ownerless ones it recorded —
+      // so a block always has a way out that is not discarding data.
       final int pendingPatients = await _localDb.getUnsyncedCount();
       final int pendingEmergencyLogs = await _localDb
           .getUnsyncedEmergencyLogCount();

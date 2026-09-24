@@ -306,7 +306,6 @@ void main() {
   group('Vocabulario de nacionalidad', () {
     test('todos los códigos ofrecidos son alfa-3 de tres letras', () {
       for (final String code in kSupportedNationalityCodes) {
-        if (code == 'OTHER') continue;
         expect(
           RegExp(r'^[A-Z]{3}$').hasMatch(code),
           isTrue,
@@ -315,13 +314,15 @@ void main() {
       }
     });
 
-    test('no se ofrece el centinela UNK', () {
-      expect(kSupportedNationalityCodes, isNot(contains('UNK')));
+    test('«Otra / desconocida» se ofrece como UNK y nunca como OTHER', () {
+      // OTHER no cabe en la columna VARCHAR(3) del backend: el alta fallaba.
+      expect(kSupportedNationalityCodes, contains(kUnknownNationalityCode));
+      expect(kSupportedNationalityCodes, isNot(contains('OTHER')));
     });
 
     test('todo código offered tiene presentación en el catálogo', () {
       for (final String code in kSupportedNationalityCodes) {
-        if (code == 'OTHER') continue;
+        if (code == kUnknownNationalityCode) continue;
         expect(
           countryDisplay(code).flag,
           isNot('🌍'),
