@@ -265,15 +265,17 @@ void main() {
       expect(countryDisplay('PER').name(isEs: false), 'Peru');
     });
 
-    test('"UNK" reads as not recorded, which is not the same as "other"', () {
+    test('"UNK" reads as another or unknown nationality, not as the '
+        'aggregated others bucket', () {
       final unknown = countryDisplay('UNK');
-      expect(unknown.nameEs, 'Sin registrar');
-      expect(unknown.nameEn, 'Not recorded');
+      expect(unknown.nameEs, 'Otra / desconocida');
+      expect(unknown.nameEn, 'Other / unknown');
       expect(unknown.nameEs, isNot(othersDisplay.nameEs));
     });
 
-    test('an empty code reads as not recorded', () {
-      expect(countryDisplay('').nameEs, 'Sin registrar');
+    test('an empty code and the legacy "OTHER" read as UNK', () {
+      expect(countryDisplay('').nameEs, 'Otra / desconocida');
+      expect(countryDisplay('other').nameEs, 'Otra / desconocida');
     });
 
     test(
