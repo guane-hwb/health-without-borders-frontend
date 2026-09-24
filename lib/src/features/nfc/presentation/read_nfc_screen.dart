@@ -411,10 +411,15 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     if (triage == null) return;
 
     final scope = AppScope.of(context);
+    final user = scope.authRepository.currentUser;
+    // The owner is what the sync engine selects on: a row without one was
+    // never uploaded, and blocked the next user's login for good.
     await scope.localDatabase.logEmergencyAccess(
       patientUid: _patientDeviceUid ?? '',
       patientName: '${triage.firstName} ${triage.lastName}'.trim(),
-      userId: scope.authRepository.currentUser?.id,
+      userId: user?.id,
+      ownerUserId: user?.id,
+      organizationId: user?.organizationId,
     );
 
     final record = NfcGuardianPayload.reconstruct(

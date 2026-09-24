@@ -441,6 +441,97 @@ void main() {
       expect(pending.single['user_id'], isNull);
     });
 
+    group('dueño de los accesos de emergencia', () {
+      test('una fila con dueño se entrega a su dueño y a nadie más', () async {
+        await localDb.logEmergencyAccess(
+          patientUid: '04:OWN',
+          userId: 'user-a',
+          ownerUserId: 'user-a',
+          organizationId: 'org-a',
+        );
+
+        final forA = await localDb.pendingEmergencyAccessLogs(
+          ownerUserId: 'user-a',
+        );
+        expect(forA.single['patient_uid'], '04:OWN');
+        expect(forA.single['owner_user_id'], 'user-a');
+        expect(forA.single['organization_id'], 'org-a');
+
+        expect(
+          await localDb.pendingEmergencyAccessLogs(ownerUserId: 'user-b'),
+          isEmpty,
+        );
+      });
+
+      test('adopta una fila antigua sin dueño registrada por el usuario '
+          'actual, y luego la marca sincronizada', () async {
+        await localDb.logEmergencyAccess(
+          patientUid: '04:LEG',
+          userId: 'user-a',
+        );
+
+        final pending = await localDb.pendingEmergencyAccessLogs(
+          ownerUserId: 'user-a',
+        );
+        expect(pending.single['patient_uid'], '04:LEG');
+        expect(pending.single['owner_user_id'], 'user-a');
+
+        final raw = await rawConnection();
+        final stored = await raw.query('emergency_access_log');
+        expect(stored.single['owner_user_id'], 'user-a');
+
+        await localDb.markEmergencyLogsSynced([pending.single['id'] as int]);
+        expect(await localDb.getUnsyncedEmergencyLogCount(), equals(0));
+      });
+
+      test('adopta una fila sin dueño y sin actor', () async {
+        await localDb.logEmergencyAccess(patientUid: '04:NOACTOR');
+
+        final pending = await localDb.pendingEmergencyAccessLogs(
+          ownerUserId: 'user-a',
+        );
+        expect(pending.single['owner_user_id'], 'user-a');
+        expect(pending.single['user_id'], isNull);
+      });
+
+      test(
+        'no adopta una fila sin dueño registrada por otro usuario',
+        () async {
+          await localDb.logEmergencyAccess(
+            patientUid: '04:OTHER',
+            userId: 'user-c',
+          );
+
+          expect(
+            await localDb.pendingEmergencyAccessLogs(ownerUserId: 'user-a'),
+            isEmpty,
+          );
+          final raw = await rawConnection();
+          final stored = await raw.query('emergency_access_log');
+          expect(stored.single['owner_user_id'], isNull);
+
+          final forC = await localDb.pendingEmergencyAccessLogs(
+            ownerUserId: 'user-c',
+          );
+          expect(forC.single['patient_uid'], '04:OTHER');
+          expect(forC.single['owner_user_id'], 'user-c');
+        },
+      );
+
+      test('sin ownerUserId devuelve todo y no adopta nada', () async {
+        await localDb.logEmergencyAccess(
+          patientUid: '04:REVIEW',
+          userId: 'user-a',
+        );
+
+        final all = await localDb.pendingEmergencyAccessLogs();
+        expect(all.single['owner_user_id'], isNull);
+        final raw = await rawConnection();
+        final stored = await raw.query('emergency_access_log');
+        expect(stored.single['owner_user_id'], isNull);
+      });
+    });
+
     test(
       'getUnsyncedEmergencyLogCount cuenta solo entradas sin sincronizar',
       () async {
@@ -1153,6 +1244,39 @@ void main() {
         expect(pending.single['is_synced'], 0);
       },
     );
+
+    test('Web: adopta la fila sin dueño del usuario actual y deja la de '
+        'otro usuario', () async {
+      await localDb.logEmergencyAccess(
+        patientUid: '04:W-LEG',
+        userId: 'user-a',
+      );
+      await localDb.logEmergencyAccess(
+        patientUid: '04:W-OTHER',
+        userId: 'user-c',
+      );
+      await localDb.logEmergencyAccess(
+        patientUid: '04:W-OWN',
+        userId: 'user-a',
+        ownerUserId: 'user-a',
+        organizationId: 'org-a',
+      );
+
+      final forA = await localDb.pendingEmergencyAccessLogs(
+        ownerUserId: 'user-a',
+      );
+      expect(
+        forA.map((r) => r['patient_uid']).toSet(),
+        equals(<String>{'04:W-LEG', '04:W-OWN'}),
+      );
+      expect(forA.every((r) => r['owner_user_id'] == 'user-a'), isTrue);
+
+      final all = await localDb.pendingEmergencyAccessLogs();
+      final other = all.singleWhere((r) => r['patient_uid'] == '04:W-OTHER');
+      expect(other['owner_user_id'], isNull);
+      final legacy = all.singleWhere((r) => r['patient_uid'] == '04:W-LEG');
+      expect(legacy['owner_user_id'], 'user-a');
+    });
 
     test(
       'getUnsyncedEmergencyLogCount cuenta solo entradas sin sincronizar en Web',
@@ -2578,6 +2702,50 @@ void main() {
       );
     });
 
+    test('descifra un payload de auditoría sin relleno base64', () async {
+      final localDb = LocalDatabase.instance;
+      await localDb.clearAll();
+      final raw = await rawConnection();
+      await raw.delete('emergency_access_log');
+
+      // 5 and 8 bytes of plaintext + 28 of nonce/MAC = 33 and 36 bytes: a
+      // multiple of 3, so the base64 carries no "=" padding.
+      await localDb.logEmergencyAccess(
+        patientUid: '04:NOPAD',
+        patientName: 'Ana Ruiz',
+        userId: 'doc-1',
+      );
+      final stored = await raw.query('emergency_access_log');
+      expect(stored.single['user_id'], isNot(contains('=')));
+      expect(stored.single['patient_name'], isNot(contains('=')));
+
+      final pending = await localDb.pendingEmergencyAccessLogs();
+      expect(pending.single['user_id'], equals('doc-1'));
+      expect(pending.single['patient_name'], equals('Ana Ruiz'));
+    });
+
+    test('deja en claro un valor heredado que no es un ciphertext', () async {
+      final localDb = LocalDatabase.instance;
+      await localDb.clearAll();
+      final raw = await rawConnection();
+      await raw.delete('emergency_access_log');
+      await raw.insert('emergency_access_log', <String, Object?>{
+        'patient_uid': '04:PLAIN',
+        'patient_name': 'Ana Ruiz',
+        'user_id': '3f2c1a9e-1111-4222-8333-944455556666',
+        'reason': 'guardian_absent_offline',
+        'occurred_at': DateTime.now().toIso8601String(),
+        'is_synced': 0,
+      });
+
+      final pending = await localDb.pendingEmergencyAccessLogs();
+      expect(pending.single['patient_name'], equals('Ana Ruiz'));
+      expect(
+        pending.single['user_id'],
+        equals('3f2c1a9e-1111-4222-8333-944455556666'),
+      );
+    });
+
     test('lanza AuditDecryptionException si el payload de auditoría no es '
         'base64 válido', () async {
       final localDb = LocalDatabase.instance;
@@ -2623,10 +2791,17 @@ void main() {
         unorderedEquals(<String>['04:A', '04:B', '04:C']),
       );
 
+      // owner-A gets its own row plus the ownerless one with no actor,
+      // which it adopts; owner-B's row is never handed to it.
       final mine = await db.pendingEmergencyAccessLogs(ownerUserId: 'owner-A');
-      expect(mine, hasLength(1));
-      expect(mine.single['patient_uid'], equals('04:A'));
-      expect(mine.single['owner_user_id'], equals('owner-A'));
+      expect(
+        mine.map((Map<String, Object?> r) => r['patient_uid']),
+        unorderedEquals(<String>['04:A', '04:C']),
+      );
+      expect(mine.every((r) => r['owner_user_id'] == 'owner-A'), isTrue);
+      final own = mine.singleWhere((r) => r['patient_uid'] == '04:A');
+      expect(own['user_id'], equals('doc-1'));
+      expect(own['patient_name'], equals('Ana Pérez'));
 
       final none = await db.pendingEmergencyAccessLogs(
         ownerUserId: 'owner-inexistente',
@@ -2687,10 +2862,17 @@ void main() {
         unorderedEquals(<String>['04:NA', '04:NB', '04:NC']),
       );
 
+      // owner-A gets its own row plus the ownerless one with no actor,
+      // which it adopts; owner-B's row is never handed to it.
       final mine = await db.pendingEmergencyAccessLogs(ownerUserId: 'owner-A');
-      expect(mine, hasLength(1));
-      expect(mine.single['patient_uid'], equals('04:NA'));
-      expect(mine.single['owner_user_id'], equals('owner-A'));
+      expect(
+        mine.map((Map<String, Object?> r) => r['patient_uid']),
+        unorderedEquals(<String>['04:NA', '04:NC']),
+      );
+      expect(mine.every((r) => r['owner_user_id'] == 'owner-A'), isTrue);
+      final own = mine.singleWhere((r) => r['patient_uid'] == '04:NA');
+      expect(own['user_id'], equals('doc-1'));
+      expect(own['patient_name'], equals('Ana Pérez'));
 
       final none = await db.pendingEmergencyAccessLogs(
         ownerUserId: 'owner-inexistente',
