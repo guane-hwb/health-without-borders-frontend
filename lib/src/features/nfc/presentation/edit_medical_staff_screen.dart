@@ -1,6 +1,7 @@
 // lib/src/features/nfc/presentation/edit_medical_staff_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
@@ -92,6 +93,40 @@ class _EditMedicalStaffScreenState extends State<EditMedicalStaffScreen> {
     super.dispose();
   }
 
+  /// Same rules as a new consultation: no practitioner without a name, "0"
+  /// for a missing document. The name parts are only kept while the name is
+  /// unchanged — they would describe someone else after a rename.
+  PractitionerInfo? _editedPractitioner(
+    PractitionerInfo? previous,
+    String name,
+    String documentNumber,
+  ) {
+    if (name.isEmpty) return previous;
+    final String doc = documentNumber.isEmpty ? '0' : documentNumber;
+    if (previous != null && previous.name == name) {
+      return previous.copyWith(
+        documentType: _practDocType,
+        documentNumber: doc,
+      );
+    }
+    return PractitionerInfo(
+      documentType: _practDocType,
+      documentNumber: doc,
+      name: name,
+    );
+  }
+
+  ProviderInfo? _editedProvider(
+    ProviderInfo? previous,
+    String name,
+    String repsCode,
+  ) {
+    if (name.isEmpty) return previous;
+    final String reps = repsCode.isEmpty ? '0' : repsCode;
+    return previous?.copyWith(name: name, repsCode: reps) ??
+        ProviderInfo(repsCode: reps, name: name);
+  }
+
   Future<void> _save() async {
     final scope = AppScope.of(context);
     final user = scope.authRepository.currentUser;
@@ -107,16 +142,36 @@ class _EditMedicalStaffScreenState extends State<EditMedicalStaffScreen> {
         ? inputDate
         : (prevDate.isNotEmpty ? prevDate : DateTime.now().toIso8601String());
 
-    final newItem = MedicalHistoryItem(
-      startDateTime: effectiveDate,
-      type: lastItem?.type ?? '01',
-      physician: _practNameCtrl.text.trim(),
-      location: _providerNameCtrl.text.trim(),
-      careModality: _careModality,
-      diagnosisType: _diagnosisType,
-      dischargeDisposition: _dischargeDisposition,
-      clinicalEvaluation: lastItem?.clinicalEvaluation,
-    );
+    final String practName = _practNameCtrl.text.trim();
+    final String practDoc = _practDocNumberCtrl.text.trim();
+    final String provName = _providerNameCtrl.text.trim();
+    final String provReps = _providerRepsCodeCtrl.text.trim();
+
+    final MedicalHistoryItem newItem =
+        (lastItem ??
+                MedicalHistoryItem(
+                  encounterIdentifier: const Uuid().v4(),
+                  type: '01',
+                  startDateTime: effectiveDate,
+                ))
+            // Edit the visit in place: its encounterIdentifier is how the
+            // server recognises it, and a rebuilt item also dropped its
+            // diagnosis, notes, prescriptions and the structured practitioner
+            // and provider this form edits.
+            .copyWith(
+              startDateTime: effectiveDate,
+              physician: practName,
+              location: provName,
+              practitioner: _editedPractitioner(
+                lastItem?.practitioner,
+                practName,
+                practDoc,
+              ),
+              provider: _editedProvider(lastItem?.provider, provName, provReps),
+              careModality: _careModality,
+              diagnosisType: _diagnosisType,
+              dischargeDisposition: _dischargeDisposition,
+            );
 
     if (updatedHistory.isNotEmpty) {
       updatedHistory[updatedHistory.length - 1] = newItem;

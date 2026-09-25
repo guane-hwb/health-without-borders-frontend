@@ -1664,6 +1664,74 @@ class MedicalHistoryItem {
   final String? occupationDescription;
   final List<MedicationRequestItem> prescriptions;
 
+  /// Edits must go through here, not through a fresh constructor: a rebuilt
+  /// item lost its encounterIdentifier (so every re-sync looked like a new
+  /// visit to the server) and its diagnosis, prescriptions and codes.
+  MedicalHistoryItem copyWith({
+    String? encounterIdentifier,
+    String? type,
+    String? startDateTime,
+    String? endDateTime,
+    String? careModality,
+    String? serviceGroup,
+    String? careEnvironment,
+    String? entryRoute,
+    String? externalCause,
+    ProviderInfo? provider,
+    PractitionerInfo? practitioner,
+    String? location,
+    String? physician,
+    ClinicalEvaluation? clinicalEvaluation,
+    List<DiagnosisItem>? diagnosis,
+    String? diagnosisType,
+    String? dischargeDisposition,
+    List<RiskFactor>? riskFactors,
+    IncapacityInfo? incapacity,
+    PayerInfo? payer,
+    String? externalCauseDisplay,
+    String? healthcareServiceCode,
+    String? healthcareServiceDisplay,
+    String? cupsCode,
+    String? cupsDisplay,
+    String? occupation,
+    String? occupationDescription,
+    List<MedicationRequestItem>? prescriptions,
+  }) {
+    return MedicalHistoryItem(
+      encounterIdentifier: encounterIdentifier ?? this.encounterIdentifier,
+      type: type ?? this.type,
+      startDateTime: startDateTime ?? this.startDateTime,
+      endDateTime: endDateTime ?? this.endDateTime,
+      careModality: careModality ?? this.careModality,
+      serviceGroup: serviceGroup ?? this.serviceGroup,
+      careEnvironment: careEnvironment ?? this.careEnvironment,
+      entryRoute: entryRoute ?? this.entryRoute,
+      externalCause: externalCause ?? this.externalCause,
+      provider: provider ?? this.provider,
+      practitioner: practitioner ?? this.practitioner,
+      location: location ?? this.location,
+      physician: physician ?? this.physician,
+      clinicalEvaluation: clinicalEvaluation ?? this.clinicalEvaluation,
+      diagnosis: diagnosis ?? this.diagnosis,
+      diagnosisType: diagnosisType ?? this.diagnosisType,
+      dischargeDisposition: dischargeDisposition ?? this.dischargeDisposition,
+      riskFactors: riskFactors ?? this.riskFactors,
+      incapacity: incapacity ?? this.incapacity,
+      payer: payer ?? this.payer,
+      externalCauseDisplay: externalCauseDisplay ?? this.externalCauseDisplay,
+      healthcareServiceCode:
+          healthcareServiceCode ?? this.healthcareServiceCode,
+      healthcareServiceDisplay:
+          healthcareServiceDisplay ?? this.healthcareServiceDisplay,
+      cupsCode: cupsCode ?? this.cupsCode,
+      cupsDisplay: cupsDisplay ?? this.cupsDisplay,
+      occupation: occupation ?? this.occupation,
+      occupationDescription:
+          occupationDescription ?? this.occupationDescription,
+      prescriptions: prescriptions ?? this.prescriptions,
+    );
+  }
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     if (encounterIdentifier != null) 'encounterIdentifier': encounterIdentifier,
     'type': type,
