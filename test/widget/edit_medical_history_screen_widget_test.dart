@@ -21,6 +21,9 @@ import 'package:health_without_borders_frontend/src/features/nfc/presentation/ed
 // FAKES
 // -----------------------------------------------------------------------------
 
+/// The record the screen last saved through [FakeLocalDatabase].
+PatientFullRecord? lastSavedRecord;
+
 class FakeAuthRepository implements AuthRepository {
   FakeAuthRepository();
 
@@ -178,7 +181,9 @@ class FakeLocalDatabase implements LocalDatabase {
     String? ownerUserId,
     String? organizationId,
     String? retiredDeviceReason,
-  }) async {}
+  }) async {
+    lastSavedRecord = record;
+  }
 
   @override
   Future<NfcChipStatus?> getChipStatus(String patientId) async => null;
@@ -742,6 +747,57 @@ void main() {
 
       expect(find.byType(EditMedicalHistoryScreen), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Guardar edita la última consulta sin perder su '
+        'identificador, diagnóstico ni recetas', (tester) async {
+      lastSavedRecord = null;
+      final patient = emptyPatient().copyWith(
+        medicalHistory: <MedicalHistoryItem>[
+          MedicalHistoryItem(
+            encounterIdentifier: 'enc-1',
+            startDateTime: '2026-09-20T10:30:00',
+            cupsCode: '890201',
+            clinicalEvaluation: ClinicalEvaluation(
+              historyOfCurrentIllness: 'Tos',
+            ),
+            diagnosis: <DiagnosisItem>[
+              DiagnosisItem(icd10Code: 'J069', description: 'IRA'),
+            ],
+            prescriptions: <MedicationRequestItem>[
+              MedicationRequestItem(medicationName: 'Acetaminofén'),
+            ],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(buildSubject(patient));
+      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      final saved = lastSavedRecord!.medicalHistory;
+      expect(saved, hasLength(1));
+      expect(saved.single.encounterIdentifier, 'enc-1');
+      expect(saved.single.startDateTime, '2026-09-20T10:30:00');
+      expect(saved.single.cupsCode, '890201');
+      expect(saved.single.diagnosis.single.icd10Code, 'J069');
+      expect(saved.single.prescriptions.single.medicationName, 'Acetaminofén');
+    });
+
+    testWidgets('Guardar sin consultas crea una con identificador propio', (
+      tester,
+    ) async {
+      lastSavedRecord = null;
+      await tester.pumpWidget(buildSubject(emptyPatient()));
+      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      final saved = lastSavedRecord!.medicalHistory;
+      expect(saved, hasLength(1));
+      expect(saved.single.encounterIdentifier, isNotNull);
+      expect(saved.single.encounterIdentifier, isNotEmpty);
     });
 
     testWidgets('botón "Guardar" hace pop', (tester) async {

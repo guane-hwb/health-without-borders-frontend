@@ -743,6 +743,143 @@ void main() {
       },
     );
 
+    PatientFullRecord captureSaved() =>
+        verify(
+              () => mockDb.savePatient(
+                captureAny(),
+                ownerUserId: any(named: 'ownerUserId'),
+                organizationId: any(named: 'organizationId'),
+                retiredDeviceReason: any(named: 'retiredDeviceReason'),
+                isSynced: any(named: 'isSynced'),
+              ),
+            ).captured.single
+            as PatientFullRecord;
+
+    Future<void> tapSave(WidgetTester tester) async {
+      final saveBtn = find.text('Guardar');
+      await tester.ensureVisible(saveBtn);
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'Guardar conserva identificador, diagnóstico y notas de la consulta',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final p = _patient(
+          history: [
+            MedicalHistoryItem(
+              encounterIdentifier: 'enc-1',
+              startDateTime: '2024-06-01T09:00:00',
+              practitioner: _practitioner(),
+              provider: _provider(),
+              clinicalEvaluation: ClinicalEvaluation(
+                historyOfCurrentIllness: 'Fiebre',
+              ),
+              diagnosis: <DiagnosisItem>[
+                DiagnosisItem(icd10Code: 'R509', description: 'Fiebre'),
+              ],
+              cupsCode: '890201',
+            ),
+          ],
+        );
+        await tester.pumpWidget(_wrapWidget(patient: p));
+        await tester.pumpAndSettle();
+        await tapSave(tester);
+
+        final visit = captureSaved().medicalHistory.single;
+        expect(visit.encounterIdentifier, 'enc-1');
+        expect(visit.diagnosis.single.icd10Code, 'R509');
+        expect(visit.clinicalEvaluation.historyOfCurrentIllness, 'Fiebre');
+        expect(visit.cupsCode, '890201');
+        expect(visit.practitioner?.name, 'Dr. Ramírez');
+        expect(visit.practitioner?.documentNumber, '99999');
+        expect(visit.provider?.repsCode, 'REPS-01');
+      },
+    );
+
+    testWidgets(
+      'Guardar escribe en el profesional y la institución lo editado en el '
+      'formulario',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final p = _patient(
+          history: [
+            MedicalHistoryItem(
+              encounterIdentifier: 'enc-2',
+              startDateTime: '2024-06-01T09:00:00',
+              practitioner: PractitionerInfo(
+                documentType: 'CC',
+                documentNumber: '99999',
+                name: 'Dr. Ramírez',
+                firstName: 'Juan',
+                firstLastName: 'Ramírez',
+              ),
+              provider: ProviderInfo(
+                repsCode: 'REPS-01',
+                name: 'Clínica Central',
+                nitNumber: '900123',
+              ),
+            ),
+          ],
+        );
+        await tester.pumpWidget(_wrapWidget(patient: p));
+        await tester.pumpAndSettle();
+
+        final fields = find.byType(TextField);
+        await tester.enterText(fields.at(0), 'Dra. Pérez');
+        await tester.enterText(fields.at(1), '12345');
+        await tester.enterText(fields.at(2), 'Hospital Norte');
+        await tester.enterText(fields.at(3), 'REPS-02');
+        await tester.pumpAndSettle();
+        await tapSave(tester);
+
+        final visit = captureSaved().medicalHistory.single;
+        expect(visit.encounterIdentifier, 'enc-2');
+        expect(visit.practitioner?.name, 'Dra. Pérez');
+        expect(visit.practitioner?.documentNumber, '12345');
+        // The split name described the previous practitioner.
+        expect(visit.practitioner?.firstName, isNull);
+        expect(visit.practitioner?.firstLastName, isNull);
+        expect(visit.physician, 'Dra. Pérez');
+        expect(visit.provider?.name, 'Hospital Norte');
+        expect(visit.provider?.repsCode, 'REPS-02');
+        expect(visit.provider?.nitNumber, '900123');
+        expect(visit.location, 'Hospital Norte');
+      },
+    );
+
+    testWidgets('Guardar sin consultas crea una con identificador propio', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_wrapWidget(patient: _patient(history: [])));
+      await tester.pumpAndSettle();
+      await tapSave(tester);
+
+      final visit = captureSaved().medicalHistory.single;
+      expect(visit.encounterIdentifier, isNotNull);
+      expect(visit.encounterIdentifier, isNotEmpty);
+    });
+
     testWidgets(
       'Manejo defensivo de error al fallar la base de datos durante el guardado',
       (tester) async {

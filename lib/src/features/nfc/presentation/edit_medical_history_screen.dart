@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
@@ -98,23 +99,21 @@ class _EditMedicalHistoryScreenState extends State<EditMedicalHistoryScreen> {
       systemsExamination: _systemsExamCtrl.text.trim(),
     );
 
-    final String prevDate = lastItem?.startDateTime ?? '';
-    final String effectiveDate = prevDate.isNotEmpty
-        ? prevDate
-        : DateTime.now().toIso8601String();
-
-    final newItem = MedicalHistoryItem(
-      startDateTime: effectiveDate,
-      type: lastItem?.type ?? '01',
-      physician: lastItem?.physician,
-      location: lastItem?.location,
-      practitioner: lastItem?.practitioner,
-      provider: lastItem?.provider,
-      careModality: lastItem?.careModality ?? '01',
-      diagnosisType: lastItem?.diagnosisType ?? '01',
-      dischargeDisposition: lastItem?.dischargeDisposition,
-      clinicalEvaluation: newEval,
-    );
+    // Edit the visit in place: its encounterIdentifier is how the server
+    // recognises it, and a rebuilt item also dropped its diagnosis.
+    final MedicalHistoryItem newItem = lastItem == null
+        ? MedicalHistoryItem(
+            encounterIdentifier: const Uuid().v4(),
+            startDateTime: DateTime.now().toIso8601String(),
+            type: '01',
+            clinicalEvaluation: newEval,
+          )
+        : lastItem.copyWith(
+            startDateTime: lastItem.startDateTime.isEmpty
+                ? DateTime.now().toIso8601String()
+                : null,
+            clinicalEvaluation: newEval,
+          );
 
     if (updatedHistory.isNotEmpty) {
       updatedHistory[updatedHistory.length - 1] = newItem;
