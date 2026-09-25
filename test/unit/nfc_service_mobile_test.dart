@@ -394,6 +394,10 @@ void main() {
         expect(isAvailable, isA<bool>());
       },
     );
+
+    test('el constructor privado puede instanciarse sin lanzar', () {
+      expect(NfcService.debugInstantiatePrivateConstructor, returnsNormally);
+    });
   });
 
   group('NfcService.resetForTest', () {
