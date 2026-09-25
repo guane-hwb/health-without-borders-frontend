@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/utils/app_logger.dart';
+import '../../../core/utils/clinical_time.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
@@ -104,13 +105,13 @@ class _EditMedicalHistoryScreenState extends State<EditMedicalHistoryScreen> {
     final MedicalHistoryItem newItem = lastItem == null
         ? MedicalHistoryItem(
             encounterIdentifier: const Uuid().v4(),
-            startDateTime: DateTime.now().toIso8601String(),
+            startDateTime: toIso8601WithOffset(DateTime.now()),
             type: '01',
             clinicalEvaluation: newEval,
           )
         : lastItem.copyWith(
             startDateTime: lastItem.startDateTime.isEmpty
-                ? DateTime.now().toIso8601String()
+                ? toIso8601WithOffset(DateTime.now())
                 : null,
             clinicalEvaluation: newEval,
           );

@@ -3,6 +3,8 @@
 import 'dart:ui' show Offset;
 
 import 'package:uuid/uuid.dart';
+
+import '../../../core/utils/clinical_time.dart';
 import 'patient_record.dart';
 
 class RegisterDraft {
@@ -104,7 +106,7 @@ class RegisterDraft {
         consent: (guardianAuthAccepted == true)
             ? GuardianConsent(
                 accepted: true,
-                acceptedAt: DateTime.now().toIso8601String(),
+                acceptedAt: toIso8601WithOffset(DateTime.now()),
                 email: guardianEmail,
                 signatureBase64: guardianSignatureBase64,
               )
@@ -121,7 +123,7 @@ class RegisterDraft {
               consent: (guardian2AuthAccepted == true)
                   ? GuardianConsent(
                       accepted: true,
-                      acceptedAt: DateTime.now().toIso8601String(),
+                      acceptedAt: toIso8601WithOffset(DateTime.now()),
                       email: guardian2Email,
                       signatureBase64: guardian2SignatureBase64,
                     )

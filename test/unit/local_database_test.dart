@@ -379,7 +379,12 @@ void main() {
       expect(pending.single['user_id'], 'user-1');
       expect(pending.single['is_synced'], 0);
       expect(pending.single['reason'], 'guardian_absent_offline');
-      expect(pending.single['occurred_at'], isNotEmpty);
+      expect(
+        pending.single['occurred_at'],
+        matches(
+          RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$'),
+        ),
+      );
       expect(pending.single['client_event_id'], isNotEmpty);
     });
 

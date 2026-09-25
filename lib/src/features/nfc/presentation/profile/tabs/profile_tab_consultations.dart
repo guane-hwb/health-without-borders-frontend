@@ -137,7 +137,7 @@ class _ConsultationCard extends StatelessWidget {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
     try {
-      final dt = DateTime.parse(item.startDateTime);
+      final dt = DateTime.parse(item.startDateTime).toLocal();
       final d = [
         s.dayLun,
         s.dayMar,
@@ -175,7 +175,7 @@ class _ConsultationCard extends StatelessWidget {
   String _formattedTime(BuildContext context) {
     final s = AppStrings.of(context);
     try {
-      final dt = DateTime.parse(item.startDateTime);
+      final dt = DateTime.parse(item.startDateTime).toLocal();
       final h = dt.hour;
       final m = dt.minute.toString().padLeft(2, '0');
       final period = h < 12 ? s.timeAm : s.timePm;
@@ -502,7 +502,7 @@ class _ConsultationDetailScreen extends StatelessWidget {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
     try {
-      final d = DateTime.parse(dt);
+      final d = DateTime.parse(dt).toLocal();
       final timeStr = '${d.hour}:${d.minute.toString().padLeft(2, '0')}';
       if (isEs) {
         return '${d.day}/${d.month}/${d.year} $timeStr';

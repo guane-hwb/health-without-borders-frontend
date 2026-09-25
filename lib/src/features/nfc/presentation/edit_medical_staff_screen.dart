@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/utils/app_logger.dart';
+import '../../../core/utils/clinical_time.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/form_widgets.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
@@ -140,7 +141,9 @@ class _EditMedicalStaffScreenState extends State<EditMedicalStaffScreen> {
     final String inputDate = _dateCtrl.text.trim();
     final String effectiveDate = inputDate.isNotEmpty
         ? inputDate
-        : (prevDate.isNotEmpty ? prevDate : DateTime.now().toIso8601String());
+        : (prevDate.isNotEmpty
+              ? prevDate
+              : toIso8601WithOffset(DateTime.now()));
 
     final String practName = _practNameCtrl.text.trim();
     final String practDoc = _practDocNumberCtrl.text.trim();
