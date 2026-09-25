@@ -6,6 +6,7 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/nfc/nfc_service.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/utils/clinical_time.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
@@ -227,8 +228,10 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     final newConsultation = MedicalHistoryItem(
       encounterIdentifier: const Uuid().v4(),
       type: 'Consultation',
-      startDateTime: _startDateTime.toIso8601String(),
-      endDateTime: _endDateTime?.toIso8601String(),
+      startDateTime: toIso8601WithOffset(_startDateTime),
+      endDateTime: _endDateTime == null
+          ? null
+          : toIso8601WithOffset(_endDateTime!),
       careModality: _careModality,
       serviceGroup: _serviceGroup,
       careEnvironment: _careEnvironment,

@@ -14,6 +14,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
 import '../utils/app_logger.dart';
+import '../utils/clinical_time.dart';
 import 'web_storage.dart' as web_storage;
 
 const Set<int> kPermanentSyncErrorCodes = <int>{400, 409, 422};
@@ -985,7 +986,7 @@ class LocalDatabase {
           : await _encryptAuditPayload(patientName),
       'user_id': userId == null ? null : await _encryptAuditPayload(userId),
       'reason': reason,
-      'occurred_at': DateTime.now().toIso8601String(),
+      'occurred_at': toIso8601WithOffset(DateTime.now()),
       'is_synced': 0,
       'owner_user_id': ownerUserId,
       'organization_id': organizationId,

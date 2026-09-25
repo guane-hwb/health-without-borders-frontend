@@ -220,6 +220,27 @@ void main() {
       expect(find.textContaining('2:05'), findsOneWidget);
     });
 
+    testWidgets('una hora con desfase se muestra en la hora local', (
+      tester,
+    ) async {
+      final DateTime local = DateTime.utc(2024, 1, 10, 19, 5).toLocal();
+      final int h = local.hour == 0
+          ? 12
+          : (local.hour > 12 ? local.hour - 12 : local.hour);
+      final c = _makeConsultation(startDateTime: '2024-01-10T19:05:00+00:00');
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.textContaining('$h:05'), findsOneWidget);
+    });
+
     testWidgets('muestra 12:xx para medianoche (hora 0)', (tester) async {
       final c = _makeConsultation(startDateTime: '2024-01-10T00:20:00');
       await tester.pumpWidget(
@@ -780,6 +801,47 @@ void main() {
 
   // ── Grupo 12: Cobertura completa de _ConsultationDetailScreen ──────────────
   group('_ConsultationDetailScreen – Cobertura Absoluta', () {
+    testWidgets('inicio y fin con desfase se muestran en la hora local', (
+      tester,
+    ) async {
+      String expected(DateTime utc) {
+        final DateTime d = utc.toLocal();
+        return '${d.day}/${d.month}/${d.year} '
+            '${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+      }
+
+      final c = _makeConsultation(
+        startDateTime: '2024-06-15T15:00:00+00:00',
+        endDateTime: '2024-06-15T17:30:00+00:00',
+        clinicalEvaluation: ClinicalEvaluation(
+          historyOfCurrentIllness: 'Dolor abdominal',
+        ),
+      );
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+      await tester.tap(find.text('Dolor abdominal'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(expected(DateTime.utc(2024, 6, 15, 15)), skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          expected(DateTime.utc(2024, 6, 15, 17, 30)),
+          skipOffstage: false,
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets(
       'Navega al detalle y renderiza endDateTime, provider, practitioner, evaluation completa, diagnosis, discharge, riskFactors, incapacity, payer, entryRoute y externalCause',
       (tester) async {

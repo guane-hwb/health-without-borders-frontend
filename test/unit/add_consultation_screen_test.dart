@@ -1117,6 +1117,13 @@ void main() {
         expect(encounter.practitioner?.documentNumber, '102030');
         expect(encounter.provider?.name, 'Hospital Central');
         expect(encounter.provider?.repsCode, 'REPS-999');
+        // Local time with its offset: without one the RDA read it as UTC.
+        expect(
+          encounter.startDateTime,
+          matches(
+            RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$'),
+          ),
+        );
       },
     );
 

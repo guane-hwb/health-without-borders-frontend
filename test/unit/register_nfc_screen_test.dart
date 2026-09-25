@@ -186,6 +186,12 @@ void main() {
         ..guardianEmail = 'test@test.com';
       expect(draft.toRecord().guardianInfo.consent, isNotNull);
       expect(draft.toRecord().guardianInfo.consent!.accepted, isTrue);
+      expect(
+        draft.toRecord().guardianInfo.consent!.acceptedAt,
+        matches(
+          RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$'),
+        ),
+      );
     });
   });
 
