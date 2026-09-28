@@ -58,6 +58,12 @@ class FakeAuthRepository implements AuthRepository {
   @override
   UserSession? get currentUser => _session;
 
+  /// Set to a code to simulate a session ended by a deactivated account.
+  final ValueNotifier<String?> inactiveCode = ValueNotifier<String?>(null);
+
+  @override
+  ValueListenable<String?> get accountInactiveCode => inactiveCode;
+
   @override
   Future<UserSession?> getCurrentUser() async => _session;
 
@@ -159,6 +165,25 @@ void main() {
       expect(
         find.text('Sesión expirada. Inicie sesión nuevamente.'),
         findsOneWidget,
+      );
+    });
+
+    testWidgets('si la cuenta fue desactivada lo dice en lugar de "expirada"', (
+      tester,
+    ) async {
+      mockAuthRepo.inactiveCode.value = 'user_inactive';
+      await tester.pumpWidget(buildSubject(showSessionExpired: true));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.textContaining('Tu cuenta está desactivada'), findsOneWidget);
+      expect(
+        find.textContaining('Los registros pendientes se conservan'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Sesión expirada. Inicie sesión nuevamente.'),
+        findsNothing,
       );
     });
 
@@ -346,6 +371,34 @@ void main() {
 
       expect(find.byType(SnackBar), findsOneWidget);
       expect(find.textContaining('Credenciales'), findsOneWidget);
+    });
+
+    testWidgets('un rechazo con code muestra el mensaje traducido', (
+      tester,
+    ) async {
+      mockAuthRepo.loginHandler =
+          ({required String email, required String password}) async {
+            throw ApiException(
+              'Organization is inactive.',
+              statusCode: 401,
+              code: 'organization_inactive',
+            );
+          };
+
+      await tester.pumpWidget(buildSubject());
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
+      await tester.enterText(find.byType(TextFormField).last, 'password123');
+      await tester.tap(find.byType(ElevatedButton));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Tu organización está desactivada'),
+        findsOneWidget,
+      );
+      expect(find.text('Organization is inactive.'), findsNothing);
     });
 
     testWidgets('muestra SnackBar generico para errores inesperados', (

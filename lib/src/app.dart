@@ -68,6 +68,8 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _apiClient.tokenProvider = _authRepository;
+    _apiClient.onAccountInactive = (String code) =>
+        unawaited(_authRepository.handleAccountInactive(code));
     _authRepository.onSessionInvalidated = _syncEngine.stop;
     _authRepository.sessionExpired.addListener(_onSessionExpired);
 

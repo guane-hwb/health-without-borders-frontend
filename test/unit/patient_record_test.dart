@@ -1306,6 +1306,23 @@ void main() {
       expect(r.status, '');
       expect(r.internalId, '');
       expect(r.message, '');
+      expect(r.conflicts, isEmpty);
+    });
+
+    test('fromJson — lee los conflicts que el servidor no aplicó', () {
+      final r = PatientSyncResponse.fromJson(<String, dynamic>{
+        'status': 'success',
+        'internal_id': 'int-001',
+        'message': 'ok',
+        'conflicts': <String>[
+          'stale_payload_retired_device_uid',
+          'guardians_not_changed_by_tag_resolved_sync',
+        ],
+      });
+      expect(r.conflicts, <String>[
+        'stale_payload_retired_device_uid',
+        'guardians_not_changed_by_tag_resolved_sync',
+      ]);
     });
   });
 

@@ -48,6 +48,9 @@ class _NullApiClient implements ApiClient {
   set tokenProvider(TokenProvider? _) {}
 
   @override
+  set onAccountInactive(void Function(String code)? _) {}
+
+  @override
   Future<Map<String, dynamic>> getJson({
     required String path,
     Map<String, String>? headers,
