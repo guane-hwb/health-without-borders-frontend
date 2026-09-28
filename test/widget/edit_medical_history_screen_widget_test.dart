@@ -53,8 +53,7 @@ class FakeAuthRepository implements AuthRepository {
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
-  ValueListenable<bool> get sessionWindowClosed =>
-      ValueNotifier<bool>(false);
+  ValueListenable<bool> get sessionWindowClosed => ValueNotifier<bool>(false);
 
   @override
   Future<Null> getNfcKeyring() async => null;
@@ -814,6 +813,34 @@ void main() {
 
       expect(find.byType(EditMedicalHistoryScreen), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Cobertura explícita — dispose y _save', () {
+    testWidgets('dispose no lanza excepción al remover la pantalla del árbol', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject(emptyPatient()));
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Guardar obtiene el AppScope del context y guarda sin lanzar', (
+      tester,
+    ) async {
+      lastSavedRecord = null;
+      await tester.pumpWidget(buildSubject(emptyPatient()));
+      await tester.pumpAndSettle();
+
+      await tapVisible(tester, find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(lastSavedRecord, isNotNull);
     });
   });
 }

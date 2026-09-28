@@ -698,6 +698,187 @@ void main() {
 
         expect(find.text(_s.save), findsOneWidget);
       });
+
+      testWidgets(
+        'peso fuera de rango bloquea el guardado y muestra el snackbar',
+        (tester) async {
+          final dbMock = MockLocalDatabase();
+          final syncMock = MockSyncEngine();
+          await tester.pumpWidget(
+            _wrap(
+              EditPatientScreen(patient: _makeRecord()),
+              dbMock: dbMock,
+              syncMock: syncMock,
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final weightField = find.widgetWithText(TextField, '58.0');
+          await tester.tap(weightField);
+          await tester.pumpAndSettle();
+          await tester.enterText(weightField, '999');
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.save));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.text('Peso fuera de rango (0.5 - 250 kg)'),
+            findsOneWidget,
+          );
+          verifyNever(() => dbMock.savePatient(any<PatientFullRecord>()));
+        },
+      );
+
+      testWidgets(
+        'talla fuera de rango bloquea el guardado y muestra el snackbar',
+        (tester) async {
+          final dbMock = MockLocalDatabase();
+          final syncMock = MockSyncEngine();
+          await tester.pumpWidget(
+            _wrap(
+              EditPatientScreen(patient: _makeRecord()),
+              dbMock: dbMock,
+              syncMock: syncMock,
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final heightField = find.widgetWithText(TextField, '162.0');
+          await tester.tap(heightField);
+          await tester.pumpAndSettle();
+          await tester.enterText(heightField, '999');
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.save));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.text('Talla fuera de rango (20 - 220 cm)'),
+            findsOneWidget,
+          );
+          verifyNever(() => dbMock.savePatient(any<PatientFullRecord>()));
+        },
+      );
+
+      testWidgets(
+        'guardar con peso y talla vacíos conserva los valores originales',
+        (tester) async {
+          final dbMock = MockLocalDatabase();
+          final syncMock = MockSyncEngine();
+          await tester.pumpWidget(
+            _wrap(
+              EditPatientScreen(
+                patient: _makeRecord(weight: 58.0, height: 162.0),
+              ),
+              dbMock: dbMock,
+              syncMock: syncMock,
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final weightField = find.widgetWithText(TextField, '58.0');
+          await tester.tap(weightField);
+          await tester.pumpAndSettle();
+          await tester.enterText(weightField, '');
+          await tester.pumpAndSettle();
+
+          final heightField = find.widgetWithText(TextField, '162.0');
+          await tester.tap(heightField);
+          await tester.pumpAndSettle();
+          await tester.enterText(heightField, '');
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.save));
+          await tester.pumpAndSettle();
+
+          final saved =
+              verify(() => dbMock.savePatient(captureAny())).captured.single
+                  as PatientFullRecord;
+
+          expect(saved.patientInfo.weight, 58.0);
+          expect(saved.patientInfo.height, 162.0);
+        },
+      );
+
+      testWidgets('guardar con la calle vacía conserva la calle original', (
+        tester,
+      ) async {
+        final dbMock = MockLocalDatabase();
+        final syncMock = MockSyncEngine();
+        await tester.pumpWidget(
+          _wrap(
+            EditPatientScreen(patient: _makeRecord(street: 'Calle 10 #20-30')),
+            dbMock: dbMock,
+            syncMock: syncMock,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final streetField = find.widgetWithText(TextField, 'Calle 10 #20-30');
+        await tester.tap(streetField);
+        await tester.pumpAndSettle();
+        await tester.enterText(streetField, '');
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        final saved =
+            verify(() => dbMock.savePatient(captureAny())).captured.single
+                as PatientFullRecord;
+
+        expect(saved.patientInfo.address.street, 'Calle 10 #20-30');
+      });
+
+      testWidgets(
+        'si falla el guardado muestra el snackbar de error y no hace pop',
+        (tester) async {
+          final spy = _PopSpy();
+          final dbMock = MockLocalDatabase();
+          final syncMock = MockSyncEngine();
+
+          await _pumpViaRoute(
+            tester,
+            _makeRecord(),
+            spy,
+            dbMock: dbMock,
+            syncMock: syncMock,
+          );
+
+          when(
+            () => dbMock.savePatient(any<PatientFullRecord>()),
+          ).thenThrow(Exception('fallo simulado de base de datos'));
+
+          // 3. Disparamos la acción de guardar
+          await tester.tap(find.byIcon(Icons.save));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(SnackBar), findsOneWidget);
+
+          final snackBarWidget = tester.widget<SnackBar>(find.byType(SnackBar));
+          final contentText = snackBarWidget.content as Text;
+          expect(contentText.data, contains('Error'));
+
+          expect(spy.didPopCalled, isFalse);
+
+          expect(find.byIcon(Icons.save), findsOneWidget);
+          expect(find.byType(CircularProgressIndicator), findsNothing);
+        },
+      );
+
+      testWidgets(
+        'el botón de retorno del header superior dispara Navigator.pop',
+        (tester) async {
+          final spy = _PopSpy();
+          await _pumpViaRoute(tester, _makeRecord(), spy);
+
+          await tester.tap(find.byIcon(Icons.arrow_back));
+          await tester.pumpAndSettle();
+
+          expect(spy.didPopCalled, isTrue);
+        },
+      );
     },
   );
 

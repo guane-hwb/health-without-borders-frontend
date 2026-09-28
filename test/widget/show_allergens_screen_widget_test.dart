@@ -126,7 +126,6 @@ void main() {
     ) async {
       final patient = _makeMockPatient(allergies: []);
 
-      /// Wrap the navigation flow within the testable widget to maintain localization context on pushed routes.
       await tester.pumpWidget(
         _buildTestableWidget(
           Scaffold(
@@ -154,6 +153,25 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Ir a Alérgenos'), findsOneWidget);
+    });
+
+    testWidgets('Debe ejecutar el onPressed del botón flotante de agregar sin '
+        'lanzar excepciones ni navegar', (tester) async {
+      final patient = _makeMockPatient(allergies: []);
+
+      await tester.pumpWidget(
+        _buildTestableWidget(ShowAllergensScreen(patient: patient)),
+      );
+      await tester.pumpAndSettle();
+
+      final fab = find.byType(FloatingActionButton);
+      expect(fab, findsOneWidget);
+
+      await tester.tap(fab);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(ShowAllergensScreen), findsOneWidget);
     });
   });
 }

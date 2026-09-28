@@ -110,10 +110,8 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => PatientProfileScreen(
-            patient: patient,
-            allowReassign: true,
-          ),
+          builder: (_) =>
+              PatientProfileScreen(patient: patient, allowReassign: true),
         ),
       );
     } on ApiException catch (e) {
