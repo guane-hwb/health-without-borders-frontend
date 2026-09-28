@@ -903,10 +903,84 @@ void main() {
         await tester.pumpWidget(_wrapWidget(patient: _patient()));
         await tester.pumpAndSettle();
 
-        final saveBtn = find.text('Guardar');
+        final saveBtn = find.widgetWithIcon(ElevatedButton, Icons.save);
         await tester.ensureVisible(saveBtn);
         await tester.tap(saveBtn);
         await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+      },
+    );
+    testWidgets(
+      'El dropdown de tipo de diagnóstico actualiza el estado al cambiar',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_wrapWidget(patient: _patient()));
+        await tester.pumpAndSettle();
+
+        final diagnosisDropdown = find.text('Impresión diagnóstica');
+        await tester.ensureVisible(diagnosisDropdown);
+        await tester.tap(diagnosisDropdown);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Confirmado nuevo').last);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Confirmado nuevo'), findsOneWidget);
+        expect(find.text('Impresión diagnóstica'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'InitState resuelve dischargeDisposition desde un valor válido previo',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final p = _patient(history: [_encounter(dischargeDisposition: '01')]);
+        await tester.pumpWidget(_wrapWidget(patient: p));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Alta voluntaria'), findsOneWidget);
+        expect(find.text('Alta médica'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Guardar crea un ProviderInfo nuevo cuando no existía institución previa',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final p = _patient(
+          history: [_encounter(provider: null, location: null)],
+        );
+        await tester.pumpWidget(_wrapWidget(patient: p));
+        await tester.pumpAndSettle();
+
+        final fields = find.byType(TextField);
+        await tester.enterText(fields.at(2), 'Hospital Nuevo');
+        await tester.enterText(fields.at(3), 'REPS-99');
+        await tester.pumpAndSettle();
+        await tapSave(tester);
+
+        final visit = captureSaved().medicalHistory.single;
+        expect(visit.provider, isNotNull);
+        expect(visit.provider?.name, 'Hospital Nuevo');
+        expect(visit.provider?.repsCode, 'REPS-99');
       },
     );
   });

@@ -231,5 +231,90 @@ void main() {
         expect(find.text(s.syncFailed), findsNothing);
       },
     );
+
+    testWidgets(
+      'onSync returning false (without throwing) shows the generic sync-failed '
+      'message',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () =>
+                    showNfcSaveFlow(context, onSync: () async => false),
+                child: const Text('Abrir Flujo'),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Abrir Flujo'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text(s.startWriting));
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.error_outline), findsOneWidget);
+        expect(find.text(s.syncFailed), findsOneWidget);
+        expect(
+          find.text(
+            'No se pudo completar la sincronización o regrabación del chip.',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'Success Flow: tapping "Ir al inicio" pops the sheet and returns to the '
+      'first route',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (innerContext) => Scaffold(
+                      body: Builder(
+                        builder: (sheetContext) => ElevatedButton(
+                          onPressed: () => showNfcSaveFlow(
+                            sheetContext,
+                            onSync: () async => true,
+                          ),
+                          child: const Text('Abrir Flujo'),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('Ir a detalle'),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('Ir a detalle'), findsOneWidget);
+
+        await tester.tap(find.text('Ir a detalle'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Abrir Flujo'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text(s.startWriting));
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(find.text(s.goHome), findsOneWidget);
+
+        await tester.tap(find.text(s.goHome));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Ir a detalle'), findsOneWidget);
+        expect(find.text('Abrir Flujo'), findsNothing);
+      },
+    );
   });
 }

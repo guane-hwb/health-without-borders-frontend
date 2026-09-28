@@ -19,16 +19,19 @@ Widget _wrap() => AppLocale(
   child: const MaterialApp(home: BrigadeHistoryScreen()),
 );
 
-PatientFullRecord _createMockPatient() {
+PatientFullRecord _createMockPatient({
+  String id = '1234-5678',
+  String name = 'Juan',
+}) {
   return PatientFullRecord(
-    patientId: '1234-5678',
+    patientId: id,
     deviceUid: 'NFC-999-ABC',
     patientInfo: PatientInfo(
       identification: PatientIdentification(
         documentType: 'CC',
         documentNumber: '1000200300',
       ),
-      firstName: 'Juan',
+      firstName: name,
       secondName: 'Carlos',
       firstLastName: 'Pérez',
       secondLastName: 'Gómez',
@@ -206,7 +209,7 @@ void main() {
     });
   });
 
-  // ── Group 5: _PatientRow
+  // ── Group 5: _PatientRow ──────────────────────────────────────────────────
   group('_PatientRow — íconos según estado con Datos Reales', () {
     testWidgets('renderiza datos de paciente y maneja estado pending', (
       tester,
@@ -353,4 +356,60 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
     });
   });
+
+  group(
+    'BrigadeHistoryScreen — Cobertura adicional (Navegación y Separadores)',
+    () {
+      testWidgets('botón de volver en el header desapila la pantalla', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          AppLocale(
+            locale: 'es',
+            setLocale: (_) {},
+            child: MaterialApp(
+              home: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BrigadeHistoryScreen(),
+                    ),
+                  ),
+                  child: const Text('Abrir historial'),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Abrir historial'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BrigadeHistoryScreen), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BrigadeHistoryScreen), findsNothing);
+
+        await tester.pump(const Duration(seconds: 6));
+      });
+
+      testWidgets('renderiza separador Divider entre múltiples pacientes', (
+        tester,
+      ) async {
+        BrigadeHistoryScreen.debugPatients = [
+          _createMockPatient(id: '1', name: 'Ana'),
+          _createMockPatient(id: '2', name: 'Carlos'),
+        ];
+
+        await tester.pumpWidget(_wrap());
+        await tester.pump();
+
+        expect(find.byType(Divider), findsOneWidget);
+
+        await tester.pump(const Duration(seconds: 6));
+      });
+    },
+  );
 }

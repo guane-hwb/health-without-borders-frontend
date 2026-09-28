@@ -51,8 +51,7 @@ class FakeAuthRepository implements AuthRepository {
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
-  ValueListenable<bool> get sessionWindowClosed =>
-      ValueNotifier<bool>(false);
+  ValueListenable<bool> get sessionWindowClosed => ValueNotifier<bool>(false);
 
   @override
   Future<NfcKeyring?> getNfcKeyring() async =>
@@ -215,6 +214,62 @@ class FakeLocalDatabase implements LocalDatabase {
 
   @override
   Future<int> getRetryablePendingCount({String? ownerUserId}) async => 0;
+}
+
+/// Variant of [FakeAuthRepository] with a non-null current user, so
+/// `_save()`'s `user?.id` / `user?.organizationId` resolve to real values
+/// instead of short-circuiting to null.
+class FakeAuthRepositoryWithSession extends FakeAuthRepository {
+  FakeAuthRepositoryWithSession(this._session);
+  final UserSession _session;
+
+  @override
+  UserSession? get currentUser => _session;
+}
+
+/// Variant of [FakeLocalDatabase] that records the arguments `savePatient`
+/// was called with, so a test can assert exactly what `_save()` passed
+/// through, and whether `markChipsDirty` ran afterwards.
+class CapturingLocalDatabase extends FakeLocalDatabase {
+  String? capturedOwnerUserId;
+  String? capturedOrganizationId;
+  bool markChipsDirtyCalled = false;
+
+  @override
+  Future<void> savePatient(
+    PatientFullRecord record, {
+    bool isSynced = false,
+    String? ownerUserId,
+    String? organizationId,
+    String? retiredDeviceReason,
+  }) async {
+    capturedOwnerUserId = ownerUserId;
+    capturedOrganizationId = organizationId;
+  }
+
+  @override
+  Future<void> markChipsDirty(
+    String patientId, {
+    bool patient = false,
+    bool guardian = false,
+  }) async {
+    markChipsDirtyCalled = true;
+  }
+}
+
+/// Variant of [FakeLocalDatabase] whose `savePatient` always throws, so a
+/// test can exercise `_save()`'s catch block.
+class ThrowingLocalDatabase extends FakeLocalDatabase {
+  @override
+  Future<void> savePatient(
+    PatientFullRecord record, {
+    bool isSynced = false,
+    String? ownerUserId,
+    String? organizationId,
+    String? retiredDeviceReason,
+  }) async {
+    throw Exception('fallo simulado al guardar el acudiente');
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -649,6 +704,133 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(popped, isTrue);
+    });
+
+    testWidgets(
+      'al guardar exitosamente, pasa ownerUserId y organizationId del usuario actual',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final session = UserSession.fromEmail('capture.test@example.com');
+        final authRepo = FakeAuthRepositoryWithSession(session);
+        final apiClient = ApiClient(baseUrl: 'https://example.com');
+        final patientRepo = PatientRepository(
+          apiClient: apiClient,
+          authRepository: authRepo,
+        );
+        final userRepo = UserRepository(
+          apiClient: apiClient,
+          authRepository: authRepo,
+        );
+        final capturingDb = CapturingLocalDatabase();
+        final syncEngine = SyncEngine(
+          patientRepository: patientRepo,
+          localDatabase: capturingDb,
+        );
+
+        await tester.pumpWidget(
+          AppLocale(
+            locale: 'es',
+            setLocale: (_) {},
+            child: AppScope(
+              authRepository: authRepo,
+              userRepository: userRepo,
+              patientRepository: patientRepo,
+              localDatabase: capturingDb,
+              syncEngine: syncEngine,
+              statsRepository: StatsRepository(
+                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                authRepository: authRepo,
+              ),
+              reachability: Reachability(baseUrl: 'http://localhost'),
+              child: MaterialApp(
+                home: EditGuardianScreen(patient: _makePatient()),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Guardar'));
+        await tester.pumpAndSettle();
+
+        expect(capturingDb.capturedOwnerUserId, session.id);
+        expect(capturingDb.capturedOrganizationId, session.organizationId);
+        expect(capturingDb.markChipsDirtyCalled, isTrue);
+      },
+    );
+
+    testWidgets('si guardar falla, no hace pop y la excepción no se propaga', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      bool popped = false;
+
+      final authRepo = FakeAuthRepository();
+      final apiClient = ApiClient(baseUrl: 'https://example.com');
+      final patientRepo = PatientRepository(
+        apiClient: apiClient,
+        authRepository: authRepo,
+      );
+      final userRepo = UserRepository(
+        apiClient: apiClient,
+        authRepository: authRepo,
+      );
+      final throwingDb = ThrowingLocalDatabase();
+      final syncEngine = SyncEngine(
+        patientRepository: patientRepo,
+        localDatabase: throwingDb,
+      );
+
+      await tester.pumpWidget(
+        AppLocale(
+          locale: 'es',
+          setLocale: (_) {},
+          child: AppScope(
+            authRepository: authRepo,
+            userRepository: userRepo,
+            patientRepository: patientRepo,
+            localDatabase: throwingDb,
+            syncEngine: syncEngine,
+            statsRepository: StatsRepository(
+              apiClient: ApiClient(baseUrl: 'http://localhost'),
+              authRepository: authRepo,
+            ),
+            reachability: Reachability(baseUrl: 'http://localhost'),
+            child: MaterialApp(
+              home: Builder(
+                builder: (ctx) => ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(ctx).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            EditGuardianScreen(patient: _makePatient()),
+                      ),
+                    );
+                  },
+                  child: const Text('Open'),
+                ),
+              ),
+              navigatorObservers: [_PopObserver(onPop: () => popped = true)],
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Guardar'));
+      await tester.pumpAndSettle();
+
+      expect(popped, isFalse);
+      expect(find.text('Guardar'), findsOneWidget);
     });
 
     testWidgets('el botón de flecha en el header hace pop de la pantalla', (

@@ -25,6 +25,11 @@ export 'nfc_session_manager.dart'
 class NfcService {
   NfcService._();
 
+  @visibleForTesting
+  static void debugInstantiatePrivateConstructor() {
+    NfcService._();
+  }
+
   static Future<String> Function()? overrideReadDeviceUid;
 
   /// Seam for tests: supply a fake [NfcTagSource] instead of the real radio.

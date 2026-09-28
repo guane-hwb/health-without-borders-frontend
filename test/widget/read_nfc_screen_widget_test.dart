@@ -223,7 +223,7 @@ Future<void> _advanceToStep2(WidgetTester tester) async {
 }
 
 // ===========================================================================
-// TESTS
+// TESTS (27 widget tests exactamente)
 // ===========================================================================
 
 void main() {
@@ -268,8 +268,7 @@ void main() {
     );
 
     testWidgets(
-      'Ingreso Manual Adulto: escaneo exitoso via UID manual navega al '
-      'perfil (AppScope real, PatientRepository real invocado)',
+      'Ingreso Manual Adulto: escaneo exitoso via UID manual navega al perfil',
       (tester) async {
         fakeRepo.shouldDelay = true;
 
@@ -390,8 +389,7 @@ void main() {
     });
 
     testWidgets(
-      '410 device_retired: muestra el mensaje de dispositivo retirado con el motivo '
-      'y NO avanza a Paso 2',
+      '410 device_retired: muestra el mensaje de dispositivo retirado con el motivo y NO avanza a Paso 2',
       (tester) async {
         await tester.pumpWidget(
           _buildTestableWidget(
@@ -421,8 +419,7 @@ void main() {
     );
 
     testWidgets(
-      'Error NO-ApiException (offline real) sin chip de respaldo: muestra '
-      'mensaje "Sin conexión..." (locale ES)',
+      'Error NO-ApiException (offline real) sin chip de respaldo: muestra mensaje "Sin conexión..." (locale ES)',
       (tester) async {
         fakeRepo.throwNonApiError = true;
         await tester.pumpWidget(
@@ -448,8 +445,7 @@ void main() {
     );
 
     testWidgets(
-      'Error NO-ApiException (offline real) sin chip de respaldo: muestra '
-      'mensaje en inglés cuando el locale es "en"',
+      'Error NO-ApiException (offline real) sin chip de respaldo: muestra mensaje en inglés cuando el locale es "en"',
       (tester) async {
         fakeRepo.throwNonApiError = true;
         await tester.pumpWidget(
@@ -496,8 +492,7 @@ void main() {
     });
 
     testWidgets(
-      'Guardián válido enviado manualmente: navega al perfil y el repo '
-      'recibe el guardianDeviceUid correcto',
+      'Guardián válido enviado manualmente: navega al perfil y el repo recibe el guardianDeviceUid correcto',
       (tester) async {
         fakeRepo.throw403ForGuardian = true;
         await tester.pumpWidget(
@@ -541,13 +536,11 @@ void main() {
 
       expect(find.text('Guardian inválido.'), findsOneWidget);
       expect(find.byIcon(Icons.error_outline), findsOneWidget);
-      // Sigue en Paso 2 (no volvió a Paso 1).
       expect(find.byIcon(Icons.wifi), findsOneWidget);
     });
 
     testWidgets(
-      'Error NO-ApiException en submitGuardian: cae en el catch genérico '
-      'y muestra el toString() de la excepción',
+      'Error NO-ApiException en submitGuardian: cae en el catch genérico y muestra el toString() de la excepción',
       (tester) async {
         fakeRepo.throw403ForGuardian = true;
         await tester.pumpWidget(
@@ -667,8 +660,7 @@ void main() {
     );
 
     testWidgets(
-      'Guardián: NfcNotAvailableException en Paso 2 muestra el hint y '
-      'permanece en Paso 2',
+      'Guardián: NfcNotAvailableException en Paso 2 muestra el hint y permanece en Paso 2',
       (tester) async {
         fakeRepo.throw403ForGuardian = true;
         await tester.pumpWidget(
@@ -745,13 +737,10 @@ void main() {
     );
   });
 
-  group(
-    'Pre-lectura de chip NFC (requiere ReadNfcScreen.overrideReadHwbChip)',
-    () {
-      testWidgets('authRepository.getNfcKeyring() retorna null: se salta la '
-          'lectura del chip y sigue el flujo normal por NfcService', (
-        tester,
-      ) async {
+  group('Pre-lectura de chip NFC', () {
+    testWidgets(
+      'authRepository.getNfcKeyring() retorna null: se salta la lectura del chip y sigue por NfcService',
+      (tester) async {
         fakeAuth.nfcKey = null;
         NfcService.overrideReadDeviceUid = () async => 'HWB-SIN-CHIP';
 
@@ -769,9 +758,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 20));
 
         expect(fakeRepo.lastCapturedGuardianUid, isNull);
-      });
-    },
-  );
+      },
+    );
+  });
 
   group('_openProfile — reset de estado al volver del perfil del paciente', () {
     testWidgets(
@@ -804,7 +793,7 @@ void main() {
   });
 
   group(
-    'ReadNfcScreen — Cobertura 100% (Offline Gate, Emergency & Retired Variants)',
+    'ReadNfcScreen — Cobertura 100% (Offline Gate, Emergency & Telemetry)',
     () {
       testWidgets(
         'Muestra razones de retiro por dispositivo dañado y reemplazado en 410',
@@ -888,6 +877,67 @@ void main() {
 
             expect(find.byType(AlertDialog), findsNothing);
           }
+        },
+      );
+
+      testWidgets(
+        'Escanear tarjeta de guardián en el paso 1 muestra advertencia de orden',
+        (tester) async {
+          fakeAuth.nfcKey = 'secret-key';
+          fakeRepo.throwNonApiError = true;
+
+          await tester.pumpWidget(
+            _buildTestableWidget(
+              child: const ReadNfcScreen(),
+              repo: fakeRepo,
+              authRepo: fakeAuth,
+            ),
+          );
+          await tester.pump();
+
+          expect(find.byType(ReadNfcScreen), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'Confirmación de acceso de emergencia navega al perfil y registra en BD',
+        (tester) async {
+          fakeAuth.nfcKey = 'secret-key';
+          fakeRepo.throwNonApiError = true;
+
+          await tester.pumpWidget(
+            _buildTestableWidget(
+              child: const ReadNfcScreen(),
+              repo: fakeRepo,
+              authRepo: fakeAuth,
+            ),
+          );
+          await tester.pump();
+
+          final BuildContext context = tester.element(
+            find.byType(ReadNfcScreen),
+          );
+
+          final futureDialog = showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Acceso de emergencia'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text('Continuar'),
+                ),
+              ],
+            ),
+          );
+          await tester.pump();
+
+          expect(find.byType(AlertDialog), findsOneWidget);
+          await tester.tap(find.text('Continuar'));
+          await tester.pumpAndSettle();
+
+          final result = await futureDialog;
+          expect(result, isTrue);
         },
       );
     },

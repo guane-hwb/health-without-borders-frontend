@@ -1196,6 +1196,75 @@ void main() {
         );
       },
     );
+
+    Future<void> pumpEditorFlow(
+      WidgetTester tester,
+      PatientFullRecord initial,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      await tester.pumpWidget(
+        _wrapFullScope(
+          Builder(
+            builder: (ctx) => TextButton(
+              onPressed: () => Navigator.of(ctx).push<PatientFullRecord>(
+                MaterialPageRoute(
+                  builder: (_) => ReadNfcGuardianScreen(patient: initial),
+                ),
+              ),
+              child: const Text('OpenScreen'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('OpenScreen'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'editor de Acudiente (_pushEditor) actualiza el estado al devolver un registro',
+      (tester) async {
+        await pumpEditorFlow(tester, _record());
+
+        final editBtn = find.byIcon(Icons.edit).last;
+        await tester.ensureVisible(editBtn);
+        await tester.tap(editBtn);
+        await tester.pumpAndSettle();
+
+        tester
+            .state<NavigatorState>(find.byType(Navigator).last)
+            .pop(_record(sex: 'M'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Masculino'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'editor de Historial médico (_pushEditor) actualiza el estado al devolver un registro',
+      (tester) async {
+        await pumpEditorFlow(tester, _record());
+
+        await tester.tap(find.text(_s.medicalHistory).first);
+        await tester.pumpAndSettle();
+
+        final editBtn = find.byIcon(Icons.edit).last;
+        await tester.ensureVisible(editBtn);
+        await tester.tap(editBtn);
+        await tester.pumpAndSettle();
+
+        tester
+            .state<NavigatorState>(find.byType(Navigator).last)
+            .pop(_record(sex: 'M'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Masculino'), findsOneWidget);
+      },
+    );
   });
 }
 

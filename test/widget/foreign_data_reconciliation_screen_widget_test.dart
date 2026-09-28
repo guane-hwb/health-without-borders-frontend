@@ -413,5 +413,44 @@ void main() {
         expect(find.byType(ForeignDataReconciliationScreen), findsNothing);
       },
     );
+
+    testWidgets(
+      'al volver de la pantalla de exportación se restablece _isWorking y se '
+      'reactivan los botones',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+
+        when(
+          () => mockAuthRepository.pendingForeignRecordsForReview(),
+        ).thenAnswer((_) async => []);
+
+        when(
+          () => mockAuthRepository.pendingForeignEmergencyLogsForReview(),
+        ).thenAnswer((_) async => []);
+
+        await tester.pumpWidget(buildTestableWidget());
+
+        await tester.tap(find.text('Exportar / revisar antes de decidir'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Revisión de datos pendientes'), findsOneWidget);
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ForeignDataReconciliationScreen), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+
+        final exportButton = tester.widget<OutlinedButton>(
+          find.ancestor(
+            of: find.text('Exportar / revisar antes de decidir'),
+            matching: find.byType(OutlinedButton),
+          ),
+        );
+        expect(exportButton.onPressed, isNotNull);
+      },
+    );
   });
 }

@@ -26,9 +26,7 @@ import 'nfc_guardian_alias.dart';
 import 'nfc_triage_payload.dart';
 
 /// Builds and reconstructs the guardian NFC payload (bounded full record).
-class NfcGuardianPayload {
-  NfcGuardianPayload._();
-
+abstract final class NfcGuardianPayload {
   /// Default number of most-recent consultations stored on the guardian card.
   static const int kDefaultMaxConsultations = 3;
 

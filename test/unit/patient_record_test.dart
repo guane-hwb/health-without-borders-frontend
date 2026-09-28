@@ -1354,6 +1354,10 @@ void main() {
       expect(copy.city, 'Medellín');
       expect(copy.state, 'DC');
       expect(copy.street, 'Calle 2');
+
+      final copyNoArgs = original.copyWith();
+      expect(copyNoArgs.street, original.street);
+      expect(copyNoArgs.city, original.city);
     });
 
     test('operator == y hashCode reconocen instancias iguales y distintas', () {
@@ -1377,6 +1381,9 @@ void main() {
 
       expect(copy.documentType, 'CC');
       expect(copy.documentNumber, '456');
+
+      final copyNoArgs = original.copyWith();
+      expect(copyNoArgs.documentNumber, original.documentNumber);
     });
 
     test('operator == y hashCode', () {
@@ -1410,6 +1417,10 @@ void main() {
       expect(copy.accepted, isTrue);
       expect(copy.acceptedAt, '2026-01-01');
       expect(copy.email, 'padre@mail.com');
+
+      final copyNoArgs = original.copyWith();
+      expect(copyNoArgs.accepted, original.accepted);
+      expect(copyNoArgs.email, original.email);
     });
 
     test('operator == y hashCode', () {
@@ -1443,6 +1454,9 @@ void main() {
       expect(copy.name, 'Pedro');
       expect(copy.phone, '456');
       expect(copy.deviceUid, 'DEV-1');
+
+      final copyNoArgs = original.copyWith();
+      expect(copyNoArgs.deviceUid, original.deviceUid);
     });
 
     test('operator == y hashCode', () {
@@ -1475,6 +1489,9 @@ void main() {
       expect(copy.conditionCie10Code, 'I10');
       expect(copy.conditionDescription, 'HTA');
 
+      final copyNoArgs = item.copyWith();
+      expect(copyNoArgs.conditionCie10Code, item.conditionCie10Code);
+
       final item2 = FamilyHistoryItem(
         conditionDescription: 'HTA',
         relationship: '01',
@@ -1491,6 +1508,9 @@ void main() {
 
       expect(copy.chronicCie10Code, 'J45');
 
+      final copyNoArgs = item.copyWith();
+      expect(copyNoArgs.chronicCie10Code, item.chronicCie10Code);
+
       final item2 = ChronicConditionItem(chronicDescription: 'Asma');
       expect(item, equals(item2));
       expect(item.hashCode, equals(item2.hashCode));
@@ -1503,6 +1523,9 @@ void main() {
       final copy = item.copyWith(dosage: '400mg');
 
       expect(copy.dosage, '400mg');
+
+      final copyNoArgs = item.copyWith();
+      expect(copyNoArgs.dosage, item.dosage);
 
       final item2 = MedicationStatementItem(medicationName: 'Ibuprofeno');
       expect(item, equals(item2));
@@ -1518,6 +1541,9 @@ void main() {
       expect(copy.personalHistory, 'Ninguno');
       expect(copy.familyHistoryNotes, 'Notas');
 
+      final copyNoArgs = bh.copyWith();
+      expect(copyNoArgs.familyHistoryNotes, bh.familyHistoryNotes);
+
       final bh2 = BackgroundHistory(personalHistory: 'Ninguno');
       expect(bh, equals(bh2));
       expect(bh.hashCode, equals(bh2.hashCode));
@@ -1530,6 +1556,9 @@ void main() {
       final copy = allergy.copyWith(notes: 'Leve');
 
       expect(copy.notes, 'Leve');
+
+      final copyNoArgs = allergy.copyWith();
+      expect(copyNoArgs.notes, allergy.notes);
 
       final allergy2 = AllergyInfo(category: '01', allergen: 'Polen');
       expect(allergy, equals(allergy2));
@@ -1550,6 +1579,9 @@ void main() {
       final copy = v.copyWith(dose: 2);
 
       expect(copy.dose, 2);
+
+      final copyNoArgs = v.copyWith();
+      expect(copyNoArgs.dose, v.dose);
 
       final v2 = VaccinationRecordItem(
         date: '2026-01-01',
@@ -1572,6 +1604,12 @@ void main() {
       expect(copy.historyOfCurrentIllness, 'Fiebre');
       expect(copy.generalPhysicalExamination, 'Normal');
 
+      final copyNoArgs = ce.copyWith();
+      expect(
+        copyNoArgs.generalPhysicalExamination,
+        ce.generalPhysicalExamination,
+      );
+
       final ce2 = ClinicalEvaluation(historyOfCurrentIllness: 'Fiebre');
       expect(ce, equals(ce2));
       expect(ce.hashCode, equals(ce2.hashCode));
@@ -1584,6 +1622,9 @@ void main() {
       final copy = diag.copyWith(icd11Code: '1A00');
 
       expect(copy.icd11Code, '1A00');
+
+      final copyNoArgs = diag.copyWith();
+      expect(copyNoArgs.icd11Code, diag.icd11Code);
 
       final diag2 = DiagnosisItem(icd10Code: 'A00', description: 'Cólera');
       expect(diag, equals(diag2));
@@ -1612,6 +1653,10 @@ void main() {
 
       expect(copy.days, 10);
       expect(copy.maternityLeaveDays, 84);
+
+      final copyNoArgs = inc.copyWith();
+      expect(copyNoArgs.days, inc.days);
+      expect(copyNoArgs.maternityLeaveDays, inc.maternityLeaveDays);
 
       final inc2 = IncapacityInfo(scope: '01', days: 5);
       expect(inc, equals(inc2));
@@ -1693,6 +1738,9 @@ void main() {
 
       final copy = item.copyWith(dosage: '1000mg');
       expect(copy.dosage, '1000mg');
+
+      final copyNoArgs = item.copyWith();
+      expect(copyNoArgs.dosage, item.dosage);
 
       final item2 = MedicationRequestItem.fromJson(json);
       expect(item, equals(item2));
