@@ -40,8 +40,18 @@ class MockReachability extends Mock implements Reachability {}
 /// screen assigns internally (mocktail mocks do not persist plain
 /// property assignments unless explicitly stubbed with `when()`).
 class SpySyncEngine extends MockSyncEngine {
+  void Function(String patientId, bool success, String? error)? _onRecordSynced;
+
   @override
-  void Function(String patientId, bool success, String? error)? onRecordSynced;
+  void Function(String patientId, bool success, String? error)?
+  get onRecordSynced => _onRecordSynced;
+
+  @override
+  set onRecordSynced(
+    void Function(String patientId, bool success, String? error)? callback,
+  ) {
+    _onRecordSynced = callback;
+  }
 }
 
 LocalPatientEntry makeEntry({
