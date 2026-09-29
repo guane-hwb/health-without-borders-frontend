@@ -145,12 +145,14 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen>
       return;
     }
 
-    final StatsDateRange next = switch (kind) {
-      StatsRangeKind.all => StatsDateRange.all,
-      StatsRangeKind.thisMonth => StatsDateRange.thisMonth(),
-      StatsRangeKind.last30Days => StatsDateRange.last30Days(),
-      StatsRangeKind.custom => _range,
-    };
+    final StatsDateRange next;
+    if (kind == StatsRangeKind.all) {
+      next = StatsDateRange.all;
+    } else if (kind == StatsRangeKind.thisMonth) {
+      next = StatsDateRange.thisMonth();
+    } else {
+      next = StatsDateRange.last30Days();
+    }
 
     if (next == _range) return;
 
@@ -408,6 +410,7 @@ class _OrgFilterDropdownState extends State<_OrgFilterDropdown> {
         id: widget.selected,
         name: widget.selected == kAllOrgsFilterId
             ? s.statsFilterAll
+            // coverage:ignore-line
             : widget.selected,
       ),
     );

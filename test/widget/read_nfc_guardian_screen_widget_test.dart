@@ -9,6 +9,7 @@ import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
@@ -1265,6 +1266,202 @@ void main() {
         expect(find.textContaining('Masculino'), findsOneWidget);
       },
     );
+  });
+
+  group('ReadNfcGuardianScreen – _syncPatient: cobertura del regrabado', () {
+    const validHexKey =
+        'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+    Future<void> pumpScreen(
+      WidgetTester tester, {
+      required PatientFullRecord patient,
+    }) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        _wrapFullScope(ReadNfcGuardianScreen(patient: patient)),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> tapSync(WidgetTester tester) async {
+      final syncBtn = find.text('Actualizar paciente');
+      await tester.ensureVisible(syncBtn);
+      await tester.tap(syncBtn);
+    }
+
+    testWidgets(
+      'un keyring sin versión actual (canWrite=false) también bloquea la '
+      'escritura, sin depender de que sea null',
+      (tester) async {
+        await pumpScreen(tester, patient: _record());
+
+        when(
+          () => mockDb.getChipStatus(any()),
+        ).thenAnswer((_) async => FakeNfcChipStatus(patientChipDirty: true));
+        when(() => mockAuth.getNfcKeyring()).thenAnswer(
+          (_) async => NfcKeyring(keys: {0: validHexKey}, currentVersion: null),
+        );
+        when(
+          () => mockAuth.isNfcSessionExpired(),
+        ).thenAnswer((_) async => false);
+
+        await tapSync(tester);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(
+          find.textContaining('No hay clave NFC disponible'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'un keyring con material de llave corrupto hace fallar la construcción '
+      'del codec, se registra el error y se avisa al usuario',
+      (tester) async {
+        await pumpScreen(tester, patient: _record());
+
+        when(
+          () => mockDb.getChipStatus(any()),
+        ).thenAnswer((_) async => FakeNfcChipStatus(patientChipDirty: true));
+        when(
+          () => mockAuth.getNfcKeyring(),
+        ).thenAnswer((_) async => NfcKeyring.single('abcd'));
+
+        await tapSync(tester);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(
+          find.textContaining('La clave NFC no es válida'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'con la pulsera del paciente pendiente, abre la hoja guiada y "Omitir" '
+      'reporta que no se pudo regrabar',
+      (tester) async {
+        await pumpScreen(tester, patient: _record());
+
+        when(() => mockDb.getChipStatus(any())).thenAnswer(
+          (_) async => FakeNfcChipStatus(
+            patientChipDirty: true,
+            guardianChipDirty: false,
+          ),
+        );
+        when(
+          () => mockAuth.getNfcKeyring(),
+        ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
+
+        await tapSync(tester);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Pulsera del paciente'), findsOneWidget);
+
+        await tester.tap(find.text('Omitir'));
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(
+          find.textContaining('No se pudo regrabar la pulsera del paciente'),
+          findsOneWidget,
+        );
+        verifyNever(
+          () => mockDb.clearChipsDirty(
+            any(),
+            patient: any(named: 'patient'),
+            guardian: any(named: 'guardian'),
+          ),
+        );
+      },
+    );
+
+    testWidgets(
+      'con el acudiente pendiente pero sin chip asociado, muestra el error '
+      'correspondiente sin abrir ninguna hoja NFC',
+      (tester) async {
+        await pumpScreen(tester, patient: _record(guardianDeviceUid: null));
+
+        when(() => mockDb.getChipStatus(any())).thenAnswer(
+          (_) async => FakeNfcChipStatus(
+            patientChipDirty: false,
+            guardianChipDirty: true,
+          ),
+        );
+        when(
+          () => mockAuth.getNfcKeyring(),
+        ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
+
+        await tapSync(tester);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(
+          find.textContaining('El acudiente no tiene un chip asociado'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('con la tarjeta del acudiente pendiente, abre la hoja guiada y '
+        '"Omitir" reporta que no se pudo regrabar', (tester) async {
+      await pumpScreen(
+        tester,
+        patient: _record(guardianDeviceUid: 'GUARDIAN:UID01'),
+      );
+
+      when(() => mockDb.getChipStatus(any())).thenAnswer(
+        (_) async =>
+            FakeNfcChipStatus(patientChipDirty: false, guardianChipDirty: true),
+      );
+      when(
+        () => mockAuth.getNfcKeyring(),
+      ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
+
+      await tapSync(tester);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Tarjeta del acudiente'), findsOneWidget);
+
+      await tester.tap(find.text('Omitir'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.textContaining('No se pudo regrabar la tarjeta del acudiente'),
+        findsOneWidget,
+      );
+      verifyNever(
+        () => mockDb.clearChipsDirty(
+          any(),
+          patient: any(named: 'patient'),
+          guardian: any(named: 'guardian'),
+        ),
+      );
+    });
+
+    testWidgets('sin chips pendientes de regrabar, va directo al flujo de '
+        'sincronización con el backend', (tester) async {
+      await pumpScreen(tester, patient: _record());
+
+      await tapSync(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.text(_s.putOnWristband), findsOneWidget);
+    });
   });
 }
 

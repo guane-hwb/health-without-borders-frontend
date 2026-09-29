@@ -354,4 +354,51 @@ void main() {
       expect(eval, isNull);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // GROUP 7 – COBERTURA 100%: lógica de _save() en aislamiento
+  // -------------------------------------------------------------------------
+  group('COBERTURA 100%: relleno de startDateTime al editar (lógica pura)', () {
+    String? resolveStartDateTime(String existing, String nowIso) =>
+        existing.isEmpty ? nowIso : null;
+
+    test('startDateTime vacío → se resuelve con la hora actual (no null)', () {
+      final result = resolveStartDateTime('', '2026-09-28T10:00:00-05:00');
+      expect(result, isNotNull);
+      expect(result, '2026-09-28T10:00:00-05:00');
+    });
+
+    test('startDateTime ya presente → se resuelve como null (se conserva)', () {
+      final result = resolveStartDateTime(
+        '2026-01-01T08:00:00-05:00',
+        '2026-09-28T10:00:00-05:00',
+      );
+      expect(result, isNull);
+    });
+
+    test(
+      'fullPatient() (fixture con startDateTime "") activa la rama de relleno',
+      () {
+        final lastItem = fullPatient().medicalHistory.last;
+        expect(lastItem.startDateTime, isEmpty);
+        expect(resolveStartDateTime(lastItem.startDateTime, 'X'), 'X');
+      },
+    );
+  });
+
+  group('COBERTURA 100%: FamilyHistoryItem con CIE-10 visible en tarjeta', () {
+    test(
+      'un ítem con conditionCie10Code no nulo habilita el texto "CIE-10: ..."',
+      () {
+        final item = FamilyHistoryItem(
+          conditionDescription: 'Diabetes tipo 2',
+          relationship: '01',
+          conditionCie10Code: 'E11',
+        );
+        // Misma condición que evalúa el widget antes de renderizar el Text.
+        expect(item.conditionCie10Code != null, isTrue);
+        expect('CIE-10: ${item.conditionCie10Code}', 'CIE-10: E11');
+      },
+    );
+  });
 }

@@ -983,5 +983,49 @@ void main() {
         expect(visit.provider?.repsCode, 'REPS-99');
       },
     );
+
+    testWidgets(
+      'Guardar registra el error en el logger si falla el guardado, sin '
+      'propagar la excepción',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final p = _patient(history: [_encounter()]);
+        final widget = _wrapWidget(patient: p);
+
+        when(
+          () => mockDb.savePatient(
+            any(),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+            isSynced: any(named: 'isSynced'),
+          ),
+        ).thenThrow(Exception('disco lleno'));
+
+        await tester.pumpWidget(widget);
+        await tester.pumpAndSettle();
+
+        final saveBtn = find.text('Guardar');
+        await tester.ensureVisible(saveBtn);
+        await tester.tap(saveBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(EditMedicalStaffScreen), findsOneWidget);
+
+        verifyNever(
+          () => mockDb.markChipsDirty(
+            any(),
+            patient: any(named: 'patient'),
+            guardian: any(named: 'guardian'),
+          ),
+        );
+      },
+    );
   });
 }

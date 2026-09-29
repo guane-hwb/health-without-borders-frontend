@@ -440,15 +440,15 @@ class _ActionCard extends StatelessWidget {
     required this.iconBg,
     required this.iconColor,
     required this.title,
+    required this.subtitle,
     required this.onTap,
-    this.subtitle,
   });
 
   final IconData icon;
   final Color iconBg;
   final Color iconColor;
   final String title;
-  final String? subtitle;
+  final String subtitle;
   final VoidCallback onTap;
 
   @override
@@ -487,36 +487,27 @@ class _ActionCard extends StatelessWidget {
               ),
               const SizedBox(width: 14),
               Expanded(
-                child: subtitle != null
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            subtitle!,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      )
-                    : Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
                       ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const Icon(
                 Icons.chevron_right_rounded,

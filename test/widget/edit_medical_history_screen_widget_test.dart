@@ -24,6 +24,11 @@ import 'package:health_without_borders_frontend/src/features/nfc/presentation/ed
 /// The record the screen last saved through [FakeLocalDatabase].
 PatientFullRecord? lastSavedRecord;
 
+/// The ownerUserId / organizationId the screen last passed to
+/// [FakeLocalDatabase.savePatient] (captured for coverage of that branch).
+String? lastSavedOwnerUserId;
+String? lastSavedOrganizationId;
+
 class FakeAuthRepository implements AuthRepository {
   FakeAuthRepository();
 
@@ -182,6 +187,8 @@ class FakeLocalDatabase implements LocalDatabase {
     String? retiredDeviceReason,
   }) async {
     lastSavedRecord = record;
+    lastSavedOwnerUserId = ownerUserId;
+    lastSavedOrganizationId = organizationId;
   }
 
   @override
@@ -219,9 +226,61 @@ class FakeLocalDatabase implements LocalDatabase {
   Future<int> getRetryablePendingCount({String? ownerUserId}) async => 0;
 }
 
+/// A [LocalDatabase] whose [savePatient] always throws, used to exercise
+/// the catch/AppLogger.e branch of `_save()`.
+class ThrowingLocalDatabase extends FakeLocalDatabase {
+  @override
+  Future<void> savePatient(
+    PatientFullRecord record, {
+    bool isSynced = false,
+    String? ownerUserId,
+    String? organizationId,
+    String? retiredDeviceReason,
+  }) async {
+    throw Exception('Fallo simulado al guardar');
+  }
+}
+
 // -----------------------------------------------------------------------------
 // BUILD SUBJECT
 // -----------------------------------------------------------------------------
+
+/// Same as [buildSubject] but lets the test inject a custom [LocalDatabase]
+/// (e.g. one that throws) to reach the `_save()` catch branch.
+Widget buildSubjectWithDb(PatientFullRecord patient, LocalDatabase db) {
+  final authRepo = FakeAuthRepository();
+  final apiClient = ApiClient(baseUrl: 'https://example.com');
+  final patientRepo = PatientRepository(
+    apiClient: apiClient,
+    authRepository: authRepo,
+  );
+  final userRepo = UserRepository(
+    apiClient: apiClient,
+    authRepository: authRepo,
+  );
+  final syncEngine = SyncEngine(
+    patientRepository: patientRepo,
+    localDatabase: db,
+  );
+
+  return AppLocale(
+    locale: 'es',
+    setLocale: (_) {},
+    child: AppScope(
+      authRepository: authRepo,
+      userRepository: userRepo,
+      patientRepository: patientRepo,
+      localDatabase: db,
+      syncEngine: syncEngine,
+      statsRepository: StatsRepository(
+        apiClient: ApiClient(baseUrl: 'http://localhost'),
+        authRepository: authRepo,
+      ),
+      reachability: Reachability(baseUrl: 'http://localhost'),
+      child: MaterialApp(home: EditMedicalHistoryScreen(patient: patient)),
+    ),
+  );
+}
 
 Widget buildSubject(PatientFullRecord patient) {
   final authRepo = FakeAuthRepository();
@@ -396,6 +455,35 @@ PatientFullRecord patientWithUnknownFamilyRelationship() => _basePatient(
     ],
   ),
 );
+
+PatientFullRecord patientWithFamilyHistoryCie10() => _basePatient(
+  id: 'e-006',
+  backgroundHistory: BackgroundHistory(
+    familyHistory: [
+      FamilyHistoryItem(
+        conditionDescription: 'Diabetes tipo 2',
+        relationship: '01',
+        conditionCie10Code: 'E11',
+      ),
+    ],
+  ),
+);
+
+/// Patient whose last medical history entry has an EMPTY `startDateTime`,
+/// forcing `_save()` down the `copyWith(startDateTime: toIso8601WithOffset(...))`
+/// branch instead of leaving it untouched.
+PatientFullRecord patientWithLastVisitMissingStartDateTime() =>
+    emptyPatient().copyWith(
+      medicalHistory: <MedicalHistoryItem>[
+        MedicalHistoryItem(
+          encounterIdentifier: 'enc-empty-start',
+          startDateTime: '',
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Consulta previa sin fecha registrada',
+          ),
+        ),
+      ],
+    );
 
 // -----------------------------------------------------------------------------
 // HELPERS
@@ -841,6 +929,100 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(lastSavedRecord, isNotNull);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // GROUP 6 – COBERTURA 100%: ramas restantes
+  // ---------------------------------------------------------------------------
+
+  group('COBERTURA 100%: startDateTime vacío, ownerUserId/organizationId', () {
+    testWidgets(
+      'Guardar con última consulta sin startDateTime la rellena con la hora actual',
+      (tester) async {
+        lastSavedRecord = null;
+        await tester.pumpWidget(
+          buildSubject(patientWithLastVisitMissingStartDateTime()),
+        );
+        await tester.pumpAndSettle();
+
+        await tapVisible(tester, find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        final saved = lastSavedRecord!.medicalHistory.single;
+        // El identificador y el resto de campos se conservan (copyWith)...
+        expect(saved.encounterIdentifier, 'enc-empty-start');
+        // ...pero startDateTime, que llegó vacío, ahora queda relleno.
+        expect(saved.startDateTime, isNotEmpty);
+      },
+    );
+
+    testWidgets(
+      'Guardar propaga ownerUserId/organizationId del usuario actual a savePatient',
+      (tester) async {
+        lastSavedRecord = null;
+        lastSavedOwnerUserId = 'sentinel';
+        lastSavedOrganizationId = 'sentinel';
+
+        await tester.pumpWidget(buildSubject(emptyPatient()));
+        await tester.pumpAndSettle();
+
+        await tapVisible(tester, find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        // FakeAuthRepository.currentUser es null en este fixture, así que
+        // ambos valores deben propagarse como null — lo relevante es que
+        // savePatient() efectivamente los recibió como parámetros nombrados
+        // (ya no quedan en el valor "sentinel" previo al guardado).
+        expect(lastSavedRecord, isNotNull);
+        expect(lastSavedOwnerUserId, isNull);
+        expect(lastSavedOrganizationId, isNull);
+      },
+    );
+
+    testWidgets(
+      'Guardar captura la excepción de savePatient (AppLogger.e) sin crashear ni hacer pop',
+      (tester) async {
+        await tester.pumpWidget(
+          buildSubjectWithDb(emptyPatient(), ThrowingLocalDatabase()),
+        );
+        await tester.pumpAndSettle();
+
+        await tapVisible(tester, find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        // El catch evita que la excepción se propague hasta el framework...
+        expect(tester.takeException(), isNull);
+        // ...y, al no completar el try, la pantalla NO hace pop.
+        expect(find.byType(EditMedicalHistoryScreen), findsOneWidget);
+      },
+    );
+  });
+
+  group('COBERTURA 100%: historial familiar — CIE-10 y eliminar', () {
+    testWidgets('muestra el código CIE-10 cuando el ítem lo tiene', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject(patientWithFamilyHistoryCie10()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Diabetes tipo 2'), findsOneWidget);
+      expect(find.textContaining('CIE-10: E11'), findsOneWidget);
+    });
+
+    testWidgets('elimina un ítem de historial familiar sin crashear', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject(patientWithFamilyHistoryCie10()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Diabetes tipo 2'), findsOneWidget);
+
+      await tapVisible(tester, find.byIcon(Icons.delete_outline).first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Diabetes tipo 2'), findsNothing);
+      expect(tester.takeException(), isNull);
     });
   });
 }
