@@ -240,6 +240,7 @@ class FakeAuthRepositoryWithSession extends FakeAuthRepository {
 class CapturingLocalDatabase extends FakeLocalDatabase {
   String? capturedOwnerUserId;
   String? capturedOrganizationId;
+  PatientFullRecord? capturedRecord;
   bool markChipsDirtyCalled = false;
 
   @override
@@ -252,6 +253,7 @@ class CapturingLocalDatabase extends FakeLocalDatabase {
   }) async {
     capturedOwnerUserId = ownerUserId;
     capturedOrganizationId = organizationId;
+    capturedRecord = record;
   }
 
   @override
@@ -319,6 +321,7 @@ PatientFullRecord _makePatient({
 Widget _buildSubject({
   required PatientFullRecord patient,
   String locale = 'es',
+  FakeLocalDatabase? database,
 }) {
   final authRepo = FakeAuthRepository();
   final apiClient = ApiClient(baseUrl: 'https://example.com');
@@ -342,7 +345,7 @@ Widget _buildSubject({
       authRepository: authRepo,
       userRepository: userRepo,
       patientRepository: patientRepo,
-      localDatabase: FakeLocalDatabase(),
+      localDatabase: database ?? FakeLocalDatabase(),
       syncEngine: syncEngine,
       statsRepository: StatsRepository(
         apiClient: ApiClient(baseUrl: 'http://localhost'),
@@ -359,6 +362,72 @@ Widget _buildSubject({
 // ─────────────────────────────────────────────────────────────────────────────
 
 void main() {
+  group('Consentimiento al guardar', () {
+    final consent = GuardianConsent(
+      accepted: true,
+      acceptedAt: '2026-09-22T10:00:00-05:00',
+      signatureBase64: 'FIRMA',
+    );
+    PatientFullRecord withConsent() => _makePatient().copyWith(
+      guardianInfo: GuardianInfo(
+        name: 'Ana Gómez',
+        relationship: '01',
+        phone: '3000000000',
+        documentType: 'CC',
+        documentNumber: '1001',
+        consent: consent,
+      ),
+    );
+
+    Future<void> tapSave(WidgetTester tester) async {
+      final save = find.text('Guardar');
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('cambiar el teléfono del mismo acudiente conserva el '
+        'consentimiento', (tester) async {
+      final db = CapturingLocalDatabase();
+      await tester.pumpWidget(
+        _buildSubject(patient: withConsent(), database: db),
+      );
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (w) => w is TextField && w.controller?.text == '3000000000',
+        ),
+        '3111111111',
+      );
+      await tapSave(tester);
+
+      expect(db.capturedRecord?.guardianInfo.phone, '3111111111');
+      expect(db.capturedRecord?.guardianInfo.consent, consent);
+    });
+
+    testWidgets('otra persona no hereda el consentimiento', (tester) async {
+      final db = CapturingLocalDatabase();
+      await tester.pumpWidget(
+        _buildSubject(patient: withConsent(), database: db),
+      );
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (w) => w is TextField && w.controller?.text == 'Ana Gómez',
+        ),
+        'Luis Díaz',
+      );
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (w) => w is TextField && w.controller?.text == '1001',
+        ),
+        '2002',
+      );
+      await tapSave(tester);
+
+      expect(db.capturedRecord?.guardianInfo.name, 'Luis Díaz');
+      expect(db.capturedRecord?.guardianInfo.consent, isNull);
+    });
+  });
+
   // ── Group 1: Initial Rendering ────────────────────────────────────────
   group('EditGuardianScreen — renderizado inicial', () {
     testWidgets('muestra el título "Editar / actualizar" en el header', (

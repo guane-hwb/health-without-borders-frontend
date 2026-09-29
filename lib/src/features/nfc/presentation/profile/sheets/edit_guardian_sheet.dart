@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../domain/guardian_identity.dart';
 import '../../../domain/patient_record.dart';
 
 const _kEnabledBorder = OutlineInputBorder(
@@ -157,17 +158,23 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   void _submitSave() {
     if (!_formKey.currentState!.validate()) return;
 
+    final edited = GuardianInfo(
+      name: _nameCtrl.text.trim(),
+      relationship: _relationship,
+      phone: _phoneCtrl.text.trim(),
+      docType: _selectedDocType,
+      docNumber: _docNumberCtrl.text.trim().isEmpty
+          ? null
+          : _docNumberCtrl.text.trim(),
+      deviceUid: widget.guardian.deviceUid,
+    );
+    // A consent belongs to the person who gave it: editing the same guardian
+    // keeps it, replacing the guardian leaves the new one's consent pending.
     widget.onConfirm(
-      GuardianInfo(
-        name: _nameCtrl.text.trim(),
-        relationship: _relationship,
-        phone: _phoneCtrl.text.trim(),
-        docType: _selectedDocType,
-        docNumber: _docNumberCtrl.text.trim().isEmpty
-            ? null
-            : _docNumberCtrl.text.trim(),
-        deviceUid: widget.guardian.deviceUid,
-        consent: widget.guardian.consent,
+      edited.copyWith(
+        consent: isSameGuardian(widget.guardian, edited)
+            ? widget.guardian.consent
+            : null,
       ),
     );
     Navigator.of(context).pop();

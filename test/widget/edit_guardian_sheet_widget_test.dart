@@ -232,6 +232,68 @@ void main() {
     }
   });
 
+  group('Consentimiento al editar el acudiente', () {
+    testWidgets('editar el mismo acudiente conserva su consentimiento', (
+      tester,
+    ) async {
+      GuardianInfo? received;
+      await tester.pumpWidget(
+        _buildSubject(
+          guardian: _sampleGuardian(phone: '000', consent: fakeConsent),
+          guardianIndex: 1,
+          onConfirm: (g) => received = g,
+        ),
+      );
+
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (w) => w is TextField && w.controller?.text == '000',
+        ),
+        '3009999999',
+      );
+      await tester.tap(find.text(sEs.confirmChanges));
+      await tester.pump();
+
+      expect(received?.phone, '3009999999');
+      expect(received?.consent, same(fakeConsent));
+    });
+
+    testWidgets('otra persona (otro documento) no hereda el consentimiento', (
+      tester,
+    ) async {
+      GuardianInfo? received;
+      await tester.pumpWidget(
+        _buildSubject(
+          guardian: _sampleGuardian(
+            name: 'María García',
+            docNumber: '1234567890',
+            consent: fakeConsent,
+          ),
+          guardianIndex: 1,
+          onConfirm: (g) => received = g,
+        ),
+      );
+
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (w) => w is TextField && w.controller?.text == 'María García',
+        ),
+        'Carlos Ruiz',
+      );
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (w) => w is TextField && w.controller?.text == '1234567890',
+        ),
+        '9876543210',
+      );
+      await tester.tap(find.text(sEs.confirmChanges));
+      await tester.pump();
+
+      expect(received?.name, 'Carlos Ruiz');
+      expect(received?.consent, isNull);
+    });
+  });
+
   group('Form Action Pipelines and Payload Assembly Constraints', () {
     testWidgets(
       'Applies trim transformations to name, phone and document number entries upon execution',

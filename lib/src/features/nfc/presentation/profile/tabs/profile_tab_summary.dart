@@ -891,6 +891,29 @@ class _GuardianContent extends StatelessWidget {
                       ],
                     ),
                   ],
+                  // No accepted consent on record — e.g. a new guardian: the
+                  // previous guardian's consent is not theirs.
+                  if (guardian.consent?.accepted != true) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.pending_outlined,
+                          size: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          AppStrings.of(context).consentPending,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

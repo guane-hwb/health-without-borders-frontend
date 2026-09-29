@@ -325,6 +325,57 @@ void main() {
     });
   });
 
+  group('Consentimiento del acudiente —', () {
+    testWidgets(
+      'sin consentimiento aceptado muestra "Consentimiento pendiente"',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildWidget(
+            draft: _baseRecord(
+              guardian: GuardianInfo(
+                name: 'Luis Díaz',
+                relationship: '01',
+                phone: '3001234567',
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Consentimiento pendiente', skipOffstage: false),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('con consentimiento aceptado no muestra el aviso', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildWidget(
+          draft: _baseRecord(
+            guardian: GuardianInfo(
+              name: 'Ana Gómez',
+              relationship: '01',
+              phone: '3001234567',
+              consent: GuardianConsent(
+                accepted: true,
+                acceptedAt: '2026-09-22T10:00:00-05:00',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Consentimiento pendiente', skipOffstage: false),
+        findsNothing,
+      );
+    });
+  });
+
   // ══════════════════════════════════════════════════════════════════════════
   // 2. Allergies section rendering
   // ══════════════════════════════════════════════════════════════════════════

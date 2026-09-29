@@ -441,6 +441,7 @@ class AppStrings {
   String get medStatusStopped => _get('medStatusStopped');
   String get medStatusUnknown => _get('medStatusUnknown');
   String get cie10Label => _get('cie10Label');
+  String get consentPending => _get('consentPending');
 
   // ── Add medication sheet ─────────────────────────────────────────────────
   String get addMedicationTitle => _get('addMedicationTitle');
@@ -1037,6 +1038,7 @@ class AppStrings {
     'medStatusStopped': 'Suspendido',
     'medStatusUnknown': 'Desconocido',
     'cie10Label': 'CIE-10: ',
+    'consentPending': 'Consentimiento pendiente',
 
     // Add medication sheet
     'addMedicationTitle': 'Agregar medicamento',
@@ -1622,6 +1624,7 @@ class AppStrings {
     'medStatusStopped': 'Stopped',
     'medStatusUnknown': 'Unknown',
     'cie10Label': 'ICD-10: ',
+    'consentPending': 'Consent pending',
 
     // Add medication sheet
     'addMedicationTitle': 'Add medication',
