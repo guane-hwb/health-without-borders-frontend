@@ -4,17 +4,30 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'api_error_codes.dart';
+
 class ApiException implements Exception {
-  ApiException(this.message, {this.statusCode, this.detail, this.retryAfter});
+  ApiException(
+    this.message, {
+    this.statusCode,
+    this.detail,
+    this.retryAfter,
+    this.code,
+  });
 
   final String message;
   final int? statusCode;
   final Object? detail;
   final Duration? retryAfter;
 
+  /// The backend's machine-readable error code (see [ApiErrorCode]), when the
+  /// response carried one. Decide on this, never on [message].
+  final String? code;
+
   @override
   String toString() =>
-      'ApiException(statusCode: $statusCode, message: $message, retryAfter: $retryAfter)';
+      'ApiException(statusCode: $statusCode, message: $message, retryAfter: $retryAfter'
+      '${code == null ? '' : ', code: $code'})';
 }
 
 abstract class TokenProvider {
@@ -47,6 +60,14 @@ class ApiClient {
 
   set tokenProvider(TokenProvider? provider) => _tokenProvider = provider;
 
+  void Function(String code)? _onAccountInactive;
+
+  /// Called when an authenticated request is refused because the account or
+  /// its organization was deactivated. Login and refresh report it through
+  /// their own errors instead, so a failed sign-in never tears down a session.
+  set onAccountInactive(void Function(String code)? callback) =>
+      _onAccountInactive = callback;
+
   bool _isPublicRoute(String path) => _publicRoutes.contains(path);
 
   Future<http.Response> _send(
@@ -68,6 +89,30 @@ class ApiClient {
     required Map<String, String> headers,
     required Future<http.Response> Function(Map<String, String> headers) send,
     Duration timeout = const Duration(seconds: 20),
+  }) async {
+    final http.Response response = await _dispatchWithRefresh(
+      path,
+      headers: headers,
+      send: send,
+      timeout: timeout,
+    );
+    _reportAccountInactive(path, response);
+    return response;
+  }
+
+  void _reportAccountInactive(String path, http.Response response) {
+    final void Function(String code)? callback = _onAccountInactive;
+    if (callback == null || _isPublicRoute(path)) return;
+    if (response.statusCode != 401 && response.statusCode != 403) return;
+    final String? code = _errorCode(_tryDecode(response.body));
+    if (ApiErrorCode.isAccountInactive(code)) callback(code!);
+  }
+
+  Future<http.Response> _dispatchWithRefresh(
+    String path, {
+    required Map<String, String> headers,
+    required Future<http.Response> Function(Map<String, String> headers) send,
+    required Duration timeout,
   }) async {
     final http.Response response = await send(headers).timeout(timeout);
 
@@ -288,7 +333,31 @@ class ApiClient {
       statusCode: response.statusCode,
       detail: detail,
       retryAfter: _parseRetryAfter(response),
+      code: _errorCode(decoded),
     );
+  }
+
+  static Object? _tryDecode(String body) {
+    if (body.isEmpty) return null;
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// `code` sits next to `detail`; the 410 of a retired wristband predates
+  /// that and carries it inside `detail`.
+  static String? _errorCode(Object? decoded) {
+    if (decoded is! Map<String, dynamic>) return null;
+    final Object? code = decoded['code'];
+    if (code is String && code.isNotEmpty) return code;
+    final Object? detail = decoded['detail'];
+    if (detail is Map && detail['code'] is String) {
+      final String nested = detail['code'] as String;
+      return nested.isEmpty ? null : nested;
+    }
+    return null;
   }
 
   Duration? _parseRetryAfter(http.Response response) {

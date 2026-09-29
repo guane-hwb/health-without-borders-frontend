@@ -30,6 +30,14 @@ class FakePatientRepository implements PatientRepository {
   bool throwGenericError = false;
   bool throwGuardianError = false;
 
+  /// Body of the first 403 (no guardian card): text and backend `code`.
+  String guardianRequiredMessage =
+      'Guardian bracelet scan required for minors.';
+  String? guardianRequiredCode;
+
+  /// Backend `code` of the step-2 403 (card does not match).
+  String? guardianErrorCode;
+
   bool throwNonApiError = false;
   bool throwRetired410 = false;
   String retiredReason = 'lost';
@@ -71,13 +79,18 @@ class FakePatientRepository implements PatientRepository {
 
     if (throw403ForGuardian && guardianDeviceUid == null) {
       throw ApiException(
-        'Guardian bracelet scan required for minors.',
+        guardianRequiredMessage,
         statusCode: 403,
+        code: guardianRequiredCode,
       );
     }
 
     if (throwGuardianError && guardianDeviceUid != null) {
-      throw ApiException('Guardian inválido.', statusCode: 403);
+      throw ApiException(
+        'Guardian inválido.',
+        statusCode: 403,
+        code: guardianErrorCode,
+      );
     }
 
     return PatientFullRecord(
@@ -538,6 +551,82 @@ void main() {
       expect(find.byIcon(Icons.error_outline), findsOneWidget);
       expect(find.byIcon(Icons.wifi), findsOneWidget);
     });
+
+    testWidgets('el 403 del acudiente se reconoce por code, no por el texto', (
+      tester,
+    ) async {
+      fakeRepo.throw403ForGuardian = true;
+      fakeRepo.guardianRequiredMessage = 'Acceso restringido.';
+      fakeRepo.guardianRequiredCode = 'guardian_required';
+      await tester.pumpWidget(
+        _buildTestableWidget(
+          child: const ReadNfcScreen(),
+          repo: fakeRepo,
+          authRepo: fakeAuth,
+        ),
+      );
+      await tester.pump();
+      await _advanceToStep2(tester);
+
+      expect(find.text('Acceso restringido.'), findsNothing);
+      // Step 2 only: the patient wristband is confirmed, the guardian card is
+      // requested.
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    });
+
+    testWidgets('guardian_mismatch muestra el mensaje traducido', (
+      tester,
+    ) async {
+      fakeRepo.throw403ForGuardian = true;
+      fakeRepo.guardianRequiredCode = 'guardian_required';
+      fakeRepo.throwGuardianError = true;
+      fakeRepo.guardianErrorCode = 'guardian_mismatch';
+      await tester.pumpWidget(
+        _buildTestableWidget(
+          child: const ReadNfcScreen(),
+          repo: fakeRepo,
+          authRepo: fakeAuth,
+        ),
+      );
+      await tester.pump();
+      await _advanceToStep2(tester);
+
+      await tester.enterText(find.byType(TextField), 'HWB-GUARDIAN-BAD');
+      await tester.tap(find.byType(OutlinedButton));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(
+        find.textContaining('La tarjeta no corresponde a ningún acudiente'),
+        findsOneWidget,
+      );
+      expect(find.text('Guardian inválido.'), findsNothing);
+    });
+
+    testWidgets(
+      'un 403 de cuenta desactivada no pide la tarjeta del acudiente',
+      (tester) async {
+        fakeRepo.throw403ForGuardian = true;
+        // Even a message that mentions the guardian: the code decides.
+        fakeRepo.guardianRequiredMessage = 'Inactive user (guardian)';
+        fakeRepo.guardianRequiredCode = 'user_inactive';
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: const ReadNfcScreen(),
+            repo: fakeRepo,
+            authRepo: fakeAuth,
+          ),
+        );
+        await tester.pump();
+        await _advanceToStep2(tester);
+
+        expect(
+          find.textContaining('Tu cuenta está desactivada'),
+          findsOneWidget,
+        );
+        expect(find.byIcon(Icons.check_circle), findsNothing);
+      },
+    );
 
     testWidgets(
       'Error NO-ApiException en submitGuardian: cae en el catch genérico y muestra el toString() de la excepción',

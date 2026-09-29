@@ -51,6 +51,13 @@ class FakeAuthRepository implements AuthRepository {
   ValueListenable<bool> get sessionExpired => ValueNotifier<bool>(false);
 
   @override
+  ValueListenable<String?> get accountInactiveCode =>
+      ValueNotifier<String?>(null);
+
+  @override
+  Future<void> handleAccountInactive(String code) async {}
+
+  @override
   ValueListenable<bool> get sessionWindowClosed => ValueNotifier<bool>(false);
 
   @override

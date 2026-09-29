@@ -85,6 +85,7 @@ void main() {
     when(() => response.status).thenReturn(status);
     when(() => response.message).thenReturn(message ?? '');
     when(() => response.fhirStatus).thenReturn(fhirStatus);
+    when(() => response.conflicts).thenReturn(const <String>[]);
     return response;
   }
 
@@ -471,6 +472,88 @@ void main() {
         expect(success, false);
       },
     );
+
+    test('un 409 con code guarda el code para traducirlo en la cola', () async {
+      final entry = buildEntry('A', record: MockPatientFullRecord());
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [entry]);
+      when(() => patientRepo.syncPatient(any())).thenThrow(
+        ApiException(
+          'A patient is already registered with this identity document.',
+          statusCode: 409,
+          code: 'duplicate_identity',
+        ),
+      );
+
+      await engine.syncAll();
+
+      verify(
+        () => localDb.markSyncError(
+          'A',
+          'duplicate_identity',
+          statusCode: 409,
+          revision: 0,
+        ),
+      ).called(1);
+    });
+
+    test(
+      'cuenta desactivada: detiene el lote sin marcar el registro',
+      () async {
+        final entryA = buildEntry('A', record: MockPatientFullRecord());
+        final entryB = buildEntry('B', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entryA, entryB]);
+        when(() => patientRepo.syncPatient(any())).thenThrow(
+          ApiException('Inactive user', statusCode: 403, code: 'user_inactive'),
+        );
+
+        final ok = await engine.syncAll();
+
+        expect(ok, isFalse);
+        verify(() => patientRepo.syncPatient(any())).called(1);
+        verifyNever(
+          () => localDb.markSyncError(
+            any(),
+            any(),
+            statusCode: any(named: 'statusCode'),
+            revision: any(named: 'revision'),
+          ),
+        );
+      },
+    );
+
+    test('una respuesta success con conflicts marca el registro como '
+        'sincronizado', () async {
+      final entry = buildEntry('A', record: MockPatientFullRecord());
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [entry]);
+      final response = buildResponse('success');
+      when(
+        () => response.conflicts,
+      ).thenReturn(const <String>['stale_payload_retired_device_uid']);
+      when(
+        () => patientRepo.syncPatient(any()),
+      ).thenAnswer((_) async => response);
+
+      await engine.syncAll();
+
+      verify(
+        () => localDb.markSynced(
+          'A',
+          createdAt: any(named: 'createdAt'),
+          recordJson: any(named: 'recordJson'),
+          revision: any(named: 'revision'),
+        ),
+      ).called(1);
+    });
 
     test('ApiException 400 marca error y no reintenta', () async {
       final entry = buildEntry('A', record: MockPatientFullRecord());

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_error_codes.dart';
 import '../../../core/nfc/nfc_guardian_payload.dart';
 import '../../../core/nfc/nfc_payload_codec.dart';
 import '../../../core/nfc/nfc_payload_service.dart' as payload;
@@ -182,7 +183,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       await _openProfile(patient);
     } on ApiException catch (e) {
       if (!mounted) return;
-      if (e.statusCode == 403 && e.message.toLowerCase().contains('guardian')) {
+      if (e.statusCode == 403 && _isGuardianCheck(e)) {
         setState(() {
           _scanning = false;
           _patientDeviceUid = deviceUid;
@@ -192,7 +193,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       } else {
         setState(() {
           _scanning = false;
-          _errorMessage = _retiredTagMessage(e) ?? e.message;
+          _errorMessage = _retiredTagMessage(e) ?? _apiErrorMessage(e);
         });
       }
     } catch (e) {
@@ -486,7 +487,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       if (!mounted) return;
       setState(() {
         _scanning = false;
-        _errorMessage = _retiredTagMessage(e) ?? e.message;
+        _errorMessage = _retiredTagMessage(e) ?? _apiErrorMessage(e);
       });
     } catch (e) {
       if (!mounted) return;
@@ -496,6 +497,16 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       });
     }
   }
+
+  /// The minor needs the guardian card. Decided on the backend's code; the
+  /// text check only covers a backend that predates codes.
+  static bool _isGuardianCheck(ApiException e) =>
+      ApiErrorCode.isGuardianCheck(e.code) ||
+      (e.code == null && e.message.toLowerCase().contains('guardian'));
+
+  String _apiErrorMessage(ApiException e) =>
+      ApiErrorCode.describe(e.code, isEs: AppStrings.of(context).isEs) ??
+      e.message;
 
   Future<void> _openProfile(
     PatientFullRecord patient, {

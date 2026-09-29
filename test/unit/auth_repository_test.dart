@@ -987,6 +987,105 @@ void main() {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
+  // cuenta u organización desactivada
+  // ───────────────────────────────────────────────────────────────────────────
+  group('cuenta u organización desactivada', () {
+    Future<void> signIn() async {
+      final jwt = _validJwt('doc@hwb.org');
+      when(
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
+      ).thenAnswer((_) async => {'access_token': jwt});
+      when(
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer((_) async => _meResponse(email: 'doc@hwb.org'));
+      await repo.login(email: 'doc@hwb.org', password: 'x');
+    }
+
+    void refreshFailsWith(String code) {
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => 'old-refresh');
+      when(
+        () => api.postJson(
+          path: '/api/v1/login/refresh',
+          body: any(named: 'body'),
+        ),
+      ).thenThrow(ApiException('Inactive user', statusCode: 401, code: code));
+    }
+
+    test(
+      'el refresco rechazado por cuenta desactivada guarda el motivo',
+      () async {
+        refreshFailsWith('user_inactive');
+
+        final token = await repo.refreshAccessToken();
+
+        expect(token, isNull);
+        expect(repo.sessionExpired.value, isTrue);
+        expect(repo.accountInactiveCode.value, 'user_inactive');
+        verifyNever(() => localDb.clearAll());
+      },
+    );
+
+    test('un 401 de refresco sin código no deja motivo', () async {
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => 'old-refresh');
+      when(
+        () => api.postJson(
+          path: '/api/v1/login/refresh',
+          body: any(named: 'body'),
+        ),
+      ).thenThrow(ApiException('expired', statusCode: 401));
+
+      await repo.refreshAccessToken();
+
+      expect(repo.sessionExpired.value, isTrue);
+      expect(repo.accountInactiveCode.value, isNull);
+    });
+
+    test(
+      'handleAccountInactive cierra la sesión y conserva los pendientes',
+      () async {
+        await signIn();
+        clearInteractions(localDb);
+
+        await repo.handleAccountInactive('organization_inactive');
+
+        expect(repo.currentUser, isNull);
+        expect(repo.hasToken, isFalse);
+        expect(repo.sessionExpired.value, isTrue);
+        expect(repo.accountInactiveCode.value, 'organization_inactive');
+        verifyNever(() => localDb.clearAll());
+        verifyNever(() => localDb.destroyEncryptionKey());
+      },
+    );
+
+    test('sin sesión solo registra el motivo', () async {
+      await repo.handleAccountInactive('user_inactive');
+
+      expect(repo.accountInactiveCode.value, 'user_inactive');
+      expect(repo.sessionExpired.value, isFalse);
+    });
+
+    test('un nuevo intento de login borra el motivo', () async {
+      refreshFailsWith('user_inactive');
+      await repo.refreshAccessToken();
+      expect(repo.accountInactiveCode.value, 'user_inactive');
+
+      await signIn();
+
+      expect(repo.accountInactiveCode.value, isNull);
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
   // getCurrentUser()
   // ───────────────────────────────────────────────────────────────────────────
   group('getCurrentUser()', () {

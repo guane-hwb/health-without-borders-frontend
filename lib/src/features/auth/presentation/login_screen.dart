@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_error_codes.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/hwb_logo.dart';
 import '../../home/presentation/home_screen.dart';
@@ -40,9 +41,21 @@ class _LoginScreenState extends State<LoginScreen> {
     if (widget.showSessionExpired) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
+        final s = AppStrings.of(context);
+        // A deactivated account ends the session like an expiry does, but
+        // "session expired" would send the person to sign in again in vain.
+        final String? inactive = ApiErrorCode.describe(
+          AppScope.of(context).authRepository.accountInactiveCode.value,
+          isEs: s.isEs,
+        );
+        final String keptNote = s.isEs
+            ? 'Los registros pendientes se conservan en este dispositivo.'
+            : 'Pending records are kept on this device.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppStrings.of(context).sessionExpired),
+            content: Text(
+              inactive == null ? s.sessionExpired : '$inactive $keptNote',
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -344,7 +357,9 @@ class _LoginScreenState extends State<LoginScreen> {
           e.message.toLowerCase().contains('network') ||
           e.message.toLowerCase().contains('connection');
 
-      final errorMessage = isNetworkError ? s.loginNetworkRequired : e.message;
+      final errorMessage = isNetworkError
+          ? s.loginNetworkRequired
+          : ApiErrorCode.describe(e.code, isEs: s.isEs) ?? e.message;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

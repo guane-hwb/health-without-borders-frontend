@@ -5,6 +5,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
+import '../../../core/network/api_error_codes.dart';
 import '../../../core/storage/local_database.dart';
 import '../../../core/sync/sync_engine.dart';
 import '../../../design/tokens/app_colors.dart';
@@ -376,10 +377,22 @@ class _SyncCard extends StatelessWidget {
     final isConflict = entry.syncErrorCode == 409;
     final hasErr = entry.syncError?.isNotEmpty == true;
     final isEs = s.isEs;
+    // Errors that carried a code store the code (see SyncEngine._syncOne).
+    final String? codedMessage = ApiErrorCode.describe(
+      entry.syncError,
+      isEs: isEs,
+    );
+    final bool isDuplicate =
+        isConflict &&
+        entry.syncError != ApiErrorCode.identityMismatch &&
+        entry.syncError != ApiErrorCode.deviceRetired;
 
     String? errorMessage;
     if (hasErr) {
-      if (isConflict) {
+      if (codedMessage != null) {
+        errorMessage = codedMessage;
+      } else if (isConflict) {
+        // Rows that failed before the backend sent codes keep its text.
         final rawErr = entry.syncError?.toLowerCase() ?? '';
         final isDocumentDuplicate =
             rawErr.contains('identity document') ||
@@ -408,8 +421,10 @@ class _SyncCard extends StatelessWidget {
     }
 
     final String badgeLabel = hasErr
-        ? (isConflict
+        ? (isDuplicate
               ? (isEs ? 'Duplicado' : 'Duplicate')
+              : isConflict
+              ? (isEs ? 'Conflicto' : 'Conflict')
               : (isEs ? 'Error' : 'Error'))
         : s.pending;
 

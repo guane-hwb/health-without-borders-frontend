@@ -1929,6 +1929,7 @@ class PatientSyncResponse {
     this.fhirStatus,
     this.vidaCode,
     required this.message,
+    this.conflicts = const <String>[],
   });
 
   factory PatientSyncResponse.fromJson(Map<String, dynamic> json) {
@@ -1938,6 +1939,11 @@ class PatientSyncResponse {
       fhirStatus: json['fhir_status']?.toString(),
       vidaCode: json['vida_code']?.toString(),
       message: json['message']?.toString() ?? '',
+      conflicts:
+          (json['conflicts'] as List<dynamic>?)
+              ?.map((dynamic c) => c.toString())
+              .toList() ??
+          const <String>[],
     );
   }
 
@@ -1946,4 +1952,8 @@ class PatientSyncResponse {
   final String? fhirStatus;
   final String? vidaCode;
   final String message;
+
+  /// Parts of the payload the server did not apply (e.g.
+  /// `stale_payload_retired_device_uid`); the rest of the record was synced.
+  final List<String> conflicts;
 }

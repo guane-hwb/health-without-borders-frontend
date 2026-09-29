@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_error_codes.dart';
 import '../../../core/nfc/nfc_keyring.dart';
 import '../../../core/storage/local_database.dart';
 import '../../../core/utils/app_logger.dart';
@@ -111,9 +112,32 @@ class AuthRepository implements TokenProvider {
   /// key is refused until they reconnect.
   ValueListenable<bool> get sessionWindowClosed => _sessionWindowClosed;
 
+  final ValueNotifier<String?> _accountInactiveCode = ValueNotifier<String?>(
+    null,
+  );
+
+  /// Why the server ended the last session, when it was because the account
+  /// or its organization was deactivated ([ApiErrorCode.userInactive] or
+  /// [ApiErrorCode.organizationInactive]); null otherwise. Cleared on the next
+  /// login attempt.
+  ValueListenable<String?> get accountInactiveCode => _accountInactiveCode;
+
   UserSession? get currentUser => _session;
 
   VoidCallback? onSessionInvalidated;
+
+  /// The server refused a request because the account or its organization is
+  /// deactivated ([code] is one of [ApiErrorCode.isAccountInactive]).
+  ///
+  /// Signs out like an expired session: tokens and the NFC keyring go, pending
+  /// records stay on the device for when the account is reactivated or its
+  /// owner signs in elsewhere. Several requests failing at once end the
+  /// session only once.
+  Future<void> handleAccountInactive(String code) async {
+    _accountInactiveCode.value = code;
+    if (_session == null && !hasToken) return;
+    await _invalidateSession();
+  }
 
   void _updateSession(UserSession? session) {
     _session = session;
@@ -128,6 +152,7 @@ class AuthRepository implements TokenProvider {
   }) async {
     _sessionExpired.value = false;
     _sessionWindowClosed.value = false;
+    _accountInactiveCode.value = null;
 
     final Map<String, dynamic> tokenData = await _apiClient.postForm(
       path: '/api/v1/login/access-token',
@@ -305,6 +330,9 @@ class AuthRepository implements TokenProvider {
       );
     } on ApiException catch (e) {
       if (e.statusCode == 401) {
+        if (ApiErrorCode.isAccountInactive(e.code)) {
+          _accountInactiveCode.value = e.code;
+        }
         await _invalidateSession();
         return null;
       }

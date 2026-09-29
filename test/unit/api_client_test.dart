@@ -41,6 +41,127 @@ void main() {
     });
   });
 
+  // ── Códigos de error del backend ─────────────────────────────────────────
+
+  group('ApiException.code y onAccountInactive', () {
+    test('lee el code que viene junto a detail', () async {
+      final api = buildClient(
+        (_) async => _json(<String, dynamic>{
+          'detail':
+              'A patient is already registered with this identity '
+              'document.',
+          'code': 'duplicate_identity',
+        }, 409),
+      );
+
+      await expectLater(
+        api.postJson(path: '/api/v1/patients/sync', body: const {}),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.code, 'code', 'duplicate_identity')
+              .having((e) => e.statusCode, 'statusCode', 409)
+              .having((e) => e.message, 'message', contains('identity')),
+        ),
+      );
+    });
+
+    test('lee el code del 410 que va dentro de detail', () async {
+      final api = buildClient(
+        (_) async => _json(<String, dynamic>{
+          'detail': <String, dynamic>{
+            'code': 'device_retired',
+            'reason': 'lost',
+            'message': 'This bracelet has been retired.',
+          },
+        }, 410),
+      );
+
+      await expectLater(
+        api.getJson(path: '/api/v1/patients/scan/abc'),
+        throwsA(
+          isA<ApiException>().having((e) => e.code, 'code', 'device_retired'),
+        ),
+      );
+    });
+
+    test('sin code queda null', () async {
+      final api = buildClient(
+        (_) async => _json(<String, dynamic>{'detail': 'Not found'}, 404),
+      );
+
+      await expectLater(
+        api.getJson(path: '/api/v1/patients/scan/abc'),
+        throwsA(isA<ApiException>().having((e) => e.code, 'code', isNull)),
+      );
+    });
+
+    test('toString incluye el code cuando existe', () {
+      expect(
+        ApiException('x', statusCode: 403, code: 'user_inactive').toString(),
+        'ApiException(statusCode: 403, message: x, retryAfter: null, '
+        'code: user_inactive)',
+      );
+    });
+
+    test(
+      'avisa de cuenta u organización desactivada en rutas autenticadas',
+      () async {
+        for (final code in <String>['user_inactive', 'organization_inactive']) {
+          final reported = <String>[];
+          final api = buildClient(
+            (_) async => _json(<String, dynamic>{
+              'detail': 'Inactive',
+              'code': code,
+            }, 403),
+          )..onAccountInactive = reported.add;
+
+          await expectLater(
+            api.postJson(path: '/api/v1/patients/sync', body: const {}),
+            throwsA(isA<ApiException>().having((e) => e.code, 'code', code)),
+          );
+          expect(reported, <String>[code]);
+        }
+      },
+    );
+
+    test('no avisa en login ni en refresh: el error va al que llamó', () async {
+      for (final path in <String>[
+        '/api/v1/login/access-token',
+        '/api/v1/login/refresh',
+      ]) {
+        final reported = <String>[];
+        final api = buildClient(
+          (_) async => _json(<String, dynamic>{
+            'detail': 'Inactive user',
+            'code': 'user_inactive',
+          }, 401),
+        )..onAccountInactive = reported.add;
+
+        await expectLater(
+          api.postJson(path: path, body: const {}),
+          throwsA(isA<ApiException>()),
+        );
+        expect(reported, isEmpty, reason: path);
+      }
+    });
+
+    test('no avisa por otros códigos 403', () async {
+      final reported = <String>[];
+      final api = buildClient(
+        (_) async => _json(<String, dynamic>{
+          'detail': 'Guardian bracelet scan required for minors.',
+          'code': 'guardian_required',
+        }, 403),
+      )..onAccountInactive = reported.add;
+
+      await expectLater(
+        api.getJson(path: '/api/v1/patients/scan/abc'),
+        throwsA(isA<ApiException>()),
+      );
+      expect(reported, isEmpty);
+    });
+  });
+
   // ── Constructor ───────────────────────────────────────────────────────────
 
   group('ApiClient - constructor', () {

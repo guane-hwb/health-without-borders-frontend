@@ -508,6 +508,47 @@ void main() {
       },
     );
 
+    for (final (code, message, badge) in <(String, String, String)>[
+      (
+        'duplicate_identity',
+        'Ya existe un paciente registrado con este número de documento.',
+        'Duplicado',
+      ),
+      (
+        'device_uid_conflict',
+        'Este dispositivo ya está registrado para otro paciente',
+        'Duplicado',
+      ),
+      (
+        'identity_mismatch',
+        'La pulsera pertenece a un paciente con otro documento',
+        'Conflicto',
+      ),
+      ('device_retired', 'Esta pulsera fue retirada', 'Conflicto'),
+    ]) {
+      testWidgets('un 409 con code $code muestra su mensaje y "$badge"', (
+        tester,
+      ) async {
+        when(() => db.getUnsyncedRecords()).thenAnswer(
+          (_) async => [makeEntry(syncError: code, syncErrorCode: 409)],
+        );
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+            reachability: reachability,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining(message), findsOneWidget);
+        expect(find.text(badge), findsOneWidget);
+        expect(find.textContaining(code), findsNothing);
+      });
+    }
+
     testWidgets('un conflicto 409 oculta el botón Sync ahora', (tester) async {
       when(() => db.getUnsyncedRecords()).thenAnswer(
         (_) async => [makeEntry(syncError: 'conflict', syncErrorCode: 409)],
