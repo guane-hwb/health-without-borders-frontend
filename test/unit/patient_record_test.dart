@@ -483,6 +483,123 @@ void main() {
   // =========================================================================
   // FamilyHistoryItem
   // =========================================================================
+  group('Procedencia de códigos clínicos (IA vs. profesional)', () {
+    test('CodeSource.isAi distingue sugerencias de IA', () {
+      expect(CodeSource.isAi('ai_suggested'), isTrue);
+      expect(CodeSource.isAi('ai_fallback'), isTrue);
+      expect(CodeSource.isAi('clinician'), isFalse);
+      expect(CodeSource.isAi(null), isFalse);
+    });
+
+    test('DiagnosisItem conserva source, model y generatedAt', () {
+      final json = <String, dynamic>{
+        'icd10Code': 'J069',
+        'description': 'Infección aguda de las vías respiratorias superiores',
+        'source': 'ai_suggested',
+        'model': 'gemini-3-flash-preview',
+        'generatedAt': '2026-09-22T15:30:00+00:00',
+      };
+      final d = DiagnosisItem.fromJson(json);
+      expect(d.source, 'ai_suggested');
+      expect(d.model, 'gemini-3-flash-preview');
+      expect(d.generatedAt, '2026-09-22T15:30:00+00:00');
+      expect(d.toJson(), json);
+    });
+
+    test('DiagnosisItem sin procedencia no emite esas claves', () {
+      final d = DiagnosisItem(icd10Code: 'R509', description: 'Fiebre');
+      expect(d.toJson().keys, <String>['icd10Code', 'description']);
+    });
+
+    test('FamilyHistoryItem conserva el texto original y el código aparte', () {
+      final json = <String, dynamic>{
+        'conditionCie10Code': 'E14',
+        'conditionDescription': 'Diabetes',
+        'relationship': '01',
+        'conditionCodedDisplay': 'Diabetes mellitus, no especificada',
+        'codingSource': 'ai_suggested',
+      };
+      final f = FamilyHistoryItem.fromJson(json);
+      expect(f.conditionDescription, 'Diabetes');
+      expect(f.conditionCodedDisplay, 'Diabetes mellitus, no especificada');
+      expect(f.codingSource, 'ai_suggested');
+      expect(f.toJson(), json);
+    });
+
+    test(
+      'ChronicConditionItem conserva el texto original y el código aparte',
+      () {
+        final json = <String, dynamic>{
+          'chronicDescription': 'Asma',
+          'chronicCie10Code': 'J459',
+          'chronicCodedDisplay': 'Asma, no especificada',
+          'codingSource': 'ai_fallback',
+        };
+        final c = ChronicConditionItem.fromJson(json);
+        expect(c.chronicDescription, 'Asma');
+        expect(c.chronicCodedDisplay, 'Asma, no especificada');
+        expect(c.codingSource, 'ai_fallback');
+        expect(c.toJson(), json);
+      },
+    );
+
+    test('un registro de /scan reenviado a /sync no pierde la procedencia', () {
+      // The server takes background items from the payload: dropping these
+      // fields locally would erase them on the next sync.
+      final record = PatientFullRecord.fromJson(<String, dynamic>{
+        'patientId': 'p-1',
+        'device_uid': 'UID-1',
+        'backgroundHistory': <String, dynamic>{
+          'chronicConditions': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'chronicDescription': 'Asma',
+              'chronicCie10Code': 'J459',
+              'chronicCodedDisplay': 'Asma, no especificada',
+              'codingSource': 'ai_suggested',
+            },
+          ],
+          'familyHistory': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'conditionDescription': 'Glaucoma',
+              'relationship': '04',
+              'conditionCie10Code': 'H409',
+              'conditionCodedDisplay': 'Glaucoma, no especificado',
+              'codingSource': 'ai_suggested',
+            },
+          ],
+        },
+        'medicalHistory': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'encounterIdentifier': 'enc-1',
+            'startDateTime': '2026-09-22T10:30:00-05:00',
+            'diagnosis': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'icd10Code': 'J069',
+                'description': 'IRA',
+                'source': 'ai_suggested',
+                'model': 'gemini-3-flash-preview',
+                'generatedAt': '2026-09-22T15:30:00+00:00',
+              },
+            ],
+          },
+        ],
+      });
+
+      final out = record.toJson();
+      final bg = out['backgroundHistory'] as Map<String, dynamic>;
+      final chronic = (bg['chronicConditions'] as List).single as Map;
+      final family = (bg['familyHistory'] as List).single as Map;
+      final diagnosis =
+          ((out['medicalHistory'] as List).single as Map)['diagnosis'] as List;
+      expect(chronic['codingSource'], 'ai_suggested');
+      expect(chronic['chronicCodedDisplay'], 'Asma, no especificada');
+      expect(family['conditionCodedDisplay'], 'Glaucoma, no especificado');
+      expect(family['codingSource'], 'ai_suggested');
+      expect((diagnosis.single as Map)['source'], 'ai_suggested');
+      expect((diagnosis.single as Map)['model'], 'gemini-3-flash-preview');
+    });
+  });
+
   group('FamilyHistoryItem', () {
     test('fromJson — con códigos CIE', () {
       final item = FamilyHistoryItem.fromJson(<String, dynamic>{

@@ -8,6 +8,7 @@ import '../../../core/utils/clinical_time.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
+import 'profile/shared/code_source_label.dart';
 import 'shared_read_nfc_header.dart';
 
 class EditMedicalHistoryScreen extends StatefulWidget {
@@ -491,7 +492,12 @@ class _EditMedicalHistoryScreenState extends State<EditMedicalHistoryScreen> {
               ),
               if (item.conditionCie10Code != null)
                 Text(
-                  'CIE-10: ${item.conditionCie10Code}',
+                  backgroundCodeLine(
+                    AppStrings.of(context),
+                    cie10Code: item.conditionCie10Code!,
+                    codedDisplay: item.conditionCodedDisplay,
+                    codingSource: item.codingSource,
+                  ),
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.primary,
@@ -644,7 +650,12 @@ class _EditMedicalHistoryScreenState extends State<EditMedicalHistoryScreen> {
               ),
               if (item.chronicCie10Code != null)
                 Text(
-                  'CIE-10: ${item.chronicCie10Code}',
+                  backgroundCodeLine(
+                    AppStrings.of(context),
+                    cie10Code: item.chronicCie10Code!,
+                    codedDisplay: item.chronicCodedDisplay,
+                    codingSource: item.codingSource,
+                  ),
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.primary,

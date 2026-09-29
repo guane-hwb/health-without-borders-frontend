@@ -437,6 +437,82 @@ void main() {
 
   // ── Group 4: DiagChip ─────────────────────────────────────────────────────
   group('_DiagChip – chips de diagnóstico', () {
+    for (final (source, label) in <(String?, String?)>[
+      ('ai_suggested', 'Sugerido por IA'),
+      ('ai_fallback', 'IA: sin código válido'),
+      (null, 'Origen no registrado'),
+      ('clinician', null),
+    ]) {
+      testWidgets(
+        'origen ${source ?? "ausente"} → ${label ?? "sin etiqueta"}',
+        (tester) async {
+          final c = _makeConsultation(
+            diagnosis: [
+              DiagnosisItem(
+                icd10Code: 'J069',
+                description: 'IRA',
+                source: source,
+              ),
+            ],
+          );
+          await tester.pumpWidget(
+            _wrap(
+              ProfileTabConsultations(
+                draft: _makeRecord([c]),
+                canAdd: false,
+                onAdd: () {},
+              ),
+            ),
+          );
+
+          for (final other in <String>[
+            'Sugerido por IA',
+            'IA: sin código válido',
+            'Origen no registrado',
+          ]) {
+            expect(
+              find.text(other),
+              other == label ? findsOneWidget : findsNothing,
+              reason: other,
+            );
+          }
+        },
+      );
+    }
+
+    testWidgets('el detalle de la consulta indica el origen del diagnóstico', (
+      tester,
+    ) async {
+      final c = _makeConsultation(
+        clinicalEvaluation: ClinicalEvaluation(
+          historyOfCurrentIllness: 'Tos seca',
+        ),
+        diagnosis: [
+          DiagnosisItem(
+            icd10Code: 'J069',
+            description: 'IRA',
+            source: 'ai_suggested',
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+      await tester.tap(find.text('Tos seca'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('IRA · Sugerido por IA', skipOffstage: false),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('muestra chip con código ICD-10 y descripción', (tester) async {
       final diag = _makeDiagnosis(
         icd10Code: 'J00',

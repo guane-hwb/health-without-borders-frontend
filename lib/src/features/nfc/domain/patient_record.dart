@@ -569,6 +569,8 @@ class FamilyHistoryItem {
     this.conditionCie11Code,
     required this.conditionDescription,
     required this.relationship,
+    this.conditionCodedDisplay,
+    this.codingSource,
   });
 
   factory FamilyHistoryItem.fromJson(Map<String, dynamic> json) {
@@ -577,20 +579,31 @@ class FamilyHistoryItem {
       conditionCie11Code: json['conditionCie11Code']?.toString(),
       conditionDescription: json['conditionDescription']?.toString() ?? '',
       relationship: json['relationship']?.toString() ?? '01',
+      conditionCodedDisplay: json['conditionCodedDisplay']?.toString(),
+      codingSource: json['codingSource']?.toString(),
     );
   }
 
   final String? conditionCie10Code; // Resolved by LLM
   final String? conditionCie11Code; // Resolved by LLM
-  final String conditionDescription; // Free text from frontend
+  final String conditionDescription; // Free text, as the professional wrote it
   final String
   relationship; // "01"=Padres, "02"=Hermanos, "03"=Tíos, "04"=Abuelos
+
+  /// Name of the assigned ICD code. It never replaces [conditionDescription].
+  final String? conditionCodedDisplay;
+
+  /// [CodeSource] value of the code; null when stored before the field.
+  final String? codingSource;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     if (conditionCie10Code != null) 'conditionCie10Code': conditionCie10Code,
     if (conditionCie11Code != null) 'conditionCie11Code': conditionCie11Code,
     'conditionDescription': conditionDescription,
     'relationship': relationship,
+    if (conditionCodedDisplay != null)
+      'conditionCodedDisplay': conditionCodedDisplay,
+    if (codingSource != null) 'codingSource': codingSource,
   };
 
   FamilyHistoryItem copyWith({
@@ -598,12 +611,17 @@ class FamilyHistoryItem {
     String? conditionCie11Code,
     String? conditionDescription,
     String? relationship,
+    String? conditionCodedDisplay,
+    String? codingSource,
   }) {
     return FamilyHistoryItem(
       conditionCie10Code: conditionCie10Code ?? this.conditionCie10Code,
       conditionCie11Code: conditionCie11Code ?? this.conditionCie11Code,
       conditionDescription: conditionDescription ?? this.conditionDescription,
       relationship: relationship ?? this.relationship,
+      conditionCodedDisplay:
+          conditionCodedDisplay ?? this.conditionCodedDisplay,
+      codingSource: codingSource ?? this.codingSource,
     );
   }
 
@@ -615,7 +633,9 @@ class FamilyHistoryItem {
           conditionCie10Code == other.conditionCie10Code &&
           conditionCie11Code == other.conditionCie11Code &&
           conditionDescription == other.conditionDescription &&
-          relationship == other.relationship;
+          relationship == other.relationship &&
+          conditionCodedDisplay == other.conditionCodedDisplay &&
+          codingSource == other.codingSource;
 
   @override
   int get hashCode => Object.hash(
@@ -623,6 +643,8 @@ class FamilyHistoryItem {
     conditionCie11Code,
     conditionDescription,
     relationship,
+    conditionCodedDisplay,
+    codingSource,
   );
 }
 
@@ -637,6 +659,8 @@ class ChronicConditionItem {
     required this.chronicDescription,
     this.chronicCie10Code,
     this.chronicCie11Code,
+    this.chronicCodedDisplay,
+    this.codingSource,
   });
 
   factory ChronicConditionItem.fromJson(Map<String, dynamic> json) {
@@ -644,28 +668,42 @@ class ChronicConditionItem {
       chronicDescription: json['chronicDescription']?.toString() ?? '',
       chronicCie10Code: json['chronicCie10Code']?.toString(),
       chronicCie11Code: json['chronicCie11Code']?.toString(),
+      chronicCodedDisplay: json['chronicCodedDisplay']?.toString(),
+      codingSource: json['codingSource']?.toString(),
     );
   }
 
-  final String chronicDescription; // Free text from frontend
+  final String chronicDescription; // Free text, as the professional wrote it
   final String? chronicCie10Code; // Resolved by LLM
   final String? chronicCie11Code; // Resolved by LLM
+
+  /// Name of the assigned ICD code. It never replaces [chronicDescription].
+  final String? chronicCodedDisplay;
+
+  /// [CodeSource] value of the code; null when stored before the field.
+  final String? codingSource;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'chronicDescription': chronicDescription,
     if (chronicCie10Code != null) 'chronicCie10Code': chronicCie10Code,
     if (chronicCie11Code != null) 'chronicCie11Code': chronicCie11Code,
+    if (chronicCodedDisplay != null) 'chronicCodedDisplay': chronicCodedDisplay,
+    if (codingSource != null) 'codingSource': codingSource,
   };
 
   ChronicConditionItem copyWith({
     String? chronicDescription,
     String? chronicCie10Code,
     String? chronicCie11Code,
+    String? chronicCodedDisplay,
+    String? codingSource,
   }) {
     return ChronicConditionItem(
       chronicDescription: chronicDescription ?? this.chronicDescription,
       chronicCie10Code: chronicCie10Code ?? this.chronicCie10Code,
       chronicCie11Code: chronicCie11Code ?? this.chronicCie11Code,
+      chronicCodedDisplay: chronicCodedDisplay ?? this.chronicCodedDisplay,
+      codingSource: codingSource ?? this.codingSource,
     );
   }
 
@@ -676,11 +714,18 @@ class ChronicConditionItem {
           runtimeType == other.runtimeType &&
           chronicDescription == other.chronicDescription &&
           chronicCie10Code == other.chronicCie10Code &&
-          chronicCie11Code == other.chronicCie11Code;
+          chronicCie11Code == other.chronicCie11Code &&
+          chronicCodedDisplay == other.chronicCodedDisplay &&
+          codingSource == other.codingSource;
 
   @override
-  int get hashCode =>
-      Object.hash(chronicDescription, chronicCie10Code, chronicCie11Code);
+  int get hashCode => Object.hash(
+    chronicDescription,
+    chronicCie10Code,
+    chronicCie11Code,
+    chronicCodedDisplay,
+    codingSource,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1089,11 +1134,31 @@ class ClinicalEvaluation {
 // ---------------------------------------------------------------------------
 // DiagnosisItem — Resolved by backend LLM, NOT sent by frontend
 // ---------------------------------------------------------------------------
+/// Who produced a clinical code — mirrors the backend's `CodeSource`.
+///
+/// Everything the LLM produces is a suggestion: the backend sends it to the RDA
+/// as provisional, and the app must keep it apart from what a professional
+/// recorded. Round-trip it untouched: re-sending a record without it would
+/// erase it on the server.
+abstract final class CodeSource {
+  static const String clinician = 'clinician';
+  static const String aiSuggested = 'ai_suggested';
+
+  /// The LLM failed or gave an invalid code; the backend stored R69.
+  static const String aiFallback = 'ai_fallback';
+
+  static bool isAi(String? source) =>
+      source == aiSuggested || source == aiFallback;
+}
+
 class DiagnosisItem {
   DiagnosisItem({
     required this.icd10Code,
     this.icd11Code,
     required this.description,
+    this.source,
+    this.model,
+    this.generatedAt,
   });
 
   factory DiagnosisItem.fromJson(Map<String, dynamic> json) {
@@ -1101,6 +1166,9 @@ class DiagnosisItem {
       icd10Code: json['icd10Code']?.toString() ?? '',
       icd11Code: json['icd11Code']?.toString(),
       description: json['description']?.toString() ?? '',
+      source: json['source']?.toString(),
+      model: json['model']?.toString(),
+      generatedAt: json['generatedAt']?.toString(),
     );
   }
 
@@ -1108,21 +1176,37 @@ class DiagnosisItem {
   final String? icd11Code;
   final String description;
 
+  /// [CodeSource] value; null on diagnoses stored before the field existed.
+  final String? source;
+
+  /// AI model that suggested it, and when (ISO 8601). Set by the server.
+  final String? model;
+  final String? generatedAt;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'icd10Code': icd10Code,
     if (icd11Code != null) 'icd11Code': icd11Code,
     'description': description,
+    if (source != null) 'source': source,
+    if (model != null) 'model': model,
+    if (generatedAt != null) 'generatedAt': generatedAt,
   };
 
   DiagnosisItem copyWith({
     String? icd10Code,
     String? icd11Code,
     String? description,
+    String? source,
+    String? model,
+    String? generatedAt,
   }) {
     return DiagnosisItem(
       icd10Code: icd10Code ?? this.icd10Code,
       icd11Code: icd11Code ?? this.icd11Code,
       description: description ?? this.description,
+      source: source ?? this.source,
+      model: model ?? this.model,
+      generatedAt: generatedAt ?? this.generatedAt,
     );
   }
 
@@ -1133,10 +1217,20 @@ class DiagnosisItem {
           runtimeType == other.runtimeType &&
           icd10Code == other.icd10Code &&
           icd11Code == other.icd11Code &&
-          description == other.description;
+          description == other.description &&
+          source == other.source &&
+          model == other.model &&
+          generatedAt == other.generatedAt;
 
   @override
-  int get hashCode => Object.hash(icd10Code, icd11Code, description);
+  int get hashCode => Object.hash(
+    icd10Code,
+    icd11Code,
+    description,
+    source,
+    model,
+    generatedAt,
+  );
 }
 
 // ---------------------------------------------------------------------------
