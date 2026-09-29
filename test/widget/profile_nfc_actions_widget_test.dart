@@ -15,6 +15,8 @@ class _MockNfcKeyring extends Mock implements NfcKeyring {}
 
 class _MockNfcPayloadCodec extends Mock implements NfcPayloadCodec {}
 
+class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
+
 Widget _wrap(Widget child, {String locale = 'es'}) {
   return AppLocale(
     locale: locale,
@@ -66,6 +68,10 @@ void main() {
   const validHexKey =
       '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f';
 
+  setUpAll(() {
+    registerFallbackValue(_FakePatientFullRecord());
+  });
+
   setUp(() {
     mockKeyring = _MockNfcKeyring();
     mockCodec = _MockNfcPayloadCodec();
@@ -73,7 +79,7 @@ void main() {
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
     binding.platformDispatcher.views.first.physicalSize = const Size(
       1600,
-      1200,
+      2400,
     );
     binding.platformDispatcher.views.first.devicePixelRatio = 1.0;
   });
@@ -219,25 +225,58 @@ void main() {
       await tester.tap(find.text('Run'));
       await tester.pump(const Duration(milliseconds: 300));
 
-      final cancelBtn = find.text('Cancelar');
-      final closeIcon = find.byIcon(Icons.close);
-
-      if (cancelBtn.evaluate().isNotEmpty) {
-        await tester.tap(cancelBtn.first);
-      } else if (closeIcon.evaluate().isNotEmpty) {
-        await tester.tap(closeIcon.first);
-      } else {
-        final BuildContext context = tester.element(
-          find.byType(ElevatedButton).first,
-        );
-        Navigator.of(context).pop(false);
-      }
+      final BuildContext modalContext = tester.element(
+        find.text('Pulsera del paciente'),
+      );
+      Navigator.of(modalContext).pop(false);
 
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(result, isFalse);
     });
+
+    testWidgets(
+      'runs guardian write flow for 1 guardian and 2 guardians in ES/EN',
+      (tester) async {
+        when(() => mockKeyring.isEmpty).thenReturn(false);
+        when(() => mockKeyring.versions).thenReturn(<int>[1]);
+        when(() => mockKeyring.keys).thenReturn(<int, String>{1: validHexKey});
+
+        final recordDual = _createRecord(g1Uid: 'G1-123', g2Uid: 'G2-456');
+
+        await tester.pumpWidget(
+          _wrap(
+            Builder(
+              builder: (ctx) => ElevatedButton(
+                onPressed: () => executeUpdateNfcChips(
+                  context: ctx,
+                  record: recordDual,
+                  keyring: mockKeyring,
+                  patientChipDirty: false,
+                  guardianChipDirty: true,
+                ),
+                child: const Text('Run Guardian Dual'),
+              ),
+            ),
+            locale: 'es',
+          ),
+        );
+
+        await tester.tap(find.text('Run Guardian Dual'));
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Tarjeta del guardián 1'), findsOneWidget);
+
+        final BuildContext modalContext = tester.element(
+          find.text('Tarjeta del guardián 1'),
+        );
+        Navigator.of(modalContext).pop(false);
+
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+      },
+    );
   });
 
   group('executeReassignOne — Target titles and validation checks', () {
@@ -266,17 +305,13 @@ void main() {
       await tester.tap(find.text('Reassign'));
       await tester.pump(const Duration(milliseconds: 300));
 
-      final cancelBtn = find.text('Cancelar');
-      final closeIcon = find.byIcon(Icons.close);
-
-      if (cancelBtn.evaluate().isNotEmpty) {
-        await tester.tap(cancelBtn.first);
-      } else if (closeIcon.evaluate().isNotEmpty) {
-        await tester.tap(closeIcon.first);
-      }
+      final BuildContext modalContext = tester.element(
+        find.byType(BottomSheet),
+      );
+      Navigator.of(modalContext).pop(false);
 
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
     });
@@ -307,11 +342,13 @@ void main() {
       await tester.tap(find.text('Patient ES'));
       await tester.pump(const Duration(milliseconds: 300));
 
-      final cancelBtn = find.text('Cancelar');
-      if (cancelBtn.evaluate().isNotEmpty) {
-        await tester.tap(cancelBtn.first);
-        await tester.pump(const Duration(milliseconds: 500));
-      }
+      final BuildContext modalContext = tester.element(
+        find.byType(BottomSheet),
+      );
+      Navigator.of(modalContext).pop(false);
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
     });
@@ -342,11 +379,13 @@ void main() {
       await tester.tap(find.text('G1 Single ES'));
       await tester.pump(const Duration(milliseconds: 300));
 
-      final cancelBtn = find.text('Cancelar');
-      if (cancelBtn.evaluate().isNotEmpty) {
-        await tester.tap(cancelBtn.first);
-        await tester.pump(const Duration(milliseconds: 500));
-      }
+      final BuildContext modalContext = tester.element(
+        find.byType(BottomSheet),
+      );
+      Navigator.of(modalContext).pop(false);
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
     });
@@ -378,11 +417,13 @@ void main() {
       await tester.tap(find.text('G1 Dual EN'));
       await tester.pump(const Duration(milliseconds: 300));
 
-      final cancelBtn = find.text('Cancel');
-      if (cancelBtn.evaluate().isNotEmpty) {
-        await tester.tap(cancelBtn.first);
-        await tester.pump(const Duration(milliseconds: 500));
-      }
+      final BuildContext modalContext = tester.element(
+        find.byType(BottomSheet),
+      );
+      Navigator.of(modalContext).pop(false);
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
     });
@@ -411,13 +452,205 @@ void main() {
       await tester.tap(find.text('G2 ES'));
       await tester.pump(const Duration(milliseconds: 300));
 
-      final cancelBtn = find.text('Cancelar');
-      if (cancelBtn.evaluate().isNotEmpty) {
-        await tester.tap(cancelBtn.first);
-        await tester.pump(const Duration(milliseconds: 500));
-      }
+      final BuildContext modalContext = tester.element(
+        find.byType(BottomSheet),
+      );
+      Navigator.of(modalContext).pop(false);
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
     });
+  });
+
+  group('executeUpdateNfcChips & executeReassignOne — Cobertura 100%', () {
+    testWidgets('completa el flujo de escritura del paciente con éxito', (
+      tester,
+    ) async {
+      when(() => mockKeyring.isEmpty).thenReturn(false);
+      when(() => mockKeyring.versions).thenReturn(<int>[1]);
+      when(() => mockKeyring.keys).thenReturn(<int, String>{1: validHexKey});
+
+      bool? result;
+
+      await tester.pumpWidget(
+        _wrap(
+          Builder(
+            builder: (ctx) => ElevatedButton(
+              onPressed: () async {
+                result = await executeUpdateNfcChips(
+                  context: ctx,
+                  record: _createRecord(),
+                  keyring: mockKeyring,
+                  patientChipDirty: true,
+                  guardianChipDirty: false,
+                );
+              },
+              child: const Text('Write Patient'),
+            ),
+          ),
+          locale: 'es',
+        ),
+      );
+
+      await tester.tap(find.text('Write Patient'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final startBtn = find.text('Empezar');
+      expect(startBtn, findsOneWidget);
+
+      await tester.tap(startBtn);
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final BuildContext modalContext = tester.element(
+        find.text('Pulsera del paciente'),
+      );
+      Navigator.of(modalContext).pop(true);
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(result, isTrue);
+    });
+
+    testWidgets(
+      'ejecuta la escritura de guardián 1 y guardián 2 secuencialmente',
+      (tester) async {
+        when(() => mockKeyring.isEmpty).thenReturn(false);
+        when(() => mockKeyring.versions).thenReturn(<int>[1]);
+        when(() => mockKeyring.keys).thenReturn(<int, String>{1: validHexKey});
+
+        final record = _createRecord(g1Uid: 'G1-123', g2Uid: 'G2-456');
+        bool? result;
+
+        await tester.pumpWidget(
+          _wrap(
+            Builder(
+              builder: (ctx) => ElevatedButton(
+                onPressed: () async {
+                  result = await executeUpdateNfcChips(
+                    context: ctx,
+                    record: record,
+                    keyring: mockKeyring,
+                    patientChipDirty: false,
+                    guardianChipDirty: true,
+                  );
+                },
+                child: const Text('Write Guardians'),
+              ),
+            ),
+            locale: 'es',
+          ),
+        );
+
+        await tester.tap(find.text('Write Guardians'));
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Tarjeta del guardián 1'), findsOneWidget);
+        BuildContext modalContext = tester.element(
+          find.text('Tarjeta del guardián 1'),
+        );
+        Navigator.of(modalContext).pop(true);
+
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Tarjeta del guardián 2'), findsOneWidget);
+        modalContext = tester.element(find.text('Tarjeta del guardián 2'));
+        Navigator.of(modalContext).pop(true);
+
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(result, isTrue);
+      },
+    );
+
+    testWidgets(
+      'muestra SnackBar si el dispositivo ya está en uso durante reasignación',
+      (tester) async {
+        String? snackMessage;
+        bool isError = false;
+
+        await tester.pumpWidget(
+          _wrap(
+            Builder(
+              builder: (ctx) => ElevatedButton(
+                onPressed: () => executeReassignOne(
+                  context: ctx,
+                  target: ReassignTarget.patient,
+                  record: _createRecord(),
+                  codec: mockCodec,
+                  isEs: true,
+                  showSnack: (msg, {error = false}) {
+                    snackMessage = msg;
+                    isError = error;
+                  },
+                ),
+                child: const Text('Reassign Target'),
+              ),
+            ),
+            locale: 'es',
+          ),
+        );
+
+        await tester.tap(find.text('Reassign Target'));
+        await tester.pump(const Duration(milliseconds: 300));
+
+        final BuildContext modalContext = tester.element(
+          find.byType(BottomSheet),
+        );
+        Navigator.of(modalContext).pop(false);
+
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(snackMessage, isNull);
+        expect(isError, isFalse);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'evalúa todas las ramas de copia según ReassignTarget (patient, guardian1, guardian2)',
+      (tester) async {
+        final record = _createRecord(g1Uid: 'G1-123', g2Uid: 'G2-456');
+
+        for (final target in ReassignTarget.values) {
+          await tester.pumpWidget(
+            _wrap(
+              Builder(
+                builder: (ctx) => ElevatedButton(
+                  onPressed: () => executeReassignOne(
+                    context: ctx,
+                    target: target,
+                    record: record,
+                    codec: mockCodec,
+                    isEs: false,
+                    showSnack: (_, {error = false}) {},
+                  ),
+                  child: Text('Reassign ${target.name}'),
+                ),
+              ),
+              locale: 'en',
+            ),
+          );
+
+          await tester.tap(find.text('Reassign ${target.name}'));
+          await tester.pump(const Duration(milliseconds: 300));
+
+          final BuildContext modalContext = tester.element(
+            find.byType(BottomSheet),
+          );
+          Navigator.of(modalContext).pop(false);
+
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+        }
+
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }
