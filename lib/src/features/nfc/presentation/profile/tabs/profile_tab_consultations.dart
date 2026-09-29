@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../domain/patient_record.dart';
+import '../shared/code_source_label.dart';
 import '../shared/profile_card.dart';
 
 class ProfileTabConsultations extends StatelessWidget {
@@ -340,6 +341,10 @@ class _DiagChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = '${d.icd10Code} ${d.description}'.trim();
     final shown = label.length > 36 ? '${label.substring(0, 36)}...' : label;
+    final String? origin = diagnosisSourceLabel(
+      AppStrings.of(context),
+      d.source,
+    );
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -364,6 +369,17 @@ class _DiagChip extends StatelessWidget {
               fontWeight: FontWeight.w500,
             ),
           ),
+          if (origin != null) ...[
+            const SizedBox(width: 6),
+            Text(
+              origin,
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -452,7 +468,8 @@ class _ConsultationDetailScreen extends StatelessWidget {
               title: s.diagnosisTitle,
               rows: [
                 _kv(s.diagnosisType, _dtLabel(context, item.diagnosisType)),
-                for (final d in item.diagnosis) _kv(d.icd10Code, d.description),
+                for (final d in item.diagnosis)
+                  _kv(d.icd10Code, _diagnosisText(s, d)),
               ],
             ),
             const SizedBox(height: 12),
@@ -498,6 +515,12 @@ class _ConsultationDetailScreen extends StatelessWidget {
   }
 
   static MapEntry<String, String> _kv(String k, String v) => MapEntry(k, v);
+
+  static String _diagnosisText(AppStrings s, DiagnosisItem d) {
+    final String? origin = diagnosisSourceLabel(s, d.source);
+    return origin == null ? d.description : '${d.description} · $origin';
+  }
+
   static String _fmtDt(String dt, BuildContext context) {
     final s = AppStrings.of(context);
     final isEs = s.isEs;

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../domain/patient_record.dart';
+import '../shared/code_source_label.dart';
 
 class BackgroundManageSheet extends StatelessWidget {
   const BackgroundManageSheet({
@@ -145,7 +146,18 @@ class BackgroundManageSheet extends StatelessWidget {
                                           .chronicCie10Code !=
                                       null)
                                     Text(
-                                      '${AppStrings.of(context).cie10Label}${bg.chronicConditions[i].chronicCie10Code}',
+                                      backgroundCodeLine(
+                                        AppStrings.of(context),
+                                        cie10Code: bg
+                                            .chronicConditions[i]
+                                            .chronicCie10Code!,
+                                        codedDisplay: bg
+                                            .chronicConditions[i]
+                                            .chronicCodedDisplay,
+                                        codingSource: bg
+                                            .chronicConditions[i]
+                                            .codingSource,
+                                      ),
                                       style: const TextStyle(
                                         fontSize: 12,
                                         color: AppColors.textSecondary,

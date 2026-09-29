@@ -207,6 +207,81 @@ void main() {
       },
     );
 
+    test(
+      'la tarjeta conserva el origen de la IA pero no model ni generatedAt',
+      () {
+        final record =
+            _record(
+              history: <MedicalHistoryItem>[
+                MedicalHistoryItem(
+                  encounterIdentifier: 'enc-1',
+                  startDateTime: '2026-03-15T09:00:00',
+                  diagnosis: <DiagnosisItem>[
+                    DiagnosisItem(
+                      icd10Code: 'J069',
+                      description: 'IRA',
+                      source: CodeSource.aiSuggested,
+                      model: 'gemini-3-flash-preview',
+                      generatedAt: '2026-03-15T14:00:00+00:00',
+                    ),
+                  ],
+                ),
+              ],
+            ).copyWith(
+              backgroundHistory: BackgroundHistory(
+                chronicConditions: <ChronicConditionItem>[
+                  ChronicConditionItem(
+                    chronicDescription: 'Asma',
+                    chronicCie10Code: 'J459',
+                    chronicCodedDisplay: 'Asma, no especificada',
+                    codingSource: CodeSource.aiSuggested,
+                  ),
+                ],
+                familyHistory: <FamilyHistoryItem>[
+                  FamilyHistoryItem(
+                    conditionDescription: 'Glaucoma',
+                    relationship: '04',
+                    conditionCie10Code: 'H409',
+                    conditionCodedDisplay: 'Glaucoma, no especificado',
+                    codingSource: CodeSource.aiSuggested,
+                  ),
+                ],
+              ),
+            );
+
+        final fit = NfcGuardianPayload.buildWithinCapacity(
+          record: record,
+          capacityBytes: 1000000,
+          estimateSize: (Map<String, dynamic> m) => 0,
+        );
+        final written = jsonEncode(fit.payload);
+        expect(written, isNot(contains('gemini')));
+        expect(written, isNot(contains('generatedAt')));
+        // New keys travel aliased, not spelled out.
+        expect(written, isNot(contains('codingSource')));
+        expect(written, isNot(contains('CodedDisplay')));
+
+        final rebuilt = NfcGuardianPayload.reconstructFromGuardian(fit.payload);
+        final d = rebuilt.medicalHistory.single.diagnosis.single;
+        expect(d.source, CodeSource.aiSuggested);
+        expect(d.model, isNull);
+        expect(d.generatedAt, isNull);
+        final chronic = rebuilt.backgroundHistory!.chronicConditions.single;
+        expect(chronic.chronicDescription, 'Asma');
+        expect(chronic.chronicCodedDisplay, 'Asma, no especificada');
+        expect(chronic.codingSource, CodeSource.aiSuggested);
+        final family = rebuilt.backgroundHistory!.familyHistory.single;
+        expect(family.conditionCodedDisplay, 'Glaucoma, no especificado');
+        expect(family.codingSource, CodeSource.aiSuggested);
+
+        // The record itself is not altered by building the card.
+        expect(
+          record.medicalHistory.single.diagnosis.single.model,
+          'gemini-3-flash-preview',
+        );
+      },
+    );
+
     test('dropped-history counts are reported on the fit', () {
       final record = _record(
         history: <MedicalHistoryItem>[

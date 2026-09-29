@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
+
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/tabs/profile_tab_background.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 
@@ -21,17 +23,21 @@ Widget _buildSubject({
   VoidCallback? onAddMedication,
   void Function(int)? onRemoveMedication,
 }) {
-  return MaterialApp(
-    home: Scaffold(
-      body: ProfileTabBackground(
-        draft: draft,
-        onAddChronic: onAddChronic ?? () {},
-        onRemoveChronic: onRemoveChronic ?? (_) {},
-        onEditPersonal: onEditPersonal ?? () {},
-        onAddFamilyHistory: onAddFamilyHistory ?? () {},
-        onRemoveFamilyHistory: onRemoveFamilyHistory ?? (_) {},
-        onAddMedication: onAddMedication ?? () {},
-        onRemoveMedication: onRemoveMedication ?? (_) {},
+  return AppLocale(
+    locale: 'es',
+    setLocale: (_) {},
+    child: MaterialApp(
+      home: Scaffold(
+        body: ProfileTabBackground(
+          draft: draft,
+          onAddChronic: onAddChronic ?? () {},
+          onRemoveChronic: onRemoveChronic ?? (_) {},
+          onEditPersonal: onEditPersonal ?? () {},
+          onAddFamilyHistory: onAddFamilyHistory ?? () {},
+          onRemoveFamilyHistory: onRemoveFamilyHistory ?? (_) {},
+          onAddMedication: onAddMedication ?? () {},
+          onRemoveMedication: onRemoveMedication ?? (_) {},
+        ),
       ),
     ),
   );
@@ -312,7 +318,54 @@ void main() {
         ),
       );
 
-      expect(find.textContaining('CIE-10 C18'), findsOneWidget);
+      expect(find.textContaining('CIE-10: C18'), findsOneWidget);
+    });
+
+    testWidgets('un código de la IA se muestra aparte del texto original', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildSubject(
+          draft: _record(
+            backgroundHistory: BackgroundHistory(
+              familyHistory: [
+                FamilyHistoryItem(
+                  relationship: '01',
+                  conditionDescription: 'Diabetes',
+                  conditionCie10Code: 'E14',
+                  conditionCodedDisplay: 'Diabetes mellitus, no especificada',
+                  codingSource: 'ai_suggested',
+                ),
+              ],
+              chronicConditions: [
+                ChronicConditionItem(
+                  chronicDescription: 'Asma',
+                  chronicCie10Code: 'J459',
+                  chronicCodedDisplay: 'Asma, no especificada',
+                  codingSource: 'ai_suggested',
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // The professional's words stay the headline of each item.
+      expect(find.text('Diabetes'), findsOneWidget);
+      expect(find.text('Asma'), findsOneWidget);
+      expect(
+        find.textContaining(
+          'CIE-10: E14 — Diabetes mellitus, no especificada · '
+          'Código sugerido por IA',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining(
+          'CIE-10: J459 — Asma, no especificada · Código sugerido por IA',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('does NOT show CIE-10 segment when code is null', (

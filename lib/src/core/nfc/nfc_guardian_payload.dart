@@ -64,7 +64,7 @@ abstract final class NfcGuardianPayload {
     );
 
     map['medicalHistory'] = consultations
-        .map((MedicalHistoryItem m) => m.toJson())
+        .map((MedicalHistoryItem m) => _withoutAiMetadata(m.toJson()))
         .toList();
     map['vaccinationRecord'] = vaccines
         .map((VaccinationRecordItem v) => v.toJson())
@@ -268,6 +268,25 @@ abstract final class NfcGuardianPayload {
     final sorted = List<T>.from(items)
       ..sort((T a, T b) => dateOf(b).compareTo(dateOf(a)));
     return sorted.take(limit).toList();
+  }
+
+  /// Drops the AI model name and timestamp from each diagnosis of a
+  /// serialized consultation. They are audit metadata the server keeps; on a
+  /// card with a few hundred bytes they would push consultations off it. The
+  /// `source` stays: it is what tells a reader offline that a diagnosis is an
+  /// AI suggestion.
+  static Map<String, dynamic> _withoutAiMetadata(Map<String, dynamic> visit) {
+    final Object? diagnoses = visit['diagnosis'];
+    if (diagnoses is List) {
+      for (final Object? d in diagnoses) {
+        if (d is Map) {
+          d
+            ..remove('model')
+            ..remove('generatedAt');
+        }
+      }
+    }
+    return visit;
   }
 
   /// Removes a guardian's consent signature (PNG base64) from its serialized

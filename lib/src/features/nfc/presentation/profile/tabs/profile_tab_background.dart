@@ -1,8 +1,10 @@
 // lib/src/features/nfc/presentation/profile/tabs/profile_tab_background.dart
 import 'package:flutter/material.dart';
 
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../domain/patient_record.dart';
+import '../shared/code_source_label.dart';
 import '../shared/profile_card.dart';
 import '../shared/profile_section_header.dart';
 
@@ -180,8 +182,13 @@ class _ChronicConditionCard extends StatelessWidget {
                 if (item.chronicCie10Code != null) ...[
                   const SizedBox(height: 2),
                   Text(
-                    'CIE-10: ${item.chronicCie10Code}'
-                    '${item.chronicCie11Code != null ? ' · CIE-11: ${item.chronicCie11Code}' : ''}',
+                    backgroundCodeLine(
+                      AppStrings.of(context),
+                      cie10Code: item.chronicCie10Code!,
+                      cie11Code: item.chronicCie11Code,
+                      codedDisplay: item.chronicCodedDisplay,
+                      codingSource: item.codingSource,
+                    ),
                     style: const TextStyle(
                       fontSize: 11,
                       color: AppColors.textSecondary,
@@ -312,8 +319,10 @@ class _FamilyHistoryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${_relationshipLabel(item.relationship)}'
-                  '${item.conditionCie10Code != null ? ' · CIE-10 ${item.conditionCie10Code}' : ''}',
+                  item.conditionCie10Code == null
+                      ? _relationshipLabel(item.relationship)
+                      : '${_relationshipLabel(item.relationship)} · '
+                            '${backgroundCodeLine(AppStrings.of(context), cie10Code: item.conditionCie10Code!, cie11Code: item.conditionCie11Code, codedDisplay: item.conditionCodedDisplay, codingSource: item.codingSource)}',
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.textSecondary,

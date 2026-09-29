@@ -518,6 +518,10 @@ class AppStrings {
   String get monNov => _get('monNov');
   String get monDic => _get('monDic');
   String get timeAm => _get('timeAm');
+  String get sourceAiSuggested => _get('sourceAiSuggested');
+  String get sourceAiFallback => _get('sourceAiFallback');
+  String get sourceUnrecorded => _get('sourceUnrecorded');
+  String get codeSuggestedByAi => _get('codeSuggestedByAi');
   String get timePm => _get('timePm');
 
   // Care Modality Labels ─────────────────────────────────────────────────
@@ -1107,6 +1111,10 @@ class AppStrings {
     'monNov': 'nov',
     'monDic': 'dic',
     'timeAm': 'a.m.',
+    'sourceAiSuggested': 'Sugerido por IA',
+    'sourceAiFallback': 'IA: sin código válido',
+    'sourceUnrecorded': 'Origen no registrado',
+    'codeSuggestedByAi': 'Código sugerido por IA',
     'timePm': 'p.m.',
     'modIntramural': 'Intramural',
     'modExtramuralMobil': 'Extramural móvil',
@@ -1688,6 +1696,10 @@ class AppStrings {
     'monNov': 'Nov',
     'monDic': 'Dec',
     'timeAm': 'AM',
+    'sourceAiSuggested': 'Suggested by AI',
+    'sourceAiFallback': 'AI: no valid code',
+    'sourceUnrecorded': 'Origin not recorded',
+    'codeSuggestedByAi': 'Code suggested by AI',
     'timePm': 'PM',
     'modIntramural': 'Intramural',
     'modExtramuralMobil': 'Mobile extramural',
