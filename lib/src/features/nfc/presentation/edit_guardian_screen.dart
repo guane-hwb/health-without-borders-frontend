@@ -5,6 +5,7 @@ import '../../../core/i18n/app_strings.dart';
 import '../../../core/utils/app_logger.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../domain/guardian_identity.dart';
 import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
 
@@ -51,7 +52,7 @@ class _EditGuardianScreenState extends State<EditGuardianScreen> {
     final user = scope.authRepository.currentUser;
 
     final g = widget.patient.guardianInfo;
-    final updatedGuardian = GuardianInfo(
+    final edited = GuardianInfo(
       name: name,
       relationship: g.relationship,
       phone: _contactCtrl.text.trim(),
@@ -59,6 +60,11 @@ class _EditGuardianScreenState extends State<EditGuardianScreen> {
       documentType: _docType,
       documentNumber: _docNumberCtrl.text.trim(),
     );
+    // Keep the consent only while it is the same person who gave it; this
+    // screen used to drop it even when only the phone changed.
+    final updatedGuardian = isSameGuardian(g, edited)
+        ? edited.copyWith(consent: g.consent)
+        : edited;
 
     final updatedPatient = widget.patient.copyWith(
       guardianInfo: updatedGuardian,

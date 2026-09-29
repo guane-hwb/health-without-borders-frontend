@@ -518,6 +518,7 @@ class AppStrings {
   String get monNov => _get('monNov');
   String get monDic => _get('monDic');
   String get timeAm => _get('timeAm');
+  String get consentPending => _get('consentPending');
   String get timePm => _get('timePm');
 
   // Care Modality Labels ─────────────────────────────────────────────────
@@ -1107,6 +1108,7 @@ class AppStrings {
     'monNov': 'nov',
     'monDic': 'dic',
     'timeAm': 'a.m.',
+    'consentPending': 'Consentimiento pendiente',
     'timePm': 'p.m.',
     'modIntramural': 'Intramural',
     'modExtramuralMobil': 'Extramural móvil',
@@ -1688,6 +1690,7 @@ class AppStrings {
     'monNov': 'Nov',
     'monDic': 'Dec',
     'timeAm': 'AM',
+    'consentPending': 'Consent pending',
     'timePm': 'PM',
     'modIntramural': 'Intramural',
     'modExtramuralMobil': 'Mobile extramural',
