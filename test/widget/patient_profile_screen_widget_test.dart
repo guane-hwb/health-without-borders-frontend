@@ -103,6 +103,9 @@ class _FakeAuthRepository extends AuthRepository {
     UserRole role = UserRole.doctor,
     this.key,
     this.keyDelay,
+    this.hasCurrentUser = true,
+    this.restoredUser,
+    this.keyringOverride,
   }) : _fakeUser = UserSession(
          id: 'u-test',
          email: 'test@example.com',
@@ -116,15 +119,32 @@ class _FakeAuthRepository extends AuthRepository {
   final String? key;
   final Duration? keyDelay;
 
+  /// Si es false, `currentUser` devuelve null (sesión en memoria perdida).
+  final bool hasCurrentUser;
+
+  /// Usuario que devuelve `restoreSession()` (null = no hay sesión guardada).
+  final UserSession? restoredUser;
+
+  /// Si se define, `getNfcKeyring()` devuelve exactamente este keyring.
+  final NfcKeyring? keyringOverride;
+
   int getNfcEncryptionKeyCallCount = 0;
+  int restoreSessionCallCount = 0;
 
   @override
-  UserSession? get currentUser => _fakeUser;
+  UserSession? get currentUser => hasCurrentUser ? _fakeUser : null;
+
+  @override
+  Future<UserSession?> restoreSession() async {
+    restoreSessionCallCount++;
+    return restoredUser;
+  }
 
   @override
   Future<NfcKeyring?> getNfcKeyring() async {
     getNfcEncryptionKeyCallCount++;
     if (keyDelay != null) await Future<void>.delayed(keyDelay!);
+    if (keyringOverride != null) return keyringOverride;
     final String hex =
         key ??
         '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF';
@@ -134,6 +154,18 @@ class _FakeAuthRepository extends AuthRepository {
 
   @override
   Future<bool> isNfcSessionExpired() async => false;
+}
+
+/// Keyring "escribible" cuyo contenido es inutilizable: `canWrite` es true
+/// (pasa la validación de _reassignDevices) pero cualquier otro acceso lanza,
+/// por lo que `NfcPayloadCodec.fromKeyring` falla.
+class _BrokenKeyring implements NfcKeyring {
+  @override
+  bool get canWrite => true;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('Keyring inválido simulado');
 }
 
 class _FaultyLocalDatabase extends LocalDatabase {
@@ -164,6 +196,7 @@ class _FaultyLocalDatabase extends LocalDatabase {
 
   int savePatientCallCount = 0;
   int clearChipsDirtyCallCount = 0;
+  final List<String?> savedOwnerUserIds = [];
 
   @override
   Future<NfcChipStatus?> getChipStatus(String patientId) async {
@@ -182,6 +215,7 @@ class _FaultyLocalDatabase extends LocalDatabase {
     String? retiredDeviceReason,
   }) async {
     savePatientCallCount++;
+    savedOwnerUserIds.add(ownerUserId);
     if (throwOnSavePatient) {
       throw Exception('Simulated savePatient failure');
     }
@@ -264,6 +298,11 @@ class _DelayedFakeSyncEngine extends _FakeSyncEngine {
     _pending?.complete(success);
     _pending = null;
   }
+
+  void fail() {
+    _pending?.completeError(Exception('Error de sincronización simulado'));
+    _pending = null;
+  }
 }
 
 class _LocaleWrapper extends StatefulWidget {
@@ -309,11 +348,17 @@ Widget _wrap(
   Duration? nfcKeyDelay,
   LocalDatabase? localDatabase,
   void Function(_Fakes fakes)? onFakesReady,
+  bool hasCurrentUser = true,
+  UserSession? restoredUser,
+  NfcKeyring? nfcKeyring,
 }) {
   final fakeAuth = _FakeAuthRepository(
     role: role,
     key: nfcKey,
     keyDelay: nfcKeyDelay,
+    hasCurrentUser: hasCurrentUser,
+    restoredUser: restoredUser,
+    keyringOverride: nfcKeyring,
   );
   final fakeSyncEngine =
       syncEng ?? _FakeSyncEngine(shouldThrow: syncShouldThrow);
@@ -455,6 +500,9 @@ Future<void> _pumpScreen(
   Duration? nfcKeyDelay,
   LocalDatabase? localDatabase,
   void Function(_Fakes fakes)? onFakesReady,
+  bool hasCurrentUser = true,
+  UserSession? restoredUser,
+  NfcKeyring? nfcKeyring,
 }) async {
   await tester.pumpWidget(
     _wrap(
@@ -472,6 +520,9 @@ Future<void> _pumpScreen(
       nfcKeyDelay: nfcKeyDelay,
       localDatabase: localDatabase,
       onFakesReady: onFakesReady,
+      hasCurrentUser: hasCurrentUser,
+      restoredUser: restoredUser,
+      nfcKeyring: nfcKeyring,
     ),
   );
   await tester.pump();
@@ -2625,6 +2676,294 @@ void main() {
         expect(headerAfter.isSyncing, isFalse);
         expect(find.byIcon(Icons.sync_rounded), findsOneWidget);
         expect(find.byType(CircularProgressIndicator), findsNothing);
+      },
+    );
+  });
+
+  group('Cobertura 100% — _reassignDevices con keyring NFC inválido', () {
+    Future<void> triggerReassign(WidgetTester tester) async {
+      PatientProfileScreen.showReassignDeviceDialogImpl =
+          (context, {required isEs, required hasG1, required hasG2}) async =>
+              const ReassignSelection(
+                targets: [ReassignTarget.patient],
+                reason: 'lost',
+              );
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onReassignDevice!();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      '131. Keyring inválido (codec falla) muestra snackbar de error en español',
+      (tester) async {
+        var executeCalls = 0;
+        await _pumpScreen(
+          tester,
+          _record(),
+          allowReassign: true,
+          nfcKeyring: _BrokenKeyring(),
+        );
+        PatientProfileScreen.executeReassignOneImpl =
+            ({
+              required context,
+              required target,
+              required record,
+              required codec,
+              required isEs,
+              required showSnack,
+            }) async {
+              executeCalls++;
+              return null;
+            };
+
+        await triggerReassign(tester);
+
+        expect(
+          find.text('La clave NFC no es válida. Contacte al administrador.'),
+          findsOneWidget,
+        );
+        expect(executeCalls, 0);
+      },
+    );
+
+    testWidgets('132. Keyring inválido muestra el snackbar en inglés', (
+      tester,
+    ) async {
+      await _pumpScreen(
+        tester,
+        _record(),
+        allowReassign: true,
+        locale: 'en',
+        nfcKeyring: _BrokenKeyring(),
+      );
+
+      await triggerReassign(tester);
+
+      expect(
+        find.text('The NFC key is invalid. Contact your administrator.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+      '133. Keyring inválido no guarda nada ni deja el botón bloqueado',
+      (tester) async {
+        late _Fakes fakes;
+        await _pumpScreen(
+          tester,
+          _record(),
+          allowReassign: true,
+          nfcKeyring: _BrokenKeyring(),
+          onFakesReady: (f) => fakes = f,
+        );
+
+        await triggerReassign(tester);
+
+        expect(fakes.db.savePatientCallCount, 0);
+        expect(fakes.db.clearChipsDirtyCallCount, 0);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+      },
+    );
+  });
+
+  group('Cobertura 100% — _saveAndPendingSync sin sesión en memoria', () {
+    Future<void> editAddress(WidgetTester tester) async {
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onEditAddress();
+      await tester.pumpAndSettle();
+      tester
+          .widget<EditAddressSheet>(find.byType(EditAddressSheet))
+          .onConfirm(Address(city: 'Cali', state: 'Valle'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      '134. Sin currentUser pero restoreSession devuelve usuario: guarda con '
+      'el usuario restaurado',
+      (tester) async {
+        late _Fakes fakes;
+        await _pumpScreen(
+          tester,
+          _record(),
+          hasCurrentUser: false,
+          restoredUser: UserSession(
+            id: 'u-restored',
+            email: 'restored@example.com',
+            fullName: 'Restored User',
+            role: UserRole.doctor,
+            organizationId: 'org-restored',
+          ),
+          onFakesReady: (f) => fakes = f,
+        );
+
+        await editAddress(tester);
+
+        expect(fakes.auth.restoreSessionCallCount, 1);
+        expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
+        expect(fakes.db.savedOwnerUserIds.first, 'u-restored');
+        expect(
+          find.text('Sesión no activa. Vuelve a iniciar sesión.'),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      '135. Sin currentUser y restoreSession devuelve null: snackbar de '
+      'sesión no activa y no guarda',
+      (tester) async {
+        late _Fakes fakes;
+        await _pumpScreen(
+          tester,
+          _record(),
+          hasCurrentUser: false,
+          restoredUser: null,
+          onFakesReady: (f) => fakes = f,
+        );
+
+        await editAddress(tester);
+
+        expect(fakes.auth.restoreSessionCallCount, 1);
+        expect(
+          find.text('Sesión no activa. Vuelve a iniciar sesión.'),
+          findsOneWidget,
+        );
+        expect(fakes.db.savePatientCallCount, 0);
+        expect(fakes.syncEngine.callCount, 0);
+      },
+    );
+  });
+
+  group('Cobertura 100% — _sync sin conexión y con errores', () {
+    testWidgets(
+      '136. Sync manual sin conexión muestra snackbar naranja en español y '
+      'no llama a syncAll',
+      (tester) async {
+        final controller = _setConnectivity([ConnectivityResult.none]);
+        late _Fakes fakes;
+        await _pumpScreen(tester, _record(), onFakesReady: (f) => fakes = f);
+        await tester.pumpAndSettle();
+
+        tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Sin conexión. Se sincronizará al reconectar.'),
+          findsOneWidget,
+        );
+        final snack = tester.widget<SnackBar>(find.byType(SnackBar));
+        expect(snack.backgroundColor, Colors.orange.shade800);
+        expect(fakes.syncEngine.callCount, 0);
+        expect(fakes.db.savePatientCallCount, 0);
+        await controller.close();
+      },
+    );
+
+    testWidgets('137. Sync manual sin conexión muestra el mensaje en inglés', (
+      tester,
+    ) async {
+      final controller = _setConnectivity([ConnectivityResult.none]);
+      await _pumpScreen(tester, _record(), locale: 'en');
+      await tester.pumpAndSettle();
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Offline. It will sync once reconnected.'),
+        findsOneWidget,
+      );
+      await controller.close();
+    });
+
+    testWidgets(
+      '138. Sync manual que lanza excepción muestra "Fallo al sincronizar." y '
+      'libera el spinner',
+      (tester) async {
+        late _Fakes fakes;
+        await _pumpScreen(
+          tester,
+          _record(),
+          syncShouldThrow: true,
+          onFakesReady: (f) => fakes = f,
+        );
+        await tester.pumpAndSettle();
+
+        tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+        await tester.pumpAndSettle();
+
+        expect(fakes.syncEngine.callCount, 1);
+        expect(find.text('Fallo al sincronizar.'), findsOneWidget);
+        final snack = tester.widget<SnackBar>(find.byType(SnackBar));
+        expect(snack.backgroundColor, isNot(Colors.orange.shade800));
+        expect(
+          tester.widget<ProfileHeader>(find.byType(ProfileHeader)).isSyncing,
+          isFalse,
+        );
+        expect(find.byIcon(Icons.sync_rounded), findsOneWidget);
+      },
+    );
+
+    testWidgets('139. Sync manual que lanza excepción en inglés', (
+      tester,
+    ) async {
+      await _pumpScreen(tester, _record(), syncShouldThrow: true, locale: 'en');
+      await tester.pumpAndSettle();
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sync failed.'), findsOneWidget);
+    });
+
+    testWidgets(
+      '140. Sync silencioso que lanza excepción (tras guardar) no muestra '
+      'snackbar de fallo',
+      (tester) async {
+        late _Fakes fakes;
+        await _pumpScreen(
+          tester,
+          _record(),
+          syncShouldThrow: true,
+          onFakesReady: (f) => fakes = f,
+        );
+        await tester.pumpAndSettle();
+
+        tester
+            .widget<ProfileTabSummary>(find.byType(ProfileTabSummary))
+            .onEditAddress();
+        await tester.pumpAndSettle();
+        tester
+            .widget<EditAddressSheet>(find.byType(EditAddressSheet))
+            .onConfirm(Address(city: 'Cali', state: 'Valle'));
+        await tester.pumpAndSettle();
+
+        expect(fakes.syncEngine.callCount, greaterThanOrEqualTo(1));
+        expect(find.text('Fallo al sincronizar.'), findsNothing);
+        expect(find.textContaining('El cambio NO está a salvo'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      '141. Si la pantalla se desmonta mientras syncAll falla, no lanza '
+      'errores',
+      (tester) async {
+        final engine = _DelayedFakeSyncEngine();
+        await _pumpScreen(tester, _record(), syncEng: engine);
+
+        tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+        await tester.pump();
+        expect(engine.callCount, 1);
+
+        await tester.pumpWidget(const SizedBox());
+        engine.fail();
+        await tester.pump();
+
+        expect(tester.takeException(), isNull);
       },
     );
   });

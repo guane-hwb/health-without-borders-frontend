@@ -107,6 +107,7 @@ PatientFullRecord _createRecord({BackgroundHistory? backgroundHistory}) {
 
 void main() {
   final sEs = AppStrings.forTesting('es');
+  final sEn = AppStrings.forTesting('en');
 
   setUp(() {
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
@@ -400,4 +401,125 @@ void main() {
       expect(find.byType(BackgroundManageSheet), findsNothing);
     });
   });
+
+  group(
+    'BackgroundManageSheet – Cobertura de etiquetas (parentesco y estado)',
+    () {
+      Finder listScrollable() => find
+          .descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+
+      Future<void> scrollTo(WidgetTester tester, Finder target) async {
+        await tester.scrollUntilVisible(
+          target,
+          200,
+          scrollable: listScrollable(),
+        );
+      }
+
+      testWidgets('estados "stopped" y "unknown" de medicamentos (es)', (
+        tester,
+      ) async {
+        final draft = _createRecord(
+          backgroundHistory: BackgroundHistory(
+            medications: [
+              MedicationStatementItem(
+                medicationName: 'Med Stopped',
+                status: 'stopped',
+              ),
+              MedicationStatementItem(
+                medicationName: 'Med Unknown',
+                status: 'unknown',
+                dosage: '5 mg',
+              ),
+            ],
+          ),
+        );
+
+        await tester.pumpWidget(_buildDirect(draft: draft));
+
+        expect(find.text(sEs.medStatusStopped), findsOneWidget);
+        expect(find.text('Suspendido'), findsOneWidget);
+        expect(find.text('${sEs.medStatusUnknown} · 5 mg'), findsOneWidget);
+        expect(find.text('Desconocido · 5 mg'), findsOneWidget);
+      });
+
+      testWidgets('parentescos 02, 03 y 04 de antecedentes familiares (es)', (
+        tester,
+      ) async {
+        final draft = _createRecord(
+          backgroundHistory: BackgroundHistory(
+            familyHistory: [
+              FamilyHistoryItem(
+                conditionDescription: 'Cond Hermano',
+                relationship: '02',
+              ),
+              FamilyHistoryItem(
+                conditionDescription: 'Cond Tío',
+                relationship: '03',
+              ),
+              FamilyHistoryItem(
+                conditionDescription: 'Cond Abuelo',
+                relationship: '04',
+              ),
+            ],
+          ),
+        );
+
+        await tester.pumpWidget(_buildDirect(draft: draft));
+
+        await scrollTo(tester, find.text(sEs.relGrandparents));
+        expect(find.text(sEs.relSiblings), findsOneWidget);
+        expect(find.text('Hermanos'), findsOneWidget);
+        expect(find.text(sEs.relUncles), findsOneWidget);
+        expect(find.text('Tíos'), findsOneWidget);
+        expect(find.text(sEs.relGrandparents), findsOneWidget);
+        expect(find.text('Abuelos'), findsOneWidget);
+      });
+
+      testWidgets('etiquetas de estado y parentesco en inglés', (tester) async {
+        final draft = _createRecord(
+          backgroundHistory: BackgroundHistory(
+            medications: [
+              MedicationStatementItem(
+                medicationName: 'Med Stopped',
+                status: 'stopped',
+              ),
+              MedicationStatementItem(
+                medicationName: 'Med Unknown',
+                status: 'unknown',
+              ),
+            ],
+            familyHistory: [
+              FamilyHistoryItem(
+                conditionDescription: 'Sibling cond',
+                relationship: '02',
+              ),
+              FamilyHistoryItem(
+                conditionDescription: 'Uncle cond',
+                relationship: '03',
+              ),
+              FamilyHistoryItem(
+                conditionDescription: 'Grandparent cond',
+                relationship: '04',
+              ),
+            ],
+          ),
+        );
+
+        await tester.pumpWidget(_buildDirect(draft: draft, locale: 'en'));
+
+        expect(find.text(sEn.medStatusStopped), findsOneWidget);
+        expect(find.text(sEn.medStatusUnknown), findsOneWidget);
+
+        await scrollTo(tester, find.text(sEn.relGrandparents));
+        expect(find.text(sEn.relSiblings), findsOneWidget);
+        expect(find.text(sEn.relUncles), findsOneWidget);
+        expect(find.text(sEn.relGrandparents), findsOneWidget);
+      });
+    },
+  );
 }

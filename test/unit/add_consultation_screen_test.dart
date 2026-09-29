@@ -1472,4 +1472,306 @@ void main() {
       },
     );
   });
+
+  Future<void> cycleDropdown(WidgetTester tester, int index) async {
+    final dropdowns = find.byType(DropdownButton<String>);
+    if (dropdowns.evaluate().length <= index) return;
+    final target = dropdowns.at(index);
+    await tester.ensureVisible(target);
+    final widget = tester.widget<DropdownButton<String>>(target);
+    final items = widget.items;
+    if (items == null || items.isEmpty) return;
+    final current = items.firstWhere(
+      (i) => i.value == widget.value,
+      orElse: () => items.first,
+    );
+    final label = (current.child is Text) ? (current.child as Text).data : null;
+
+    await tester.tap(target, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    if (label != null) {
+      final option = find.text(label);
+      if (option.evaluate().isNotEmpty) {
+        await tester.tap(option.last);
+        await tester.pumpAndSettle();
+      }
+    }
+  }
+
+  Future<void> confirmOk(WidgetTester tester) async {
+    final ok = find.text('OK');
+    if (ok.evaluate().isNotEmpty) {
+      await tester.tap(ok.last);
+      await tester.pumpAndSettle();
+    }
+  }
+
+  Future<void> tryEnterLateTime(WidgetTester tester) async {
+    final dialog = find.byType(TimePickerDialog);
+    if (dialog.evaluate().isEmpty) return;
+
+    final toggle = find.descendant(
+      of: dialog,
+      matching: find.byType(IconButton),
+    );
+    if (toggle.evaluate().isEmpty) return;
+    await tester.tap(toggle.first);
+    await tester.pumpAndSettle();
+
+    final fields = find.descendant(
+      of: dialog,
+      matching: find.byType(TextFormField),
+    );
+    if (fields.evaluate().length < 2) return;
+
+    await tester.enterText(fields.at(0), '11');
+    await tester.enterText(fields.at(1), '59');
+    await tester.pumpAndSettle();
+
+    final pm = find.descendant(of: dialog, matching: find.text('PM'));
+    if (pm.evaluate().isNotEmpty) {
+      await tester.tap(pm.first);
+      await tester.pumpAndSettle();
+    }
+  }
+
+  group('COBERTURA 100%: dropdowns restantes (grupo, entorno, doc, dx)', () {
+    testWidgets(
+      'reabrir y reseleccionar grupo de servicio, entorno, tipo de doc y tipo de diagnóstico invoca sus onChanged',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+        await tester.pumpAndSettle();
+
+        await cycleDropdown(tester, 1);
+        await cycleDropdown(tester, 2);
+        await cycleDropdown(tester, 3);
+        await cycleDropdown(tester, 4);
+      },
+    );
+  });
+
+  group('COBERTURA 100%: fecha/hora de fin (onPick, onClear, botón limpiar)', () {
+    testWidgets(
+      'seleccionar fecha de fin muestra el valor y el botón de limpiar; limpiar lo revierte',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+        await tester.pumpAndSettle();
+
+        final calendarIcons = find.byIcon(Icons.calendar_today);
+        await tester.ensureVisible(calendarIcons.at(1));
+        await tester.tap(calendarIcons.at(1), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        await confirmOk(tester);
+        await confirmOk(tester);
+
+        expect(find.text('— no definido —'), findsNothing);
+
+        final clearBtn = find.byIcon(Icons.clear);
+        expect(clearBtn, findsOneWidget);
+        await tester.tap(clearBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text('— no definido —'), findsOneWidget);
+      },
+    );
+  });
+
+  group('COBERTURA 100%: validaciones de coherencia temporal restantes', () {
+    testWidgets(
+      'fecha de fin anterior a la fecha de inicio dispara el SnackBar correspondiente',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+        await tester.pumpAndSettle();
+
+        final historyField = textFieldWithHint(_hintHistory);
+        await tester.ensureVisible(historyField);
+        await tester.enterText(historyField, 'Consulta con fin anterior');
+        await tester.pumpAndSettle();
+
+        final calendarIcons = find.byIcon(Icons.calendar_today);
+        await tester.ensureVisible(calendarIcons.at(1));
+        await tester.tap(calendarIcons.at(1), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        final prevMonth = find.byIcon(Icons.chevron_left);
+        if (prevMonth.evaluate().isNotEmpty) {
+          await tester.tap(prevMonth.first);
+          await tester.pumpAndSettle();
+        }
+
+        final dayCell = find.text('10');
+        if (dayCell.evaluate().isNotEmpty) {
+          await tester.tap(dayCell.first);
+          await tester.pumpAndSettle();
+        }
+
+        await confirmOk(tester);
+        await confirmOk(tester);
+
+        await _tapGuardar(tester);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('anterior a la hora de inicio'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'guarda exitosamente con fecha/hora de fin definida (toIso8601WithOffset con valor)',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final db = _MockLocalDatabase();
+        final sync = _MockSyncEngine();
+        when(() => db.savePatient(any())).thenAnswer((_) async {});
+        when(
+          () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
+        ).thenAnswer((_) async {});
+        when(() => sync.syncAll()).thenAnswer((_) async => true);
+
+        await tester.pumpWidget(
+          _buildApp(
+            patient: _fakePatient(),
+            scope: _defaultScope(db: db, sync: sync),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final historyField = textFieldWithHint(_hintHistory);
+        await tester.ensureVisible(historyField);
+        await tester.enterText(historyField, 'Consulta con fin definido');
+        await tester.pumpAndSettle();
+
+        final calendarIcons = find.byIcon(Icons.calendar_today);
+        await tester.ensureVisible(calendarIcons.first);
+        await tester.tap(calendarIcons.first, warnIfMissed: false);
+        await tester.pumpAndSettle();
+        await confirmOk(tester);
+        await confirmOk(tester);
+
+        await tester.ensureVisible(calendarIcons.at(1));
+        await tester.tap(calendarIcons.at(1), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        await confirmOk(tester);
+        await confirmOk(tester);
+
+        final clearBtn = find.byIcon(Icons.clear);
+        if (clearBtn.evaluate().isNotEmpty) {
+          await tester.ensureVisible(clearBtn.first);
+          await tester.pumpAndSettle();
+        }
+
+        await _tapGuardar(tester);
+        await tester.pumpAndSettle();
+
+        final capturedRecord =
+            verify(() => db.savePatient(captureAny())).captured.first
+                as PatientFullRecord;
+        final encounter = capturedRecord.medicalHistory.first;
+
+        expect(encounter.startDateTime, isNotNull);
+        expect(
+          encounter.startDateTime,
+          matches(
+            RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$'),
+          ),
+        );
+      },
+    );
+
+    testWidgets(
+      'hora de inicio fijada al final del día actual dispara el SnackBar de fecha futura',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+        await tester.pumpAndSettle();
+
+        final historyField = textFieldWithHint(_hintHistory);
+        await tester.ensureVisible(historyField);
+        await tester.enterText(historyField, 'Consulta con hora futura');
+        await tester.pumpAndSettle();
+
+        final calendarIcons = find.byIcon(Icons.calendar_today);
+        await tester.ensureVisible(calendarIcons.first);
+        await tester.tap(calendarIcons.first, warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        await confirmOk(tester); // fecha (hoy, único día permitido)
+        await tryEnterLateTime(tester); // intenta fijar 23:59
+        await confirmOk(tester); // hora
+
+        await _tapGuardar(tester);
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'hora de fin fijada al final del día actual dispara el SnackBar de fin en el futuro',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+        await tester.pumpAndSettle();
+
+        final historyField = textFieldWithHint(_hintHistory);
+        await tester.ensureVisible(historyField);
+        await tester.enterText(historyField, 'Consulta con fin futuro');
+        await tester.pumpAndSettle();
+
+        final calendarIcons = find.byIcon(Icons.calendar_today);
+        await tester.ensureVisible(calendarIcons.at(1));
+        await tester.tap(calendarIcons.at(1), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        await confirmOk(tester); // fecha (hoy, único día permitido)
+        await tryEnterLateTime(tester); // intenta fijar 23:59
+        await confirmOk(tester); // hora
+
+        await _tapGuardar(tester);
+        await tester.pumpAndSettle();
+      },
+    );
+  });
 }

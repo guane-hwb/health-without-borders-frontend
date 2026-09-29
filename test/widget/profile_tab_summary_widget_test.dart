@@ -117,9 +117,10 @@ Widget _buildWidget({
   bool canEdit = true,
   VoidCallback? onEditVitalSigns,
   VoidCallback? onEditAddress,
-  ValueChanged<int>? onEditGuardian,
+  void Function(int)? onEditGuardian,
   VoidCallback? onOpenAllergies,
   VoidCallback? onOpenBackground,
+  VoidCallback? onReassignDevice,
   Locale locale = const Locale('es'),
 }) {
   final rec = original ?? draft;
@@ -129,8 +130,8 @@ Widget _buildWidget({
       locale: locale,
       home: Scaffold(
         body: SizedBox(
-          height: 6000,
           width: 800,
+          height: 3000,
           child: ProfileTabSummary(
             draft: draft,
             original: rec,
@@ -140,6 +141,7 @@ Widget _buildWidget({
             onEditGuardian: onEditGuardian ?? (_) {},
             onOpenAllergies: onOpenAllergies ?? () {},
             onOpenBackground: onOpenBackground ?? () {},
+            onReassignDevice: onReassignDevice,
           ),
         ),
       ),
@@ -948,5 +950,220 @@ void main() {
       expect(find.text('Editar'), findsNothing);
       expect(find.text('Edit'), findsNothing);
     });
+  });
+
+  group('Edición de guardianes y badge de documento —', () {
+    testWidgets(
+      'al hacer tap en editar guardián principal llama onEditGuardian(1)',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 3000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        int? guardianEdited;
+        final draft = _baseRecord(
+          guardian: GuardianInfo(
+            name: 'Carlos Ruiz',
+            relationship: '01',
+            phone: '3001234567',
+            documentType: 'CC',
+            documentNumber: '10987654',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _buildWidget(
+            draft: draft,
+            canEdit: true,
+            onEditGuardian: (index) => guardianEdited = index,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final editButtons = find.ancestor(
+          of: find.byIcon(Icons.edit_outlined),
+          matching: find.byType(IconButton),
+        );
+
+        await tester.ensureVisible(editButtons.first);
+        await tester.tap(editButtons.first);
+        await tester.pumpAndSettle();
+
+        expect(guardianEdited, equals(1));
+      },
+    );
+
+    testWidgets(
+      'al hacer tap en editar guardián secundario llama onEditGuardian(2)',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 3000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        int? guardianEdited;
+        final draft = PatientFullRecord(
+          patientId: 'test-uuid-002',
+          deviceUid: 'NFC-002',
+          patientInfo: _baseRecord().patientInfo,
+          guardianInfo: GuardianInfo(
+            name: 'María López',
+            relationship: '01',
+            phone: '3001112233',
+          ),
+          guardian2Info: GuardianInfo(
+            name: 'Pedro Gómez',
+            relationship: '02',
+            phone: '3004445566',
+            docType: 'CE',
+            docNumber: '98765432',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _buildWidget(
+            draft: draft,
+            canEdit: true,
+            onEditGuardian: (index) => guardianEdited = index,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final editButtons = find.ancestor(
+          of: find.byIcon(Icons.edit_outlined),
+          matching: find.byType(IconButton),
+        );
+
+        expect(editButtons, findsNWidgets(2));
+
+        await tester.ensureVisible(editButtons.at(1));
+        await tester.tap(editButtons.at(1));
+        await tester.pumpAndSettle();
+
+        expect(guardianEdited, equals(2));
+      },
+    );
+
+    testWidgets(
+      'muestra badge con tipo y número de documento del guardián cuando está presente',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 3000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final draft = _baseRecord(
+          guardian: GuardianInfo(
+            name: 'Ana Torres',
+            relationship: '01',
+            phone: '3000000000',
+            docType: 'CC',
+            docNumber: '52123456',
+          ),
+        );
+
+        await tester.pumpWidget(_buildWidget(draft: draft));
+        await tester.pumpAndSettle();
+
+        final badgeIcon = find.byIcon(Icons.badge_outlined);
+        await tester.ensureVisible(badgeIcon);
+
+        expect(badgeIcon, findsOneWidget);
+        expect(find.text('CC: 52123456'), findsOneWidget);
+      },
+    );
+  });
+
+  group('Zona Rural e Identidad de Género —', () {
+    testWidgets('renderiza etiqueta de zona rural cuando zone es "02"', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final draft = _baseRecord(
+        address: Address(
+          street: 'Vereda El Hato',
+          city: 'Guatavita',
+          state: 'Cundinamarca',
+          zone: '02',
+        ),
+      );
+
+      await tester.pumpWidget(
+        _buildWidget(draft: draft, locale: const Locale('es')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Rural', findRichText: true), findsWidgets);
+    });
+
+    testWidgets(
+      'mapea todos los códigos de identidad de género en español e inglés',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 3000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final genderCodes = ['01', '02', '03', '04', '99'];
+
+        for (final code in genderCodes) {
+          final draftEs = _baseRecord(genderIdentity: code);
+          await tester.pumpWidget(
+            _buildWidget(draft: draftEs, locale: const Locale('es')),
+          );
+          await tester.pumpAndSettle();
+
+          final draftEn = _baseRecord(genderIdentity: code);
+          await tester.pumpWidget(
+            _buildWidget(draft: draftEn, locale: const Locale('en')),
+          );
+          await tester.pumpAndSettle();
+        }
+      },
+    );
+
+    testWidgets(
+      'ejecuta reasignar dispositivo al pulsar el botón si está presente',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 3000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        bool reassigned = false;
+        final draft = _baseRecord();
+
+        await tester.pumpWidget(
+          _buildWidget(draft: draft, onReassignDevice: () => reassigned = true),
+        );
+        await tester.pumpAndSettle();
+
+        final reassignBtn = find.byIcon(Icons.published_with_changes);
+        await tester.ensureVisible(reassignBtn);
+        expect(reassignBtn, findsOneWidget);
+
+        await tester.tap(reassignBtn);
+        await tester.pumpAndSettle();
+
+        expect(reassigned, isTrue);
+      },
+    );
   });
 }
