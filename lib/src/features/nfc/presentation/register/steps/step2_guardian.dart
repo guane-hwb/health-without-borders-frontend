@@ -483,16 +483,21 @@ class _Step2State extends State<Step2Guardian> {
                     size: 22,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    isEs ? 'Información del guardián' : 'Guardian information',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+                  Expanded(
+                    child: Text(
+                      isEs
+                          ? 'Información del guardián'
+                          : 'Guardian information',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Spacer(),
-                  if (!_hasGuardian2)
+                  if (!_hasGuardian2) ...[
+                    const SizedBox(width: 8),
                     TextButton.icon(
                       onPressed: () => setState(() => _hasGuardian2 = true),
                       icon: const Icon(
@@ -510,11 +515,14 @@ class _Step2State extends State<Step2Guardian> {
                       ),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
+                          horizontal: 8,
                           vertical: 6,
                         ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),
+                  ],
                 ],
               ),
               const SizedBox(height: 14),

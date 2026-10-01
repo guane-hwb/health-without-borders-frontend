@@ -47,6 +47,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   late TextEditingController _nameCtrl;
   late TextEditingController _phoneCtrl;
   late TextEditingController _docNumberCtrl;
+  late TextEditingController _emailCtrl;
   late String _relationship;
   late String _selectedDocType;
 
@@ -55,6 +56,11 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   late final String _initialDocNumber;
   late final String _initialRelationship;
   late final String _initialDocType;
+
+  bool _authAccepted = false;
+  final List<List<Offset>> _signatureStrokes = [];
+  List<Offset>? _currentStroke;
+  String? _authErrorMsg;
 
   static const List<String> _relationshipCodes = ['01', '02', '03', '04'];
 
@@ -87,16 +93,33 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     _nameCtrl = TextEditingController(text: _initialName);
     _phoneCtrl = TextEditingController(text: _initialPhone);
     _docNumberCtrl = TextEditingController(text: _initialDocNumber);
+    _emailCtrl = TextEditingController();
     _relationship = _initialRelationship;
     _selectedDocType = _initialDocType;
+
+    _nameCtrl.addListener(_onFieldChanged);
+    _docNumberCtrl.addListener(_onFieldChanged);
+  }
+
+  void _onFieldChanged() {
+    setState(() {});
   }
 
   @override
   void dispose() {
+    _nameCtrl.removeListener(_onFieldChanged);
+    _docNumberCtrl.removeListener(_onFieldChanged);
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _docNumberCtrl.dispose();
+    _emailCtrl.dispose();
     super.dispose();
+  }
+
+  bool get _isIdentityChanged {
+    final nameChanged = _nameCtrl.text.trim() != _initialName;
+    final docNumChanged = _docNumberCtrl.text.trim() != _initialDocNumber;
+    return nameChanged && docNumChanged;
   }
 
   bool get _hasUnsavedChanges {
@@ -110,7 +133,9 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
         phoneChanged ||
         docNumChanged ||
         relChanged ||
-        docTypeChanged;
+        docTypeChanged ||
+        _authAccepted ||
+        _signatureStrokes.isNotEmpty;
   }
 
   Future<bool> _onWillPop() async {
@@ -155,8 +180,52 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     }
   }
 
+  void _clearSignature() {
+    setState(() {
+      _signatureStrokes.clear();
+      _currentStroke = null;
+    });
+  }
+
+  void _showPrivacyPolicy() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => const _PrivacyPolicyDialog(),
+    );
+  }
+
   void _submitSave() {
-    if (!_formKey.currentState!.validate()) return;
+    setState(() => _authErrorMsg = null);
+
+    final formValid = _formKey.currentState!.validate();
+    if (!formValid) return;
+
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
+
+    if (_isIdentityChanged && (_authAccepted || _signatureStrokes.isNotEmpty)) {
+      final missing = <String>[];
+      if (!_authAccepted) {
+        missing.add(
+          isEs
+              ? 'Autorización de política de privacidad'
+              : 'Privacy policy authorization',
+        );
+      }
+      if (_signatureStrokes.isEmpty) {
+        missing.add(isEs ? 'Firma biométrica' : 'Biometric signature');
+      }
+
+      if (missing.isNotEmpty) {
+        setState(() {
+          _authErrorMsg = isEs
+              ? 'Campos requeridos: ${missing.join(', ')}'
+              : 'Required fields: ${missing.join(', ')}';
+        });
+        return;
+      }
+    }
 
     final edited = GuardianInfo(
       name: _nameCtrl.text.trim(),
@@ -168,8 +237,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
           : _docNumberCtrl.text.trim(),
       deviceUid: widget.guardian.deviceUid,
     );
-    // A consent belongs to the person who gave it: editing the same guardian
-    // keeps it, replacing the guardian leaves the new one's consent pending.
+
     widget.onConfirm(
       edited.copyWith(
         consent: isSameGuardian(widget.guardian, edited)
@@ -348,7 +416,70 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+
+                  if (_isIdentityChanged) ...[
+                    _AuthSection(
+                      accepted: _authAccepted,
+                      emailController: _emailCtrl,
+                      emailRequired: false,
+                      signatureStrokes: _signatureStrokes,
+                      currentStroke: _currentStroke,
+                      onAcceptedChanged: (v) =>
+                          setState(() => _authAccepted = v),
+                      onPrivacyTap: _showPrivacyPolicy,
+                      onSignatureStart: (offset) {
+                        setState(() {
+                          _currentStroke = [offset];
+                          _signatureStrokes.add(_currentStroke!);
+                        });
+                      },
+                      onSignatureUpdate: (offset) {
+                        setState(() => _currentStroke?.add(offset));
+                      },
+                      onSignatureEnd: () =>
+                          setState(() => _currentStroke = null),
+                      onClearSignature: _clearSignature,
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+
+                  if (_authErrorMsg != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.error.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            color: AppColors.error,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _authErrorMsg!,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.error,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
 
                   SizedBox(
                     width: double.infinity,
@@ -593,7 +724,480 @@ class _DocTypeSelectorState extends State<_DocTypeSelector> {
 }
 
 class _LabelText extends StatelessWidget {
-  const _LabelText({required this.text});
+  const _LabelText({required this.text, this.required = false});
+  final String text;
+  final bool required;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text.rich(
+      TextSpan(
+        text: text.replaceAll('*', '').trim(),
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary,
+        ),
+        children: [
+          if (required)
+            const TextSpan(
+              text: ' *',
+              style: TextStyle(
+                color: AppColors.error,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuthSection extends StatelessWidget {
+  const _AuthSection({
+    required this.accepted,
+    required this.emailController,
+    required this.signatureStrokes,
+    required this.currentStroke,
+    required this.onAcceptedChanged,
+    required this.onPrivacyTap,
+    required this.onSignatureStart,
+    required this.onSignatureUpdate,
+    required this.onSignatureEnd,
+    required this.onClearSignature,
+    this.emailRequired = false,
+  });
+
+  final bool accepted;
+  final TextEditingController emailController;
+  final List<List<Offset>> signatureStrokes;
+  final List<Offset>? currentStroke;
+  final ValueChanged<bool> onAcceptedChanged;
+  final VoidCallback onPrivacyTap;
+  final ValueChanged<Offset> onSignatureStart;
+  final ValueChanged<Offset> onSignatureUpdate;
+  final VoidCallback onSignatureEnd;
+  final VoidCallback onClearSignature;
+  final bool emailRequired;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
+    final signatureLabel = isEs ? 'Firma biométrica' : 'Biometric signature';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _LabelText(text: s.confirmChanges, required: true),
+          const SizedBox(height: 14),
+
+          _AuthCheckbox(
+            accepted: accepted,
+            onChanged: onAcceptedChanged,
+            onPrivacyTap: onPrivacyTap,
+          ),
+          const SizedBox(height: 16),
+
+          _ValidatedField(
+            label: s.email,
+            controller: emailController,
+            hint: s.emailHint,
+            prefixIcon: Icons.email_outlined,
+            keyboardType: TextInputType.emailAddress,
+          ),
+          const SizedBox(height: 16),
+
+          _LabelText(text: signatureLabel, required: true),
+          const SizedBox(height: 6),
+          _SignaturePad(
+            strokes: signatureStrokes,
+            onPanStart: onSignatureStart,
+            onPanUpdate: onSignatureUpdate,
+            onPanEnd: onSignatureEnd,
+            onClear: onClearSignature,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuthCheckbox extends StatelessWidget {
+  const _AuthCheckbox({
+    required this.accepted,
+    required this.onChanged,
+    required this.onPrivacyTap,
+  });
+
+  final bool accepted;
+  final ValueChanged<bool> onChanged;
+  final VoidCallback onPrivacyTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 24,
+          height: 24,
+          child: Checkbox(
+            value: accepted,
+            activeColor: AppColors.primary,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+            ),
+            onChanged: (v) => onChanged(v ?? false),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: GestureDetector(
+            onTap: () => onChanged(!accepted),
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textPrimary,
+                  height: 1.45,
+                ),
+                children: [
+                  TextSpan(
+                    text: isEs
+                        ? 'El guardián reconoce haber leído y autorizado el tratamiento de los datos del menor y la '
+                        : 'The guardian acknowledges having read and authorized the processing of the minor\'s data and the ',
+                  ),
+                  WidgetSpan(
+                    alignment: PlaceholderAlignment.baseline,
+                    baseline: TextBaseline.alphabetic,
+                    child: GestureDetector(
+                      onTap: onPrivacyTap,
+                      child: Text(
+                        isEs ? 'política de privacidad' : 'privacy policy',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppColors.primary,
+                          height: 1.45,
+                        ),
+                      ),
+                    ),
+                  ),
+                  TextSpan(
+                    text: isEs
+                        ? ' incluyendo el recibo electrónico de comprobantes.'
+                        : ' including the electronic receipt of credentials.',
+                  ),
+                  const TextSpan(
+                    text: ' *',
+                    style: TextStyle(
+                      color: AppColors.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SignaturePad extends StatelessWidget {
+  const _SignaturePad({
+    required this.strokes,
+    required this.onPanStart,
+    required this.onPanUpdate,
+    required this.onPanEnd,
+    required this.onClear,
+  });
+
+  final List<List<Offset>> strokes;
+  final ValueChanged<Offset> onPanStart;
+  final ValueChanged<Offset> onPanUpdate;
+  final VoidCallback onPanEnd;
+  final VoidCallback onClear;
+
+  bool get _hasSignature => strokes.isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          height: 140,
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
+          ),
+          clipBehavior: Clip.hardEdge,
+          child: GestureDetector(
+            onPanStart: (d) => onPanStart(d.localPosition),
+            onPanUpdate: (d) => onPanUpdate(d.localPosition),
+            onPanEnd: (_) => onPanEnd(),
+            child: CustomPaint(
+              painter: _SignaturePainter(strokes: strokes),
+              child: _hasSignature
+                  ? null
+                  : Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.edit_outlined,
+                            size: 24,
+                            color: AppColors.textSecondary,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            isEs ? 'Firmar aquí' : 'Sign here',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 40,
+          child: OutlinedButton.icon(
+            onPressed: _hasSignature ? onClear : null,
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(
+                color: _hasSignature
+                    ? AppColors.primary
+                    : const Color(0xFFB0B8C4),
+                width: 1.5,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              foregroundColor: AppColors.primary,
+            ),
+            icon: const Icon(Icons.refresh, size: 16),
+            label: Text(
+              isEs ? 'Limpiar firma' : 'Clear signature',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SignaturePainter extends CustomPainter {
+  _SignaturePainter({required this.strokes});
+  final List<List<Offset>> strokes;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF1A1A2E)
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    for (final stroke in strokes) {
+      if (stroke.length < 2) continue;
+      final path = Path()..moveTo(stroke[0].dx, stroke[0].dy);
+      for (int i = 1; i < stroke.length; i++) {
+        path.lineTo(stroke[i].dx, stroke[i].dy);
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SignaturePainter old) => old.strokes != strokes;
+}
+
+class _PrivacyPolicyDialog extends StatelessWidget {
+  const _PrivacyPolicyDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 12, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    isEs ? 'Política de privacidad' : 'Privacy Policy',
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 22),
+                  onPressed: () => Navigator.of(context).pop(),
+                  color: AppColors.textSecondary,
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 16),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: isEs
+                    ? const [
+                        _PolicyTitle(
+                          'Política de Privacidad: Aviso sobre el Tratamiento de Datos de Menores',
+                        ),
+                        SizedBox(height: 12),
+                        _PolicySection(
+                          title: '1. Introducción',
+                          body:
+                              'Esta Política de Privacidad describe cómo recopilamos, usamos y protegemos los datos personales de menores y sus tutores legales. Al proporcionar su consentimiento, usted autoriza el tratamiento de esta información con el propósito de identificación médica y asistencia de emergencia.',
+                        ),
+                        _PolicySection(
+                          title: '2. Datos que recopilamos',
+                          body: '',
+                          bullets: [
+                            'Información del menor: Nombre completo, número de identificación y condiciones médicas/de salud relevantes.',
+                            'Información del guardián: Nombre completo, relación con el menor, datos de contacto y dirección física.',
+                            'Datos biométricos: Firma digital como prueba de autorización legal.',
+                          ],
+                        ),
+                        _PolicySection(
+                          title: '3. Seguridad de los datos',
+                          body:
+                              'Implementamos protocolos de cifrado y seguridad de alto nivel para garantizar que la información personal y médica se almacene de forma segura y solo sea accesible por partes autorizadas en una emergencia.',
+                        ),
+                        _PolicySection(
+                          title: '4. Sus derechos (Derechos ARCO)',
+                          body:
+                              'Como guardián, tiene derecho a acceder, rectificar, cancelar u oponerse al tratamiento de sus datos o los datos del menor en cualquier momento a través de nuestros canales de soporte.',
+                        ),
+                        _PolicySection(
+                          title: '5. Recibo de prueba de consentimiento',
+                          body:
+                              'Una vez aceptada, se enviará a la dirección de correo electrónico proporcionada una copia digital de esta autorización y su firma digital como comprobante legal de esta transacción.',
+                        ),
+                        _PolicySection(
+                          title: '6. Finalidad del tratamiento',
+                          body:
+                              'Los datos se utilizarán exclusivamente para identificación médica, asistencia de emergencia y comunicación con el guardián legal del menor registrado en la plataforma.',
+                        ),
+                      ]
+                    : const [
+                        _PolicyTitle(
+                          'Privacy Policy: Notice on the Processing of Minor\'s Data',
+                        ),
+                        SizedBox(height: 12),
+                        _PolicySection(
+                          title: '1. Introduction',
+                          body:
+                              'This Privacy Policy describes how we collect, use, and protect the personal data of minors and their legal guardians. By providing your consent, you authorize the processing of this information for medical identification and emergency assistance purposes.',
+                        ),
+                        _PolicySection(
+                          title: '2. Data We Collect',
+                          body: '',
+                          bullets: [
+                            'Minor\'s information: Full name, identification number, and relevant medical/health conditions.',
+                            'Guardian\'s information: Full name, relationship to the minor, contact details, and physical address.',
+                            'Biometric data: Digital signature as proof of legal authorization.',
+                          ],
+                        ),
+                        _PolicySection(
+                          title: '3. Data Security',
+                          body:
+                              'We implement high-level encryption and security protocols to ensure that personal and medical information is stored securely and is only accessible by authorized parties in an emergency.',
+                        ),
+                        _PolicySection(
+                          title: '4. Your Rights (ARCO Rights)',
+                          body:
+                              'As a guardian, you have the right to access, rectify, cancel, or object to the processing of your data or the minor\'s data at any time through our support channels.',
+                        ),
+                        _PolicySection(
+                          title: '5. Receipt of Proof of Consent',
+                          body:
+                              'Once accepted, a digital copy of this authorization and your digital signature will be sent to the provided email address as legal proof of this transaction.',
+                        ),
+                        _PolicySection(
+                          title: '6. Purpose of Processing',
+                          body:
+                              'The data will be used exclusively for medical identification, emergency assistance, and communication with the legal guardian of the minor registered on the platform.',
+                        ),
+                      ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            child: SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+                child: Text(
+                  s.ok,
+                  style: const TextStyle(
+                    color: AppColors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PolicyTitle extends StatelessWidget {
+  const _PolicyTitle(this.text);
   final String text;
 
   @override
@@ -601,9 +1205,82 @@ class _LabelText extends StatelessWidget {
     return Text(
       text,
       style: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
+        height: 1.4,
+      ),
+    );
+  }
+}
+
+class _PolicySection extends StatelessWidget {
+  const _PolicySection({
+    required this.title,
+    required this.body,
+    this.bullets = const [],
+  });
+  final String title;
+  final String body;
+  final List<String> bullets;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          if (body.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              body,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                height: 1.5,
+              ),
+            ),
+          ],
+          if (bullets.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            ...bullets.map(
+              (b) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '• ',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        b,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
