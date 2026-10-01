@@ -235,6 +235,7 @@ class _ConsultationCard extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                             color: AppColors.textPrimary,
                           ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                         if (_formattedTime(context).isNotEmpty)
                           Text(
@@ -243,10 +244,12 @@ class _ConsultationCard extends StatelessWidget {
                               fontSize: 11,
                               color: AppColors.textSecondary,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -297,12 +300,15 @@ class _ConsultationCard extends StatelessWidget {
                       color: AppColors.textSecondary,
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      item.practitioner!.name,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
-                        fontStyle: FontStyle.italic,
+                    Expanded(
+                      child: Text(
+                        item.practitioner!.name,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -337,6 +343,7 @@ class _ConsultationCard extends StatelessWidget {
 class _DiagChip extends StatelessWidget {
   const _DiagChip({required this.d});
   final DiagnosisItem d;
+
   @override
   Widget build(BuildContext context) {
     final label = '${d.icd10Code} ${d.description}'.trim();
@@ -345,6 +352,7 @@ class _DiagChip extends StatelessWidget {
       AppStrings.of(context),
       d.source,
     );
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -361,12 +369,15 @@ class _DiagChip extends StatelessWidget {
             color: AppColors.primary,
           ),
           const SizedBox(width: 4),
-          Text(
-            shown,
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppColors.primary,
-              fontWeight: FontWeight.w500,
+          Flexible(
+            child: Text(
+              shown,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.primary,
+                fontWeight: FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           if (origin != null) ...[

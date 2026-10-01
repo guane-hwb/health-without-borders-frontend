@@ -1172,6 +1172,87 @@ void main() {
       expect(find.textContaining('Paciente no encontrado'), findsOneWidget);
     });
 
+    testWidgets(
+      'Búsqueda manual: ApiException con code traducible muestra el mensaje '
+      'traducido (no el crudo del backend)',
+      (tester) async {
+        final repo = _MockPatientRepository();
+        final completer = Completer<PatientFullRecord>();
+        when(
+          () => repo.scanDevice('UID-ORG-INACTIVE'),
+        ).thenAnswer((_) => completer.future);
+
+        final scope = _defaultScope(repo: repo);
+        await tester.pumpWidget(_buildApp(scope: scope));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Buscar paciente'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.widgetWithText(TextField, ''),
+          'UID-ORG-INACTIVE',
+        );
+        await tester.tap(find.text('Buscar'));
+        await tester.pump();
+
+        completer.completeError(
+          ApiException(
+            'Organization is inactive.',
+            statusCode: 401,
+            code: 'organization_inactive',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('Tu organización está desactivada'),
+          findsOneWidget,
+        );
+        expect(find.text('Organization is inactive.'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Búsqueda manual: ApiException con code no traducible cae al mensaje '
+      'crudo del backend',
+      (tester) async {
+        final repo = _MockPatientRepository();
+        final completer = Completer<PatientFullRecord>();
+        when(
+          () => repo.scanDevice('UID-UNKNOWN-CODE'),
+        ).thenAnswer((_) => completer.future);
+
+        final scope = _defaultScope(repo: repo);
+        await tester.pumpWidget(_buildApp(scope: scope));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Buscar paciente'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.widgetWithText(TextField, ''),
+          'UID-UNKNOWN-CODE',
+        );
+        await tester.tap(find.text('Buscar'));
+        await tester.pump();
+
+        completer.completeError(
+          ApiException(
+            'Mensaje crudo del backend',
+            statusCode: 500,
+            code: 'codigo_no_mapeado_xyz',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('Mensaje crudo del backend'),
+          findsOneWidget,
+        );
+      },
+    );
+
     testWidgets('Errores de ApiException y genéricos al escanear paciente', (
       tester,
     ) async {
@@ -1765,9 +1846,9 @@ void main() {
         await tester.tap(calendarIcons.at(1), warnIfMissed: false);
         await tester.pumpAndSettle();
 
-        await confirmOk(tester); // fecha (hoy, único día permitido)
-        await tryEnterLateTime(tester); // intenta fijar 23:59
-        await confirmOk(tester); // hora
+        await confirmOk(tester);
+        await tryEnterLateTime(tester);
+        await confirmOk(tester);
 
         await _tapGuardar(tester);
         await tester.pumpAndSettle();

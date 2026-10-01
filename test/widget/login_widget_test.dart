@@ -585,6 +585,33 @@ void main() {
     );
 
     testWidgets(
+      'ApiException cuyo mensaje menciona un problema de red muestra el '
+      'aviso de conexión requerida (rama distinta al catch genérico)',
+      (tester) async {
+        mockAuthRepo.loginHandler =
+            ({required String email, required String password}) async {
+              throw ApiException(
+                'SocketException: Failed host lookup: api.example.com',
+              );
+            };
+
+        await tester.pumpWidget(buildSubject());
+        await tester.enterText(
+          find.byType(TextFormField).first,
+          'usuario@test.com',
+        );
+        await tester.enterText(find.byType(TextFormField).last, 'password123');
+        await tester.tap(find.byType(ElevatedButton));
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(find.text(s.loginNetworkRequired), findsOneWidget);
+        expect(find.textContaining('Failed host lookup'), findsNothing);
+      },
+    );
+
+    testWidgets(
       'tocar el texto de _RememberCheckbox conmuta el valor de la casilla',
       (tester) async {
         await tester.pumpWidget(buildSubject());

@@ -233,6 +233,17 @@ class FakeLocalDatabase implements LocalDatabase {
   Future<int> getRetryablePendingCount({String? ownerUserId}) async => 0;
 }
 
+/// Variant of [FakeAuthRepository] with a non-null current user, so
+/// `_save()`'s `user?.id` / `user?.organizationId` resolve to real values
+/// instead of both short-circuiting to null.
+class FakeAuthRepositoryWithSession extends FakeAuthRepository {
+  FakeAuthRepositoryWithSession(this._session);
+  final UserSession _session;
+
+  @override
+  UserSession? get currentUser => _session;
+}
+
 /// A [LocalDatabase] whose [savePatient] always throws, used to exercise
 /// the catch/AppLogger.e branch of `_save()`.
 class ThrowingLocalDatabase extends FakeLocalDatabase {
@@ -254,6 +265,48 @@ class ThrowingLocalDatabase extends FakeLocalDatabase {
 
 /// Same as [buildSubject] but lets the test inject a custom [LocalDatabase]
 /// (e.g. one that throws) to reach the `_save()` catch branch.
+/// Same as [buildSubjectWithDb] but also lets the test inject a custom
+/// [AuthRepository] (e.g. one with a non-null `currentUser`), to exercise
+/// the `user?.id` / `user?.organizationId` branches of `_save()` with real
+/// values instead of null.
+Widget buildSubjectWithAuthAndDb(
+  PatientFullRecord patient,
+  AuthRepository authRepo,
+  LocalDatabase db,
+) {
+  final apiClient = ApiClient(baseUrl: 'https://example.com');
+  final patientRepo = PatientRepository(
+    apiClient: apiClient,
+    authRepository: authRepo,
+  );
+  final userRepo = UserRepository(
+    apiClient: apiClient,
+    authRepository: authRepo,
+  );
+  final syncEngine = SyncEngine(
+    patientRepository: patientRepo,
+    localDatabase: db,
+  );
+
+  return AppLocale(
+    locale: 'es',
+    setLocale: (_) {},
+    child: AppScope(
+      authRepository: authRepo,
+      userRepository: userRepo,
+      patientRepository: patientRepo,
+      localDatabase: db,
+      syncEngine: syncEngine,
+      statsRepository: StatsRepository(
+        apiClient: ApiClient(baseUrl: 'http://localhost'),
+        authRepository: authRepo,
+      ),
+      reachability: Reachability(baseUrl: 'http://localhost'),
+      child: MaterialApp(home: EditMedicalHistoryScreen(patient: patient)),
+    ),
+  );
+}
+
 Widget buildSubjectWithDb(PatientFullRecord patient, LocalDatabase db) {
   final authRepo = FakeAuthRepository();
   final apiClient = ApiClient(baseUrl: 'https://example.com');
@@ -984,6 +1037,31 @@ void main() {
         expect(lastSavedRecord, isNotNull);
         expect(lastSavedOwnerUserId, isNull);
         expect(lastSavedOrganizationId, isNull);
+      },
+    );
+
+    testWidgets(
+      'Guardar propaga ownerUserId/organizationId de un usuario real (no nulo)',
+      (tester) async {
+        lastSavedRecord = null;
+        lastSavedOwnerUserId = 'sentinel';
+        lastSavedOrganizationId = 'sentinel';
+
+        final session = UserSession.fromEmail('capture.test@example.com');
+        final authRepo = FakeAuthRepositoryWithSession(session);
+        final db = FakeLocalDatabase();
+
+        await tester.pumpWidget(
+          buildSubjectWithAuthAndDb(emptyPatient(), authRepo, db),
+        );
+        await tester.pumpAndSettle();
+
+        await tapVisible(tester, find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        expect(lastSavedRecord, isNotNull);
+        expect(lastSavedOwnerUserId, session.id);
+        expect(lastSavedOrganizationId, session.organizationId);
       },
     );
 
