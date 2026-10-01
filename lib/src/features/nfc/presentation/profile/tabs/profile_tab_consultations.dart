@@ -347,6 +347,7 @@ class _DiagChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = '${d.icd10Code} ${d.description}'.trim();
+    final shown = label.length > 36 ? '${label.substring(0, 36)}...' : label;
     final String? origin = diagnosisSourceLabel(
       AppStrings.of(context),
       d.source,
@@ -370,7 +371,7 @@ class _DiagChip extends StatelessWidget {
           const SizedBox(width: 4),
           Flexible(
             child: Text(
-              label,
+              shown,
               style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.primary,

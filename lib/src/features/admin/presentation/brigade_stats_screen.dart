@@ -406,13 +406,7 @@ class _OrgFilterDropdownState extends State<_OrgFilterDropdown> {
     final s = AppStrings.of(context);
     final selectedFilter = widget.orgs.firstWhere(
       (o) => o.id == widget.selected,
-      orElse: () => _OrgFilter(
-        id: widget.selected,
-        name: widget.selected == kAllOrgsFilterId
-            ? s.statsFilterAll
-            // coverage:ignore-line
-            : widget.selected,
-      ),
+      orElse: () => _OrgFilter(id: widget.selected, name: s.statsFilterAll),
     );
 
     final selectedName = _getOrgName(context, selectedFilter);
