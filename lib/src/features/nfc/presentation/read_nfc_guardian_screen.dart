@@ -1,5 +1,6 @@
 // lib/src/features/nfc/presentation/read_nfc_guardian_screen.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
@@ -24,6 +25,13 @@ import 'show_vaccines_screen.dart';
 class ReadNfcGuardianScreen extends StatefulWidget {
   const ReadNfcGuardianScreen({super.key, required this.patient});
   final PatientFullRecord patient;
+
+  @visibleForTesting
+  static Future<void> Function()? overrideWriteTriagePayload;
+
+  @visibleForTesting
+  static Future<void> Function()? overrideWriteGuardianRecord;
+
   @override
   State<ReadNfcGuardianScreen> createState() => _ReadNfcGuardianScreenState();
 }
@@ -206,10 +214,12 @@ class _ReadNfcGuardianScreenState extends State<ReadNfcGuardianScreen> {
           instruction: isEs
               ? 'Acerque la pulsera del paciente al teléfono para actualizarla'
               : 'Bring the patient wristband to the phone to update it',
-          write: () => NfcPayloadService(codec: codec).writeTriagePayload(
-            NfcTriagePayload.buildPatientPayload(record: _p),
-            expectedUid: expectedUid,
-          ),
+          write: () => ReadNfcGuardianScreen.overrideWriteTriagePayload != null
+              ? ReadNfcGuardianScreen.overrideWriteTriagePayload!()
+              : NfcPayloadService(codec: codec).writeTriagePayload(
+                  NfcTriagePayload.buildPatientPayload(record: _p),
+                  expectedUid: expectedUid,
+                ),
         );
         if (!ctx.mounted) return;
         if (!patientOk) {
@@ -242,10 +252,12 @@ class _ReadNfcGuardianScreenState extends State<ReadNfcGuardianScreen> {
           instruction: isEs
               ? 'Acerque la tarjeta del acudiente al teléfono para actualizarla'
               : 'Bring the guardian card to the phone to update it',
-          write: () => NfcPayloadService(codec: codec).writeGuardianRecord(
-            buildFit: guardianFitBuilder(record: _p, codec: codec),
-            expectedUid: expectedUid,
-          ),
+          write: () => ReadNfcGuardianScreen.overrideWriteGuardianRecord != null
+              ? ReadNfcGuardianScreen.overrideWriteGuardianRecord!()
+              : NfcPayloadService(codec: codec).writeGuardianRecord(
+                  buildFit: guardianFitBuilder(record: _p, codec: codec),
+                  expectedUid: expectedUid,
+                ),
         );
         if (!ctx.mounted) return;
         if (!guardianOk) {

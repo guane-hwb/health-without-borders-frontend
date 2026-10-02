@@ -674,4 +674,28 @@ void main() {
       expect(state.offlineGuardianRequired, isFalse);
     });
   });
+
+  group('L. Cobertura completa de ramas offline y cancelaciones', () {
+    test('L-01 offlineGuardianRequired se desactiva al regresar a paso 1', () {
+      final state = _FakeReadNfcState()
+        ..step2 = true
+        ..offlineGuardianRequired = true
+        ..guardianUidText = '123456';
+
+      state.backToStep1();
+
+      expect(state.step2, isFalse);
+      expect(state.offlineGuardianRequired, isFalse);
+      expect(state.guardianUidText, isEmpty);
+    });
+
+    test('L-02 reintento de escaneo limpia mensajes de error previos', () {
+      final state = _FakeReadNfcState()..errorMessage = 'Error previo';
+      state.handlePatientApiError(
+        ApiException('Guardian required', statusCode: 403),
+        deviceUid: 'HWB-001',
+      );
+      expect(state.errorMessage, isNull);
+    });
+  });
 }
