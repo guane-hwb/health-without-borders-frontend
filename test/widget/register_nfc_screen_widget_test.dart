@@ -184,7 +184,10 @@ void main() {
           reachability: Reachability(baseUrl: 'http://localhost'),
           child: MaterialApp(
             home: const HomeScreen(),
-            routes: {'/register': (_) => const RegisterNfcScreen()},
+            routes: {
+              '/register': (_) => const RegisterNfcScreen(),
+              '/login': (_) => const Scaffold(body: Text('Login Screen')),
+            },
           ),
         ),
       ),
@@ -824,5 +827,87 @@ void main() {
       final success = tester.widget<Step6Success>(find.byType(Step6Success));
       expect(success.sealed, isTrue);
     });
+  });
+
+  group('RegisterNfcScreen — Cobertura 100% de líneas faltantes', () {
+    testWidgets(
+      'System Pop cuando _savedRecord no es nulo ejecuta Navigator.pop() directamente',
+      (tester) async {
+        await pumpScreen(tester);
+        await advanceToHub(tester);
+
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        popScope.onPopInvokedWithResult?.call(false, null);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RegisterNfcScreen), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'System Pop cuando _step > 0 retrocede el paso sin mostrar el diálogo de descartar',
+      (tester) async {
+        await pumpScreen(tester);
+        await goToStep1(tester);
+
+        expect(find.byType(Step2Guardian), findsOneWidget);
+
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        popScope.onPopInvokedWithResult?.call(false, null);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Step3PatientData), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Restaura sesión mediante authRepository.restoreSession() si currentUser es nulo al confirmar',
+      (tester) async {
+        final activeUser = user();
+
+        when(() => auth.currentUser).thenReturn(activeUser);
+
+        await pumpScreen(tester);
+        await advanceToReview(tester);
+
+        when(() => auth.currentUser).thenReturn(null);
+        when(() => auth.restoreSession()).thenAnswer((_) async => activeUser);
+
+        await tester.widget<Step5Review>(find.byType(Step5Review)).onConfirm();
+        await tester.pumpAndSettle();
+
+        verify(() => auth.restoreSession()).called(1);
+        expect(find.byType(Step6Success), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Muestra error SnackBar si falla la actualización en BD local dentro de _persistLocally',
+      (tester) async {
+        await pumpScreen(tester);
+        await advanceToHub(tester);
+
+        when(
+          () => db.getAllRecords(ownerUserId: any(named: 'ownerUserId')),
+        ).thenThrow(Exception('Local DB Fetch Error'));
+
+        tester
+            .widget<Step6Success>(find.byType(Step6Success))
+            .onAddConsultation();
+        await pumpFrames(tester);
+
+        Navigator.of(tester.element(find.byType(AddConsultationScreen))).pop(
+          MedicalHistoryItem(startDateTime: DateTime.now().toIso8601String()),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(
+          find.text('No se pudo actualizar el registro en este dispositivo.'),
+          findsOneWidget,
+        );
+      },
+    );
   });
 }

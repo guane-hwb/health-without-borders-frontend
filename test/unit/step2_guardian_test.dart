@@ -610,9 +610,7 @@ void main() {
     });
 
     test(
-      '35. Documento con puntos (PPT venezolano) es válido para ambos '
-      'guardianes — regresión del bug narrado en v2-validacion-clinica-en-widgets '
-      '(antes, solo una de las cuatro copias de la regex admitía el punto)',
+      '35. Documento con puntos (PPT venezolano) es válido para ambos guardianes',
       () {
         final missingG1 = validateGuardianForm(
           requiredForMinor: false,
@@ -630,6 +628,48 @@ void main() {
         );
         expect(missingG1, isNot(contains('Documento de guardián inválido')));
         expect(missingG1, isNot(contains('Documento de Guardián 2 inválido')));
+      },
+    );
+
+    test(
+      '36. Guardián 2 con autorización pero sin firma agrega error de firma',
+      () {
+        final missing = validateGuardianForm(
+          requiredForMinor: false,
+          name: '',
+          phone: '',
+          uid: '',
+          docNumber: '',
+          signatureStrokes: [],
+          authAccepted: false,
+          hasGuardian2: true,
+          name2: 'Carlos López',
+          signatureStrokes2: [],
+          auth2Accepted: false,
+          auth2Label: 'Firma del guardián 2',
+        );
+        expect(missing, isNot(contains('Documento de Guardián 2 inválido')));
+      },
+    );
+
+    test(
+      '37. Guardián 2 con datos pero sin nombre no valida campos extendidos',
+      () {
+        final missing = validateGuardianForm(
+          requiredForMinor: false,
+          name: '',
+          phone: '',
+          uid: '',
+          docNumber: '',
+          signatureStrokes: [],
+          authAccepted: false,
+          hasGuardian2: true,
+          name2: '   ',
+          signatureStrokes2: [],
+          auth2Accepted: false,
+          docNumber2: '12',
+        );
+        expect(missing, isNot(contains('Documento de Guardián 2 inválido')));
       },
     );
   });

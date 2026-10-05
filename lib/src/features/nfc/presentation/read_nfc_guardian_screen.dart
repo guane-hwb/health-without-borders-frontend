@@ -1,6 +1,5 @@
 // lib/src/features/nfc/presentation/read_nfc_guardian_screen.dart
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
