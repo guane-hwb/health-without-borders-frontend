@@ -316,5 +316,29 @@ void main() {
         'Cefalea',
       );
     });
+
+    test(
+      'updateBackground conserva personalHistory existente cuando el nuevo valor es null',
+      () {
+        final patientWithBg = _createSamplePatient(
+          backgroundHistory: BackgroundHistory(
+            personalHistory: 'Cirugía de rodilla previa',
+            chronicConditions: const [],
+          ),
+        );
+        final ctrl = PatientDraftController(patientWithBg);
+
+        ctrl.updateBackground(
+          chronicConditions: [ChronicConditionItem(chronicDescription: 'Asma')],
+          personalHistory: null,
+        );
+
+        final bg = ctrl.draft.backgroundHistory;
+        expect(bg, isNotNull);
+        expect(bg!.personalHistory, 'Cirugía de rodilla previa');
+        expect(bg.chronicConditions, hasLength(1));
+        expect(bg.chronicConditions.first.chronicDescription, 'Asma');
+      },
+    );
   });
 }

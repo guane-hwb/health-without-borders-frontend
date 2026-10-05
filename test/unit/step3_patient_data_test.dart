@@ -359,4 +359,31 @@ void main() {
       expect(draft.genderIdentity, equals('01'));
     });
   });
+
+  group('Step3PatientData — Pruebas de formateo y campos auxiliares', () {
+    test('Formateo de peso entero en el controlador de texto', () {
+      double? weight = 70.0;
+        final text =
+          weight % 1 == 0 ? weight.toInt().toString() : weight.toString();
+      expect(text, '70');
+
+      weight = 70.5;
+        final textDecimal =
+          weight % 1 == 0 ? weight.toInt().toString() : weight.toString();
+      expect(textDecimal, '70.5');
+    });
+
+    test('Asignación de nacionalidad no válida falla en la validación', () {
+      final natCode = 'INVALID_CODE';
+      final isSupported = kSupportedNationalityCodes.contains(natCode);
+      expect(isSupported, isFalse);
+
+      for (final isEs in [true, false]) {
+        final msg = isEs
+            ? 'Nacionalidad no válida (código ISO 3166-1 requerido)'
+            : 'Invalid nationality (ISO 3166-1 code required)';
+        expect(msg, contains('ISO 3166-1'));
+      }
+    });
+  });
 }

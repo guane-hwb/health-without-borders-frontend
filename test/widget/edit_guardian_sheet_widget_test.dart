@@ -778,4 +778,174 @@ void main() {
       );
     },
   );
+
+  group('EditGuardianSheet — Firma Biométrica, Privacidad y Errores', () {
+    testWidgets(
+      'Muestra sección de autorización, interactúa con firma, checkbox y limpia la firma',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(
+              name: 'María García',
+              docNumber: '1234567890',
+              consent: fakeConsent,
+            ),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final formFields = find.byType(TextFormField);
+
+        await tester.enterText(formFields.at(0), 'Carlos Ruiz');
+        await tester.pump();
+
+        await tester.enterText(formFields.at(2), '9876543210');
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Firma biométrica'), findsWidgets);
+
+        final signaturePad = find.byType(CustomPaint).last;
+        await tester.ensureVisible(signaturePad);
+        await tester.drag(signaturePad, const Offset(50, 50));
+        await tester.pumpAndSettle();
+
+        final clearBtn = find.text('Limpiar firma');
+        await tester.ensureVisible(clearBtn);
+        await tester.tap(clearBtn);
+        await tester.pumpAndSettle();
+
+        final checkbox = find.byType(Checkbox);
+        await tester.ensureVisible(checkbox);
+        await tester.tap(checkbox);
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'Muestra banner de error cuando falta autorización o firma al cambiar identidad',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(
+              name: 'María García',
+              docNumber: '1234567890',
+              consent: fakeConsent,
+            ),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final formFields = find.byType(TextFormField);
+        await tester.enterText(formFields.at(0), 'Carlos Ruiz');
+        await tester.pump();
+        await tester.enterText(formFields.at(2), '9876543210');
+        await tester.pumpAndSettle();
+
+        final checkbox = find.byType(Checkbox);
+        await tester.ensureVisible(checkbox);
+        await tester.tap(checkbox);
+        await tester.pumpAndSettle();
+
+        final confirmBtn = find.text(sEs.confirmChanges);
+        await tester.ensureVisible(confirmBtn);
+        await tester.tap(confirmBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Campos requeridos:'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Abre y navega por el diálogo de Política de Privacidad en ES y EN',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(
+              name: 'María García',
+              docNumber: '1234567890',
+              consent: fakeConsent,
+            ),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final formFieldsEs = find.byType(TextFormField);
+        await tester.enterText(formFieldsEs.at(0), 'Carlos Ruiz');
+        await tester.pump();
+        await tester.enterText(formFieldsEs.at(2), '9876543210');
+        await tester.pumpAndSettle();
+
+        final privacyLinkEs = find.text('política de privacidad');
+        await tester.ensureVisible(privacyLinkEs);
+        await tester.tap(privacyLinkEs);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Dialog), findsOneWidget);
+
+        final okBtn = find.text(sEs.ok);
+        await tester.ensureVisible(okBtn);
+        await tester.tap(okBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Dialog), findsNothing);
+
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(
+              name: 'María García',
+              docNumber: '1234567890',
+              consent: fakeConsent,
+            ),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+            locale: 'en',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final formFieldsEn = find.byType(TextFormField);
+        await tester.enterText(formFieldsEn.at(0), 'Carlos Ruiz');
+        await tester.pump();
+        await tester.enterText(formFieldsEn.at(2), '9876543210');
+        await tester.pumpAndSettle();
+
+        final privacyLinkEn = find.text('privacy policy');
+        await tester.ensureVisible(privacyLinkEn);
+        await tester.tap(privacyLinkEn);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Dialog), findsOneWidget);
+
+        final closeIcon = find.byIcon(Icons.close).last;
+        await tester.tap(closeIcon);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Dialog), findsNothing);
+      },
+    );
+  });
 }

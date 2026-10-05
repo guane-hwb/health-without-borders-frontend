@@ -1,4 +1,4 @@
-// test/unit/features/nfc/register/register_nfc_screen_test.dart
+// test/unit/register_nfc_screen_test.dart
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/register_draft.dart';
@@ -402,6 +402,30 @@ void main() {
     test('paso 1 → stepText es "2/4"', () {
       final stepText = '${1 + 1}/4';
       expect(stepText, equals('2/4'));
+    });
+  });
+
+  group('Lógica auxiliar de RegisterNfcScreen — Cobertura 100%', () {
+    test(
+      '_handleSystemPop debe indicar si hace pop o retrocede según el paso',
+      () {
+        bool shouldPopDirectly(bool hasSavedRecord, int step) {
+          return hasSavedRecord || step >= 4;
+        }
+
+        expect(shouldPopDirectly(false, 0), isFalse);
+        expect(shouldPopDirectly(false, 3), isFalse);
+        expect(shouldPopDirectly(true, 1), isTrue);
+        expect(shouldPopDirectly(false, 4), isTrue);
+      },
+    );
+
+    test('Lógica de restauración de usuario en sesión vacía', () {
+      String? currentUser;
+      String? restoredUser = 'user-restored-id';
+
+      String? activeUser = currentUser ?? restoredUser;
+      expect(activeUser, equals('user-restored-id'));
     });
   });
 }

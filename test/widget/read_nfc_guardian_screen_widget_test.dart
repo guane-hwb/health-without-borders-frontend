@@ -1462,6 +1462,155 @@ void main() {
 
       expect(find.text(_s.putOnWristband), findsOneWidget);
     });
+
+    tearDown(() {
+      ReadNfcGuardianScreen.overrideWriteTriagePayload = null;
+      ReadNfcGuardianScreen.overrideWriteGuardianRecord = null;
+    });
+
+    testWidgets(
+      'regrabado exitoso de la pulsera del paciente limpia el flag dirty y '
+      'continúa al flujo de sincronización (sin acudiente pendiente)',
+      (tester) async {
+        ReadNfcGuardianScreen.overrideWriteTriagePayload = () async =>
+            Future<void>.value();
+
+        await pumpScreen(tester, patient: _record());
+
+        when(() => mockDb.getChipStatus(any())).thenAnswer(
+          (_) async => FakeNfcChipStatus(
+            patientChipDirty: true,
+            guardianChipDirty: false,
+          ),
+        );
+        when(
+          () => mockAuth.getNfcKeyring(),
+        ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
+
+        await tapSync(tester);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Pulsera del paciente'), findsOneWidget);
+
+        await tester.tap(find.text('Empezar'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 750));
+        await tester.pumpAndSettle();
+
+        verify(
+          () => mockDb.clearChipsDirty(
+            any(),
+            patient: true,
+            guardian: any(named: 'guardian'),
+          ),
+        ).called(1);
+        expect(find.text(_s.putOnWristband), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'regrabado exitoso de la tarjeta del acudiente limpia el flag dirty y '
+      'continúa al flujo de sincronización',
+      (tester) async {
+        ReadNfcGuardianScreen.overrideWriteGuardianRecord = () async =>
+            Future<void>.value();
+
+        await pumpScreen(
+          tester,
+          patient: _record(guardianDeviceUid: 'GUARDIAN:UID01'),
+        );
+
+        when(() => mockDb.getChipStatus(any())).thenAnswer(
+          (_) async => FakeNfcChipStatus(
+            patientChipDirty: false,
+            guardianChipDirty: true,
+          ),
+        );
+        when(
+          () => mockAuth.getNfcKeyring(),
+        ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
+
+        await tapSync(tester);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Tarjeta del acudiente'), findsOneWidget);
+
+        await tester.tap(find.text('Empezar'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 750));
+        await tester.pumpAndSettle();
+
+        verify(
+          () => mockDb.clearChipsDirty(
+            any(),
+            patient: any(named: 'patient'),
+            guardian: true,
+          ),
+        ).called(1);
+        expect(find.text(_s.putOnWristband), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'con ambos chips pendientes, regrabar paciente y acudiente con éxito '
+      'limpia ambos flags antes de pasar al flujo de sincronización',
+      (tester) async {
+        ReadNfcGuardianScreen.overrideWriteTriagePayload = () async =>
+            Future<void>.value();
+        ReadNfcGuardianScreen.overrideWriteGuardianRecord = () async =>
+            Future<void>.value();
+
+        await pumpScreen(
+          tester,
+          patient: _record(guardianDeviceUid: 'GUARDIAN:UID01'),
+        );
+
+        when(() => mockDb.getChipStatus(any())).thenAnswer(
+          (_) async => FakeNfcChipStatus(
+            patientChipDirty: true,
+            guardianChipDirty: true,
+          ),
+        );
+        when(
+          () => mockAuth.getNfcKeyring(),
+        ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
+
+        await tapSync(tester);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Pulsera del paciente'), findsOneWidget);
+        await tester.tap(find.text('Empezar'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 750));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Tarjeta del acudiente'), findsOneWidget);
+        await tester.tap(find.text('Empezar'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 750));
+        await tester.pumpAndSettle();
+
+        verify(
+          () => mockDb.clearChipsDirty(
+            any(),
+            patient: true,
+            guardian: any(named: 'guardian'),
+          ),
+        ).called(1);
+        verify(
+          () => mockDb.clearChipsDirty(
+            any(),
+            patient: any(named: 'patient'),
+            guardian: true,
+          ),
+        ).called(1);
+        expect(find.text(_s.putOnWristband), findsOneWidget);
+      },
+    );
   });
 }
 
