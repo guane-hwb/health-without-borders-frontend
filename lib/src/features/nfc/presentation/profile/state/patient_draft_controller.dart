@@ -16,7 +16,10 @@ class PatientDraftController extends ChangeNotifier {
   PatientFullRecord get original => _original;
   bool get hasUnsyncedChanges => _draft != _original;
 
-  void markSynced() {
+  void markSynced({int? newRecordVersion}) {
+    if (newRecordVersion != null) {
+      _draft = _draft.copyWith(recordVersion: newRecordVersion);
+    }
     _original = _draft;
     notifyListeners();
   }

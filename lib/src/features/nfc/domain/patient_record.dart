@@ -234,8 +234,6 @@ class PatientInfo {
       firstName: json['firstName']?.toString() ?? '',
       secondName: json['secondName']?.toString(),
       dob: json['dob']?.toString() ?? '',
-      // Records saved by older builds may hold "OTHER"; read them as "UNK" so
-      // they show, edit and sync like the code the backend now stores.
       nationalityCode: json['nationalityCode'] == null
           ? 'COL'
           : normalizeNationalityCode(json['nationalityCode'].toString()),
@@ -390,12 +388,16 @@ class PatientInfo {
 // ---------------------------------------------------------------------------
 // GuardianConsent — Ley 1581/2012 (Habeas Data)
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// GuardianConsent — Ley 1581/2012 (Habeas Data)
+// ---------------------------------------------------------------------------
 class GuardianConsent {
   GuardianConsent({
     required this.accepted,
     required this.acceptedAt,
     this.email,
     this.signatureBase64,
+    this.policyVersion = 'v1.1',
   });
 
   factory GuardianConsent.fromJson(Map<String, dynamic> json) {
@@ -404,6 +406,7 @@ class GuardianConsent {
       acceptedAt: json['acceptedAt']?.toString() ?? '',
       email: json['email']?.toString(),
       signatureBase64: json['signatureBase64']?.toString(),
+      policyVersion: json['policyVersion']?.toString() ?? 'v1.1',
     );
   }
 
@@ -411,12 +414,14 @@ class GuardianConsent {
   final String acceptedAt; // ISO 8601
   final String? email;
   final String? signatureBase64; // PNG base64
+  final String? policyVersion;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'accepted': accepted,
     'acceptedAt': acceptedAt,
     if (email != null) 'email': email,
     if (signatureBase64 != null) 'signatureBase64': signatureBase64,
+    if (policyVersion != null) 'policyVersion': policyVersion,
   };
 
   GuardianConsent copyWith({
@@ -424,12 +429,14 @@ class GuardianConsent {
     String? acceptedAt,
     String? email,
     String? signatureBase64,
+    String? policyVersion,
   }) {
     return GuardianConsent(
       accepted: accepted ?? this.accepted,
       acceptedAt: acceptedAt ?? this.acceptedAt,
       email: email ?? this.email,
       signatureBase64: signatureBase64 ?? this.signatureBase64,
+      policyVersion: policyVersion ?? this.policyVersion,
     );
   }
 
@@ -441,10 +448,12 @@ class GuardianConsent {
           accepted == other.accepted &&
           acceptedAt == other.acceptedAt &&
           email == other.email &&
-          signatureBase64 == other.signatureBase64;
+          signatureBase64 == other.signatureBase64 &&
+          policyVersion == other.policyVersion;
 
   @override
-  int get hashCode => Object.hash(accepted, acceptedAt, email, signatureBase64);
+  int get hashCode =>
+      Object.hash(accepted, acceptedAt, email, signatureBase64, policyVersion);
 }
 
 // ---------------------------------------------------------------------------
@@ -559,9 +568,6 @@ class GuardianInfo {
 
 // ---------------------------------------------------------------------------
 // FamilyHistoryItem — Res. 866 Elems. 47.3, 47.4
-//
-// Frontend sends: conditionDescription + relationship
-// Backend LLM resolves: conditionCie10Code + conditionCie11Code
 // ---------------------------------------------------------------------------
 class FamilyHistoryItem {
   FamilyHistoryItem({
@@ -584,16 +590,11 @@ class FamilyHistoryItem {
     );
   }
 
-  final String? conditionCie10Code; // Resolved by LLM
-  final String? conditionCie11Code; // Resolved by LLM
-  final String conditionDescription; // Free text, as the professional wrote it
-  final String
-  relationship; // "01"=Padres, "02"=Hermanos, "03"=Tíos, "04"=Abuelos
-
-  /// Name of the assigned ICD code. It never replaces [conditionDescription].
+  final String? conditionCie10Code;
+  final String? conditionCie11Code;
+  final String conditionDescription;
+  final String relationship;
   final String? conditionCodedDisplay;
-
-  /// [CodeSource] value of the code; null when stored before the field.
   final String? codingSource;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -650,9 +651,6 @@ class FamilyHistoryItem {
 
 // ---------------------------------------------------------------------------
 // ChronicConditionItem — IG RDA v0.8.1 ConditionStatementRDA
-//
-// Frontend sends: chronicDescription (free text)
-// Backend LLM resolves: chronicCie10Code + chronicCie11Code
 // ---------------------------------------------------------------------------
 class ChronicConditionItem {
   ChronicConditionItem({
@@ -673,14 +671,10 @@ class ChronicConditionItem {
     );
   }
 
-  final String chronicDescription; // Free text, as the professional wrote it
-  final String? chronicCie10Code; // Resolved by LLM
-  final String? chronicCie11Code; // Resolved by LLM
-
-  /// Name of the assigned ICD code. It never replaces [chronicDescription].
+  final String chronicDescription;
+  final String? chronicCie10Code;
+  final String? chronicCie11Code;
   final String? chronicCodedDisplay;
-
-  /// [CodeSource] value of the code; null when stored before the field.
   final String? codingSource;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -751,9 +745,9 @@ class MedicationStatementItem {
   }
 
   final String medicationName;
-  final String? dciCode; // Código DCI — MIPRES
-  final String status; // "active", "completed", "stopped", "unknown"
-  final String? dosage; // Free text
+  final String? dciCode;
+  final String status;
+  final String? dosage;
   final String? notes;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -990,9 +984,9 @@ class VaccinationRecordItem {
     );
   }
 
-  final String date; // YYYY-MM-DD
+  final String date;
   final String vaccineName;
-  final String vaccineCode; // CVX code
+  final String vaccineCode;
   final int dose;
   final String administratedBy;
   final String administratedAt;
@@ -1134,17 +1128,9 @@ class ClinicalEvaluation {
 // ---------------------------------------------------------------------------
 // DiagnosisItem — Resolved by backend LLM, NOT sent by frontend
 // ---------------------------------------------------------------------------
-/// Who produced a clinical code — mirrors the backend's `CodeSource`.
-///
-/// Everything the LLM produces is a suggestion: the backend sends it to the RDA
-/// as provisional, and the app must keep it apart from what a professional
-/// recorded. Round-trip it untouched: re-sending a record without it would
-/// erase it on the server.
 abstract final class CodeSource {
   static const String clinician = 'clinician';
   static const String aiSuggested = 'ai_suggested';
-
-  /// The LLM failed or gave an invalid code; the backend stored R69.
   static const String aiFallback = 'ai_fallback';
 
   static bool isAi(String? source) =>
@@ -1175,11 +1161,7 @@ class DiagnosisItem {
   final String icd10Code;
   final String? icd11Code;
   final String description;
-
-  /// [CodeSource] value; null on diagnoses stored before the field existed.
   final String? source;
-
-  /// AI model that suggested it, and when (ISO 8601). Set by the server.
   final String? model;
   final String? generatedAt;
 
@@ -1758,9 +1740,6 @@ class MedicalHistoryItem {
   final String? occupationDescription;
   final List<MedicationRequestItem> prescriptions;
 
-  /// Edits must go through here, not through a fresh constructor: a rebuilt
-  /// item lost its encounterIdentifier (so every re-sync looked like a new
-  /// visit to the server) and its diagnosis, prescriptions and codes.
   MedicalHistoryItem copyWith({
     String? encounterIdentifier,
     String? type,
@@ -1877,6 +1856,7 @@ class PatientFullRecord {
     this.allergies = const <AllergyInfo>[],
     this.medicalHistory = const <MedicalHistoryItem>[],
     this.vaccinationRecord = const <VaccinationRecordItem>[],
+    this.recordVersion,
   });
 
   factory PatientFullRecord.fromJson(Map<String, dynamic> json) {
@@ -1930,6 +1910,9 @@ class PatientFullRecord {
               )
               .toList() ??
           <VaccinationRecordItem>[],
+      recordVersion:
+          (json['recordVersion'] as num?)?.toInt() ??
+          (json['record_version'] as num?)?.toInt(),
     );
   }
 
@@ -1942,6 +1925,7 @@ class PatientFullRecord {
   final List<AllergyInfo> allergies;
   final List<MedicalHistoryItem> medicalHistory;
   final List<VaccinationRecordItem> vaccinationRecord;
+  final int? recordVersion;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'patientId': patientId,
@@ -1958,6 +1942,7 @@ class PatientFullRecord {
     'vaccinationRecord': vaccinationRecord
         .map((VaccinationRecordItem v) => v.toJson())
         .toList(),
+    if (recordVersion != null) 'baseVersion': recordVersion,
   };
 
   PatientFullRecord copyWith({
@@ -1970,6 +1955,7 @@ class PatientFullRecord {
     List<AllergyInfo>? allergies,
     List<MedicalHistoryItem>? medicalHistory,
     List<VaccinationRecordItem>? vaccinationRecord,
+    int? recordVersion,
   }) {
     return PatientFullRecord(
       patientId: patientId ?? this.patientId,
@@ -1981,6 +1967,7 @@ class PatientFullRecord {
       allergies: allergies ?? this.allergies,
       medicalHistory: medicalHistory ?? this.medicalHistory,
       vaccinationRecord: vaccinationRecord ?? this.vaccinationRecord,
+      recordVersion: recordVersion ?? this.recordVersion,
     );
   }
 
@@ -2024,6 +2011,7 @@ class PatientSyncResponse {
     this.vidaCode,
     required this.message,
     this.conflicts = const <String>[],
+    this.recordVersion,
   });
 
   factory PatientSyncResponse.fromJson(Map<String, dynamic> json) {
@@ -2038,6 +2026,9 @@ class PatientSyncResponse {
               ?.map((dynamic c) => c.toString())
               .toList() ??
           const <String>[],
+      recordVersion:
+          (json['record_version'] as num?)?.toInt() ??
+          (json['recordVersion'] as num?)?.toInt(),
     );
   }
 
@@ -2046,8 +2037,6 @@ class PatientSyncResponse {
   final String? fhirStatus;
   final String? vidaCode;
   final String message;
-
-  /// Parts of the payload the server did not apply (e.g.
-  /// `stale_payload_retired_device_uid`); the rest of the record was synced.
   final List<String> conflicts;
+  final int? recordVersion;
 }

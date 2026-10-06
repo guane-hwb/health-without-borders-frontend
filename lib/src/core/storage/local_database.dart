@@ -19,6 +19,18 @@ import 'web_storage.dart' as web_storage;
 
 const Set<int> kPermanentSyncErrorCodes = <int>{400, 409, 422};
 
+class LocalKeyUnavailableException implements Exception {
+  LocalKeyUnavailableException(this.keyName, this.cause);
+
+  final String keyName;
+  final Object cause;
+
+  @override
+  String toString() =>
+      'LocalKeyUnavailableException: No se pudo leer la clave de cifrado "$keyName" tras varios reintentos. '
+      'No se sobrescribirá la clave existente para evitar pérdida de datos. Causa: $cause';
+}
+
 class WebStoreCorruptionException implements Exception {
   WebStoreCorruptionException(this.key, this.quarantineKey);
 
@@ -359,10 +371,7 @@ class LocalDatabase {
       if (e.key.contains('::quarantine::')) continue;
       try {
         rows.add(Map<String, Object?>.from(jsonDecode(e.value) as Map));
-      } catch (_) {
-        // An unreadable observation is telemetry, not clinical data: skip it
-        // rather than quarantine, so a corrupt row never blocks a read.
-      }
+      } catch (_) {}
     }
     return rows;
   }
@@ -420,16 +429,30 @@ class LocalDatabase {
   }
 
   Future<Uint8List> _initEncryptionKey() async {
-    try {
-      final existingKeyBase64 = await _secureStorage.read(
-        key: _dbKeyStorageName,
-      );
-      if (existingKeyBase64 != null && existingKeyBase64.isNotEmpty) {
-        _dbEncryptionKey = base64Decode(existingKeyBase64);
-        return _dbEncryptionKey!;
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final existingKeyBase64 = await _secureStorage.read(
+          key: _dbKeyStorageName,
+        );
+        if (existingKeyBase64 != null && existingKeyBase64.isNotEmpty) {
+          _dbEncryptionKey = base64Decode(existingKeyBase64);
+          return _dbEncryptionKey!;
+        }
+        lastError = null;
+        break;
+      } catch (e) {
+        lastError = e;
+        AppLogger.e(
+          'Error leyendo clave de cifrado local (intento $attempt): $e',
+        );
+        await Future<void>.delayed(Duration(milliseconds: 200 * (attempt + 1)));
       }
-    } catch (e) {
-      AppLogger.e('Error leyendo clave de cifrado local: $e');
+    }
+
+    if (lastError != null) {
+      _keyInitFuture = null;
+      throw LocalKeyUnavailableException(_dbKeyStorageName, lastError);
     }
 
     final random = Random.secure();
@@ -531,16 +554,30 @@ class LocalDatabase {
   }
 
   Future<Uint8List> _initAuditEncryptionKey() async {
-    try {
-      final existingKeyBase64 = await _secureStorage.read(
-        key: _auditKeyStorageName,
-      );
-      if (existingKeyBase64 != null && existingKeyBase64.isNotEmpty) {
-        _auditEncryptionKey = base64Decode(existingKeyBase64);
-        return _auditEncryptionKey!;
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final existingKeyBase64 = await _secureStorage.read(
+          key: _auditKeyStorageName,
+        );
+        if (existingKeyBase64 != null && existingKeyBase64.isNotEmpty) {
+          _auditEncryptionKey = base64Decode(existingKeyBase64);
+          return _auditEncryptionKey!;
+        }
+        lastError = null;
+        break;
+      } catch (e) {
+        lastError = e;
+        AppLogger.e(
+          'Error leyendo clave de cifrado de auditoría (intento $attempt): $e',
+        );
+        await Future<void>.delayed(Duration(milliseconds: 200 * (attempt + 1)));
       }
-    } catch (e) {
-      AppLogger.e('Error leyendo clave de cifrado de auditoría: $e');
+    }
+
+    if (lastError != null) {
+      _auditKeyInitFuture = null;
+      throw LocalKeyUnavailableException(_auditKeyStorageName, lastError);
     }
 
     final random = Random.secure();
@@ -605,14 +642,6 @@ class LocalDatabase {
 
   static final RegExp _unpaddedBase64 = RegExp(r'^[A-Za-z0-9+/]{40,}$');
 
-  /// Whether [value] is what [_encryptAuditPayload] produces, as opposed to a
-  /// plaintext value stored before audit fields were encrypted.
-  ///
-  /// Checking only for "ey" or "=" missed every ciphertext whose byte length
-  /// is a multiple of 3 (no padding): about a third of them, e.g. any name of
-  /// 2, 5, 8… bytes. Those were uploaded still encrypted. A ciphertext is at
-  /// least nonce + MAC (28 bytes, 40 base64 chars); a name or a UUID in clear
-  /// has spaces or hyphens, or is shorter.
   static bool _looksLikeAuditCiphertext(String value) =>
       value.startsWith('ey') ||
       value.contains('=') ||
@@ -816,16 +845,6 @@ class LocalDatabase {
     ''');
   }
 
-  /// Records which NFC key version each chip was last seen on.
-  ///
-  /// Keyed by device UID so repeated scans of the same chip update one row
-  /// instead of piling up: the question is "what version is this chip on
-  /// now", not "how often was it read".
-  ///
-  /// [device_role] separates wristbands from guardian cards. Both are written
-  /// with the same keyring, so a version cannot be retired safely by looking
-  /// at wristbands alone — guardian cards are rewritten less often and are the
-  /// likelier stragglers.
   static Future<void> _createKeyVersionTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS $_keyVersionTable (
@@ -864,13 +883,6 @@ class LocalDatabase {
     );
   }
 
-  /// Records that [deviceUid] was just read on [keyVersion].
-  ///
-  /// Upserts by UID: repeated scans of the same chip refresh one row. Marks it
-  /// unsynced so the next sync can report it.
-  ///
-  /// Telemetry must never break a clinical read, so every failure here is
-  /// swallowed. A missing observation only delays a rotation decision.
   Future<void> recordNfcKeyVersion({
     required String deviceUid,
     required String deviceRole,
@@ -884,8 +896,6 @@ class LocalDatabase {
       'device_role': deviceRole,
       'key_version': keyVersion,
       'had_header': hadHeader ? 1 : 0,
-      // UTC with a 'Z' suffix. A naive local timestamp is read by the
-      // server as UTC, shifting every observation by the device's offset.
       'observed_at': DateTime.now().toUtc().toIso8601String(),
       'is_synced': 0,
     };
@@ -910,7 +920,6 @@ class LocalDatabase {
     }
   }
 
-  /// Observations not yet reported to the backend.
   Future<List<Map<String, Object?>>> pendingNfcKeyVersions() async {
     try {
       final db = await _database;
@@ -933,7 +942,6 @@ class LocalDatabase {
     }
   }
 
-  /// Marks the given UIDs as reported.
   Future<void> markNfcKeyVersionsSynced(List<String> deviceUids) async {
     if (deviceUids.isEmpty) return;
     try {
@@ -1011,17 +1019,6 @@ class LocalDatabase {
     }
   }
 
-  /// Unsynced break-glass entries.
-  ///
-  /// With [ownerUserId], only the entries that user may upload: their own,
-  /// plus the ownerless rows they recorded. Builds before the owner was set at
-  /// write time left every row ownerless, so none was ever uploaded and each
-  /// one blocked the next user's login. Such a row is adopted (its owner set)
-  /// when its decrypted actor is [ownerUserId], or when it has no actor at
-  /// all: a device only holds one user's pending data between wipes. A row
-  /// whose actor is someone else is left for that user to upload.
-  ///
-  /// Without [ownerUserId], every unsynced entry, untouched (review/export).
   Future<List<Map<String, Object?>>> pendingEmergencyAccessLogs({
     String? ownerUserId,
   }) async {
@@ -1349,10 +1346,20 @@ class LocalDatabase {
                 r['owner_user_id'] == null ||
                 r['owner_user_id'] == ownerUserId),
       )) {
-        final decryptedJson = await _decryptPayload(r['record_json'] as String);
-        final row = Map<String, dynamic>.from(r);
-        row['record_json'] = decryptedJson;
-        entries.add(LocalPatientEntry.fromRow(row));
+        try {
+          final decryptedJson = await _decryptPayload(
+            r['record_json'] as String,
+          );
+          final row = Map<String, dynamic>.from(r);
+          row['record_json'] = decryptedJson;
+          entries.add(LocalPatientEntry.fromRow(row));
+        } catch (e, stack) {
+          AppLogger.e(
+            'Fallo al descifrar fila web para ${r['patient_id']}',
+            error: e,
+            stackTrace: stack,
+          );
+        }
       }
       return entries..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     }
@@ -1372,11 +1379,19 @@ class LocalDatabase {
 
     final entries = <LocalPatientEntry>[];
     for (final row in rows) {
-      final mutableRow = Map<String, dynamic>.from(row);
-      mutableRow['record_json'] = await _decryptPayload(
-        row['record_json'] as String,
-      );
-      entries.add(LocalPatientEntry.fromRow(mutableRow));
+      try {
+        final mutableRow = Map<String, dynamic>.from(row);
+        mutableRow['record_json'] = await _decryptPayload(
+          row['record_json'] as String,
+        );
+        entries.add(LocalPatientEntry.fromRow(mutableRow));
+      } catch (e, stack) {
+        AppLogger.e(
+          'Fallo al descifrar fila SQLite para ${row['patient_id']}',
+          error: e,
+          stackTrace: stack,
+        );
+      }
     }
     return entries;
   }
@@ -1391,10 +1406,20 @@ class LocalDatabase {
             r['owner_user_id'] == null ||
             r['owner_user_id'] == ownerUserId,
       )) {
-        final decryptedJson = await _decryptPayload(r['record_json'] as String);
-        final row = Map<String, dynamic>.from(r);
-        row['record_json'] = decryptedJson;
-        entries.add(LocalPatientEntry.fromRow(row));
+        try {
+          final decryptedJson = await _decryptPayload(
+            r['record_json'] as String,
+          );
+          final row = Map<String, dynamic>.from(r);
+          row['record_json'] = decryptedJson;
+          entries.add(LocalPatientEntry.fromRow(row));
+        } catch (e, stack) {
+          AppLogger.e(
+            'Fallo al descifrar fila web para ${r['patient_id']}',
+            error: e,
+            stackTrace: stack,
+          );
+        }
       }
       return entries..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     }
@@ -1414,11 +1439,19 @@ class LocalDatabase {
 
     final entries = <LocalPatientEntry>[];
     for (final row in rows) {
-      final mutableRow = Map<String, dynamic>.from(row);
-      mutableRow['record_json'] = await _decryptPayload(
-        row['record_json'] as String,
-      );
-      entries.add(LocalPatientEntry.fromRow(mutableRow));
+      try {
+        final mutableRow = Map<String, dynamic>.from(row);
+        mutableRow['record_json'] = await _decryptPayload(
+          row['record_json'] as String,
+        );
+        entries.add(LocalPatientEntry.fromRow(mutableRow));
+      } catch (e, stack) {
+        AppLogger.e(
+          'Fallo al descifrar fila SQLite para ${row['patient_id']}',
+          error: e,
+          stackTrace: stack,
+        );
+      }
     }
     return entries;
   }
