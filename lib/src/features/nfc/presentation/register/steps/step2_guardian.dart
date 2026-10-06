@@ -1071,11 +1071,7 @@ class _AuthCheckbox extends StatelessWidget {
                       ),
                     ),
                   ),
-                  TextSpan(
-                    text: isEs
-                        ? ' incluyendo el recibo electrónico de comprobantes.'
-                        : ' including the electronic receipt of credentials.',
-                  ),
+                  TextSpan(text: isEs ? '.' : '.'),
                   const TextSpan(
                     text: ' *',
                     style: TextStyle(
@@ -1258,82 +1254,86 @@ class _PrivacyPolicyDialog extends StatelessWidget {
                 children: isEs
                     ? const [
                         _PolicyTitle(
-                          'Política de Privacidad: Aviso sobre el Tratamiento de Datos de Menores',
+                          'Política de Privacidad y Tratamiento de Datos Personales (v1.1)',
                         ),
                         SizedBox(height: 12),
                         _PolicySection(
-                          title: '1. Introducción',
+                          title: '1. Responsable del Tratamiento',
                           body:
-                              'Esta Política de Privacidad describe cómo recopilamos, usamos y protegemos los datos personales de menores y sus tutores legales. Al proporcionar su consentimiento, usted autoriza el tratamiento de esta información con el propósito de identificación médica y asistencia de emergencia.',
+                              'Health Without Borders es el responsable del tratamiento de los datos personales recopilados a través de esta plataforma de atención médica interoperable.',
                         ),
                         _PolicySection(
-                          title: '2. Datos que recopilamos',
+                          title: '2. Datos Recopilados',
                           body: '',
                           bullets: [
-                            'Información del menor: Nombre completo, número de identificación y condiciones médicas/de salud relevantes.',
-                            'Información del guardián: Nombre completo, relación con el menor, datos de contacto y dirección física.',
-                            'Datos biométricos: Firma digital como prueba de autorización legal.',
+                            'Datos del menor: Nombres, apellidos, tipo y número de documento, fecha de nacimiento, sexo biológico, dirección y datos de salud (consultas, vacunas, alergias y diagnósticos).',
+                            'Datos del guardián: Nombre completo, parentesco, teléfono, dirección de correo electrónico, tipo y número de documento, e ID del dispositivo NFC.',
+                            'Datos biométricos: Firma manuscrita digitalizada como evidencia de autorización legal.',
                           ],
                         ),
                         _PolicySection(
-                          title: '3. Seguridad de los datos',
+                          title: '3. Finalidad del Tratamiento',
                           body:
-                              'Implementamos protocolos de cifrado y seguridad de alto nivel para garantizar que la información personal y médica se almacene de forma segura y solo sea accesible por partes autorizadas en una emergencia.',
+                              'Los datos personales y de salud serán tratados exclusivamente para las siguientes finalidades:',
+                          bullets: [
+                            'Atención clínica, identificación médica y asistencia en salud durante jornadas y brigadas.',
+                            'Estructuración y sugerencia asistida de diagnósticos mediante modelos de Inteligencia Artificial (IA/LLM).',
+                            'Generación del Resumen Digital de Atención (RDA) y envío al repositorio nacional de salud de Colombia.',
+                            'Consolidación de indicadores y estadísticas de brigadas de atención médica.',
+                          ],
                         ),
                         _PolicySection(
-                          title: '4. Sus derechos (Derechos ARCO)',
+                          title:
+                              '4. Derechos del Titular y del Guardián (Art. 8, Ley 1581/2012)',
                           body:
-                              'Como guardián, tiene derecho a acceder, rectificar, cancelar u oponerse al tratamiento de sus datos o los datos del menor en cualquier momento a través de nuestros canales de soporte.',
+                              'Como titular o representante legal del menor, usted tiene derecho a: conocer, actualizar y rectificar sus datos personales; solicitar prueba de la autorización otorgada; ser informado sobre el uso de sus datos; presentar quejas ante la Superintendencia de Industria y Comercio (SIC); revocar la autorización o solicitar la supresión de los datos salvo obligación legal o contractual.',
                         ),
                         _PolicySection(
-                          title: '5. Recibo de prueba de consentimiento',
+                          title: '5. Seguridad y Confidencialidad',
                           body:
-                              'Una vez aceptada, se enviará a la dirección de correo electrónico proporcionada una copia digital de esta autorización y su firma digital como comprobante legal de esta transacción.',
-                        ),
-                        _PolicySection(
-                          title: '6. Finalidad del tratamiento',
-                          body:
-                              'Los datos se utilizarán exclusivamente para identificación médica, asistencia de emergencia y comunicación con el guardián legal del menor registrado en la plataforma.',
+                              'Implementamos cifrado de grado militar (AES-256-GCM) en reposo y tránsito (HTTPS/TLS) para asegurar que la información no sea accesible por terceros no autorizados.',
                         ),
                       ]
                     : const [
                         _PolicyTitle(
-                          'Privacy Policy: Notice on the Processing of Minor\'s Data',
+                          'Privacy Policy and Personal Data Processing Notice (v1.1)',
                         ),
                         SizedBox(height: 12),
                         _PolicySection(
-                          title: '1. Introduction',
+                          title: '1. Data Controller',
                           body:
-                              'This Privacy Policy describes how we collect, use, and protect the personal data of minors and their legal guardians. By providing your consent, you authorize the processing of this information for medical identification and emergency assistance purposes.',
+                              'Health Without Borders is the data controller for personal data collected through this interoperable healthcare platform.',
                         ),
                         _PolicySection(
-                          title: '2. Data We Collect',
+                          title: '2. Collected Data',
                           body: '',
                           bullets: [
-                            'Minor\'s information: Full name, identification number, and relevant medical/health conditions.',
-                            'Guardian\'s information: Full name, relationship to the minor, contact details, and physical address.',
-                            'Biometric data: Digital signature as proof of legal authorization.',
+                            'Minor\'s data: Full name, ID type and number, date of birth, biological sex, address, and health records (consultations, vaccines, allergies, diagnoses).',
+                            'Guardian\'s data: Full name, relationship, phone number, email address, ID type and number, and NFC device ID.',
+                            'Biometric data: Digitalized handwritten signature as legal authorization proof.',
                           ],
                         ),
                         _PolicySection(
-                          title: '3. Data Security',
+                          title: '3. Purpose of Processing',
                           body:
-                              'We implement high-level encryption and security protocols to ensure that personal and medical information is stored securely and is only accessible by authorized parties in an emergency.',
+                              'Personal and health data will be processed exclusively for the following purposes:',
+                          bullets: [
+                            'Clinical care, medical identification, and health assistance during medical brigades.',
+                            'Assisted diagnosis structuring and coding via AI/LLM models.',
+                            'Creation of the Digital Summary of Care (RDA) sent to Colombia\'s national health repository.',
+                            'Consolidation of metrics and brigade analytics.',
+                          ],
                         ),
                         _PolicySection(
-                          title: '4. Your Rights (ARCO Rights)',
+                          title:
+                              '4. Rights of the Data Subject and Guardian (Law 1581/2012)',
                           body:
-                              'As a guardian, you have the right to access, rectify, cancel, or object to the processing of your data or the minor\'s data at any time through our support channels.',
+                              'As data subject or legal guardian, you have the right to access, update, and rectify personal data; request proof of authorization; be informed of data usage; lodge complaints with the Superintendency of Industry and Commerce (SIC); and revoke authorization or request data deletion.',
                         ),
                         _PolicySection(
-                          title: '5. Receipt of Proof of Consent',
+                          title: '5. Security and Confidentiality',
                           body:
-                              'Once accepted, a digital copy of this authorization and your digital signature will be sent to the provided email address as legal proof of this transaction.',
-                        ),
-                        _PolicySection(
-                          title: '6. Purpose of Processing',
-                          body:
-                              'The data will be used exclusively for medical identification, emergency assistance, and communication with the legal guardian of the minor registered on the platform.',
+                              'We implement AES-256-GCM encryption at rest and in transit (HTTPS/TLS) to ensure that information remains protected against unauthorized access.',
                         ),
                       ],
               ),

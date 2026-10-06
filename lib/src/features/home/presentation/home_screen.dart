@@ -25,21 +25,63 @@ class HomeScreen extends StatelessWidget {
 
   Future<void> _logout(BuildContext context) async {
     final s = AppStrings.of(context);
+    final isEs = s.isEs;
     final scope = AppScope.of(context);
     final name = scope.currentUser?.fullName ?? '';
+    final dialogContext = context;
+
+    if (!dialogContext.mounted) return;
+
+    int pendingPatients = 0;
+    int pendingLogs = 0;
+    try {
+      pendingPatients = await scope.localDatabase.getUnsyncedCount();
+      pendingLogs = await scope.localDatabase.getUnsyncedEmergencyLogCount();
+    } catch (_) {}
+
+    if (!dialogContext.mounted) return;
+
+    final totalPending = pendingPatients + pendingLogs;
 
     final confirmed = await showDialog<bool>(
-      context: context,
+      context: dialogContext,
       builder: (_) => AlertDialog(
         title: Text(s.logoutTitle),
-        content: Text(s.logoutConfirm(name)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(s.logoutConfirm(name)),
+            if (totalPending > 0) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3CD),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFFEEBA)),
+                ),
+                child: Text(
+                  isEs
+                      ? 'Atención: Hay $totalPending registro(s) pendiente(s) por sincronizar en este dispositivo.'
+                      : 'Warning: There are $totalPending pending record(s) on this device.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF856404),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: Text(s.cancel),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text(
               s.logout,
               style: const TextStyle(color: AppColors.error),
@@ -49,10 +91,10 @@ class HomeScreen extends StatelessWidget {
       ),
     );
 
-    if (confirmed == true && context.mounted) {
+    if (confirmed == true && dialogContext.mounted) {
       unawaited(
         showDialog<void>(
-          context: context,
+          context: dialogContext,
           barrierDismissible: false,
           builder: (_) => const PopScope(
             canPop: false,
@@ -72,9 +114,9 @@ class HomeScreen extends StatelessWidget {
 
       await scope.authRepository.logout();
 
-      if (context.mounted) {
+      if (dialogContext.mounted) {
         await Navigator.of(
-          context,
+          dialogContext,
         ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
       }
     }
@@ -165,8 +207,6 @@ class HomeScreen extends StatelessWidget {
     };
   }
 
-  // ── SUPERADMIN ────────────────────────────────────────────────────────────
-
   Widget _buildSuperadminBody(BuildContext context) {
     final s = AppStrings.of(context);
     return ListView(
@@ -194,8 +234,6 @@ class HomeScreen extends StatelessWidget {
       ],
     );
   }
-
-  // ── ORG ADMIN ─────────────────────────────────────────────────────────────
 
   Widget _buildOrgAdminBody(BuildContext context) {
     final s = AppStrings.of(context);
@@ -234,8 +272,6 @@ class HomeScreen extends StatelessWidget {
       ],
     );
   }
-
-  // ── DOCTOR / NURSE ────────────────────────────────────────────────────────
 
   Widget _buildClinicalBody(BuildContext context, UserSession user) {
     final s = AppStrings.of(context);
@@ -285,10 +321,6 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// SUB-WIDGETS
-// ═════════════════════════════════════════════════════════════════════════════
 
 class _Header extends StatelessWidget {
   const _Header({required this.user, required this.greeting});

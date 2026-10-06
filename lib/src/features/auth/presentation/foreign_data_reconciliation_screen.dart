@@ -1,10 +1,8 @@
 // lib/src/features/auth/presentation/foreign_data_reconciliation_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../design/tokens/app_colors.dart';
-import '../../../core/storage/local_database.dart';
 import '../data/auth_repository.dart';
 
 class ForeignDataReconciliationScreen extends StatefulWidget {
@@ -26,25 +24,6 @@ class _ForeignDataReconciliationScreenState
     extends State<ForeignDataReconciliationScreen> {
   bool _isWorking = false;
 
-  Future<void> _openExportReview() async {
-    setState(() => _isWorking = true);
-    try {
-      final records = await widget.authRepository
-          .pendingForeignRecordsForReview();
-      final logs = await widget.authRepository
-          .pendingForeignEmergencyLogsForReview();
-      if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) =>
-              _PendingDataExportScreen(records: records, logs: logs),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isWorking = false);
-    }
-  }
-
   Future<void> _confirmDiscard() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -59,8 +38,7 @@ class _ForeignDataReconciliationScreenState
           'registro(s) de paciente y ${widget.exception.pendingEmergencyLogs} '
           'acceso(s) de emergencia que aún no se han sincronizado con el '
           'servidor. Esta acción no se puede deshacer.\n\n'
-          'Usa "Exportar / revisar" primero si necesitas conservar esta '
-          'información.',
+          'Asegúrate de que la información se haya respaldado o coordinado antes de proceder.',
           style: const TextStyle(fontSize: 13, height: 1.4),
         ),
         actions: [
@@ -121,10 +99,9 @@ class _ForeignDataReconciliationScreenState
                   size: 40,
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'Este dispositivo aún tiene datos sin sincronizar de otra '
-                  'cuenta (usuario ${e.previousOwnerUserId}):',
-                  style: const TextStyle(
+                const Text(
+                  'Este dispositivo aún tiene datos sin sincronizar pertenecientes a la sesión del usuario anterior.',
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,
@@ -157,13 +134,6 @@ class _ForeignDataReconciliationScreenState
                   onPressed: _isWorking
                       ? null
                       : () => Navigator.of(context).pop(),
-                ),
-                const SizedBox(height: 12),
-                _ActionButton(
-                  icon: Icons.file_download_outlined,
-                  label: 'Exportar / revisar antes de decidir',
-                  subtitle: 'Ver el detalle y copiarlo como texto.',
-                  onPressed: _isWorking ? null : _openExportReview,
                 ),
                 const SizedBox(height: 12),
                 _ActionButton(
@@ -272,95 +242,6 @@ class _ActionButton extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ── Export / review screen ──────────────────────────────────────────────────
-
-class _PendingDataExportScreen extends StatelessWidget {
-  const _PendingDataExportScreen({required this.records, required this.logs});
-
-  final List<LocalPatientEntry> records;
-  final List<Map<String, Object?>> logs;
-
-  String _asText() {
-    final buffer = StringBuffer();
-    buffer.writeln('=== Pacientes pendientes (${records.length}) ===');
-    for (final r in records) {
-      buffer.writeln(
-        '- ${r.patientId} | ${r.maskedName} | creado ${r.createdAt} | '
-        'revisión ${r.revision} | dueño: ${r.ownerUserId ?? "(sin dueño)"}',
-      );
-    }
-    buffer.writeln();
-    buffer.writeln('=== Accesos de emergencia pendientes (${logs.length}) ===');
-    for (final l in logs) {
-      buffer.writeln(
-        '- id ${l['id']} | paciente ${l['patient_uid']} | '
-        'motivo ${l['reason']} | ocurrió ${l['occurred_at']} | '
-        'dueño: ${l['owner_user_id'] ?? "(sin dueño)"}',
-      );
-    }
-    return buffer.toString();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final text = _asText();
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Revisión de datos pendientes'),
-        actions: [
-          IconButton(
-            tooltip: 'Copiar como texto',
-            icon: const Icon(Icons.copy_all_outlined),
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: text));
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Copiado al portapapeles.')),
-                );
-              }
-            },
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'Este listado identifica pacientes (PHI). Trátalo según '
-                  'las políticas de manejo de datos de tu organización '
-                  'antes de descartarlo.',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: SelectableText(
-                    text,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

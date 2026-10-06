@@ -43,6 +43,7 @@ class FakeAuthRepository implements AuthRepository {
   Future<UserSession> login({
     required String email,
     required String password,
+    bool rememberSession = true,
   }) async {
     loginCalled = true;
     loginEmail = email;

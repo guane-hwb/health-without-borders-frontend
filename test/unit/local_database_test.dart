@@ -1342,7 +1342,7 @@ void main() {
     });
 
     test(
-      'si la lectura de la clave falla, genera y persiste una clave nueva',
+      'si la lectura de la clave falla tras reintentos, lanza LocalKeyUnavailableException sin sobrescribir',
       () async {
         when(
           () => mockStorage.read(key: any(named: 'key')),
@@ -1351,10 +1351,13 @@ void main() {
         final localDb = LocalDatabase.forTesting(secureStorage: mockStorage);
 
         await expectLater(
-          localDb.savePatient(_buildRecord(patientId: 'k-2')),
-          completes,
+          localDb.savePatient(
+            _buildRecord(patientId: 'k-2'),
+            ownerUserId: 'u1',
+          ),
+          throwsA(isA<LocalKeyUnavailableException>()),
         );
-        expect(inMemoryStorage.containsKey(_kDbKeyStorageName), isTrue);
+        expect(inMemoryStorage.containsKey(_kDbKeyStorageName), isFalse);
       },
     );
 
@@ -2458,7 +2461,7 @@ void main() {
     );
 
     test(
-      'captura error al leer clave de auditoría y genera una nueva',
+      'captura error al leer clave de auditoría y lanza LocalKeyUnavailableException sin sobrescribir',
       () async {
         when(
           () => mockStorage.read(key: 'hwb_sqlite_audit_aes_key'),
@@ -2469,11 +2472,15 @@ void main() {
           localDb.logEmergencyAccess(
             patientUid: '04:READ_FAIL',
             patientName: 'Pedro',
+            ownerUserId: 'u1',
           ),
-          completes,
+          throwsA(isA<LocalKeyUnavailableException>()),
         );
 
-        expect(inMemoryStorage.containsKey('hwb_sqlite_audit_aes_key'), isTrue);
+        expect(
+          inMemoryStorage.containsKey('hwb_sqlite_audit_aes_key'),
+          isFalse,
+        );
       },
     );
 
