@@ -26,7 +26,6 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
   bool _searching = false;
   String? _error;
 
-  // Common Colombian document types from the patient registration screen
   static const Map<String, String> _docTypes = {
     'TI': 'TI — Tarjeta de identidad',
     'CC': 'CC — Cédula de ciudadanía',
@@ -97,21 +96,24 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
       _error = null;
     });
     try {
-      final patient = await AppScope.of(context).patientRepository
-          .searchPatient(
-            documentNumber: _docCtrl.text.trim(),
-            birthDate: _formatDate(_dob!),
-            firstName: _fnCtrl.text.trim(),
-            lastName: _lnCtrl.text.trim(),
-            guardianName: _gnCtrl.text.trim().isEmpty
-                ? null
-                : _gnCtrl.text.trim(),
-          );
+      final scope = AppScope.of(context);
+      final currentUser = scope.authRepository.currentUser;
+      final canReassign = currentUser?.role.canSyncPatient ?? false;
+
+      final patient = await scope.patientRepository.searchPatient(
+        documentNumber: _docCtrl.text.trim(),
+        birthDate: _formatDate(_dob!),
+        firstName: _fnCtrl.text.trim(),
+        lastName: _lnCtrl.text.trim(),
+        guardianName: _gnCtrl.text.trim().isEmpty ? null : _gnCtrl.text.trim(),
+      );
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) =>
-              PatientProfileScreen(patient: patient, allowReassign: true),
+          builder: (_) => PatientProfileScreen(
+            patient: patient,
+            allowReassign: canReassign,
+          ),
         ),
       );
     } on ApiException catch (e) {
@@ -191,11 +193,9 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                         ),
                         const SizedBox(height: 14),
 
-                        // ── Privacy banner ──────────────────────
                         _PrivacyBanner(message: s.searchPrivacyNotice),
                         const SizedBox(height: 20),
 
-                        // ── Document type + number ───────────────
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -225,7 +225,6 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                         ),
                         const SizedBox(height: 14),
 
-                        // ── First name ─────────────────────────
                         _LabeledField(
                           label: s.firstNameLabel,
                           controller: _fnCtrl,
@@ -234,7 +233,6 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                         ),
                         const SizedBox(height: 14),
 
-                        // ── Last name ──────────────────────────
                         _LabeledField(
                           label: s.lastNameLabel,
                           hint: s.firstOrSecondLastName,
@@ -244,7 +242,6 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                         ),
                         const SizedBox(height: 14),
 
-                        // ── DOB ────────────────────────────────
                         _DateField(
                           label: s.dobLabel,
                           requiredField: true,
@@ -253,7 +250,6 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                         ),
                         const SizedBox(height: 14),
 
-                        // ── Guardian name (optional) ───────────
                         _LabeledField(
                           label: s.guardianNameOptionalLabel,
                           hint: 'Ej. Carmen Vargas Pinto',
@@ -304,7 +300,6 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
 
                         const SizedBox(height: 24),
 
-                        // ── Search button ──────────────────────
                         SizedBox(
                           width: double.infinity,
                           height: 50,
@@ -376,7 +371,6 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
   }
 }
 
-// ── Doc type dropdown ──────────────────────────────────────────────────────
 class _DocTypeDropdown extends StatelessWidget {
   const _DocTypeDropdown({
     required this.value,
@@ -477,7 +471,6 @@ class _DocTypeDropdown extends StatelessWidget {
   }
 }
 
-// ── Labeled field ──────────────────────────────────────────────────────────
 class _LabeledField extends StatelessWidget {
   const _LabeledField({
     required this.label,
@@ -577,8 +570,6 @@ class _LabeledField extends StatelessWidget {
   }
 }
 
-// ── Date field ──────────────────────────────────────────────────────────────
-
 class _DateField extends StatelessWidget {
   const _DateField({
     required this.label,
@@ -662,8 +653,6 @@ class _DateField extends StatelessWidget {
     );
   }
 }
-
-// ── Privacy banner ──────────────────────────────────────────────────────────
 
 class _PrivacyBanner extends StatelessWidget {
   const _PrivacyBanner({required this.message});

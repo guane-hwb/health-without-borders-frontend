@@ -1,6 +1,7 @@
 // lib/src/features/home/presentation/home_screen.dart
 
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
@@ -32,6 +33,12 @@ class HomeScreen extends StatelessWidget {
 
     if (!dialogContext.mounted) return;
 
+    if (kIsWeb) {
+      try {
+        await scope.syncEngine.syncAll().timeout(const Duration(seconds: 20));
+      } catch (_) {}
+    }
+
     int pendingPatients = 0;
     int pendingLogs = 0;
     try {
@@ -62,9 +69,13 @@ class HomeScreen extends StatelessWidget {
                   border: Border.all(color: const Color(0xFFFFEEBA)),
                 ),
                 child: Text(
-                  isEs
-                      ? 'Atención: Hay $totalPending registro(s) pendiente(s) por sincronizar en este dispositivo.'
-                      : 'Warning: There are $totalPending pending record(s) on this device.',
+                  kIsWeb
+                      ? (isEs
+                            ? 'Atención: $totalPending registro(s) no se pudieron sincronizar. Al cerrar sesión se ELIMINARÁN de este navegador y no se podrán recuperar.'
+                            : 'Warning: $totalPending record(s) could not be synced. Signing out will DELETE them from this browser and they cannot be recovered.')
+                      : (isEs
+                            ? 'Atención: Hay $totalPending registro(s) pendiente(s) por sincronizar en este dispositivo.'
+                            : 'Warning: There are $totalPending pending record(s) on this device.'),
                   style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFF856404),

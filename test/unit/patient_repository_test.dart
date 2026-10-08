@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_error_codes.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
@@ -620,5 +621,105 @@ void main() {
         expect(mappedEntries[2]['observed_at'], 'NOT_A_DATE');
       },
     );
+  });
+
+  group('contrato de errores: se conservan statusCode y code', () {
+    const record = _FakePatientFullRecord(<String, dynamic>{});
+
+    void stubSyncThrows(ApiException e) {
+      when(
+        () => apiClient.postJson(
+          path: any(named: 'path'),
+          body: any(named: 'body'),
+          headers: any(named: 'headers'),
+          timeout: any(named: 'timeout'),
+        ),
+      ).thenThrow(e);
+    }
+
+    for (final String code in <String>[
+      ApiErrorCode.deviceUidConflict,
+      ApiErrorCode.duplicateIdentity,
+      ApiErrorCode.identityMismatch,
+      ApiErrorCode.deviceRetired,
+    ]) {
+      test('/sync 409 "$code" llega con su code y tiene mensaje', () async {
+        stubSyncThrows(ApiException('x', statusCode: 409, code: code));
+
+        await expectLater(
+          repository.syncPatient(record as PatientFullRecord),
+          throwsA(
+            isA<ApiException>()
+                .having((ApiException e) => e.statusCode, 'statusCode', 409)
+                .having((ApiException e) => e.code, 'code', code),
+          ),
+        );
+        expect(ApiErrorCode.describe(code, isEs: true), isNotNull);
+        expect(ApiErrorCode.describe(code, isEs: false), isNotNull);
+      });
+    }
+
+    test(
+      '/sync 403 de rol llega como 403 sin code de cuenta inactiva',
+      () async {
+        stubSyncThrows(ApiException('Forbidden', statusCode: 403));
+
+        await expectLater(
+          repository.syncPatient(record as PatientFullRecord),
+          throwsA(
+            isA<ApiException>()
+                .having((ApiException e) => e.statusCode, 'statusCode', 403)
+                .having(
+                  (ApiException e) => ApiErrorCode.isAccountInactive(e.code),
+                  'isAccountInactive',
+                  isFalse,
+                ),
+          ),
+        );
+      },
+    );
+
+    for (final MapEntry<String, int> c in <String, int>{
+      ApiErrorCode.guardianRequired: 403,
+      ApiErrorCode.guardianMismatch: 403,
+      ApiErrorCode.deviceRetired: 410,
+    }.entries) {
+      test('/scan ${c.value} "${c.key}" llega con su code', () async {
+        when(
+          () => apiClient.getJson(
+            path: any(named: 'path'),
+            headers: any(named: 'headers'),
+          ),
+        ).thenThrow(ApiException('x', statusCode: c.value, code: c.key));
+
+        await expectLater(
+          repository.scanDevice('04:AA:BB'),
+          throwsA(
+            isA<ApiException>()
+                .having((ApiException e) => e.statusCode, 'statusCode', c.value)
+                .having((ApiException e) => e.code, 'code', c.key),
+          ),
+        );
+        expect(ApiErrorCode.describe(c.key, isEs: true), isNotNull);
+      });
+    }
+
+    test('/sync 201 con status "success" conserva el estado que evalúa el '
+        'motor', () async {
+      when(
+        () => apiClient.postJson(
+          path: any(named: 'path'),
+          body: any(named: 'body'),
+          headers: any(named: 'headers'),
+          timeout: any(named: 'timeout'),
+        ),
+      ).thenAnswer((_) async => <String, dynamic>{'status': 'success'});
+
+      final PatientSyncResponse result = await repository.syncPatient(
+        record as PatientFullRecord,
+      );
+
+      expect(result.status, 'success');
+    });
   });
 }

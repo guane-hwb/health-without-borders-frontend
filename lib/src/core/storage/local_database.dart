@@ -2,13 +2,18 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Directory, File;
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart' as crypto;
-import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb, visibleForTesting;
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart'
+    show getApplicationSupportDirectory;
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
@@ -17,7 +22,9 @@ import '../utils/app_logger.dart';
 import '../utils/clinical_time.dart';
 import 'web_storage.dart' as web_storage;
 
-const Set<int> kPermanentSyncErrorCodes = <int>{400, 409, 422};
+const Set<int> kPermanentSyncErrorCodes = <int>{400, 403, 409, 422};
+
+final String _permanentCodesSql = kPermanentSyncErrorCodes.join(', ');
 
 class LocalKeyUnavailableException implements Exception {
   LocalKeyUnavailableException(this.keyName, this.cause);
@@ -55,6 +62,11 @@ class AuditDecryptionException implements Exception {
 class LocalDatabase {
   LocalDatabase._({FlutterSecureStorage? secureStorage})
     : _secureStorage = secureStorage ?? _defaultSecureStorage,
+      _legacySecureStorage = _defaultLegacySecureStorage,
+      _platformOverride = null,
+      _legacyDatabasesDirectory = getDatabasesPath,
+      _protectedDirectory = _defaultProtectedDirectory,
+      _excludeFromBackup = _defaultExcludeFromBackup,
       _forceWeb = null,
       _webGet = web_storage.getWebStorageItem,
       _webSet = web_storage.setWebStorageItem,
@@ -80,7 +92,18 @@ class LocalDatabase {
     Future<void> Function()? webClearAll,
     Future<List<MapEntry<String, String>>> Function(String prefix)? webList,
     Future<void> Function(String prefix)? webDeleteByPrefix,
+    FlutterSecureStorage? legacySecureStorage,
+    TargetPlatform? platformOverride,
+    Future<String> Function()? legacyDatabasesDirectory,
+    Future<String> Function()? protectedDirectory,
+    Future<void> Function(String path)? excludeFromBackup,
   }) : _secureStorage = secureStorage ?? _defaultSecureStorage,
+       _legacySecureStorage =
+           legacySecureStorage ?? _defaultLegacySecureStorage,
+       _platformOverride = platformOverride,
+       _legacyDatabasesDirectory = legacyDatabasesDirectory ?? getDatabasesPath,
+       _protectedDirectory = protectedDirectory ?? _defaultProtectedDirectory,
+       _excludeFromBackup = excludeFromBackup ?? _defaultExcludeFromBackup,
        _forceWeb = forceWeb,
        _webGet = webGet ?? web_storage.getWebStorageItem,
        _webSet = webSet ?? web_storage.setWebStorageItem,
@@ -91,10 +114,15 @@ class LocalDatabase {
            webDeleteByPrefix ?? web_storage.deleteWebStorageByPrefix;
 
   final bool? _forceWeb;
+  final FlutterSecureStorage _legacySecureStorage;
+  final TargetPlatform? _platformOverride;
+  final Future<String> Function() _legacyDatabasesDirectory;
+  final Future<String> Function() _protectedDirectory;
+  final Future<void> Function(String path) _excludeFromBackup;
   final Future<String?> Function(String key) _webGet;
   final Future<void> Function(String key, String value) _webSet;
   final Future<void> Function(String key) _webRemove;
-  final Future<void> Function() _webClearAll;
+  final Future<void> Function()? _webClearAll;
   final Future<List<MapEntry<String, String>>> Function(String prefix) _webList;
   final Future<void> Function(String prefix) _webDeleteByPrefix;
 
@@ -116,8 +144,51 @@ class LocalDatabase {
     }
   }
 
+  static const String _keychainService = 'hwb_local_db';
+
   static const FlutterSecureStorage _defaultSecureStorage =
+      FlutterSecureStorage(
+        iOptions: IOSOptions(
+          accountName: _keychainService,
+          accessibility: KeychainAccessibility.first_unlock_this_device,
+        ),
+        mOptions: MacOsOptions(
+          accountName: _keychainService,
+          accessibility: KeychainAccessibility.first_unlock_this_device,
+        ),
+        aOptions: AndroidOptions(),
+        // Web: la llave vive en sessionStorage, no en localStorage junto al
+        // texto cifrado de IndexedDB. Al cerrar la pestaña la cola queda
+        // ilegible y se borra al arrancar sin sesión (AuthRepository).
+        webOptions: WebOptions(useSessionStorage: true),
+      );
+
+  /// iOS/macOS: almacén anterior a la migración al llavero solo-dispositivo.
+  /// Web: apunta al almacén persistente (localStorage) de versiones previas,
+  /// solo para borrar las llaves que dejaron allí.
+  static const FlutterSecureStorage _defaultLegacySecureStorage =
       FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: false));
+
+  @visibleForTesting
+  static FlutterSecureStorage get defaultSecureStorageForTesting =>
+      _defaultSecureStorage;
+
+  static const MethodChannel _backupChannel = MethodChannel(
+    'hwb/backup_exclusion',
+  );
+
+  static Future<String> _defaultProtectedDirectory() async =>
+      (await getApplicationSupportDirectory()).path;
+
+  static Future<void> _defaultExcludeFromBackup(String path) => _backupChannel
+      .invokeMethod<void>('excludeFromBackup', <String, String>{'path': path});
+
+  static const String _protectedDbDirName = 'hwb_db';
+  static const List<String> _dbSidecarSuffixes = <String>[
+    '-wal',
+    '-shm',
+    '-journal',
+  ];
 
   static const String _dbName = 'hwb_patients.db';
   static const int _dbVersion = 10;
@@ -147,6 +218,12 @@ class LocalDatabase {
   static Future<void> init() async {}
 
   bool get _isWeb => _forceWeb ?? kIsWeb;
+
+  bool get _isApple {
+    if (_isWeb) return false;
+    final TargetPlatform platform = _platformOverride ?? defaultTargetPlatform;
+    return platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
+  }
 
   bool _webMigrationChecked = false;
 
@@ -226,6 +303,15 @@ class LocalDatabase {
   @visibleForTesting
   List<String> get webQuarantinedKeysForTesting =>
       List.unmodifiable(_webQuarantinedKeys);
+
+  @visibleForTesting
+  Future<void> closeForTesting() async {
+    if (_db != null && _db!.isOpen) {
+      await _db!.close();
+      _db = null;
+      _dbInitFuture = null;
+    }
+  }
 
   Future<Map<String, dynamic>?> _webReadJsonRecord(String key) async {
     await _ensureWebMigrated();
@@ -428,12 +514,73 @@ class LocalDatabase {
     return _keyInitFuture ??= _initEncryptionKey();
   }
 
+  Future<String?> _readKeyWithMigration(String name) async {
+    final String? current = await _secureStorage.read(key: name);
+    if (!_isApple) return current;
+
+    if (current != null && current.isNotEmpty) {
+      await _dropRedundantLegacyKey(name, current);
+      return current;
+    }
+
+    final String? legacy = await _legacySecureStorage.read(key: name);
+    if (legacy == null || legacy.isEmpty) return null;
+    return _migrateLegacyKey(name, legacy);
+  }
+
+  Future<String> _migrateLegacyKey(String name, String legacyValue) async {
+    try {
+      await _secureStorage.write(key: name, value: legacyValue);
+      final String? check = await _secureStorage.read(key: name);
+      if (check != legacyValue) {
+        throw StateError('La verificación de la llave migrada no coincide.');
+      }
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo migrar la llave "$name" al llavero solo-dispositivo; '
+        'se sigue usando la heredada y se reintentará en el próximo arranque',
+        error: e,
+        stackTrace: stack,
+      );
+      try {
+        await _secureStorage.delete(key: name);
+      } catch (_) {}
+      return legacyValue;
+    }
+
+    try {
+      await _legacySecureStorage.delete(key: name);
+    } catch (e) {
+      AppLogger.e(
+        'Llave "$name" migrada, pero no se pudo borrar la heredada: $e',
+      );
+    }
+    return legacyValue;
+  }
+
+  Future<void> _dropRedundantLegacyKey(String name, String current) async {
+    try {
+      final String? legacy = await _legacySecureStorage.read(key: name);
+      if (legacy == null || legacy.isEmpty) return;
+      if (legacy == current) {
+        await _legacySecureStorage.delete(key: name);
+      } else {
+        AppLogger.e(
+          'La llave "$name" heredada difiere de la actual; se conserva la '
+          'actual y se deja la heredada sin tocar.',
+        );
+      }
+    } catch (e) {
+      AppLogger.e('No se pudo limpiar la llave heredada "$name": $e');
+    }
+  }
+
   Future<Uint8List> _initEncryptionKey() async {
     Object? lastError;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        final existingKeyBase64 = await _secureStorage.read(
-          key: _dbKeyStorageName,
+        final existingKeyBase64 = await _readKeyWithMigration(
+          _dbKeyStorageName,
         );
         if (existingKeyBase64 != null && existingKeyBase64.isNotEmpty) {
           _dbEncryptionKey = base64Decode(existingKeyBase64);
@@ -557,8 +704,8 @@ class LocalDatabase {
     Object? lastError;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        final existingKeyBase64 = await _secureStorage.read(
-          key: _auditKeyStorageName,
+        final existingKeyBase64 = await _readKeyWithMigration(
+          _auditKeyStorageName,
         );
         if (existingKeyBase64 != null && existingKeyBase64.isNotEmpty) {
           _auditEncryptionKey = base64Decode(existingKeyBase64);
@@ -701,9 +848,28 @@ class LocalDatabase {
     } catch (e) {
       AppLogger.e('Error borrando la clave de cifrado local: $e');
     }
-    if (_isWeb) {
+    if (_isApple) {
       try {
-        await _withWebLock(() => _webClearAll());
+        await _legacySecureStorage.delete(key: _dbKeyStorageName);
+      } catch (e) {
+        AppLogger.e('Error borrando la clave heredada de cifrado local: $e');
+      }
+    }
+    if (_isWeb) {
+      // Builds anteriores guardaron las llaves en localStorage: no deben
+      // sobrevivir al cierre de sesión.
+      for (final String name in <String>[
+        _dbKeyStorageName,
+        _auditKeyStorageName,
+      ]) {
+        try {
+          await _legacySecureStorage.delete(key: name);
+        } catch (e) {
+          AppLogger.e('Error borrando la clave web heredada $name: $e');
+        }
+      }
+      try {
+        await _withWebLock(() => _webClearAll!());
       } catch (e) {
         AppLogger.e('Error limpiando IndexedDB web tras borrar la clave: $e');
       }
@@ -714,13 +880,90 @@ class LocalDatabase {
 
   Future<Database?> get _database async {
     if (_isWeb) return null;
-    if (_db != null) return _db;
-    _db = await _initDb();
+    if (_db != null && _db!.isOpen) return _db;
+    final Future<Database> pending = _dbInitFuture ??= _initDb();
+    try {
+      _db = await pending;
+    } catch (_) {
+      _dbInitFuture = null;
+      rethrow;
+    }
     return _db;
   }
 
+  Future<Database>? _dbInitFuture;
+
+  Future<String> _resolveDbPath() async {
+    final String legacyPath = join(await _legacyDatabasesDirectory(), _dbName);
+    if (!_isApple) return legacyPath;
+
+    final String protectedDir = join(
+      await _protectedDirectory(),
+      _protectedDbDirName,
+    );
+    try {
+      await Directory(protectedDir).create(recursive: true);
+    } catch (e) {
+      AppLogger.e('No se pudo crear la carpeta protegida de la base local: $e');
+      return legacyPath;
+    }
+    try {
+      await _excludeFromBackup(protectedDir);
+    } catch (e) {
+      AppLogger.e(
+        'No se pudo excluir la base local de las copias de seguridad: $e',
+      );
+    }
+
+    final String newPath = join(protectedDir, _dbName);
+    final bool ready = await _moveLegacyDatabase(legacyPath, newPath);
+    return ready ? newPath : legacyPath;
+  }
+
+  Future<bool> _moveLegacyDatabase(String from, String to) async {
+    final File source = File(from);
+    if (await File(to).exists()) return true;
+    if (!await source.exists()) return true;
+
+    final File staging = File('$to.migrating');
+    try {
+      for (final String suffix in <String>['', ..._dbSidecarSuffixes]) {
+        final File stale = File('$to$suffix');
+        if (await stale.exists()) await stale.delete();
+      }
+      if (await staging.exists()) await staging.delete();
+
+      for (final String suffix in _dbSidecarSuffixes) {
+        final File aux = File('$from$suffix');
+        if (await aux.exists()) await aux.copy('$to$suffix');
+      }
+      await source.copy(staging.path);
+      if (await staging.length() != await source.length()) {
+        throw StateError('La copia de la base local no coincide en tamaño.');
+      }
+      await staging.rename(to);
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo trasladar la base local a Application Support',
+        error: e,
+        stackTrace: stack,
+      );
+      return false;
+    }
+
+    for (final String suffix in <String>[..._dbSidecarSuffixes, '']) {
+      try {
+        final File old = File('$from$suffix');
+        if (await old.exists()) await old.delete();
+      } catch (e) {
+        AppLogger.e('No se pudo borrar el archivo heredado $from$suffix: $e');
+      }
+    }
+    return true;
+  }
+
   Future<Database> _initDb() async {
-    final String dbPath = join(await getDatabasesPath(), _dbName);
+    final String dbPath = await _resolveDbPath();
     return openDatabase(
       dbPath,
       version: _dbVersion,
@@ -1538,9 +1781,9 @@ class LocalDatabase {
     final String sql = ownerUserId != null
         ? 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
               'AND (owner_user_id = ? OR owner_user_id IS NULL) '
-              'AND (sync_error_code IS NULL OR sync_error_code NOT IN (400, 409, 422))'
+              'AND (sync_error_code IS NULL OR sync_error_code NOT IN ($_permanentCodesSql))'
         : 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
-              'AND (sync_error_code IS NULL OR sync_error_code NOT IN (400, 409, 422))';
+              'AND (sync_error_code IS NULL OR sync_error_code NOT IN ($_permanentCodesSql))';
     final List<Object> args = ownerUserId != null ? [ownerUserId] : [];
 
     final result = await db!.rawQuery(sql, args);
@@ -1565,9 +1808,9 @@ class LocalDatabase {
     final String sql = ownerUserId != null
         ? 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
               'AND (owner_user_id = ? OR owner_user_id IS NULL) '
-              'AND sync_error_code IN (400, 409, 422)'
+              'AND sync_error_code IN ($_permanentCodesSql)'
         : 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
-              'AND sync_error_code IN (400, 409, 422)';
+              'AND sync_error_code IN ($_permanentCodesSql)';
     final List<Object> args = ownerUserId != null ? [ownerUserId] : [];
 
     final result = await db!.rawQuery(sql, args);
@@ -1575,40 +1818,6 @@ class LocalDatabase {
   }
 
   // ── Sync lifecycle ────────────────────────────────────────────────────────
-
-  Future<void> purgeStalePermanentErrors({
-    Duration maxAge = const Duration(days: 30),
-  }) async {
-    final thresholdDateTime = DateTime.now().subtract(maxAge);
-    final threshold = thresholdDateTime.toIso8601String();
-    if (_isWeb) {
-      await _withWebLock(() async {
-        final store = await _webAllPatients();
-        for (final row in store) {
-          final code = (row['sync_error_code'] as num?)?.toInt();
-          final createdAtStr = row['created_at'] as String?;
-          final isPermanent = code == 400 || code == 409 || code == 422;
-          if (!isPermanent || createdAtStr == null) continue;
-
-          final createdAt = DateTime.tryParse(createdAtStr);
-          if (createdAt == null) continue;
-          if (createdAt.isAfter(thresholdDateTime)) continue;
-
-          final patientId = row['patient_id'] as String?;
-          if (patientId != null) {
-            await _webDeletePatient(patientId);
-          }
-        }
-      });
-      return;
-    }
-    final db = await _database;
-    await db!.delete(
-      _table,
-      where: 'sync_error_code IN (400, 409, 422) AND created_at <= ?',
-      whereArgs: [threshold],
-    );
-  }
 
   Future<void> markSynced(
     String patientId, {

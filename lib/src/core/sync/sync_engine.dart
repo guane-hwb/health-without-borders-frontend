@@ -130,6 +130,12 @@ class SyncEngine {
     _retryTimer?.cancel();
     _retryTimer = null;
 
+    if (_currentUserId == null) {
+      _retryAttempt = 0;
+      _pendingServerRetryAfter = null;
+      return;
+    }
+
     if (pendingCount.value <= 0) {
       _retryAttempt = 0;
       _pendingServerRetryAfter = null;

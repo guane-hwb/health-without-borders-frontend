@@ -509,8 +509,8 @@ class _SyncCard extends StatelessWidget {
         }
       } else if (entry.syncErrorCode == 403) {
         errorMessage = isEs
-            ? 'Acceso denegado (403): Tu rol no permite registrar historia médica completa.'
-            : 'Access denied (403): Your role cannot register full medical history.';
+            ? 'Acceso denegado (403): Tu rol no puede sincronizar este cambio. Pide a un usuario con rol clínico (médico o enfermería) que lo reasigne o lo registre.'
+            : 'Access denied (403): Your role cannot sync this change. Ask a clinical user (doctor or nurse) to reassign or register it.';
       } else if (entry.syncErrorCode == 422) {
         errorMessage = isEs
             ? 'Error de validación (422): El registro contiene campos incompatibles con el backend.'
