@@ -36,7 +36,9 @@ class AuthRepository implements TokenProvider {
     required ApiClient apiClient,
     FlutterSecureStorage? secureStorage,
     LocalDatabase? localDatabase,
+    bool? forceWeb,
   }) : _apiClient = apiClient,
+       _forceWeb = forceWeb,
        _secureStorage =
            secureStorage ??
            const FlutterSecureStorage(
@@ -47,7 +49,7 @@ class AuthRepository implements TokenProvider {
                accessibility: KeychainAccessibility.first_unlock_this_device,
              ),
              aOptions: AndroidOptions(),
-             webOptions: WebOptions(useSessionStorage: false),
+             webOptions: WebOptions(useSessionStorage: true),
            ),
        _localDb = localDatabase ?? LocalDatabase.instance;
 
@@ -79,6 +81,9 @@ class AuthRepository implements TokenProvider {
   final ApiClient _apiClient;
   final FlutterSecureStorage _secureStorage;
   final LocalDatabase _localDb;
+  final bool? _forceWeb;
+
+  bool get _isWeb => _forceWeb ?? kIsWeb;
 
   String? _cachedToken;
   String? _cachedRefreshToken;
@@ -141,7 +146,13 @@ class AuthRepository implements TokenProvider {
       throw ApiException('Login did not return an access token.');
     }
 
-    final UserSession fetchedSession = await _fetchMe(accessToken);
+    final UserSession fetchedSession;
+    try {
+      fetchedSession = await _fetchMe(accessToken);
+    } catch (e) {
+      await clearSession();
+      rethrow;
+    }
 
     String? lastUserId;
     try {
@@ -234,7 +245,10 @@ class AuthRepository implements TokenProvider {
     if (_session != null) return _session;
 
     final String? token = await _readStoredToken();
-    if (token == null || token.isEmpty) return null;
+    if (token == null || token.isEmpty) {
+      if (_isWeb) await wipeLocalPhi(force: true);
+      return null;
+    }
     _cachedToken = token;
 
     await _refreshSessionWindowState();
@@ -394,8 +408,8 @@ class AuthRepository implements TokenProvider {
     } catch (_) {
     } finally {
       await clearSession();
-      if (wipeLocalData) {
-        await wipeLocalPhi();
+      if (wipeLocalData || _isWeb) {
+        await wipeLocalPhi(force: _isWeb);
       }
     }
   }
@@ -418,22 +432,7 @@ class AuthRepository implements TokenProvider {
     _updateSession(null);
 
     try {
-      await _secureStorage.delete(key: _tokenKey);
-    } catch (_) {}
-    try {
-      await _secureStorage.delete(key: _refreshKey);
-    } catch (_) {}
-    try {
-      await _secureStorage.delete(key: _nfcKeyKey);
-    } catch (_) {}
-    try {
-      await _secureStorage.delete(key: _nfcKeyringKey);
-    } catch (_) {}
-    try {
-      await _secureStorage.delete(key: _clockMarkKey);
-    } catch (_) {}
-    try {
-      await _secureStorage.delete(key: _sessionKey);
+      await _secureStorage.deleteAll();
     } catch (_) {}
   }
 
@@ -465,6 +464,7 @@ class AuthRepository implements TokenProvider {
 
   Future<void> _invalidateSession() async {
     await clearSession();
+    if (_isWeb) await wipeLocalPhi(force: true);
     _sessionWindowClosed.value = false;
     _sessionExpired.value = true;
   }
@@ -536,22 +536,13 @@ class AuthRepository implements TokenProvider {
 
   Future<UserSession> _fetchMe(String token) async {
     final headers = <String, String>{'Authorization': 'Bearer $token'};
-    try {
-      final data = await _apiClient.getJson(
-        path: '/api/v1/users/me',
-        headers: headers,
-      );
-      await _absorbKeyring(data);
-      return UserSession.fromJson(data);
-    } on ApiException catch (e) {
-      if (e.statusCode != 404 && e.statusCode != 403) rethrow;
-    } catch (_) {}
-
-    final email = _emailFromJwt(token);
-    return UserSession.fromEmail(email ?? 'user');
+    final data = await _apiClient.getJson(
+      path: '/api/v1/users/me',
+      headers: headers,
+    );
+    await _absorbKeyring(data);
+    return UserSession.fromJson(data);
   }
-
-  String? _emailFromJwt(String token) => _jwtPayload(token)?['sub']?.toString();
 
   Map<String, dynamic>? _jwtPayload(String token) {
     try {

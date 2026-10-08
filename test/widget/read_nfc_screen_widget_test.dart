@@ -21,6 +21,7 @@ import 'package:health_without_borders_frontend/src/features/auth/domain/user_se
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/read_nfc_screen.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/patient_profile_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Mocks & Fakes
@@ -1161,7 +1162,7 @@ void main() {
     );
 
     testWidgets('Escaneo de guardián offline exitoso reconstruye el registro y '
-        'navega al perfil', (tester) async {
+        'navega al perfil con el paciente correcto', (tester) async {
       final triage = makeTriage(
         minor: true,
         guardianDeviceUid: 'HWB-GUARDIAN-01',
@@ -1173,13 +1174,19 @@ void main() {
           ({required String alertMessage}) async => const HwbChipReadResult(
             uid: 'HWB-GUARDIAN-02',
             kind: HwbChipKind.guardian,
-            guardianRecord: <String, dynamic>{'patientId': 'p-guardian-01'},
+            guardianRecord: <String, dynamic>{'patientId': 'p-minor-01'},
             keyVersion: 4,
           );
 
       await tester.tap(find.byIcon(Icons.wifi));
       await tester.pumpAndSettle();
 
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+      final profileScreen = tester.widget<PatientProfileScreen>(
+        find.byType(PatientProfileScreen),
+      );
+
+      expect(profileScreen.patient.patientId, equals('p-minor-01'));
       expect(find.byIcon(Icons.wifi), findsNothing);
       expect(tester.takeException(), isNull);
     });
@@ -1241,6 +1248,16 @@ void main() {
         expect(
           find.textContaining('no corresponde al guardián'),
           findsOneWidget,
+        );
+        expect(find.byType(PatientProfileScreen), findsNothing);
+        verifyNever(
+          () => mockDb.logEmergencyAccess(
+            patientUid: any(named: 'patientUid'),
+            patientName: any(named: 'patientName'),
+            userId: any(named: 'userId'),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+          ),
         );
       },
     );

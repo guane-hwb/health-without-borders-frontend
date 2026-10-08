@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'core/bootstrap/app_bootstrap.dart';
 import 'core/config/app_env.dart';
 import 'core/di/app_scope.dart';
 import 'core/i18n/app_strings.dart';
@@ -35,6 +36,7 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
   final ApiClient _apiClient = ApiClient(baseUrl: AppEnv.apiBaseUrl);
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   String _locale = 'es';
+  late final AppBootstrap _bootstrap;
 
   late final Reachability _reachability = Reachability(
     baseUrl: AppEnv.apiBaseUrl,
@@ -73,9 +75,12 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
     _authRepository.onSessionInvalidated = _syncEngine.stop;
     _authRepository.sessionExpired.addListener(_onSessionExpired);
 
-    _authRepository.restoreSession().then((_) {
-      _syncEngine.start();
-    });
+    _bootstrap = AppBootstrap(
+      session: _authRepository.sessionNotifier,
+      startSync: _syncEngine.start,
+      stopSync: _syncEngine.stop,
+      restoreSession: _authRepository.restoreSession,
+    )..attach();
 
     unawaited(NfcSessionManager.instance.attach());
   }
@@ -84,7 +89,7 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _authRepository.sessionExpired.removeListener(_onSessionExpired);
-    _syncEngine.stop();
+    _bootstrap.dispose();
     super.dispose();
   }
 
@@ -137,13 +142,10 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
           darkTheme: AppTheme.dark(),
           themeMode: ThemeMode.light,
           onGenerateRoute: AppRoutes.onGenerateRoute,
-          // Wraps every route, so the warning follows the person around
-          // instead of living on one screen they may never open.
-          builder: (BuildContext context, Widget? child) =>
-              SessionWindowBanner(
-                windowClosed: _authRepository.sessionWindowClosed,
-                child: child ?? const SizedBox.shrink(),
-              ),
+          builder: (BuildContext context, Widget? child) => SessionWindowBanner(
+            windowClosed: _authRepository.sessionWindowClosed,
+            child: child ?? const SizedBox.shrink(),
+          ),
           home: AuthGate(authRepository: _authRepository),
         ),
       ),

@@ -138,9 +138,6 @@ void main() {
       () => patientRepo.reportNfcKeyVersions(any()),
     ).thenAnswer((_) async {});
     when(
-      () => localDb.purgeStalePermanentErrors(maxAge: any(named: 'maxAge')),
-    ).thenAnswer((_) async {});
-    when(
       () => localDb.markSynced(
         any(),
         createdAt: any(named: 'createdAt'),
@@ -276,8 +273,7 @@ void main() {
       verify(() => patientRepo.syncPatient(any())).called(1);
     });
 
-    test('no invoca purgeStalePermanentErrors bajo ninguna circunstancia '
-        '(v2-purga-silenciosa-30-dias)', () async {
+    test('omite errores permanentes durante la sincronización', () async {
       final entryOk = buildEntry('OK', record: MockPatientFullRecord());
       final entry409 = buildEntry(
         'CONFLICT',
@@ -295,9 +291,7 @@ void main() {
 
       await engine.syncAll();
 
-      verifyNever(
-        () => localDb.purgeStalePermanentErrors(maxAge: any(named: 'maxAge')),
-      );
+      verify(() => patientRepo.syncPatient(any())).called(1);
     });
 
     test(

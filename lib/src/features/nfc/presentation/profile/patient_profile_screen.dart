@@ -259,9 +259,19 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   }
 
   Future<void> _reassignDevices() async {
-    if (_isUpdatingChips || widget.readOnly) return;
-    final scope = AppScope.of(context);
     final isEs = AppStrings.of(context).isEs;
+    if (_isUpdatingChips || widget.readOnly || !_currentRole.canSyncPatient) {
+      if (!_currentRole.canSyncPatient && mounted) {
+        _showReassignSnack(
+          isEs
+              ? 'Tu rol no permite reasignar o sincronizar dispositivos.'
+              : 'Your role is not authorized to reassign or sync devices.',
+          error: true,
+        );
+      }
+      return;
+    }
+    final scope = AppScope.of(context);
 
     final hasG1 = (_draft.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
     final hasG2 = (_draft.guardian2Info?.deviceUid ?? '').trim().isNotEmpty;
@@ -355,7 +365,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       if (_hasInternet) await scope.syncEngine.syncAll();
       if (!mounted) return;
       _showReassignSnack(
-        isEs ? 'dispositivo reasignado.' : 'Device reassigned.',
+        isEs ? 'Dispositivo reasignado.' : 'Device reassigned.',
       );
     } catch (e, stack) {
       AppLogger.e('Fallo al reasignar', error: e, stackTrace: stack);
