@@ -1301,6 +1301,42 @@ void main() {
       },
     );
 
+    testWidgets('503 sync_in_progress: pendiente que se reintenta, no error', (
+      tester,
+    ) async {
+      when(() => db.getUnsyncedRecords()).thenAnswer(
+        (_) async => [
+          makeEntry(
+            patientId: 'p1',
+            syncError: 'sync_in_progress',
+            syncErrorCode: 503,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+          locale: 'es',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final s = AppStrings.forTesting('es');
+      expect(
+        find.textContaining('Se reintentará automáticamente'),
+        findsOneWidget,
+      );
+      expect(find.text(s.pending), findsOneWidget);
+      expect(find.text('Error'), findsNothing);
+      expect(find.byIcon(Icons.schedule), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline), findsNothing);
+      expect(find.text(s.syncNow), findsOneWidget);
+    });
+
     testWidgets('shows error SnackBar when _syncOne returns failure', (
       tester,
     ) async {

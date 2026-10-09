@@ -1096,6 +1096,140 @@ void main() {
     });
   });
 
+  group('503 sync_in_progress (temporal)', () {
+    MockApiException syncInProgress() {
+      final e = buildApiException(
+        503,
+        'This patient is being saved by another request; retry in a few '
+        'seconds.',
+      );
+      when(() => e.code).thenReturn('sync_in_progress');
+      when(() => e.retryAfter).thenReturn(const Duration(seconds: 5));
+      return e;
+    }
+
+    test('no es un código permanente', () {
+      expect(kPermanentSyncErrorCodes, isNot(contains(503)));
+      expect(kPermanentSyncErrorCodes.where((int c) => c >= 500), isEmpty);
+    });
+
+    test('se guarda con su code y se reintenta tras el Retry-After, no '
+        'antes', () {
+      fakeAsync((async) {
+        final shortEngine = SyncEngine(
+          patientRepository: patientRepo,
+          authRepository: authRepo,
+          localDatabase: localDb,
+          retryBackoff: const [Duration(seconds: 1)],
+        );
+        final entry = buildEntry('A', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entry]);
+        when(
+          () => localDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 1);
+        final MockApiException error = syncInProgress();
+        when(() => patientRepo.syncPatient(any())).thenThrow(error);
+
+        shortEngine.syncAll();
+        async.elapse(Duration.zero);
+
+        verify(
+          () => localDb.markSyncError(
+            'A',
+            'sync_in_progress',
+            statusCode: 503,
+            revision: 0,
+          ),
+        ).called(1);
+        clearInteractions(patientRepo);
+
+        async.elapse(const Duration(seconds: 4));
+        verifyNever(() => patientRepo.syncPatient(any()));
+
+        async.elapse(const Duration(seconds: 2));
+        verify(() => patientRepo.syncPatient(any())).called(1);
+
+        shortEngine.stop();
+      });
+    });
+
+    test('"Sincronizar ahora" también programa el reintento', () {
+      fakeAsync((async) {
+        final shortEngine = SyncEngine(
+          patientRepository: patientRepo,
+          authRepository: authRepo,
+          localDatabase: localDb,
+          retryBackoff: const [Duration(seconds: 1)],
+        );
+        final entry = buildEntry('A', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entry]);
+        when(
+          () => localDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 1);
+        final MockApiException error = syncInProgress();
+        when(() => patientRepo.syncPatient(any())).thenThrow(error);
+
+        SyncOneResult? result;
+        shortEngine.syncOne('A').then((r) => result = r);
+        async.elapse(Duration.zero);
+        expect(result, SyncOneResult.failure);
+        clearInteractions(patientRepo);
+
+        async.elapse(const Duration(seconds: 4));
+        verifyNever(() => patientRepo.syncPatient(any()));
+        async.elapse(const Duration(seconds: 2));
+        verify(() => patientRepo.syncPatient(any())).called(1);
+
+        shortEngine.stop();
+      });
+    });
+
+    test('"Sincronizar ahora" con un error permanente no reintenta solo', () {
+      fakeAsync((async) {
+        final shortEngine = SyncEngine(
+          patientRepository: patientRepo,
+          authRepository: authRepo,
+          localDatabase: localDb,
+          retryBackoff: const [Duration(seconds: 1)],
+        );
+        final entry = buildEntry('A', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entry]);
+        when(
+          () => localDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 1);
+        final MockApiException duplicate = buildApiException(409, 'duplicate');
+        when(() => patientRepo.syncPatient(any())).thenThrow(duplicate);
+
+        shortEngine.syncOne('A');
+        async.elapse(Duration.zero);
+        clearInteractions(patientRepo);
+
+        async.elapse(const Duration(minutes: 5));
+        verifyNever(() => patientRepo.syncPatient(any()));
+
+        shortEngine.stop();
+      });
+    });
+  });
+
   group('_scheduleRetry y syncOne en vuelo dentro de syncAll', () {
     test('respeta el Retry-After del servidor cuando hint > backoff', () {
       fakeAsync((async) {
