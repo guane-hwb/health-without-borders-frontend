@@ -360,6 +360,33 @@ void main() {
       expect(json.containsKey('height'), isTrue);
     });
 
+    test('toJson envía la comunidad étnica con un solo nombre', () {
+      final json = PatientInfo(
+        identification: _buildId(),
+        firstLastName: 'García',
+        firstName: 'Ana',
+        dob: '2000-01-15',
+        biologicalSex: 'F',
+        ethnicCommunity: 'Wayúu',
+        address: _buildAddress(),
+      ).toJson();
+      expect(json['ethnicCommunity'], 'Wayúu');
+      expect(json.containsKey('ethnic_community'), isFalse);
+    });
+
+    test('fromJson lee ethnicCommunity de /scan', () {
+      final info = PatientInfo.fromJson(<String, dynamic>{
+        'identification': {'documentType': 'CC', 'documentNumber': '1'},
+        'firstLastName': 'García',
+        'firstName': 'Ana',
+        'dob': '2000-01-15',
+        'biologicalSex': 'F',
+        'ethnicCommunity': 'Wayúu',
+        'address': {'city': 'Riohacha', 'state': 'La Guajira'},
+      });
+      expect(info.ethnicCommunity, 'Wayúu');
+    });
+
     test('toJson — campos opcionales ausentes no aparecen', () {
       final info = PatientInfo(
         identification: _buildId(),
@@ -419,6 +446,16 @@ void main() {
       final json = consent.toJson();
       expect(json.containsKey('email'), isFalse);
       expect(json.containsKey('signatureBase64'), isFalse);
+    });
+
+    test('policyVersion se envía y se lee de vuelta', () {
+      final json = GuardianConsent(
+        accepted: true,
+        acceptedAt: '2024-01-01',
+        policyVersion: 'v1.1',
+      ).toJson();
+      expect(json['policyVersion'], 'v1.1');
+      expect(GuardianConsent.fromJson(json).policyVersion, 'v1.1');
     });
   });
 
