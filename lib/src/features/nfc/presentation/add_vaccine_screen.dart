@@ -175,6 +175,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
       allergies: _patient!.allergies,
       medicalHistory: _patient!.medicalHistory,
       vaccinationRecord: [..._patient!.vaccinationRecord, ...newVaccines],
+      recordVersion: _patient!.recordVersion,
     );
 
     // Guardamos la referencia a AppScope ANTES de cualquier llamada asíncrona

@@ -1,5 +1,7 @@
 // test/unit/patient_record_test.dart
 
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
@@ -1387,6 +1389,30 @@ void main() {
       expect(json.containsKey('guardian2Info'), isFalse);
       expect(json.containsKey('backgroundHistory'), isFalse);
     });
+
+    test('fromJson — lee recordVersion de /scan y /search', () {
+      final json = _buildMinimal().toJson()..['recordVersion'] = 7;
+      expect(PatientFullRecord.fromJson(json).recordVersion, 7);
+    });
+
+    test('toJson envía la versión como baseVersion y sin recordVersion', () {
+      final json = _buildMinimal().copyWith(recordVersion: 7).toJson();
+      expect(json['baseVersion'], 7);
+      expect(json.containsKey('recordVersion'), isFalse);
+      expect(_buildMinimal().toJson().containsKey('baseVersion'), isFalse);
+    });
+
+    test('la versión sobrevive a toJson/fromJson (cola local y tarjeta del '
+        'acudiente guardan toJson)', () {
+      final stored = jsonDecode(
+        jsonEncode(_buildMinimal().copyWith(recordVersion: 7).toJson()),
+      );
+      final restored = PatientFullRecord.fromJson(
+        stored as Map<String, dynamic>,
+      );
+      expect(restored.recordVersion, 7);
+      expect(restored.toJson()['baseVersion'], 7);
+    });
   });
 
   // =========================================================================
@@ -1440,6 +1466,28 @@ void main() {
         'stale_payload_retired_device_uid',
         'guardians_not_changed_by_tag_resolved_sync',
       ]);
+    });
+
+    test('fromJson — lee record_version y el registro fusionado', () {
+      final r = PatientSyncResponse.fromJson(<String, dynamic>{
+        'status': 'success',
+        'internal_id': 'int-001',
+        'message': 'ok',
+        'record_version': 8,
+        'conflicts': <String>['stale_payload_base_version'],
+        'record': _buildMinimal().toJson()..['recordVersion'] = 8,
+      });
+      expect(r.recordVersion, 8);
+      expect(r.record?.patientId, 'pid-001');
+      expect(r.record?.recordVersion, 8);
+    });
+
+    test('fromJson — sin registro fusionado, record es null', () {
+      final r = PatientSyncResponse.fromJson(<String, dynamic>{
+        'status': 'success',
+        'record_version': 8,
+      });
+      expect(r.record, isNull);
     });
   });
 

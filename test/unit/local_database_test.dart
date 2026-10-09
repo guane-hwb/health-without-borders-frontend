@@ -1668,6 +1668,7 @@ void main() {
         )).map((r) => r['name'] as String).toSet();
         expect(tables, contains('nfc_chip_status'));
         expect(tables, contains('emergency_access_log'));
+        expect(tables, contains('sync_notices'));
 
         final emergencyColumns = (await raw.rawQuery(
           'PRAGMA table_info(emergency_access_log)',
@@ -3545,4 +3546,193 @@ void main() {
       },
     );
   });
+
+  // ── Versión del registro y avisos de sincronización ──────────────────────
+  //
+  // Los mismos casos en SQLite y en Web: cada plataforma tiene su camino.
+  for (final bool web in <bool>[false, true]) {
+    group('Versión y avisos de sync (${web ? 'web' : 'nativo'})', () {
+      late LocalDatabase localDb;
+      late Map<String, String> webBackend;
+
+      setUp(() async {
+        webBackend = <String, String>{};
+        if (web) {
+          localDb = LocalDatabase.forTesting(
+            secureStorage: mockStorage,
+            forceWeb: true,
+            webGet: (key) async => webBackend[key],
+            webSet: (key, value) async => webBackend[key] = value,
+            webRemove: (key) async => webBackend.remove(key),
+            webClearAll: () async => webBackend.clear(),
+            webList: (prefix) async => webBackend.entries
+                .where((e) => e.key.startsWith(prefix))
+                .toList(growable: false),
+            webDeleteByPrefix: (prefix) async =>
+                webBackend.removeWhere((k, _) => k.startsWith(prefix)),
+          );
+        } else {
+          localDb = LocalDatabase.instance;
+          await localDb.clearAll();
+        }
+      });
+
+      Future<LocalPatientEntry> pending(String patientId) async =>
+          (await localDb.getUnsyncedRecords()).singleWhere(
+            (LocalPatientEntry e) => e.patientId == patientId,
+          );
+
+      test(
+        'la versión vuelve de la cola y se envía como baseVersion',
+        () async {
+          await localDb.savePatient(
+            _buildRecord(patientId: 'v-1').copyWith(recordVersion: 4),
+            ownerUserId: 'u1',
+          );
+
+          final record = (await pending('v-1')).toPatientRecord()!;
+          expect(record.recordVersion, 4);
+          expect(record.toJson()['baseVersion'], 4);
+        },
+      );
+
+      test('rebasePending cambia la versión de la fila que se envió', () async {
+        await localDb.savePatient(
+          _buildRecord(patientId: 'v-2').copyWith(recordVersion: 4),
+          ownerUserId: 'u1',
+        );
+        final sent = await pending('v-2');
+
+        await localDb.rebasePending(
+          'v-2',
+          revision: sent.revision,
+          recordVersion: 5,
+        );
+
+        final after = await pending('v-2');
+        expect(after.toPatientRecord()!.recordVersion, 5);
+        expect(after.revision, sent.revision);
+      });
+
+      test('rebasePending no toca una edición posterior', () async {
+        await localDb.savePatient(
+          _buildRecord(patientId: 'v-3').copyWith(recordVersion: 4),
+          ownerUserId: 'u1',
+        );
+        final sent = await pending('v-3');
+        await localDb.savePatient(
+          _buildRecord(
+            patientId: 'v-3',
+            firstName: 'Lucía',
+          ).copyWith(recordVersion: 4),
+          ownerUserId: 'u1',
+        );
+
+        await localDb.rebasePending(
+          'v-3',
+          revision: sent.revision,
+          recordVersion: 5,
+        );
+
+        final after = (await pending('v-3')).toPatientRecord()!;
+        expect(after.recordVersion, 4);
+        expect(after.patientInfo.firstName, 'Lucía');
+      });
+
+      test('rebasePending sin fila no hace nada', () async {
+        await localDb.rebasePending('nadie', revision: 0, recordVersion: 5);
+        expect(await localDb.getUnsyncedRecords(), isEmpty);
+      });
+
+      test('addSyncNotice une los códigos del paciente y enmascara el '
+          'nombre', () async {
+        await localDb.addSyncNotice(
+          patientId: 'n-1',
+          patientName: 'Ana María García',
+          codes: const <String>['stale_payload_base_version'],
+          ownerUserId: 'u1',
+        );
+        await localDb.addSyncNotice(
+          patientId: 'n-1',
+          patientName: 'Ana María García',
+          codes: const <String>[
+            'stale_payload_base_version',
+            'visit_edit_not_applied:enc-1',
+          ],
+        );
+
+        final notices = await localDb.getSyncNotices(ownerUserId: 'u1');
+        expect(notices, hasLength(1));
+        expect(notices.single.patientId, 'n-1');
+        expect(notices.single.patientName, 'Ana M.');
+        expect(notices.single.codes, <String>[
+          'stale_payload_base_version',
+          'visit_edit_not_applied:enc-1',
+        ]);
+      });
+
+      test('sin códigos o sin paciente no guarda aviso', () async {
+        await localDb.addSyncNotice(
+          patientId: 'n-2',
+          patientName: 'Ana',
+          codes: const <String>[],
+        );
+        await localDb.addSyncNotice(
+          patientId: '',
+          patientName: 'Ana',
+          codes: const <String>['stale_payload_base_version'],
+        );
+        expect(await localDb.getSyncNotices(), isEmpty);
+      });
+
+      test('getSyncNotices filtra por dueño y ordena del más nuevo al más '
+          'viejo', () async {
+        await localDb.addSyncNotice(
+          patientId: 'n-old',
+          patientName: 'Ana',
+          codes: const <String>['stale_payload_base_version'],
+          ownerUserId: 'u1',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        await localDb.addSyncNotice(
+          patientId: 'n-new',
+          patientName: 'Luis',
+          codes: const <String>['stale_payload_base_version'],
+          ownerUserId: 'u1',
+        );
+        await localDb.addSyncNotice(
+          patientId: 'n-other',
+          patientName: 'Eva',
+          codes: const <String>['stale_payload_base_version'],
+          ownerUserId: 'u2',
+        );
+
+        final mine = await localDb.getSyncNotices(ownerUserId: 'u1');
+        expect(mine.map((SyncNotice n) => n.patientId), <String>[
+          'n-new',
+          'n-old',
+        ]);
+        expect(await localDb.getSyncNotices(), hasLength(3));
+      });
+
+      test('dismissSyncNotice y clearAll borran los avisos', () async {
+        for (final String id in <String>['n-a', 'n-b']) {
+          await localDb.addSyncNotice(
+            patientId: id,
+            patientName: 'Ana',
+            codes: const <String>['stale_payload_base_version'],
+          );
+        }
+
+        await localDb.dismissSyncNotice('n-a');
+        expect(
+          (await localDb.getSyncNotices()).map((SyncNotice n) => n.patientId),
+          <String>['n-b'],
+        );
+
+        await localDb.clearAll();
+        expect(await localDb.getSyncNotices(), isEmpty);
+      });
+    });
+  }
 }

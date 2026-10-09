@@ -576,6 +576,7 @@ class _SyncCard extends StatefulWidget {
 class _SyncCardState extends State<_SyncCard> {
   int _pendingCount = 0;
   int _blockedCount = 0;
+  int _noticeCount = 0;
   bool _initialized = false;
   SyncEngine? _engineRef;
 
@@ -636,15 +637,23 @@ class _SyncCardState extends State<_SyncCard> {
     int pending = scope.syncEngine.pendingCount.value;
     int blocked = scope.syncEngine.blockedCount.value;
 
+    int notices = _noticeCount;
+
     try {
       pending = await scope.localDatabase.getRetryablePendingCount();
       blocked = await scope.localDatabase.getBlockedCount();
+    } catch (_) {}
+    try {
+      notices = (await scope.localDatabase.getSyncNotices(
+        ownerUserId: scope.authRepository.currentUser?.id,
+      )).length;
     } catch (_) {}
 
     if (mounted) {
       setState(() {
         _pendingCount = pending;
         _blockedCount = blocked;
+        _noticeCount = notices;
       });
     }
   }
@@ -654,12 +663,17 @@ class _SyncCardState extends State<_SyncCard> {
     final scope = AppScope.of(context);
     final s = AppStrings.of(context);
 
-    final String subtitle = switch ((_pendingCount, _blockedCount)) {
+    final String queue = switch ((_pendingCount, _blockedCount)) {
       (0, 0) => s.actionPendingSyncEmpty,
       (0, _) => '$_blockedCount requieren intervención',
       (_, 0) => s.actionPendingSyncCount(_pendingCount),
       _ =>
         '${s.actionPendingSyncCount(_pendingCount)} · $_blockedCount requieren intervención',
+    };
+    final String subtitle = switch (_noticeCount) {
+      0 => queue,
+      1 => '$queue · ${s.isEs ? '1 aviso' : '1 notice'}',
+      _ => '$queue · $_noticeCount ${s.isEs ? 'avisos' : 'notices'}',
     };
 
     final hasTotalPending = _pendingCount > 0 || _blockedCount > 0;

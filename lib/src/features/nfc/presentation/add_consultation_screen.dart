@@ -301,6 +301,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       allergies: _patient!.allergies,
       medicalHistory: [..._patient!.medicalHistory, newConsultation],
       vaccinationRecord: _patient!.vaccinationRecord,
+      recordVersion: _patient!.recordVersion,
     );
 
     try {
