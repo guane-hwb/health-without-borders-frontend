@@ -313,6 +313,48 @@ void main() {
     });
   });
 
+  group('comunidad étnica en la tarjeta', () {
+    PatientFullRecord withCommunity() {
+      final r = _record();
+      return r.copyWith(
+        patientInfo: r.patientInfo.copyWith(ethnicCommunity: 'Wayúu'),
+      );
+    }
+
+    test('se escribe con un solo nombre y se lee de vuelta', () {
+      final fit = NfcGuardianPayload.buildWithinCapacity(
+        record: withCommunity(),
+        capacityBytes: 1000000,
+        estimateSize: (Map<String, dynamic> m) => 0,
+      );
+
+      expect(jsonEncode(fit.payload), isNot(contains('ethnic_community')));
+      expect(
+        NfcGuardianPayload.reconstructFromGuardian(
+          fit.payload,
+        ).patientInfo.ethnicCommunity,
+        'Wayúu',
+      );
+    });
+
+    test('una tarjeta escrita con los dos nombres se sigue leyendo', () {
+      final payload = aliasGuardianPayload(withCommunity().toJson());
+      final String infoKey = payload.keys.firstWhere(
+        (String k) =>
+            (payload[k] as Object?) is Map &&
+            (payload[k] as Map).containsKey('ec'),
+      );
+      (payload[infoKey] as Map)['ethnic_community'] = 'Wayúu';
+
+      expect(
+        NfcGuardianPayload.reconstructFromGuardian(
+          payload,
+        ).patientInfo.ethnicCommunity,
+        'Wayúu',
+      );
+    });
+  });
+
   group('reconstructFromGuardian round-trip', () {
     test('rebuilds an equivalent PatientFullRecord', () {
       final record = _record(
