@@ -83,7 +83,8 @@ void main() {
           path: '/api/v1/patients/sync',
           body: record.toJson(),
           headers: expectedAuthHeader,
-          timeout: const Duration(seconds: 10),
+          // The server takes up to ~68 s in production (LLM + FHIR Store).
+          timeout: const Duration(seconds: 90),
         ),
       ).called(1);
       verify(() => authRepository.getAccessToken()).called(1);
@@ -204,130 +205,96 @@ void main() {
   group('scanDevice', () {
     const String deviceUid = 'abc-123';
 
-    test('GETs /api/v1/patients/scan/{device_uid} without guardian header '
-        'when guardianDeviceUid is null', () async {
-      final Map<String, dynamic> responseJson = <String, dynamic>{
-        'id': 'patient-001',
-      };
-
+    void stubScan(Map<String, dynamic> response) {
       when(
+        () => apiClient.postJson(
+          path: any(named: 'path'),
+          body: any(named: 'body'),
+          headers: any(named: 'headers'),
+          timeout: any(named: 'timeout'),
+        ),
+      ).thenAnswer((_) async => response);
+    }
+
+    ({String path, Map<String, dynamic> body, Map<String, String> headers})
+    capturedScan() {
+      final captured = verify(
+        () => apiClient.postJson(
+          path: captureAny(named: 'path'),
+          body: captureAny(named: 'body'),
+          headers: captureAny(named: 'headers'),
+          timeout: any(named: 'timeout'),
+        ),
+      ).captured;
+      return (
+        path: captured[0] as String,
+        body: captured[1] as Map<String, dynamic>,
+        headers: captured[2] as Map<String, String>,
+      );
+    }
+
+    test('POSTs both UIDs in the body, none in the URL or headers', () async {
+      stubScan(<String, dynamic>{'patientId': 'patient-001'});
+
+      final result = await repository.scanDevice(
+        '  04:AA:BB  ',
+        guardianDeviceUid: '  guardian-xyz  ',
+      );
+
+      expect(result.patientId, 'patient-001');
+      final call = capturedScan();
+      expect(call.path, '/api/v1/patients/scan');
+      expect(call.body, <String, dynamic>{
+        'device_uid': '04:AA:BB',
+        'guardian_device_uid': 'guardian-xyz',
+      });
+      expect(call.headers, expectedAuthHeader);
+      verifyNever(
         () => apiClient.getJson(
-          path: '/api/v1/patients/scan/$deviceUid',
+          path: any(named: 'path'),
           headers: any(named: 'headers'),
         ),
-      ).thenAnswer((_) async => responseJson);
+      );
+    });
+
+    test('sends guardian_device_uid null without a guardian card', () async {
+      stubScan(<String, dynamic>{'patientId': 'patient-001'});
+
+      await repository.scanDevice(deviceUid);
+
+      expect(capturedScan().body, <String, dynamic>{
+        'device_uid': deviceUid,
+        'guardian_device_uid': null,
+      });
+    });
+
+    test('sends guardian_device_uid null for a blank guardian UID', () async {
+      stubScan(<String, dynamic>{'patientId': 'patient-001'});
+
+      await repository.scanDevice(deviceUid, guardianDeviceUid: '   ');
+
+      expect(capturedScan().body['guardian_device_uid'], isNull);
+    });
+
+    test('reads recordVersion from the response', () async {
+      stubScan(<String, dynamic>{
+        'patientId': 'patient-001',
+        'recordVersion': 12,
+      });
 
       final result = await repository.scanDevice(deviceUid);
 
-      expect(result, isA<PatientFullRecord>());
-      final captured =
-          verify(
-                () => apiClient.getJson(
-                  path: '/api/v1/patients/scan/$deviceUid',
-                  headers: captureAny(named: 'headers'),
-                ),
-              ).captured.single
-              as Map<String, String>;
-
-      expect(captured, expectedAuthHeader);
-      expect(captured.containsKey('X-Guardian-Device-UID'), isFalse);
-    });
-
-    test('GETs without guardian header when guardianDeviceUid is empty '
-        'string', () async {
-      final Map<String, dynamic> responseJson = <String, dynamic>{
-        'id': 'patient-001',
-      };
-
-      when(
-        () => apiClient.getJson(
-          path: '/api/v1/patients/scan/$deviceUid',
-          headers: any(named: 'headers'),
-        ),
-      ).thenAnswer((_) async => responseJson);
-
-      final result = await repository.scanDevice(
-        deviceUid,
-        guardianDeviceUid: '',
-      );
-
-      expect(result, isA<PatientFullRecord>());
-      final captured =
-          verify(
-                () => apiClient.getJson(
-                  path: '/api/v1/patients/scan/$deviceUid',
-                  headers: captureAny(named: 'headers'),
-                ),
-              ).captured.single
-              as Map<String, String>;
-
-      expect(captured.containsKey('X-Guardian-Device-UID'), isFalse);
-    });
-
-    test('adds trimmed X-Guardian-Device-UID header when provided', () async {
-      const String guardianUid = '  guardian-xyz  ';
-      final Map<String, dynamic> responseJson = <String, dynamic>{
-        'id': 'patient-002',
-      };
-
-      when(
-        () => apiClient.getJson(
-          path: '/api/v1/patients/scan/$deviceUid',
-          headers: any(named: 'headers'),
-        ),
-      ).thenAnswer((_) async => responseJson);
-
-      final result = await repository.scanDevice(
-        deviceUid,
-        guardianDeviceUid: guardianUid,
-      );
-
-      expect(result, isA<PatientFullRecord>());
-      final captured =
-          verify(
-                () => apiClient.getJson(
-                  path: '/api/v1/patients/scan/$deviceUid',
-                  headers: captureAny(named: 'headers'),
-                ),
-              ).captured.single
-              as Map<String, String>;
-
-      expect(captured['X-Guardian-Device-UID'], 'guardian-xyz');
-      expect(captured['Authorization'], 'Bearer $fakeToken');
-    });
-
-    test('URL-encodes special characters in deviceUid', () async {
-      const String rawDeviceUid = '  uid with spaces/slash  ';
-      final String expectedSafeUid = Uri.encodeComponent(rawDeviceUid.trim());
-
-      final Map<String, dynamic> responseJson = <String, dynamic>{
-        'id': 'patient-003',
-      };
-
-      when(
-        () => apiClient.getJson(
-          path: '/api/v1/patients/scan/$expectedSafeUid',
-          headers: any(named: 'headers'),
-        ),
-      ).thenAnswer((_) async => responseJson);
-
-      final result = await repository.scanDevice(rawDeviceUid);
-
-      expect(result, isA<PatientFullRecord>());
-      verify(
-        () => apiClient.getJson(
-          path: '/api/v1/patients/scan/$expectedSafeUid',
-          headers: any(named: 'headers'),
-        ),
-      ).called(1);
+      expect(result.recordVersion, 12);
     });
 
     test('propagates ApiException with "Guardian bracelet scan required '
         'for minors." on 403', () async {
       when(
-        () => apiClient.getJson(
-          path: '/api/v1/patients/scan/$deviceUid',
+        () => apiClient.postJson(
+          path: any(named: 'path'),
+          body: any(named: 'body'),
           headers: any(named: 'headers'),
+          timeout: any(named: 'timeout'),
         ),
       ).thenThrow(
         ApiException(
@@ -683,12 +650,15 @@ void main() {
       ApiErrorCode.guardianRequired: 403,
       ApiErrorCode.guardianMismatch: 403,
       ApiErrorCode.deviceRetired: 410,
+      ApiErrorCode.storedRecordInvalid: 500,
     }.entries) {
       test('/scan ${c.value} "${c.key}" llega con su code', () async {
         when(
-          () => apiClient.getJson(
+          () => apiClient.postJson(
             path: any(named: 'path'),
+            body: any(named: 'body'),
             headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
           ),
         ).thenThrow(ApiException('x', statusCode: c.value, code: c.key));
 

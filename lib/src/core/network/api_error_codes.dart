@@ -31,6 +31,10 @@ abstract final class ApiErrorCode {
   /// /sync (409) or /scan (410): the wristband was retired.
   static const String deviceRetired = 'device_retired';
 
+  /// /scan or /search (500): the stored record no longer reads. Not
+  /// transient: asking again gives the same answer.
+  static const String storedRecordInvalid = 'stored_record_invalid';
+
   /// The account can no longer use the API: sign out, keep pending data.
   static bool isAccountInactive(String? code) =>
       code == userInactive || code == organizationInactive;
@@ -86,6 +90,12 @@ abstract final class ApiErrorCode {
                 'Usa una pulsera nueva.'
           : 'This wristband was retired and no longer identifies a '
                 'patient. Use a new wristband.',
+    storedRecordInvalid =>
+      isEs
+          ? 'No se pudo leer el registro de este paciente en el servidor. '
+                'Contacte a soporte.'
+          : "The server could not read this patient's record. Contact "
+                'support.',
     _ => null,
   };
 }
