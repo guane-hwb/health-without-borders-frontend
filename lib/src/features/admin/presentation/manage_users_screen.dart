@@ -168,7 +168,19 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     );
   }
 
+  /// What the backend lets the viewer reset: never their own account or a
+  /// superadmin; an org_admin only doctors and nurses (of their own
+  /// organization, which is all they list).
+  static bool _canResetPassword(UserSession? viewer, UserSession target) =>
+      viewer != null &&
+      viewer.id != target.id &&
+      target.role != UserRole.superadmin &&
+      (viewer.role.isSuperadmin ||
+          target.role == UserRole.doctor ||
+          target.role == UserRole.nurse);
+
   void _showEditUserSheet(UserSession user) {
+    final UserSession? viewer = AppScope.of(context).authRepository.currentUser;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -190,6 +202,9 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           ).userRepository.setUserActive(user.id, isActive);
           if (mounted) await _load();
         },
+        onResetPassword: _canResetPassword(viewer, user)
+            ? () => AppScope.of(context).userRepository.resetPassword(user.id)
+            : null,
       ),
     );
   }
@@ -640,11 +655,15 @@ class _UserDetailSheet extends StatefulWidget {
     required this.user,
     required this.onDelete,
     required this.onToggleActive,
+    this.onResetPassword,
   });
 
   final UserSession user;
   final Future<void> Function() onDelete;
   final Future<void> Function(bool isActive) onToggleActive;
+
+  /// Null when the viewer may not reset this user's password.
+  final Future<String> Function()? onResetPassword;
 
   @override
   State<_UserDetailSheet> createState() => _UserDetailSheetState();
@@ -654,7 +673,10 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
   late bool _isActive = widget.user.isActive;
   bool _isDeleting = false;
   bool _isToggling = false;
+  bool _isResetting = false;
   String? _error;
+
+  bool get _busy => _isDeleting || _isToggling || _isResetting;
 
   @override
   Widget build(BuildContext context) {
@@ -719,7 +741,7 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
             width: double.infinity,
             height: 44,
             child: OutlinedButton.icon(
-              onPressed: (_isDeleting || _isToggling) ? null : _toggleActive,
+              onPressed: _busy ? null : _toggleActive,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 side: const BorderSide(color: AppColors.primary),
@@ -755,13 +777,46 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
           ),
           const SizedBox(height: 10),
 
+          if (widget.onResetPassword != null) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: OutlinedButton.icon(
+                onPressed: _busy ? null : _resetPassword,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: _isResetting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : const Icon(Icons.lock_reset, size: 20),
+                label: Text(
+                  isEs ? 'Restablecer contraseña' : 'Reset password',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+
           SizedBox(
             width: double.infinity,
             height: 44,
             child: OutlinedButton.icon(
-              onPressed: (_isDeleting || _isToggling)
-                  ? null
-                  : _confirmAndDelete,
+              onPressed: _busy ? null : _confirmAndDelete,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.error,
                 side: const BorderSide(color: AppColors.error),
@@ -815,6 +870,90 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
         });
       }
     }
+  }
+
+  Future<void> _resetPassword() async {
+    final bool isEs = AppStrings.of(context).isEs;
+    final String name = widget.user.fullName;
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEs ? '¿Restablecer la contraseña?' : 'Reset password?'),
+        content: Text(
+          isEs
+              ? 'Se generará una contraseña temporal para $name y se cerrarán '
+                    'todas sus sesiones. Deberá cambiarla al entrar.'
+              : 'A temporary password will be generated for $name and all '
+                    'their sessions will end. They must change it when they '
+                    'sign in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(AppStrings.of(ctx).cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(isEs ? 'Restablecer' : 'Reset'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    setState(() {
+      _isResetting = true;
+      _error = null;
+    });
+    final String temporary;
+    try {
+      temporary = await widget.onResetPassword!();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e is ApiException ? e.message : e.toString();
+          _isResetting = false;
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _isResetting = false);
+
+    // Shown once: the server keeps only its hash.
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEs ? 'Contraseña temporal' : 'Temporary password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isEs
+                  ? 'Entréguela a $name. No se volverá a mostrar.'
+                  : 'Give it to $name. It will not be shown again.',
+            ),
+            const SizedBox(height: 12),
+            SelectableText(
+              temporary,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(isEs ? 'Listo' : 'Done'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _confirmAndDelete() async {

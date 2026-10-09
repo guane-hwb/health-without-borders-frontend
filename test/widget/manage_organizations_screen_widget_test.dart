@@ -149,6 +149,9 @@ class _FakeRepo implements UserRepository {
   Future<void> deleteUser(String id) async {
     await Future<void>.delayed(const Duration(milliseconds: 10));
   }
+
+  @override
+  Future<String> resetPassword(String id) async => 'Temporal-1234';
 }
 
 class _TestLocaleWrapper extends StatefulWidget {

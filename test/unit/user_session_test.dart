@@ -412,6 +412,42 @@ void main() {
     });
   });
 
+  group('UserSession.mustChangePassword', () {
+    Map<String, dynamic> json({Object? flag}) => {
+      'id': '1',
+      'email': 'a@b.co',
+      'role': 'nurse',
+      'organization_id': 'o1',
+      'must_change_password': ?flag,
+    };
+
+    test('se lee de /users/me y es false si no viene', () {
+      expect(UserSession.fromJson(json(flag: true)).mustChangePassword, isTrue);
+      expect(
+        UserSession.fromJson(json(flag: false)).mustChangePassword,
+        isFalse,
+      );
+      expect(UserSession.fromJson(json()).mustChangePassword, isFalse);
+    });
+
+    test('sobrevive a toJson/fromJson (sesión restaurada sin red)', () {
+      final restored = UserSession.fromJson(
+        UserSession.fromJson(json(flag: true)).toJson(),
+      );
+      expect(restored.mustChangePassword, isTrue);
+      expect(restored.role, UserRole.nurse);
+    });
+
+    test('copyWith cambia solo la marca', () {
+      final session = UserSession.fromJson(json(flag: true));
+      final changed = session.copyWith(mustChangePassword: false);
+      expect(changed.mustChangePassword, isFalse);
+      expect(changed.id, session.id);
+      expect(changed.role, session.role);
+      expect(session.copyWith().mustChangePassword, isTrue);
+    });
+  });
+
   group('UserRole.wireValue', () {
     test('cada rol mapea a su string de backend', () {
       expect(UserRole.superadmin.wireValue, 'superadmin');

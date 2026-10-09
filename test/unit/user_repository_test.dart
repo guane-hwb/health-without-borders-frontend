@@ -670,4 +670,46 @@ void main() {
       );
     });
   });
+
+  group('resetPassword', () {
+    test(
+      'POST /api/v1/users/{id}/reset-password devuelve la temporal',
+      () async {
+        late http.Request captured;
+        final client = MockClient((request) async {
+          captured = request;
+          return _ok({'temporary_password': 'Temporal-abc123'});
+        });
+        final (:repo, fakeAuth: _) = _buildSut(client);
+
+        expect(await repo.resetPassword('user-9'), 'Temporal-abc123');
+        expect(captured.method, 'POST');
+        expect(captured.url.path, '/api/v1/users/user-9/reset-password');
+      },
+    );
+
+    test('sin temporary_password es un error', () async {
+      final client = MockClient((_) async => _ok(<String, dynamic>{}));
+      final (:repo, fakeAuth: _) = _buildSut(client);
+
+      await expectLater(
+        repo.resetPassword('user-9'),
+        throwsA(isA<ApiException>()),
+      );
+    });
+
+    test('propaga el 400 de la propia cuenta', () async {
+      final client = MockClient(
+        (_) async => _err(400, 'You cannot reset the password of your own'),
+      );
+      final (:repo, fakeAuth: _) = _buildSut(client);
+
+      await expectLater(
+        repo.resetPassword('me'),
+        throwsA(
+          isA<ApiException>().having((e) => e.statusCode, 'statusCode', 400),
+        ),
+      );
+    });
+  });
 }

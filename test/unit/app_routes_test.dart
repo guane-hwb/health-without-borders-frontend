@@ -17,6 +17,7 @@ import 'package:health_without_borders_frontend/src/features/admin/presentation/
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
+import 'package:health_without_borders_frontend/src/features/auth/presentation/change_password_screen.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
 import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
@@ -96,6 +97,58 @@ void main() {
   });
 
   group('AppRoutes Guard Tests', () {
+    for (final String route in <String>[
+      AppRoutes.home,
+      AppRoutes.manageUsers,
+      AppRoutes.readNfc,
+      AppRoutes.changePassword,
+    ]) {
+      testWidgets('con contraseña asignada por un administrador, $route lleva '
+          'al cambio obligatorio', (tester) async {
+        final session = _createSession(
+          UserRole.orgAdmin,
+        ).copyWith(mustChangePassword: true);
+        when(() => mockAuthRepository.currentUser).thenReturn(session);
+        when(
+          () => mockAuthRepository.sessionNotifier,
+        ).thenReturn(ValueNotifier<UserSession?>(session));
+
+        await tester.pumpWidget(
+          buildTestableApp(
+            authRepository: mockAuthRepository,
+            initialRoute: route,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final screen = tester.widget<ChangePasswordScreen>(
+          find.byType(ChangePasswordScreen),
+        );
+        expect(screen.mandatory, isTrue);
+      });
+    }
+
+    testWidgets('/account/password abre el cambio voluntario', (tester) async {
+      final session = _createSession(UserRole.nurse);
+      when(() => mockAuthRepository.currentUser).thenReturn(session);
+      when(
+        () => mockAuthRepository.sessionNotifier,
+      ).thenReturn(ValueNotifier<UserSession?>(session));
+
+      await tester.pumpWidget(
+        buildTestableApp(
+          authRepository: mockAuthRepository,
+          initialRoute: AppRoutes.changePassword,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final screen = tester.widget<ChangePasswordScreen>(
+        find.byType(ChangePasswordScreen).last,
+      );
+      expect(screen.mandatory, isFalse);
+    });
+
     testWidgets('Redirige a LoginScreen cuando la sesión no está iniciada', (
       tester,
     ) async {

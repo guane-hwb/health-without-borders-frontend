@@ -6,6 +6,7 @@ import '../../features/admin/presentation/brigade_stats_screen.dart';
 import '../../features/admin/presentation/manage_organizations_screen.dart';
 import '../../features/admin/presentation/manage_users_screen.dart';
 import '../../features/auth/data/auth_repository.dart';
+import '../../features/auth/presentation/change_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/nfc/presentation/loss_of_wristband_screen.dart';
@@ -25,6 +26,7 @@ abstract class AppRoutes {
   static const String registerNfc = '/nfc/register';
   static const String lossWristband = '/nfc/loss-wristband';
   static const String syncQueue = '/sync/queue';
+  static const String changePassword = '/account/password';
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     return MaterialPageRoute<void>(
@@ -50,11 +52,19 @@ abstract class AppRoutes {
       return const LoginScreen();
     }
 
+    // A password an administrator set: nothing else until it is changed.
+    if (currentUser.mustChangePassword) {
+      return const ChangePasswordScreen(mandatory: true);
+    }
+
     final role = currentUser.role;
 
     switch (routeName) {
       case home:
         return const HomeScreen();
+
+      case changePassword:
+        return const ChangePasswordScreen();
 
       case readNfc:
         if (role.canReadPatients || role.canScanNfc) {

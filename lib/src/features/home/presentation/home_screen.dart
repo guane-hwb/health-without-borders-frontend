@@ -12,6 +12,7 @@ import '../../../shared/widgets/hwb_logo.dart';
 import '../../../shared/widgets/locale_switcher.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../auth/domain/user_session.dart';
+import '../../auth/presentation/change_password_screen.dart';
 import '../../../core/sync/sync_engine.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -24,7 +25,8 @@ class HomeScreen extends StatelessWidget {
     return s.goodEvening;
   }
 
-  Future<void> _logout(BuildContext context) async {
+  /// Asks before signing out, warning about records still pending.
+  static Future<void> confirmLogout(BuildContext context) async {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
     final scope = AppScope.of(context);
@@ -183,6 +185,9 @@ class HomeScreen extends StatelessWidget {
       });
       return const SizedBox.shrink();
     }
+    if (user.mustChangePassword) {
+      return const ChangePasswordScreen(mandatory: true);
+    }
 
     return Scaffold(
       backgroundColor: AppColors.backgroundLight,
@@ -241,7 +246,7 @@ class HomeScreen extends StatelessWidget {
           onTap: () => Navigator.of(context).pushNamed(AppRoutes.brigadeStats),
         ),
         const SizedBox(height: 28),
-        _LogoutButton(onTap: () => unawaited(_logout(context))),
+        _AccountButtons(onLogout: () => unawaited(confirmLogout(context))),
       ],
     );
   }
@@ -279,7 +284,7 @@ class HomeScreen extends StatelessWidget {
               Navigator.of(context).pushNamed(AppRoutes.brigadeStatsOrg),
         ),
         const SizedBox(height: 28),
-        _LogoutButton(onTap: () => unawaited(_logout(context))),
+        _AccountButtons(onLogout: () => unawaited(confirmLogout(context))),
       ],
     );
   }
@@ -327,7 +332,7 @@ class HomeScreen extends StatelessWidget {
           },
         ),
         const SizedBox(height: 28),
-        _LogoutButton(onTap: () => unawaited(_logout(context))),
+        _AccountButtons(onLogout: () => unawaited(confirmLogout(context))),
       ],
     );
   }
@@ -776,25 +781,43 @@ class _SyncCardState extends State<_SyncCard> {
   }
 }
 
-class _LogoutButton extends StatelessWidget {
-  const _LogoutButton({required this.onTap});
-  final VoidCallback onTap;
+class _AccountButtons extends StatelessWidget {
+  const _AccountButtons({required this.onLogout});
+  final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: TextButton.icon(
-        onPressed: onTap,
-        icon: const Icon(
-          Icons.logout_rounded,
-          size: 16,
-          color: AppColors.textSecondary,
+    const TextStyle style = TextStyle(
+      color: AppColors.textSecondary,
+      fontSize: 13,
+    );
+    return Column(
+      children: [
+        TextButton.icon(
+          onPressed: () =>
+              Navigator.of(context).pushNamed(AppRoutes.changePassword),
+          icon: const Icon(
+            Icons.lock_reset,
+            size: 16,
+            color: AppColors.textSecondary,
+          ),
+          label: Text(
+            AppStrings.of(context).isEs
+                ? 'Cambiar contraseña'
+                : 'Change password',
+            style: style,
+          ),
         ),
-        label: Text(
-          AppStrings.of(context).logout,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        TextButton.icon(
+          onPressed: onLogout,
+          icon: const Icon(
+            Icons.logout_rounded,
+            size: 16,
+            color: AppColors.textSecondary,
+          ),
+          label: Text(AppStrings.of(context).logout, style: style),
         ),
-      ),
+      ],
     );
   }
 }
