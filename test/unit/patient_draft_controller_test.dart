@@ -1,7 +1,10 @@
 // test/unit/patient_draft_controller_test.dart
 
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/state/patient_draft_controller.dart';
 
@@ -61,18 +64,197 @@ void main() {
       expect(controller.hasUnsyncedChanges, isFalse);
     });
 
-    test('markSynced actualiza original y notifica a los oyentes', () {
+    test('reset toma el registro como borrador y como original', () {
       bool notified = false;
       controller.addListener(() => notified = true);
-
       controller.updateAddress(Address(city: 'Medellín', state: 'Antioquia'));
-      expect(controller.hasUnsyncedChanges, isTrue);
 
-      controller.markSynced();
+      final replacement = _createSamplePatient().copyWith(deviceUid: 'UID-9');
+      controller.reset(replacement);
 
-      expect(controller.original, equals(controller.draft));
+      expect(controller.draft, same(replacement));
+      expect(controller.original, same(replacement));
       expect(controller.hasUnsyncedChanges, isFalse);
       expect(notified, isTrue);
+    });
+  });
+
+  group('PatientDraftController — applySyncResult', () {
+    // What the sync engine sends: the copy as it comes back from the local
+    // queue, i.e. after a JSON round trip.
+    PatientFullRecord fromQueue(PatientFullRecord r) =>
+        PatientFullRecord.fromJson(
+          jsonDecode(jsonEncode(r.toJson())) as Map<String, dynamic>,
+        );
+
+    MedicalHistoryItem visit() => MedicalHistoryItem(
+      type: 'Consultation',
+      encounterIdentifier: 'enc-1',
+      startDateTime: '2026-09-29T10:00:00-05:00',
+      careModality: '01',
+      serviceGroup: '01',
+      careEnvironment: '05',
+      clinicalEvaluation: ClinicalEvaluation(historyOfCurrentIllness: 'Tos'),
+      diagnosis: const [],
+      prescriptions: const [],
+    );
+
+    setUp(() {
+      controller = PatientDraftController(
+        _createSamplePatient(
+          medicalHistory: [visit()],
+        ).copyWith(recordVersion: 4),
+      );
+    });
+
+    test('ignora el resultado de otro paciente', () {
+      final other = _createSamplePatient().copyWith(patientId: 'P-999');
+      final effect = controller.applySyncResult(
+        RecordSyncResult(patientId: 'P-999', sent: other, recordVersion: 9),
+      );
+
+      expect(effect, SyncResultEffect.ignored);
+      expect(controller.draft.recordVersion, 4);
+    });
+
+    test('el borrador enviado toma la versión nueva y queda sincronizado', () {
+      controller.addAllergy(AllergyInfo(category: '01', allergen: 'Maní'));
+      final effect = controller.applySyncResult(
+        RecordSyncResult(
+          patientId: 'P-123',
+          sent: fromQueue(controller.draft),
+          recordVersion: 5,
+        ),
+      );
+
+      expect(effect, SyncResultEffect.synced);
+      expect(controller.draft.recordVersion, 5);
+      expect(controller.draft.toJson()['baseVersion'], 5);
+      expect(controller.hasUnsyncedChanges, isFalse);
+    });
+
+    test('una edición hecha durante el envío toma la versión nueva y pide '
+        're-guardar; el original es lo enviado', () {
+      final sent = fromQueue(controller.draft);
+      controller.addAllergy(AllergyInfo(category: '01', allergen: 'Maní'));
+
+      final effect = controller.applySyncResult(
+        RecordSyncResult(patientId: 'P-123', sent: sent, recordVersion: 5),
+      );
+
+      expect(effect, SyncResultEffect.resaveDraft);
+      expect(controller.draft.recordVersion, 5);
+      expect(controller.draft.allergies, hasLength(1));
+      expect(controller.original.allergies, isEmpty);
+      expect(controller.original.recordVersion, 5);
+    });
+
+    test('otra copia del paciente sin ediciones aquí no cambia la versión: '
+        'la siguiente edición no debe pisar lo que esa copia subió', () {
+      final other = fromQueue(
+        controller.draft.copyWith(
+          allergies: [AllergyInfo(category: '01', allergen: 'Látex')],
+        ),
+      );
+
+      final effect = controller.applySyncResult(
+        RecordSyncResult(patientId: 'P-123', sent: other, recordVersion: 5),
+      );
+
+      expect(effect, SyncResultEffect.ignored);
+      expect(controller.draft.recordVersion, 4);
+      expect(controller.draft.allergies, isEmpty);
+    });
+
+    test('sin record_version el borrador enviado queda sincronizado igual', () {
+      final effect = controller.applySyncResult(
+        RecordSyncResult(patientId: 'P-123', sent: fromQueue(controller.draft)),
+      );
+
+      expect(effect, SyncResultEffect.synced);
+      expect(controller.draft.recordVersion, 4);
+    });
+
+    test(
+      'con conflictos y registro del servidor, el borrador es el del servidor',
+      () {
+        final server = _createSamplePatient(
+          allergies: [AllergyInfo(category: '01', allergen: 'Polen')],
+        ).copyWith(recordVersion: 7);
+
+        final effect = controller.applySyncResult(
+          RecordSyncResult(
+            patientId: 'P-123',
+            sent: fromQueue(controller.draft),
+            recordVersion: 7,
+            conflicts: const ['stale_payload_base_version'],
+            serverRecord: server,
+          ),
+        );
+
+        expect(effect, SyncResultEffect.replacedByServer);
+        expect(controller.draft, same(server));
+        expect(controller.original, same(server));
+      },
+    );
+
+    test(
+      'con conflictos y sin registro del servidor, conserva la versión vieja',
+      () {
+        final effect = controller.applySyncResult(
+          RecordSyncResult(
+            patientId: 'P-123',
+            sent: fromQueue(controller.draft),
+            recordVersion: 7,
+            conflicts: const ['stale_payload_base_version'],
+          ),
+        );
+
+        expect(effect, SyncResultEffect.conflictsKept);
+        expect(controller.draft.recordVersion, 4);
+        expect(controller.hasUnsyncedChanges, isFalse);
+      },
+    );
+
+    test('con conflictos y ediciones posteriores no reemplaza el borrador', () {
+      final sent = fromQueue(controller.draft);
+      controller.addAllergy(AllergyInfo(category: '01', allergen: 'Maní'));
+      final server = _createSamplePatient().copyWith(recordVersion: 7);
+
+      final effect = controller.applySyncResult(
+        RecordSyncResult(
+          patientId: 'P-123',
+          sent: sent,
+          recordVersion: 7,
+          conflicts: const ['stale_payload_base_version'],
+          serverRecord: server,
+        ),
+      );
+
+      expect(effect, SyncResultEffect.conflictsKept);
+      expect(controller.draft.allergies, hasLength(1));
+      expect(controller.draft.recordVersion, 4);
+      expect(controller.hasUnsyncedChanges, isTrue);
+    });
+
+    test('sameContent ignora la versión y compara por valor', () {
+      final a = controller.draft;
+      expect(
+        PatientDraftController.sameContent(
+          a,
+          fromQueue(a).copyWith(recordVersion: 99),
+        ),
+        isTrue,
+      );
+      expect(
+        PatientDraftController.sameContent(
+          a,
+          a.copyWith(
+            allergies: [AllergyInfo(category: '01', allergen: 'X')],
+          ),
+        ),
+        isFalse,
+      );
     });
   });
 

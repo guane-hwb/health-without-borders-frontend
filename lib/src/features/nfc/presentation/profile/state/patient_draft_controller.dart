@@ -1,8 +1,34 @@
 // lib/src/features/nfc/presentation/profile/state/patient_draft_controller.dart
 
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
+import '../../../../../core/sync/sync_engine.dart';
 import '../../../domain/patient_record.dart';
+
+/// What [PatientDraftController.applySyncResult] did with a saved record.
+enum SyncResultEffect {
+  /// Another patient's record, or another copy of this one that the draft
+  /// does not come from: the draft keeps its version.
+  ignored,
+
+  /// The draft is what was sent: it is synced and carries the new version.
+  synced,
+
+  /// The draft changed while the sync was in flight. It carries the new
+  /// version now and must be saved again, so the pending copy does too.
+  resaveDraft,
+
+  /// The server merged the copy and sent its record back: the draft is now
+  /// the server's.
+  replacedByServer,
+
+  /// The server merged the copy without sending its record. The draft keeps
+  /// its old version, so what is edited next is merged too, never applied
+  /// over the server's copy.
+  conflictsKept,
+}
 
 class PatientDraftController extends ChangeNotifier {
   PatientDraftController(PatientFullRecord initial)
@@ -16,13 +42,62 @@ class PatientDraftController extends ChangeNotifier {
   PatientFullRecord get original => _original;
   bool get hasUnsyncedChanges => _draft != _original;
 
-  void markSynced({int? newRecordVersion}) {
-    if (newRecordVersion != null) {
-      _draft = _draft.copyWith(recordVersion: newRecordVersion);
-    }
-    _original = _draft;
+  /// Starts over from [record], taken as what the server has.
+  void reset(PatientFullRecord record) {
+    _draft = record;
+    _original = record;
     notifyListeners();
   }
+
+  /// Takes in what the server answered for a sync of this patient.
+  ///
+  /// The next edit is sent with the version set here as its baseVersion; an
+  /// older one would make the server take it for an old copy and keep its
+  /// guardians and allergies.
+  SyncResultEffect applySyncResult(RecordSyncResult result) {
+    if (result.patientId != _draft.patientId) return SyncResultEffect.ignored;
+    final bool draftWasSent = sameContent(_draft, result.sent);
+
+    if (result.hasConflicts) {
+      final PatientFullRecord? server = result.serverRecord;
+      if (server != null && draftWasSent) {
+        reset(server);
+        return SyncResultEffect.replacedByServer;
+      }
+      if (draftWasSent) {
+        _original = _draft;
+        notifyListeners();
+      }
+      return SyncResultEffect.conflictsKept;
+    }
+
+    // Another copy of this patient (a row queued before the screen opened)
+    // and no edit here: the server now holds more than the draft shows. Its
+    // version stays, so what is edited next is merged, not applied over it.
+    if (!draftWasSent && !hasUnsyncedChanges) return SyncResultEffect.ignored;
+
+    final int? version = result.recordVersion;
+    _draft = _draft.copyWith(recordVersion: version);
+    _original = draftWasSent
+        ? _draft
+        : result.sent.copyWith(recordVersion: version);
+    notifyListeners();
+    return draftWasSent || version == null
+        ? SyncResultEffect.synced
+        : SyncResultEffect.resaveDraft;
+  }
+
+  /// Whether two copies hold the same data, whatever their version.
+  ///
+  /// Compared as JSON after a round trip: a synced copy comes back from the
+  /// local queue, and not every item type compares by value.
+  @visibleForTesting
+  static bool sameContent(PatientFullRecord a, PatientFullRecord b) =>
+      _content(a) == _content(b);
+
+  static String _content(PatientFullRecord record) => jsonEncode(
+    PatientFullRecord.fromJson(record.toJson()).toJson()..remove('baseVersion'),
+  );
 
   // ── Signos vitales / dirección ──────────────────────────────────────────
 

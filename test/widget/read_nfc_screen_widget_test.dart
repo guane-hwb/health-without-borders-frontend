@@ -214,6 +214,10 @@ Widget _buildTestableWidget({
     ),
   ).thenAnswer((_) async {});
 
+  when(
+    () => mockDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => <SyncNotice>[]);
+
   return _FakeLocaleProvider(
     locale: locale,
     child: AppScope(

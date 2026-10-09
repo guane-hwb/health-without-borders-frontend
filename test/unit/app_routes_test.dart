@@ -65,6 +65,12 @@ Widget buildTestableApp({
   when(() => syncEngine.blockedCount).thenReturn(ValueNotifier<int>(0));
   when(() => syncEngine.refreshPendingCount()).thenAnswer((_) async {});
   when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
+  when(
+    () => localDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => <SyncNotice>[]);
+  when(
+    () => syncEngine.savedRecords,
+  ).thenAnswer((_) => const Stream<RecordSyncResult>.empty());
 
   return AppLocale(
     locale: 'es',

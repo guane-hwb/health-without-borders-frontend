@@ -4,7 +4,11 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/i18n/app_strings.dart';
+import '../../../../core/storage/local_database.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../../../design/tokens/app_colors.dart';
+import '../../../auth/domain/user_session.dart';
+import '../../domain/patient_record.dart';
 
 DateTime? tryParsePatientDate(String dob) {
   try {
@@ -169,4 +173,28 @@ Future<bool> confirmProfileExit(
     ),
   );
   return confirmed ?? false;
+}
+
+// ── Sync ─────────────────────────────────────────────────────────────────
+/// Saves [draft] again so its pending copy names the version the draft just
+/// took: edited while a sync was in flight, it still names the old one and
+/// the server would take it for an old copy.
+Future<void> resavePendingDraft(
+  LocalDatabase db,
+  UserSession? user,
+  PatientFullRecord draft,
+) async {
+  try {
+    await db.savePatient(
+      draft,
+      ownerUserId: user?.id,
+      organizationId: user?.organizationId,
+    );
+  } catch (e, stack) {
+    AppLogger.e(
+      'No se pudo re-guardar la edición pendiente',
+      error: e,
+      stackTrace: stack,
+    );
+  }
 }

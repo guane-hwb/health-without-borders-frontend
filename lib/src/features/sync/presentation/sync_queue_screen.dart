@@ -8,6 +8,7 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_error_codes.dart';
 import '../../../core/storage/local_database.dart';
+import '../../../core/sync/sync_conflicts.dart';
 import '../../../core/sync/sync_engine.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/locale_switcher.dart';
@@ -23,6 +24,7 @@ class SyncQueueScreen extends StatefulWidget {
 
 class _SyncQueueScreenState extends State<SyncQueueScreen> {
   List<LocalPatientEntry> _entries = [];
+  List<SyncNotice> _notices = [];
   bool _loading = true, _syncing = false;
   int _syncedSoFar = 0;
   int _syncTotal = 0;
@@ -37,10 +39,14 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
     setState(() => _loading = true);
     final scope = AppScope.of(context);
     final e = await scope.localDatabase.getUnsyncedRecords();
+    final notices = await scope.localDatabase.getSyncNotices(
+      ownerUserId: scope.authRepository.currentUser?.id,
+    );
 
     if (mounted) {
       setState(() {
         _entries = e;
+        _notices = notices;
         _loading = false;
       });
       await scope.syncEngine.refreshPendingCount();
@@ -312,6 +318,13 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
     }
   }
 
+  Future<void> _dismissNotice(SyncNotice notice) async {
+    await AppScope.of(
+      context,
+    ).localDatabase.dismissSyncNotice(notice.patientId);
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
@@ -406,7 +419,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                 Expanded(
                   child: _loading
                       ? const Center(child: CircularProgressIndicator())
-                      : _entries.isEmpty
+                      : _entries.isEmpty && _notices.isEmpty
                       ? Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -437,14 +450,23 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.fromLTRB(18, 0, 18, 60),
-                          itemCount: _entries.length,
-                          itemBuilder: (_, i) => _SyncCard(
-                            entry: _entries[i],
-                            s: s,
-                            onSync: () => _syncOne(_entries[i].patientId),
-                            onReview: () => _review(_entries[i]),
-                            onDelete: () => _delete(_entries[i]),
-                          ),
+                          itemCount: _notices.length + _entries.length,
+                          itemBuilder: (_, i) {
+                            if (i < _notices.length) {
+                              return _SyncNoticeCard(
+                                notice: _notices[i],
+                                onDismiss: () => _dismissNotice(_notices[i]),
+                              );
+                            }
+                            final entry = _entries[i - _notices.length];
+                            return _SyncCard(
+                              entry: entry,
+                              s: s,
+                              onSync: () => _syncOne(entry.patientId),
+                              onReview: () => _review(entry),
+                              onDelete: () => _delete(entry),
+                            );
+                          },
                         ),
                 ),
               ],
@@ -697,4 +719,97 @@ class _SyncCard extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// A sync the server accepted without taking all of it (see SyncNotice).
+class _SyncNoticeCard extends StatelessWidget {
+  const _SyncNoticeCard({required this.notice, required this.onDismiss});
+
+  final SyncNotice notice;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isEs = AppStrings.of(context).isEs;
+    final String date =
+        DateTime.tryParse(
+          notice.createdAt,
+        )?.toLocal().toIso8601String().split('T').first ??
+        '';
+    const TextStyle style = TextStyle(
+      fontSize: 12,
+      height: 1.3,
+      color: Color(0xFF7A4F00),
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFB26A00)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.info_outline,
+                size: 18,
+                color: Color(0xFFB26A00),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  notice.patientName,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              Text(
+                date,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          for (final String line in SyncConflictCode.describe(
+            notice.codes,
+            isEs: isEs,
+          ))
+            Padding(
+              padding: const EdgeInsets.only(top: 6, right: 6),
+              child: Text(line, style: style),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6, right: 6),
+            child: Text(
+              SyncConflictCode.nextStep(serverCopyShown: false, isEs: isEs),
+              style: style.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: onDismiss,
+              child: Text(
+                isEs ? 'Entendido' : 'Got it',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

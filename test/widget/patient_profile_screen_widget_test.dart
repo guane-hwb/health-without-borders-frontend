@@ -36,6 +36,7 @@ import 'package:health_without_borders_frontend/src/features/nfc/presentation/pr
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/profile_banners.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/profile_header.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/reassign_device_dialog.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/sync_conflict_banner.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
@@ -185,6 +186,9 @@ class _FaultyLocalDatabase extends LocalDatabase {
         webRemove: (key) async {
           store.remove(key);
         },
+        webList: (prefix) async => store.entries
+            .where((e) => e.key.startsWith(prefix))
+            .toList(growable: false),
       );
 
   final Map<String, String> _memoryStore;
@@ -302,6 +306,30 @@ class _DelayedFakeSyncEngine extends _FakeSyncEngine {
   void fail() {
     _pending?.completeError(Exception('Error de sincronización simulado'));
     _pending = null;
+  }
+}
+
+/// Lets a test announce what the server answered for a record, as
+/// [SyncEngine.savedRecords] does after a sync.
+class _AnnouncingSyncEngine extends _FakeSyncEngine {
+  final StreamController<RecordSyncResult> results =
+      StreamController<RecordSyncResult>.broadcast();
+
+  /// Announced from inside syncAll, before it returns (as the real engine).
+  RecordSyncResult? Function()? onSyncAll;
+
+  @override
+  Stream<RecordSyncResult> get savedRecords => results.stream;
+
+  @override
+  Future<bool> syncAll() async {
+    callCount++;
+    final RecordSyncResult? result = onSyncAll?.call();
+    if (result != null) {
+      results.add(result);
+      await Future<void>.microtask(() {});
+    }
+    return true;
   }
 }
 
@@ -2966,5 +2994,318 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  });
+  group('Versión del registro y conflicts tras un sync', () {
+    Map<String, dynamic> stored(_FaultyLocalDatabase db) =>
+        jsonDecode(db._memoryStore['patient_pid-001']!) as Map<String, dynamic>;
+
+    /// The copy the engine would send: what the profile last saved.
+    PatientFullRecord sentFrom(_FaultyLocalDatabase db) =>
+        PatientFullRecord.fromJson(stored(db));
+
+    Future<void> addAllergy(WidgetTester tester, String allergen) async {
+      tester
+          .widget<ProfileTabSummary>(find.byType(ProfileTabSummary))
+          .onOpenAllergies();
+      await tester.pumpAndSettle();
+      tester
+          .widget<AllergiesManageSheet>(find.byType(AllergiesManageSheet))
+          .onAdd();
+      await tester.pumpAndSettle();
+      tester
+          .widget<AddAllergySheet>(find.byType(AddAllergySheet))
+          .onAdd(AllergyInfo(category: '02', allergen: allergen));
+      Navigator.of(tester.element(find.byType(AddAllergySheet))).pop();
+      await tester.pumpAndSettle();
+    }
+
+    Future<_Fakes> pump(
+      WidgetTester tester,
+      _AnnouncingSyncEngine engine, {
+      PatientFullRecord? patient,
+      bool offline = false,
+      _FaultyLocalDatabase? db,
+    }) async {
+      late _Fakes fakes;
+      await _pumpScreen(
+        tester,
+        patient ?? _record().copyWith(recordVersion: 4),
+        syncEng: engine,
+        offline: offline,
+        localDatabase: db,
+        onFakesReady: (f) => fakes = f,
+      );
+      await tester.pumpAndSettle();
+      return fakes;
+    }
+
+    testWidgets('la edición siguiente se envía sobre la versión que devolvió '
+        'el sync', (tester) async {
+      final engine = _AnnouncingSyncEngine();
+      final fakes = await pump(tester, engine);
+      engine.onSyncAll = () => RecordSyncResult(
+        patientId: 'pid-001',
+        sent: sentFrom(fakes.db),
+        recordVersion: 5,
+      );
+
+      await addAllergy(tester, 'Maní');
+      expect(stored(fakes.db)['baseVersion'], 4);
+
+      await addAllergy(tester, 'Polen');
+      expect(stored(fakes.db)['baseVersion'], 5);
+    });
+
+    testWidgets('una edición hecha mientras el sync estaba en vuelo se '
+        'vuelve a guardar sobre la versión nueva', (tester) async {
+      final engine = _AnnouncingSyncEngine();
+      final fakes = await pump(tester, engine);
+
+      await addAllergy(tester, 'Maní');
+      final PatientFullRecord inFlight = sentFrom(fakes.db);
+      await addAllergy(tester, 'Polen');
+      expect(stored(fakes.db)['baseVersion'], 4);
+      final int savesBefore = fakes.db.savePatientCallCount;
+
+      engine.results.add(
+        RecordSyncResult(
+          patientId: 'pid-001',
+          sent: inFlight,
+          recordVersion: 5,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(fakes.db.savePatientCallCount, savesBefore + 1);
+      expect(stored(fakes.db)['baseVersion'], 5);
+      expect(stored(fakes.db)['allergies'], hasLength(2));
+    });
+
+    testWidgets('un resultado de otro paciente no cambia nada', (tester) async {
+      final engine = _AnnouncingSyncEngine();
+      final fakes = await pump(tester, engine);
+      await addAllergy(tester, 'Maní');
+      final int savesBefore = fakes.db.savePatientCallCount;
+
+      engine.results.add(
+        RecordSyncResult(
+          patientId: 'otro',
+          sent: _record().copyWith(patientId: 'otro'),
+          recordVersion: 9,
+          conflicts: const <String>['stale_payload_base_version'],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(fakes.db.savePatientCallCount, savesBefore);
+      expect(find.byType(SyncConflictBanner), findsOneWidget);
+      expect(
+        find.text('El servidor no aplicó todos los cambios'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('con conflicts y registro del servidor, muestra ese registro '
+        'y pide actualizar los chips', (tester) async {
+      final engine = _AnnouncingSyncEngine();
+      final db = _FaultyLocalDatabase();
+      await db.markChipsDirty('pid-001', patient: true, guardian: true);
+      final fakes = await pump(tester, engine, db: db);
+      final PatientFullRecord sent = PatientFullRecord.fromJson(
+        _record().copyWith(recordVersion: 4).toJson(),
+      );
+      await fakes.db.addSyncNotice(
+        patientId: 'pid-001',
+        patientName: 'Juan Pérez',
+        codes: const <String>['stale_payload_base_version'],
+      );
+
+      engine.results.add(
+        RecordSyncResult(
+          patientId: 'pid-001',
+          sent: sent,
+          recordVersion: 7,
+          conflicts: const <String>['stale_payload_base_version'],
+          serverRecord: _record(
+            allergies: [AllergyInfo(category: '01', allergen: 'Penicilina')],
+          ).copyWith(recordVersion: 7),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Penicilina'), findsWidgets);
+      expect(
+        find.text('El servidor no aplicó todos los cambios'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Lo que ve es la versión del servidor'),
+        findsOneWidget,
+      );
+      expect(find.byType(NfcStaleBanner), findsOneWidget);
+
+      await addAllergy(tester, 'Maní');
+      expect(stored(fakes.db)['baseVersion'], 7);
+    });
+
+    testWidgets('con conflicts sin registro del servidor, pide escanear de '
+        'nuevo y no ofrece grabar los chips con la copia vieja', (
+      tester,
+    ) async {
+      final engine = _AnnouncingSyncEngine();
+      final db = _FaultyLocalDatabase();
+      await db.markChipsDirty('pid-001', patient: true, guardian: true);
+      final fakes = await pump(tester, engine, db: db);
+      expect(find.byType(NfcStaleBanner), findsOneWidget);
+      await fakes.db.addSyncNotice(
+        patientId: 'pid-001',
+        patientName: 'Juan Pérez',
+        codes: const <String>['visit_edit_not_applied:enc-1'],
+      );
+
+      engine.results.add(
+        RecordSyncResult(
+          patientId: 'pid-001',
+          sent: PatientFullRecord.fromJson(
+            _record().copyWith(recordVersion: 4).toJson(),
+          ),
+          recordVersion: 7,
+          conflicts: const <String>['visit_edit_not_applied:enc-1'],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('La corrección de una consulta ya registrada NO'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Escanee de nuevo la pulsera'),
+        findsOneWidget,
+      );
+      expect(find.byType(NfcStaleBanner), findsNothing);
+
+      // The copy keeps its old base: what is edited next is merged.
+      await addAllergy(tester, 'Maní');
+      expect(stored(fakes.db)['baseVersion'], 4);
+    });
+
+    testWidgets('Entendido descarta el aviso también en la cola', (
+      tester,
+    ) async {
+      final db = _FaultyLocalDatabase();
+      await db.addSyncNotice(
+        patientId: 'pid-001',
+        patientName: 'Juan Pérez',
+        codes: const <String>['stale_payload_retired_device_uid'],
+      );
+      await _pumpScreen(
+        tester,
+        _record(),
+        localDatabase: db,
+        syncEng: _AnnouncingSyncEngine(),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('pulsera o tarjeta ya retirada'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Entendido'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('pulsera o tarjeta ya retirada'),
+        findsNothing,
+      );
+      expect(await db.getSyncNotices(), isEmpty);
+    });
+
+    testWidgets('un sync manual con conflicts no muestra "cambios guardados"', (
+      tester,
+    ) async {
+      final engine = _AnnouncingSyncEngine();
+      final fakes = await pump(tester, engine);
+      engine.onSyncAll = () => RecordSyncResult(
+        patientId: 'pid-001',
+        sent: sentFrom(fakes.db),
+        recordVersion: 7,
+        conflicts: const <String>['stale_payload_base_version'],
+      );
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('un sync manual sin conflicts sí muestra "cambios guardados"', (
+      tester,
+    ) async {
+      final engine = _AnnouncingSyncEngine();
+      final fakes = await pump(tester, engine);
+      engine.onSyncAll = () => RecordSyncResult(
+        patientId: 'pid-001',
+        sent: sentFrom(fakes.db),
+        recordVersion: 5,
+      );
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(stored(fakes.db)['baseVersion'], 4);
+      await addAllergy(tester, 'Maní');
+      expect(stored(fakes.db)['baseVersion'], 5);
+    });
+
+    testWidgets('tras reasignar, el borrador es el registro reasignado: su '
+        'sync no lo re-guarda con la pulsera vieja', (tester) async {
+      final engine = _AnnouncingSyncEngine();
+      late _Fakes fakes;
+      await _pumpScreen(
+        tester,
+        _record().copyWith(recordVersion: 4),
+        allowReassign: true,
+        syncEng: engine,
+        onFakesReady: (f) => fakes = f,
+      );
+      PatientProfileScreen.showReassignDeviceDialogImpl =
+          (context, {required isEs, required hasG1, required hasG2}) async =>
+              const ReassignSelection(
+                targets: [ReassignTarget.patient],
+                reason: 'lost',
+              );
+      PatientProfileScreen.executeReassignOneImpl =
+          ({
+            required context,
+            required target,
+            required record,
+            required codec,
+            required isEs,
+            required showSnack,
+          }) async => record.copyWith(deviceUid: 'dev-NEW');
+      engine.onSyncAll = () => RecordSyncResult(
+        patientId: 'pid-001',
+        sent: sentFrom(fakes.db),
+        recordVersion: 5,
+      );
+
+      await tester.runAsync(() async {
+        tester
+            .widget<ProfileTabSummary>(find.byType(ProfileTabSummary))
+            .onReassignDevice!();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+      final int savesAfterReassign = fakes.db.savePatientCallCount;
+      expect(stored(fakes.db)['device_uid'], 'dev-NEW');
+
+      await addAllergy(tester, 'Maní');
+
+      expect(fakes.db.savePatientCallCount, greaterThan(savesAfterReassign));
+      expect(stored(fakes.db)['device_uid'], 'dev-NEW');
+      expect(stored(fakes.db)['baseVersion'], 5);
+    });
   });
 }
