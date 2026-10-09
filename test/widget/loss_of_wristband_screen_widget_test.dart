@@ -53,6 +53,7 @@ class _FakePatientRepository extends Fake implements PatientRepository {
   bool throwApiException = false;
   int apiStatusCode = 404;
   String apiMessage = 'Not found';
+  String? apiCode;
 
   @override
   Future<PatientFullRecord> searchPatient({
@@ -65,7 +66,11 @@ class _FakePatientRepository extends Fake implements PatientRepository {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     if (shouldThrow) {
       if (throwApiException) {
-        throw ApiException(apiMessage, statusCode: apiStatusCode);
+        throw ApiException(
+          apiMessage,
+          statusCode: apiStatusCode,
+          code: apiCode,
+        );
       }
       throw Exception('Unexpected error');
     }
@@ -462,6 +467,34 @@ void main() {
 
       final s = AppStrings.forTesting('es');
       expect(find.text(s.searchError), findsOneWidget);
+      _resetScreenSize(tester);
+    });
+
+    testWidgets('500 stored_record_invalid pide contactar a soporte', (
+      tester,
+    ) async {
+      _setMobileScreenSize(tester);
+      final repo = _FakePatientRepository()
+        ..shouldThrow = true
+        ..throwApiException = true
+        ..apiStatusCode = 500
+        ..apiCode = 'stored_record_invalid'
+        ..apiMessage = 'The stored record could not be read.';
+
+      await tester.pumpWidget(
+        _wrap(const LossOfWristbandScreen(), patientRepo: repo),
+      );
+      await tester.pump();
+
+      await _fillAndSubmit(tester);
+
+      expect(
+        find.text(
+          'No se pudo leer el registro de este paciente en el servidor. '
+          'Contacte a soporte.',
+        ),
+        findsOneWidget,
+      );
       _resetScreenSize(tester);
     });
 

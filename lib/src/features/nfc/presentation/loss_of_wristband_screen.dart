@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_error_codes.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/locale_switcher.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
@@ -118,8 +119,11 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
       );
     } on ApiException catch (e) {
       if (!mounted) return;
+      final bool isEs = AppStrings.of(context).isEs;
       setState(() {
-        _error = e.statusCode == 404 ? 'searchNoMatch' : 'searchError';
+        _error = e.statusCode == 404
+            ? 'searchNoMatch'
+            : ApiErrorCode.describe(e.code, isEs: isEs) ?? 'searchError';
       });
     } catch (_) {
       if (!mounted) return;

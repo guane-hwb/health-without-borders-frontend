@@ -43,6 +43,7 @@ class FakePatientRepository implements PatientRepository {
   String? guardianErrorCode;
 
   bool throwNonApiError = false;
+  bool throwStoredRecordInvalid = false;
   bool throwRetired410 = false;
   String retiredReason = 'lost';
   String? lastCapturedGuardianUid;
@@ -74,6 +75,14 @@ class FakePatientRepository implements PatientRepository {
 
     if (throwGenericError) {
       throw ApiException('Error de base de datos', statusCode: 500);
+    }
+
+    if (throwStoredRecordInvalid) {
+      throw ApiException(
+        'The stored record could not be read; the error was logged.',
+        statusCode: 500,
+        code: 'stored_record_invalid',
+      );
     }
 
     if (throwRetired410) {
@@ -469,6 +478,38 @@ void main() {
       expect(find.text('Error de base de datos'), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
     });
+
+    testWidgets(
+      '500 stored_record_invalid: pide contactar a soporte, sin reintentar ni '
+      'avanzar',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: const ReadNfcScreen(),
+            repo: fakeRepo,
+            authRepo: fakeAuth,
+          ),
+        );
+        await tester.pump();
+
+        fakeRepo.throwStoredRecordInvalid = true;
+        await tester.enterText(find.byType(TextField), 'HWB-BROKEN-1');
+        await tester.tap(find.byType(OutlinedButton));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 10));
+        await tester.pump(const Duration(seconds: 5));
+
+        expect(
+          find.text(
+            'No se pudo leer el registro de este paciente en el servidor. '
+            'Contacte a soporte.',
+          ),
+          findsOneWidget,
+        );
+        expect(fakeRepo.scanDeviceCallCount, 1);
+        expect(find.byType(TextField), findsOneWidget);
+      },
+    );
 
     testWidgets(
       '410 device_retired: muestra el mensaje de dispositivo retirado con el motivo '
