@@ -73,7 +73,11 @@ POST /api/v1/patients/sync
 | 400 / 422 | Does not retry — data error, user should review |
 | 401 | Stops synchronization entirely — token expired, requires re-login |
 | 429 / 500 | Keeps `is_synced = 0` for automatic retry |
+| 503 `sync_in_progress` | Another request was creating the same new patient (a retry racing the first attempt). Kept pending, not blocked, and retried no sooner than `Retry-After` (5 s) or the backoff, whichever is longer; the retry merges into the record the other request created. The queue shows it as pending |
 | Timeout | Keeps `is_synced = 0` for automatic retry |
+
+Transient failures (408, 429, 5xx, network) schedule the next attempt whether
+they come from a background cycle or from **Sync now** on one record.
 
 ### Callbacks
 

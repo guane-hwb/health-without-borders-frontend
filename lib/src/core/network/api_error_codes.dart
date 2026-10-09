@@ -22,6 +22,15 @@ abstract final class ApiErrorCode {
   /// /sync: the wristband already belongs to another patient (409).
   static const String deviceUidConflict = 'device_uid_conflict';
 
+  /// /sync (503, Retry-After 5): another request created this same new
+  /// patient a moment before, usually a retry racing the first attempt.
+  /// Transient: the next attempt merges into the record it created.
+  static const String syncInProgress = 'sync_in_progress';
+
+  /// The record stays queued and the engine retries it; the queue shows it
+  /// as pending, not as an error to fix.
+  static bool isTransient(String? code) => code == syncInProgress;
+
   /// /sync: a new patient whose identity document is already registered (409).
   static const String duplicateIdentity = 'duplicate_identity';
 
@@ -69,6 +78,12 @@ abstract final class ApiErrorCode {
                 'Registra al paciente con un dispositivo nuevo.'
           : 'This device is already registered to another patient. '
                 'Register the patient with a new device.',
+    syncInProgress =>
+      isEs
+          ? 'Otro envío estaba guardando este paciente. Se reintentará '
+                'automáticamente en unos instantes.'
+          : 'Another request was saving this patient. It will retry '
+                'automatically in a moment.',
     duplicateIdentity =>
       isEs
           ? 'Ya existe un paciente registrado con este número de '

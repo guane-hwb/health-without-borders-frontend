@@ -478,6 +478,10 @@ class _SyncCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isConflict = entry.syncErrorCode == 409;
     final hasErr = entry.syncError?.isNotEmpty == true;
+    // A transient refusal (sync_in_progress) retries by itself: pending, not
+    // an error the user has to fix.
+    final bool showsError =
+        hasErr && !ApiErrorCode.isTransient(entry.syncError);
     final isEs = s.isEs;
     final String? codedMessage = ApiErrorCode.describe(
       entry.syncError,
@@ -520,7 +524,7 @@ class _SyncCard extends StatelessWidget {
       }
     }
 
-    final String badgeLabel = hasErr
+    final String badgeLabel = showsError
         ? (isDuplicate
               ? (isEs ? 'Duplicado' : 'Duplicate')
               : isConflict
@@ -537,7 +541,7 @@ class _SyncCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(14),
-        border: hasErr
+        border: showsError
             ? Border.all(color: AppColors.error.withValues(alpha: 0.4))
             : null,
         boxShadow: const [
@@ -589,7 +593,7 @@ class _SyncCard extends StatelessWidget {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: hasErr
+                    color: showsError
                         ? const Color(0xFFFEE2E2)
                         : const Color(0xFFFFF3CD),
                     borderRadius: BorderRadius.circular(8),
@@ -599,7 +603,9 @@ class _SyncCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: hasErr ? AppColors.error : const Color(0xFF856404),
+                      color: showsError
+                          ? AppColors.error
+                          : const Color(0xFF856404),
                     ),
                   ),
                 ),
@@ -612,19 +618,23 @@ class _SyncCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.error_outline,
+                  Icon(
+                    showsError ? Icons.error_outline : Icons.schedule,
                     size: 15,
-                    color: AppColors.error,
+                    color: showsError
+                        ? AppColors.error
+                        : const Color(0xFF856404),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       errorMessage,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         height: 1.3,
-                        color: AppColors.error,
+                        color: showsError
+                            ? AppColors.error
+                            : const Color(0xFF856404),
                       ),
                     ),
                   ),

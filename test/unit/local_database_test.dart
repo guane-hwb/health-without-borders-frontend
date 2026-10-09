@@ -1774,6 +1774,17 @@ void main() {
       },
     );
 
+    test('un 503 sync_in_progress sigue pendiente, no bloqueado', () async {
+      await localDb.savePatient(
+        _buildRecord(patientId: 'p-503'),
+        ownerUserId: 'u1',
+      );
+      await localDb.markSyncError('p-503', 'sync_in_progress', statusCode: 503);
+
+      expect(await localDb.getRetryablePendingCount(ownerUserId: 'u1'), 1);
+      expect(await localDb.getBlockedCount(ownerUserId: 'u1'), 0);
+    });
+
     test(
       'getRetryablePendingCount y getBlockedCount filtran por ownerUserId',
       () async {
