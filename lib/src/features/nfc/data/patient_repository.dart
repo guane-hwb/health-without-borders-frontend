@@ -14,6 +14,14 @@ class PatientRepository {
   final ApiClient _apiClient;
   final AuthRepository _authRepository;
 
+  /// The server codes diagnoses with the LLM and writes to the FHIR Store
+  /// inside the /sync request: p95 25.6 s and up to 68 s in production.
+  ///
+  /// A timeout does not mean nothing was saved. The retry is safe (visits and
+  /// vaccinations merge by their ids) and may come back with
+  /// `stale_payload_base_version` when the first attempt was saved.
+  static const Duration syncTimeout = Duration(seconds: 90);
+
   Future<Map<String, String>> _authHeaders() async {
     final String token = await _authRepository.getAccessToken();
     return <String, String>{'Authorization': 'Bearer $token'};
@@ -42,32 +50,33 @@ class PatientRepository {
       path: '/api/v1/patients/sync',
       body: body,
       headers: await _authHeaders(),
-      timeout: const Duration(seconds: 10),
+      timeout: syncTimeout,
     );
     return PatientSyncResponse.fromJson(data);
   }
 
-  // ── GET /api/v1/patients/scan/{device_uid} ──────────────────────────────
+  // ── POST /api/v1/patients/scan ──────────────────────────────────────────
   /// Retrieves a patient by scanning their NFC wristband.
   ///
-  /// If the patient is a minor (<18), the backend returns 403 with
-  /// "Guardian bracelet scan required for minors."  In that case, the
-  /// caller should prompt for the guardian's NFC scan and call this
-  /// method again with [guardianDeviceUid] (sent as the X-Guardian-Device-UID header).
+  /// Both UIDs travel in the body: in the URL, the wristband UID (PHI) ended
+  /// up in Cloud Run's request logs.
+  ///
+  /// A minor (<18) answers 403 `guardian_required`: the caller asks for the
+  /// guardian's card and calls again with [guardianDeviceUid]. A stored
+  /// record the server can no longer read answers 500
+  /// `stored_record_invalid`; trying again does not help.
   Future<PatientFullRecord> scanDevice(
     String deviceUid, {
     String? guardianDeviceUid,
   }) async {
-    final Map<String, String> headers = await _authHeaders();
-    if (guardianDeviceUid != null && guardianDeviceUid.isNotEmpty) {
-      headers['X-Guardian-Device-UID'] = guardianDeviceUid.trim();
-    }
-
-    final String safeDeviceUid = Uri.encodeComponent(deviceUid.trim());
-
-    final Map<String, dynamic> data = await _apiClient.getJson(
-      path: '/api/v1/patients/scan/$safeDeviceUid',
-      headers: headers,
+    final String guardian = guardianDeviceUid?.trim() ?? '';
+    final Map<String, dynamic> data = await _apiClient.postJson(
+      path: '/api/v1/patients/scan',
+      headers: await _authHeaders(),
+      body: <String, dynamic>{
+        'device_uid': deviceUid.trim(),
+        'guardian_device_uid': guardian.isEmpty ? null : guardian,
+      },
     );
     return PatientFullRecord.fromJson(data);
   }
