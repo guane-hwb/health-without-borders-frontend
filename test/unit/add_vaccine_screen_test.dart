@@ -985,6 +985,59 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('guarda la vacuna sobre la versión que leyó del servidor', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final scope = _defaultScope();
+      when(
+        () => scope.localDatabase.savePatient(any()),
+      ).thenAnswer((_) async {});
+      when(
+        () => scope.localDatabase.markChipsDirty(
+          any(),
+          guardian: any(named: 'guardian'),
+        ),
+      ).thenAnswer((_) async {});
+      when(
+        () => scope.syncEngine.refreshPendingCount(),
+      ).thenAnswer((_) async => 0);
+      when(() => scope.syncEngine.syncAll()).thenAnswer((_) async => true);
+
+      await tester.pumpWidget(
+        _buildApp(
+          patient: _fakePatient().copyWith(recordVersion: 6),
+          scope: scope,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(textFieldWithHint(_hintVaccineName).first, 'BCG');
+      await tester.enterText(textFieldWithHint(_hintCvxCode).first, '19');
+      await tester.enterText(textFieldWithHint(_hintAdminBy), 'Dr. Ruiz');
+      await tester.enterText(
+        textFieldWithHint(_hintAdminAt),
+        'Clínica Central',
+      );
+      await tester.pump();
+      await _tapGuardar(tester);
+      await tester.pumpAndSettle();
+
+      final saved =
+          verify(
+                () => scope.localDatabase.savePatient(captureAny()),
+              ).captured.single
+              as PatientFullRecord;
+      expect(saved.recordVersion, 6);
+      expect(saved.vaccinationRecord, hasLength(1));
+    });
+
     testWidgets('Header ejecuta la navegación de regreso', (tester) async {
       await tester.pumpWidget(_buildApp(patient: _fakePatient()));
       await tester.pumpAndSettle();

@@ -877,7 +877,7 @@ void main() {
 
         await tester.pumpWidget(
           _buildApp(
-            patient: _fakePatient(),
+            patient: _fakePatient().copyWith(recordVersion: 6),
             scope: _defaultScope(db: db, sync: sync),
           ),
         );
@@ -908,6 +908,8 @@ void main() {
         expect(clinicalEval.generalPhysicalExamination, 'PA: 120/80');
         expect(clinicalEval.systemsExamination, 'Ruidos cardíacos rítmicos');
         expect(clinicalEval.treatmentPlanObservations, 'Reposo 24 horas');
+        // Sent as baseVersion: the visit is added to the version it read.
+        expect(verifyRecord.recordVersion, 6);
 
         tester.view.resetPhysicalSize();
         tester.view.resetDevicePixelRatio();

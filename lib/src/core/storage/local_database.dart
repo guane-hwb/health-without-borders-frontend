@@ -191,11 +191,12 @@ class LocalDatabase {
   ];
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 10;
+  static const int _dbVersion = 11;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
   static const String _keyVersionTable = 'nfc_key_version_observations';
+  static const String _syncNoticeTable = 'sync_notices';
   static const String _dbKeyStorageName = 'hwb_sqlite_aes_key';
   static const String _auditKeyStorageName = 'hwb_sqlite_audit_aes_key';
 
@@ -207,6 +208,7 @@ class LocalDatabase {
   static const String _webChipPrefix = 'hwb_web_chip::';
   static const String _webKeyVersionPrefix = 'hwb_web_keyver::';
   static const String _webLogPrefix = 'hwb_web_emlog::';
+  static const String _webNoticePrefix = 'hwb_web_notice::';
 
   final FlutterSecureStorage _secureStorage;
   Database? _db;
@@ -996,6 +998,7 @@ class LocalDatabase {
         await _createChipStatusTable(db);
         await _createEmergencyLogTable(db);
         await _createKeyVersionTable(db);
+        await _createSyncNoticeTable(db);
       },
       onUpgrade: (Database db, int oldVersion, int newVersion) async {
         if (oldVersion < 2) {
@@ -1061,6 +1064,9 @@ class LocalDatabase {
         if (oldVersion < 10) {
           await _createKeyVersionTable(db);
         }
+        if (oldVersion < 11) {
+          await _createSyncNoticeTable(db);
+        }
       },
     );
   }
@@ -1103,6 +1109,18 @@ class LocalDatabase {
       'CREATE INDEX IF NOT EXISTS idx_keyver_synced '
       'ON $_keyVersionTable (is_synced)',
     );
+  }
+
+  static Future<void> _createSyncNoticeTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_syncNoticeTable (
+        patient_id    TEXT PRIMARY KEY,
+        patient_name  TEXT NOT NULL,
+        codes         TEXT NOT NULL,
+        owner_user_id TEXT,
+        created_at    TEXT NOT NULL
+      )
+    ''');
   }
 
   static Future<void> _createEmergencyLogTable(Database db) async {
@@ -1901,6 +1919,56 @@ class LocalDatabase {
     }
   }
 
+  /// Moves a pending row the server already saved onto the version it was
+  /// saved as, so its retry is not taken for an old copy.
+  ///
+  /// Only while the row still holds [revision], that is, exactly what was
+  /// sent: a later edit keeps its own base.
+  Future<void> rebasePending(
+    String patientId, {
+    required int revision,
+    required int recordVersion,
+  }) async {
+    Future<String> withVersion(String cipher) async {
+      final Map<String, dynamic> record =
+          jsonDecode(await _decryptPayload(cipher)) as Map<String, dynamic>;
+      record['baseVersion'] = recordVersion;
+      return _encryptPayload(jsonEncode(record));
+    }
+
+    if (_isWeb) {
+      await _withWebLock(() async {
+        final current = await _webGetPatient(patientId);
+        if (current == null ||
+            ((current['revision'] as int?) ?? 0) != revision) {
+          return;
+        }
+        await _webPutPatient(patientId, <String, dynamic>{
+          ...current,
+          'record_json': await withVersion(current['record_json'] as String),
+        });
+      });
+      return;
+    }
+    final db = await _database;
+    final rows = await db!.query(
+      _table,
+      columns: <String>['record_json'],
+      where: 'patient_id = ? AND revision = ?',
+      whereArgs: <Object>[patientId, revision],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    await db.update(
+      _table,
+      <String, Object?>{
+        'record_json': await withVersion(rows.first['record_json'] as String),
+      },
+      where: 'patient_id = ? AND revision = ?',
+      whereArgs: <Object>[patientId, revision],
+    );
+  }
+
   Future<void> deleteRecord(String patientId) async {
     if (_isWeb) {
       await _withWebLock(() async {
@@ -1996,11 +2064,132 @@ class LocalDatabase {
     );
   }
 
+  // ── Sync notices ──────────────────────────────────────────────────────────
+
+  /// Keeps what the server did not apply on a sync it accepted, until the
+  /// user dismisses it. One notice per patient: a later sync adds its codes.
+  ///
+  /// The sync itself already succeeded, so a failure here is only logged.
+  Future<void> addSyncNotice({
+    required String patientId,
+    required String patientName,
+    required List<String> codes,
+    String? ownerUserId,
+  }) async {
+    if (patientId.isEmpty || codes.isEmpty) return;
+
+    Map<String, Object?> row(Map<String, Object?>? previous) =>
+        <String, Object?>{
+          'patient_id': patientId,
+          'patient_name': _maskName(patientName),
+          'codes': jsonEncode(
+            <String>{
+              ...SyncNotice.decodeCodes(previous?['codes']),
+              ...codes,
+            }.toList(),
+          ),
+          'owner_user_id': ownerUserId ?? previous?['owner_user_id'],
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+        };
+
+    try {
+      final db = await _database;
+      if (db == null) {
+        await _withWebLock(() async {
+          final String key = '$_webNoticePrefix$patientId';
+          final Map<String, dynamic>? previous = await _webReadJsonRecord(key);
+          await _webSet(key, jsonEncode(row(previous)));
+        });
+        return;
+      }
+      await db.transaction((txn) async {
+        final previous = await txn.query(
+          _syncNoticeTable,
+          where: 'patient_id = ?',
+          whereArgs: <String>[patientId],
+          limit: 1,
+        );
+        await txn.insert(
+          _syncNoticeTable,
+          row(previous.isEmpty ? null : previous.first),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      });
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo guardar el aviso de sincronización',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  /// Notices not dismissed yet, newest first.
+  Future<List<SyncNotice>> getSyncNotices({String? ownerUserId}) async {
+    try {
+      final db = await _database;
+      final List<Map<String, Object?>> rows;
+      if (db == null) {
+        await _ensureWebMigrated();
+        rows = <Map<String, Object?>>[];
+        for (final e in await _webList(_webNoticePrefix)) {
+          if (e.key.contains('::quarantine::')) continue;
+          try {
+            rows.add(Map<String, Object?>.from(jsonDecode(e.value) as Map));
+          } catch (_) {}
+        }
+      } else {
+        rows = await db.query(_syncNoticeTable);
+      }
+      return rows
+          .where(
+            (Map<String, Object?> r) =>
+                ownerUserId == null ||
+                r['owner_user_id'] == null ||
+                r['owner_user_id'] == ownerUserId,
+          )
+          .map(SyncNotice.fromRow)
+          .toList()
+        ..sort(
+          (SyncNotice a, SyncNotice b) => b.createdAt.compareTo(a.createdAt),
+        );
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudieron leer los avisos de sincronización',
+        error: e,
+        stackTrace: stack,
+      );
+      return const <SyncNotice>[];
+    }
+  }
+
+  Future<void> dismissSyncNotice(String patientId) async {
+    try {
+      final db = await _database;
+      if (db == null) {
+        await _withWebLock(() => _webRemove('$_webNoticePrefix$patientId'));
+        return;
+      }
+      await db.delete(
+        _syncNoticeTable,
+        where: 'patient_id = ?',
+        whereArgs: <String>[patientId],
+      );
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo descartar el aviso de sincronización',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
   Future<void> clearAll() async {
     if (_isWeb) {
       await _withWebLock(() async {
         await _webDeleteByPrefix(_webPatientPrefix);
         await _webDeleteByPrefix(_webChipPrefix);
+        await _webDeleteByPrefix(_webNoticePrefix);
         await _webRemove(_webStoreKey);
         await _webRemove(_webChipKey);
 
@@ -2022,8 +2211,47 @@ class LocalDatabase {
     final db = await _database;
     await db!.delete(_table);
     await db.delete(_chipStatusTable);
+    await db.delete(_syncNoticeTable);
     await db.delete(_emergencyLogTable, where: 'is_synced = 1');
   }
+}
+
+/// What the server kept as it had it on a sync it accepted, waiting for the
+/// user to read it (see [LocalDatabase.addSyncNotice]).
+class SyncNotice {
+  const SyncNotice({
+    required this.patientId,
+    required this.patientName,
+    required this.codes,
+    required this.createdAt,
+  });
+
+  factory SyncNotice.fromRow(Map<String, Object?> row) => SyncNotice(
+    patientId: row['patient_id'] as String,
+    patientName: (row['patient_name'] as String?) ?? '',
+    codes: decodeCodes(row['codes']),
+    createdAt: (row['created_at'] as String?) ?? '',
+  );
+
+  static List<String> decodeCodes(Object? raw) {
+    if (raw is! String || raw.isEmpty) return const <String>[];
+    try {
+      return (jsonDecode(raw) as List<dynamic>)
+          .map((dynamic c) => c.toString())
+          .toList();
+    } catch (_) {
+      return const <String>[];
+    }
+  }
+
+  final String patientId;
+
+  /// Masked as in the sync queue: first name and an initial.
+  final String patientName;
+
+  /// The `conflicts` codes, see SyncConflictCode.
+  final List<String> codes;
+  final String createdAt;
 }
 
 // ── Data classes ──────────────────────────────────────────────────────────

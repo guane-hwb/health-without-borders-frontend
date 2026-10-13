@@ -158,6 +158,12 @@ void main() {
 
     when(() => reachability.probe()).thenAnswer((_) async => true);
     when(() => syncEngine.refreshPendingCount()).thenAnswer((_) async {});
+    when(
+      () => syncEngine.savedRecords,
+    ).thenAnswer((_) => const Stream<RecordSyncResult>.empty());
+    when(
+      () => db.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+    ).thenAnswer((_) async => <SyncNotice>[]);
   });
 
   tearDown(() {
@@ -166,6 +172,85 @@ void main() {
           const MethodChannel('dev.fluttercommunity.plus/connectivity'),
           null,
         );
+  });
+
+  group('SyncQueueScreen – avisos de sincronización', () {
+    SyncNotice notice(String id, String name) => SyncNotice(
+      patientId: id,
+      patientName: name,
+      codes: const <String>['stale_payload_base_version'],
+      createdAt: '2026-10-09T15:00:00Z',
+    );
+
+    testWidgets('lista el aviso sin pendientes y "Entendido" lo descarta', (
+      tester,
+    ) async {
+      var notices = <SyncNotice>[notice('p-9', 'Ana G.')];
+      when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+      when(
+        () => db.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => notices);
+      when(() => db.dismissSyncNotice(any())).thenAnswer((_) async {
+        notices = <SyncNotice>[];
+      });
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ana G.'), findsOneWidget);
+      expect(find.text('2026-10-09'), findsOneWidget);
+      expect(
+        find.textContaining('ya había cambiado en el servidor'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Escanee de nuevo la pulsera'),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.cloud_done), findsNothing);
+
+      await tester.tap(find.text('Entendido'));
+      await tester.pumpAndSettle();
+
+      verify(() => db.dismissSyncNotice('p-9')).called(1);
+      expect(find.text('Ana G.'), findsNothing);
+      expect(find.byIcon(Icons.cloud_done), findsOneWidget);
+    });
+
+    testWidgets('los avisos van antes de los registros pendientes', (
+      tester,
+    ) async {
+      when(
+        () => db.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [makeEntry(patientName: 'Juan Diaz')]);
+      when(
+        () => db.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => <SyncNotice>[notice('p-9', 'Ana G.')]);
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+          locale: 'en',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final double noticeY = tester.getTopLeft(find.text('Ana G.')).dy;
+      final double entryY = tester.getTopLeft(find.text('Juan D.')).dy;
+      expect(noticeY, lessThan(entryY));
+      expect(find.textContaining('Scan the wristband again'), findsOneWidget);
+      expect(find.text('Got it'), findsOneWidget);
+    });
   });
 
   group('SyncQueueScreen – estado vacío', () {
