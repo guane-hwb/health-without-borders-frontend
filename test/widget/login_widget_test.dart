@@ -402,6 +402,44 @@ void main() {
       expect(find.text('Organization is inactive.'), findsNothing);
     });
 
+    for (final (String name, ApiException error, String message)
+        in <(String, ApiException, String)>[
+          (
+            'login_paused con Retry-After',
+            ApiException(
+              'Too many failed sign-in attempts for this account. Try again '
+              'in 120 seconds.',
+              statusCode: 429,
+              code: 'login_paused',
+              retryAfter: const Duration(seconds: 120),
+            ),
+            'Demasiados intentos. Intente de nuevo en 2 minutos.',
+          ),
+          (
+            'límite por IP sin code',
+            ApiException('Request failed (HTTP 429).', statusCode: 429),
+            'Demasiados intentos. Espere unos minutos e intente de nuevo.',
+          ),
+        ]) {
+      testWidgets('un 429 ($name) dice cuánto esperar', (tester) async {
+        mockAuthRepo.loginHandler =
+            ({required String email, required String password}) async {
+              throw error;
+            };
+
+        await tester.pumpWidget(buildSubject());
+        await tester.enterText(
+          find.byType(TextFormField).first,
+          'usuario@test.com',
+        );
+        await tester.enterText(find.byType(TextFormField).last, 'password123');
+        await tester.tap(find.byType(ElevatedButton));
+        await tester.pumpAndSettle();
+
+        expect(find.text(message), findsOneWidget);
+      });
+    }
+
     testWidgets('muestra SnackBar generico para errores inesperados', (
       tester,
     ) async {

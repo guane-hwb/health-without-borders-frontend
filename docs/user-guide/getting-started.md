@@ -11,6 +11,10 @@ This page covers logging in, the home screen, changing the language, and signing
 
 Your access depends on your **role** (for example, medical staff, or an organization administrator). Administrators see additional options such as **Statistics**, **Manage users**, and **Organizations**.
 
+If an administrator created your account or reset your password, the app asks you to **choose your own password** before anything else: at least 12 characters, not a common one. You can change it later from **Change password** on the home screen. Changing it signs you out on every other device.
+
+After several wrong passwords the account is paused for a while; the app tells you how long to wait.
+
 **Note:** Once you are logged in, the app keeps your session active as you move between screens. If your session expires, you will be asked to sign in again — any records you registered in the field are **kept on the device** until they can be synchronized.
 
 ---
