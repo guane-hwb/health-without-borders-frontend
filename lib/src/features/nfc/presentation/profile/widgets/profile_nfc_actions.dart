@@ -104,15 +104,15 @@ Future<bool> executeUpdateNfcChips({
       final ok = await writeGuardianCard(
         expectedUid: guardian1Uid,
         title: hasTwoGuardians
-            ? (isEs ? 'Tarjeta del guardián 1' : 'Guardian card 1')
-            : (isEs ? 'Tarjeta del guardián' : 'Guardian card'),
+            ? (isEs ? 'Dispositivo del guardián 1' : 'Guardian device 1')
+            : (isEs ? 'Dispositivo del guardián' : 'Guardian device'),
         instruction: hasTwoGuardians
             ? (isEs
-                  ? 'Acerque la tarjeta del guardián 1 al teléfono'
-                  : 'Bring guardian card 1 to the phone')
+                  ? 'Acerque el dispositivo del guardián 1 al teléfono'
+                  : 'Bring guardian device 1 to the phone')
             : (isEs
-                  ? 'Acerque la tarjeta del guardián al teléfono'
-                  : 'Bring the guardian card to the phone'),
+                  ? 'Acerque el dispositivo del guardián al teléfono'
+                  : 'Bring the guardian device to the phone'),
       );
       allWritten = allWritten && ok;
     }
@@ -121,10 +121,10 @@ Future<bool> executeUpdateNfcChips({
       if (!context.mounted) return false;
       final ok = await writeGuardianCard(
         expectedUid: guardian2Uid,
-        title: isEs ? 'Tarjeta del guardián 2' : 'Guardian card 2',
+        title: isEs ? 'Dispositivo del guardián 2' : 'Guardian device 2',
         instruction: isEs
-            ? 'Acerque la tarjeta del guardián 2 al teléfono'
-            : 'Bring guardian card 2 to the phone',
+            ? 'Acerque el dispositivo del guardián 2 al teléfono'
+            : 'Bring guardian device 2 to the phone',
       );
       allWritten = allWritten && ok;
     }
@@ -152,11 +152,11 @@ Future<PatientFullRecord?> executeReassignOne({
       break;
     case ReassignTarget.guardian1:
       title = hasTwo
-          ? (isEs ? 'Tarjeta del guardián 1' : 'Guardian card 1')
-          : (isEs ? 'Tarjeta del guardián' : 'Guardian card');
+          ? (isEs ? 'Dispositivo del guardián 1' : 'Guardian device 1')
+          : (isEs ? 'Dispositivo del guardián' : 'Guardian device');
       break;
     case ReassignTarget.guardian2:
-      title = isEs ? 'Tarjeta del guardián 2' : 'Guardian card 2';
+      title = isEs ? 'Dispositivo del guardián 2' : 'Guardian device 2';
       break;
   }
 

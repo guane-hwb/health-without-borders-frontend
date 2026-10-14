@@ -59,7 +59,7 @@ void main() {
       final estimated = codec.estimateSize(_record);
       final encrypted = await codec.encode(_record);
 
-      // Importante para el ajuste de capacidad de la tarjeta del guardián.
+      // Importante para el ajuste de capacidad del dispositivo del guardián.
       // La v0 no lleva encabezado, así que no lo suma.
       expect(estimated, encrypted.length);
       expect(estimated, greaterThan(28));

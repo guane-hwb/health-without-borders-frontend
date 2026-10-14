@@ -38,7 +38,7 @@ void main() {
       );
     });
 
-    test('sin documento en un lado decide el UID de la tarjeta', () {
+    test('sin documento en un lado decide el UID del dispositivo', () {
       expect(
         isSameGuardian(
           _g(deviceUid: 'CARD-1'),
