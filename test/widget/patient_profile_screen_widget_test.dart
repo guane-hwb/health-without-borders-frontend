@@ -1048,7 +1048,9 @@ void main() {
       },
     );
 
-    testWidgets('51. Visualización de la tarjeta del paciente', (tester) async {
+    testWidgets('51. Visualización del dispositivo del paciente', (
+      tester,
+    ) async {
       await _pumpScreen(tester, _record());
       expect(find.textContaining('Pérez'), findsAtLeastNWidgets(1));
     });

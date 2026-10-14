@@ -268,10 +268,10 @@ void main() {
         await tester.tap(find.text('Run Guardian Dual'));
         await tester.pump(const Duration(milliseconds: 300));
 
-        expect(find.text('Tarjeta del guardián 1'), findsOneWidget);
+        expect(find.text('Dispositivo del guardián 1'), findsOneWidget);
 
         final BuildContext modalContext = tester.element(
-          find.text('Tarjeta del guardián 1'),
+          find.text('Dispositivo del guardián 1'),
         );
         Navigator.of(modalContext).pop(false);
 
@@ -557,7 +557,7 @@ void main() {
         }
 
         final BuildContext modalContext = tester.element(
-          find.text('Tarjeta del guardián'),
+          find.text('Dispositivo del guardián'),
         );
         Navigator.of(modalContext).pop(true);
 

@@ -555,7 +555,7 @@ void main() {
       );
 
       testWidgets(
-        'con tarjeta de guardián registrada: también intenta la tarjeta del guardián',
+        'con dispositivo de guardián registrada: también intenta con el dispositivo del guardián',
         (tester) async {
           when(
             () => auth.getNfcKeyring(),

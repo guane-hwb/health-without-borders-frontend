@@ -634,12 +634,12 @@ void main() {
 
   group('J. Offline Guardian Gate & Exception Mapping', () {
     test(
-      'J-01 handleGuardianCardMismatch asigna el mensaje de tarjeta no correspondiente',
+      'J-01 handleGuardianCardMismatch asigna el mensaje de dispositivo no correspondiente',
       () {
         final state = _FakeReadNfcState()..patientDeviceUid = 'AA:BB';
         state.handleGuardianApiError(
           ApiException(
-            'Esa tarjeta no corresponde al guardián de este paciente.',
+            'Ese dispositivo no corresponde al guardián de este paciente.',
             statusCode: 400,
           ),
         );
@@ -647,16 +647,19 @@ void main() {
       },
     );
 
-    test('J-02 handleGuardianBlankCard asigna el mensaje de tarjeta vacía', () {
-      final state = _FakeReadNfcState()..patientDeviceUid = 'AA:BB';
-      state.handleGuardianApiError(
-        ApiException(
-          'La tarjeta del guardián está vacía o no se pudo leer.',
-          statusCode: 400,
-        ),
-      );
-      expect(state.errorMessage, contains('vacía o no se pudo leer'));
-    });
+    test(
+      'J-02 handleGuardianBlankCard asigna el mensaje de dispositivo vacío',
+      () {
+        final state = _FakeReadNfcState()..patientDeviceUid = 'AA:BB';
+        state.handleGuardianApiError(
+          ApiException(
+            'El dispositivo del guardián está vacío o no se pudo leer.',
+            statusCode: 400,
+          ),
+        );
+        expect(state.errorMessage, contains('vacía o no se pudo leer'));
+      },
+    );
   });
 
   group('K. Additional Unit Tests for 100% ReadNfcScreen Coverage', () {

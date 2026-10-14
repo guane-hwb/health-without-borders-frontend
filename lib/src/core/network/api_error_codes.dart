@@ -55,13 +55,13 @@ abstract final class ApiErrorCode {
                 'administrator.',
     guardianRequired =>
       isEs
-          ? 'Paciente menor de edad: se requiere la tarjeta del acudiente.'
-          : 'Minor patient: the guardian card is required.',
+          ? 'Paciente menor de edad: se requiere el dispositivo del acudiente.'
+          : 'Minor patient: the guardian device is required.',
     guardianMismatch =>
       isEs
-          ? 'La tarjeta no corresponde a ningún acudiente registrado de '
+          ? 'El dispositivo no corresponde a ningún acudiente registrado de '
                 'este paciente.'
-          : 'This card does not belong to any registered guardian of this '
+          : 'This device does not belong to any registered guardian of this '
                 'patient.',
     deviceUidConflict =>
       isEs

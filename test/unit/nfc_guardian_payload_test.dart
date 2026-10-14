@@ -208,7 +208,7 @@ void main() {
     );
 
     test(
-      'la tarjeta conserva el origen de la IA pero no model ni generatedAt',
+      'El dispositivo conserva el origen de la IA pero no model ni generatedAt',
       () {
         final record =
             _record(
