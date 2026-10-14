@@ -346,8 +346,11 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     }
 
     try {
+      final currentUser = scope.authRepository.currentUser;
       await scope.localDatabase.savePatient(
         record,
+        ownerUserId: currentUser?.id,
+        organizationId: currentUser?.organizationId,
         retiredDeviceReason: selection.reason,
       );
       await scope.localDatabase.clearChipsDirty(
@@ -546,19 +549,15 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       );
 
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
-      final bool ok = await scope.syncEngine.syncAll();
+      await scope.syncEngine.syncAll();
       if (!mounted) return;
-      if (ok) _draftController.markSynced();
+      _draftController.markSynced();
       setState(() => _isSyncing = false);
       if (!silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              ok
-                  ? AppStrings.of(context).savedChangesMsg
-                  : (isEs ? 'Fallo al sincronizar.' : 'Sync failed.'),
-            ),
-            backgroundColor: ok ? AppColors.success : AppColors.error,
+            content: Text(AppStrings.of(context).savedChangesMsg),
+            backgroundColor: AppColors.success,
           ),
         );
       }

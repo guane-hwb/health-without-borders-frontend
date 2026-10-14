@@ -20,6 +20,21 @@ enum SyncOneResult { success, failure, busy, notFound }
 
 enum _SyncOutcome { success, failure, networkFailure, abortBatch }
 
+class SyncResult {
+  const SyncResult({
+    required this.allSuccessful,
+    required this.remainingRetryable,
+    required this.remainingBlocked,
+  });
+
+  final bool allSuccessful;
+  final int remainingRetryable;
+  final int remainingBlocked;
+
+  bool get isFullyClean => remainingRetryable == 0 && remainingBlocked == 0;
+  bool get hasBlockedOnly => remainingRetryable == 0 && remainingBlocked > 0;
+}
+
 /// Motor de sincronización en segundo plano que envía registros locales al backend.
 class SyncEngine {
   SyncEngine({
@@ -56,7 +71,7 @@ class SyncEngine {
     Duration(minutes: 30),
   ];
 
-  Future<bool>? _activeSyncAllFuture;
+  Future<SyncResult>? _activeSyncAllFuture;
   Completer<void>? _syncOneCompletion;
   bool get _syncOneRunning => _syncOneCompletion != null;
   Duration? _pendingServerRetryAfter;
@@ -162,7 +177,7 @@ class SyncEngine {
 
   // ── Sync logic ────────────────────────────────────────────────────────────
 
-  Future<bool> syncAll() {
+  Future<SyncResult> syncAll() {
     if (_activeSyncAllFuture != null) {
       AppLogger.d(
         'syncAll en ejecución: uniendo llamada al ciclo en curso (single-flight).',
@@ -170,11 +185,11 @@ class SyncEngine {
       return _activeSyncAllFuture!;
     }
 
-    final completer = Completer<bool>();
+    final completer = Completer<SyncResult>();
     _activeSyncAllFuture = completer.future;
 
     final Completer<void>? syncOneInFlight = _syncOneCompletion;
-    final Future<bool> Function() startCycle = _executeSyncAll;
+    final Future<SyncResult> Function() startCycle = _executeSyncAll;
 
     if (syncOneInFlight != null) {
       AppLogger.d('syncAll en espera: syncOne en ejecución.');
@@ -205,10 +220,14 @@ class SyncEngine {
     return _activeSyncAllFuture!;
   }
 
-  Future<bool> _executeSyncAll() async {
+  Future<SyncResult> _executeSyncAll() async {
     if (_currentUserId == null) {
       AppLogger.d('syncAll omitido: no hay sesión activa.');
-      return false;
+      return const SyncResult(
+        allSuccessful: false,
+        remainingRetryable: 0,
+        remainingBlocked: 0,
+      );
     }
 
     await refreshPendingCount();
@@ -220,7 +239,17 @@ class SyncEngine {
     try {
       if (_reachability != null && !await _reachability.probe()) {
         AppLogger.d('Backend inalcanzable. Se omite el lote.');
-        return false;
+        final retryable = await _localDb.getRetryablePendingCount(
+          ownerUserId: _currentUserId,
+        );
+        final blocked = await _localDb.getBlockedCount(
+          ownerUserId: _currentUserId,
+        );
+        return SyncResult(
+          allSuccessful: false,
+          remainingRetryable: retryable,
+          remainingBlocked: blocked,
+        );
       }
 
       final List<LocalPatientEntry> allUnsynced = await _localDb
@@ -260,15 +289,33 @@ class SyncEngine {
         }
       }
 
-      final remaining = await _localDb.getRetryablePendingCount(
+      final remainingRetryable = await _localDb.getRetryablePendingCount(
         ownerUserId: _currentUserId,
       );
-      onSyncStatusChanged?.call(remaining);
+      final remainingBlocked = await _localDb.getBlockedCount(
+        ownerUserId: _currentUserId,
+      );
 
-      return allSuccessful && remaining == 0;
+      onSyncStatusChanged?.call(remainingRetryable + remainingBlocked);
+
+      return SyncResult(
+        allSuccessful: allSuccessful,
+        remainingRetryable: remainingRetryable,
+        remainingBlocked: remainingBlocked,
+      );
     } catch (e, stack) {
       AppLogger.e('Error crítico durante syncAll', error: e, stackTrace: stack);
-      return false;
+      final retryable = await _localDb.getRetryablePendingCount(
+        ownerUserId: _currentUserId,
+      );
+      final blocked = await _localDb.getBlockedCount(
+        ownerUserId: _currentUserId,
+      );
+      return SyncResult(
+        allSuccessful: false,
+        remainingRetryable: retryable,
+        remainingBlocked: blocked,
+      );
     } finally {
       await refreshPendingCount();
       _scheduleRetry();
@@ -306,8 +353,6 @@ class SyncEngine {
       if (response.status == 'success' && fhirOk) {
         AppLogger.d('Registro sincronizado exitosamente: ${entry.patientId}');
         if (response.conflicts.isNotEmpty) {
-          // The server kept its own value for these parts of the record (e.g.
-          // it refused to re-link a retired wristband); the rest was synced.
           AppLogger.d(
             'Sync de ${entry.patientId} aceptado con conflictos: '
             '${response.conflicts.join(', ')}',
@@ -347,9 +392,6 @@ class SyncEngine {
         return _SyncOutcome.abortBatch;
       }
 
-      // Deactivated account or organization: the session is being ended (see
-      // ApiClient.onAccountInactive). Nothing is wrong with the record, so it
-      // stays pending instead of being marked as failed.
       if (ApiErrorCode.isAccountInactive(e.code)) {
         onRecordSynced?.call(entry.patientId, false, e.code);
         return _SyncOutcome.abortBatch;
@@ -362,8 +404,6 @@ class SyncEngine {
               e.statusCode! >= 500 &&
               e.statusCode! <= 599);
 
-      // A known code is stored as-is and translated when shown (see
-      // ApiErrorCode.describe), so the queue never has to parse server text.
       final String safeMsg = (ApiErrorCode.describe(e.code, isEs: true) != null)
           ? e.code!
           : (e.statusCode == 409 && e.message.isNotEmpty)
@@ -454,10 +494,6 @@ class SyncEngine {
     }
   }
 
-  /// Ships pending NFC key version sightings.
-  ///
-  /// Best-effort like the audit log: a failure here delays a rotation decision,
-  /// never a clinical action, so it must not abort the batch.
   Future<void> _syncNfcKeyVersions() async {
     try {
       final pending = await _localDb.pendingNfcKeyVersions();

@@ -115,10 +115,27 @@ String formatNfcUid(Uint8List bytes) => bytes
 
 /// Normalises a UID for comparison: hex digits only, uppercased.
 ///
-/// Tolerates formatting differences (colons, case) between the value read at
-/// scan time and the value stored on the record.
-String normalizeNfcUid(String uid) =>
-    uid.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toUpperCase();
+String normalizeNfcUid(String uid) {
+  final cleanHex = uid.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toUpperCase();
+  if (cleanHex.isEmpty) return '';
+  final buffer = StringBuffer();
+  for (var i = 0; i < cleanHex.length; i += 2) {
+    if (i > 0) buffer.write(':');
+    if (i + 2 <= cleanHex.length) {
+      buffer.write(cleanHex.substring(i, i + 2));
+    } else {
+      buffer.write(cleanHex.substring(i));
+    }
+  }
+  return buffer.toString();
+}
+
+String normalizeTypedNfcUid(String input) {
+  final String t = input.trim();
+  if (t.isEmpty) return '';
+  if (RegExp(r'^[0-9a-fA-F\s:.\-]+$').hasMatch(t)) return normalizeNfcUid(t);
+  return t;
+}
 
 // ── Exceptions ──────────────────────────────────────────────────────────────
 //

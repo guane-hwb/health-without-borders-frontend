@@ -319,7 +319,15 @@ void main() {
       when(
         () => db.getUnsyncedRecords(),
       ).thenAnswer((_) async => [makeEntry()]);
-      when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
+      when(
+        () => syncEngine.syncAll(),
+      ).thenAnswer(
+        (_) async => const SyncResult(
+          allSuccessful: true,
+          remainingRetryable: 0,
+          remainingBlocked: 0,
+        ),
+      );
 
       await tester.pumpWidget(
         buildTestApp(
@@ -343,7 +351,15 @@ void main() {
       when(
         () => db.getUnsyncedRecords(),
       ).thenAnswer((_) async => [makeEntry()]);
-      when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
+      when(
+        () => syncEngine.syncAll(),
+      ).thenAnswer(
+        (_) async => const SyncResult(
+          allSuccessful: true,
+          remainingRetryable: 0,
+          remainingBlocked: 0,
+        ),
+      );
 
       await tester.pumpWidget(
         buildTestApp(
@@ -1121,7 +1137,11 @@ void main() {
 
         when(() => syncEngine.syncAll()).thenAnswer((_) async {
           syncEngine.onRecordSynced?.call('p-001', true, null);
-          return true;
+          return const SyncResult(
+            allSuccessful: true,
+            remainingRetryable: 0,
+            remainingBlocked: 0,
+          );
         });
 
         await tester.pumpWidget(
@@ -1154,7 +1174,15 @@ void main() {
       when(
         () => db.getUnsyncedRecords(),
       ).thenAnswer((_) async => [makeEntry()]);
-      when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
+      when(
+        () => syncEngine.syncAll(),
+      ).thenAnswer(
+        (_) async => const SyncResult(
+          allSuccessful: true,
+          remainingRetryable: 1,
+          remainingBlocked: 0,
+        ),
+      );
 
       await tester.pumpWidget(
         buildTestApp(
@@ -1342,7 +1370,7 @@ void main() {
           () => db.getUnsyncedRecords(),
         ).thenAnswer((_) async => [makeEntry()]);
 
-        final completer = Completer<bool>();
+        final completer = Completer<SyncResult>();
         when(() => syncEngine.syncAll()).thenAnswer((_) => completer.future);
 
         await tester.pumpWidget(
@@ -1365,7 +1393,13 @@ void main() {
 
         expect(find.text('0 / 1'), findsOneWidget);
 
-        completer.complete(true);
+        completer.complete(
+          const SyncResult(
+            allSuccessful: true,
+            remainingRetryable: 0,
+            remainingBlocked: 0,
+          ),
+        );
         when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
         await tester.pumpAndSettle();
       },
@@ -1380,7 +1414,7 @@ void main() {
           () => db.getUnsyncedRecords(),
         ).thenAnswer((_) async => [makeEntry()]);
 
-        final completer = Completer<bool>();
+        final completer = Completer<SyncResult>();
         when(() => spyEngine.syncAll()).thenAnswer((_) => completer.future);
 
         await tester.pumpWidget(
@@ -1408,7 +1442,13 @@ void main() {
 
         expect(find.text('1 / 1'), findsOneWidget);
 
-        completer.complete(true);
+        completer.complete(
+          const SyncResult(
+            allSuccessful: true,
+            remainingRetryable: 0,
+            remainingBlocked: 0,
+          ),
+        );
         when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
         await tester.pumpAndSettle();
 
@@ -1426,7 +1466,7 @@ void main() {
           () => db.getUnsyncedRecords(),
         ).thenAnswer((_) async => [makeEntry()]);
 
-        final completer = Completer<bool>();
+        final completer = Completer<SyncResult>();
         when(() => spyEngine.syncAll()).thenAnswer((_) => completer.future);
 
         await tester.pumpWidget(

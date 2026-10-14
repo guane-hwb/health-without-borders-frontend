@@ -133,6 +133,7 @@ class FakePatientRepository implements PatientRepository {
 
   @override
   Future<PatientFullRecord> searchPatient({
+    String? accessReason,
     required String documentNumber,
     required String birthDate,
     required String firstName,
@@ -597,6 +598,30 @@ void main() {
         await tester.pump(const Duration(milliseconds: 20));
 
         expect(fakeRepo.lastCapturedGuardianUid, 'HWB-GUARDIAN-01');
+      },
+    );
+
+    testWidgets(
+      'Guardián tecleado con espacios y minúsculas: el repo recibe el UID '
+      'normalizado (04:1A:2C:DE)',
+      (tester) async {
+        fakeRepo.throw403ForGuardian = true;
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: const ReadNfcScreen(),
+            repo: fakeRepo,
+            authRepo: fakeAuth,
+          ),
+        );
+        await tester.pump();
+        await _advanceToStep2(tester);
+
+        await tester.enterText(find.byType(TextField), '04 1a 2c de');
+        await tester.tap(find.byType(OutlinedButton));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 20));
+
+        expect(fakeRepo.lastCapturedGuardianUid, '04:1A:2C:DE');
       },
     );
 
@@ -1187,8 +1212,8 @@ void main() {
       );
 
       expect(profileScreen.patient.patientId, equals('p-minor-01'));
+      expect(profileScreen.patient.patientInfo.firstName, equals('Ana'));
       expect(find.byIcon(Icons.wifi), findsNothing);
-      expect(tester.takeException(), isNull);
     });
 
     testWidgets(

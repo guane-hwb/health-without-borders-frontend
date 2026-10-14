@@ -15,6 +15,7 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart'
     show getApplicationSupportDirectory;
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
@@ -963,6 +964,14 @@ class LocalDatabase {
   }
 
   Future<Database> _initDb() async {
+    if (!_isWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux ||
+            defaultTargetPlatform == TargetPlatform.macOS)) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
+
     final String dbPath = await _resolveDbPath();
     return openDatabase(
       dbPath,
@@ -1410,7 +1419,7 @@ class LocalDatabase {
 
   Future<void> savePatient(
     PatientFullRecord record, {
-    String? ownerUserId,
+    required String? ownerUserId,
     String? organizationId,
     String? retiredDeviceReason,
     bool isSynced = false,
@@ -1479,12 +1488,11 @@ class LocalDatabase {
     if (_isWeb) {
       await _withWebLock(() async {
         final previous = await _webGetPatient(record.patientId);
-        final effectiveOwner = ownerUserId ?? previous?['owner_user_id'];
-        if (effectiveOwner == null) {
+        final String? effectiveOwner =
+            ownerUserId ?? previous?['owner_user_id'] as String?;
+        if (effectiveOwner == null || effectiveOwner.isEmpty) {
           AppLogger.e(
-            'savePatient(${record.patientId}) llamado sin ownerUserId: la fila '
-            'quedará sin propietario y no se sincronización ni se mostrará en '
-            'ninguna consulta filtrada por usuario hasta que se reconcilie.',
+            'savePatient(${record.patientId}) llamado sin ownerUserId válido',
           );
         }
         if (previous != null) {
@@ -1542,11 +1550,9 @@ class LocalDatabase {
         reason ??= existing.first['pending_retired_reason'] as String?;
       }
 
-      if (prevOwner == null) {
+      if (prevOwner == null || prevOwner.isEmpty) {
         AppLogger.e(
-          'savePatient(${record.patientId}) llamado sin ownerUserId: la fila '
-          'quedará sin propietario y no se sincronizará ni se mostrará en '
-          'ninguna consulta filtrada por usuario hasta que se reconcilie.',
+          'savePatient(${record.patientId}) llamado sin ownerUserId válido',
         );
       }
 
@@ -2004,6 +2010,19 @@ class LocalDatabase {
         await _webRemove(_webStoreKey);
         await _webRemove(_webChipKey);
 
+        final allKeyVersions = await _webAllKeyVersionRows();
+        for (final row in allKeyVersions) {
+          final isSynced =
+              row['is_synced'] == 1 ||
+              row['is_synced'] == '1' ||
+              (row['is_synced'] as num?)?.toInt() == 1;
+          if (!isSynced) continue;
+          final uid = row['device_uid'] as String?;
+          if (uid != null && uid.isNotEmpty) {
+            await _webRemove('$_webKeyVersionPrefix$uid');
+          }
+        }
+
         final allLogs = await _webAllLogRows();
         for (final row in allLogs) {
           final isSynced =
@@ -2023,6 +2042,7 @@ class LocalDatabase {
     await db!.delete(_table);
     await db.delete(_chipStatusTable);
     await db.delete(_emergencyLogTable, where: 'is_synced = 1');
+    await db.delete(_keyVersionTable, where: 'is_synced = 1');
   }
 }
 

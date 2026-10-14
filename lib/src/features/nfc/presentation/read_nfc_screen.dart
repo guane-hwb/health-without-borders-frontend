@@ -32,7 +32,6 @@ class ReadNfcScreen extends StatefulWidget {
 }
 
 class _ReadNfcScreenState extends State<ReadNfcScreen> {
-  // ── Step state ──
   bool _step2 = false;
 
   TriageSummary? _offlineTriage;
@@ -42,10 +41,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
 
   bool _nfcSessionExpired = false;
 
-  // ── Stored values across steps ──
   String? _patientDeviceUid;
 
-  // ── Form controllers (manual entry — testing in Chrome) ──
   final _patientUidCtrl = TextEditingController();
   final _guardianUidCtrl = TextEditingController();
 
@@ -56,8 +53,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     _guardianUidCtrl.dispose();
     super.dispose();
   }
-
-  // ── Patient scan ──────────────────────────────────────────────────────────
 
   Future<void> _recordChipKeyVersion(payload.HwbChipReadResult chip) async {
     final int? version = chip.keyVersion;
@@ -246,8 +241,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         : 'Hold the patient device near the phone';
   }
 
-  // ── Offline guardian gate ─────────────────────────────────────────────────
-
   Future<void> _scanGuardianOffline() async {
     final triage = _offlineTriage;
     if (triage == null) return;
@@ -414,8 +407,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     await _openProfile(record, readOnly: true, offline: true, emergency: true);
   }
 
-  // ── Guardian scan ─────────────────────────────────────────────────────────
-
   Future<void> _scanGuardian() async {
     setState(() {
       _scanning = true;
@@ -451,7 +442,15 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   }
 
   Future<void> _submitGuardian(String guardianUid) async {
-    if (_patientDeviceUid == null) return;
+    if (_patientDeviceUid == null || _patientDeviceUid!.isEmpty) {
+      setState(() {
+        _scanning = false;
+        _errorMessage =
+            'No se ha registrado el UID del paciente. Vuelva al paso 1.';
+      });
+      return;
+    }
+
     setState(() {
       _scanning = true;
       _errorMessage = null;
@@ -478,11 +477,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     }
   }
 
-  /// The minor needs the guardian card. Decided on the backend's code; the
-  /// text check only covers a backend that predates codes.
+  /// Evalúa únicamente la clave del ApiErrorCode sin revisar textos de mensajes
   static bool _isGuardianCheck(ApiException e) =>
-      ApiErrorCode.isGuardianCheck(e.code) ||
-      (e.code == null && e.message.toLowerCase().contains('guardian'));
+      ApiErrorCode.isGuardianCheck(e.code);
 
   String _apiErrorMessage(ApiException e) =>
       ApiErrorCode.describe(e.code, isEs: AppStrings.of(context).isEs) ??
@@ -519,12 +516,11 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   void _backToStep1() {
     setState(() {
       _step2 = false;
+      _patientDeviceUid = null;
       _guardianUidCtrl.clear();
       _errorMessage = null;
     });
   }
-
-  // ── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -562,8 +558,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       ),
     );
   }
-
-  // ── Step 1: Patient ──────────────────────────────────────────────────────
 
   Widget _buildPatientStep(AppStrings s) {
     return SingleChildScrollView(

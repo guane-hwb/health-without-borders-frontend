@@ -875,7 +875,10 @@ void main() {
       test(
         'registros legados sin owner_user_id siguen siendo visibles',
         () async {
-          await localDb.savePatient(_buildRecord(patientId: 'p-legacy'));
+          await localDb.savePatient(
+            _buildRecord(patientId: 'p-legacy'),
+            ownerUserId: null,
+          );
 
           final forAnyUser = await localDb.getAllRecords();
 

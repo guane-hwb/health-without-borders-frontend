@@ -22,6 +22,7 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
   final _fnCtrl = TextEditingController();
   final _lnCtrl = TextEditingController();
   final _gnCtrl = TextEditingController();
+  String _accessReason = 'lost_wristband';
   DateTime? _dob;
   bool _searching = false;
   String? _error;
@@ -48,6 +49,13 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
     'PT': 'PT',
     'MS': 'MS',
     'AS': 'AS',
+  };
+
+  static const Map<String, String> _reasons = {
+    'lost_wristband': 'Pulsera perdida o dañada',
+    'no_wristband_emergency': 'Atención de emergencia sin pulsera',
+    'follow_up_care': 'Atención de seguimiento clínico',
+    'guardian_verification': 'Verificación de acudiente',
   };
 
   @override
@@ -106,6 +114,7 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
         firstName: _fnCtrl.text.trim(),
         lastName: _lnCtrl.text.trim(),
         guardianName: _gnCtrl.text.trim().isEmpty ? null : _gnCtrl.text.trim(),
+        accessReason: _accessReason,
       );
       if (!mounted) return;
       await Navigator.of(context).push(
@@ -250,6 +259,15 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
                         ),
                         const SizedBox(height: 14),
 
+                        _ReasonDropdown(
+                          value: _accessReason,
+                          reasons: _reasons,
+                          onChanged: (v) {
+                            if (v != null) setState(() => _accessReason = v);
+                          },
+                        ),
+                        const SizedBox(height: 14),
+
                         _LabeledField(
                           label: s.guardianNameOptionalLabel,
                           hint: 'Ej. Carmen Vargas Pinto',
@@ -367,6 +385,87 @@ class _LossOfWristbandScreenState extends State<LossOfWristbandScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ReasonDropdown extends StatelessWidget {
+  const _ReasonDropdown({
+    required this.value,
+    required this.reasons,
+    required this.onChanged,
+  });
+
+  final String value;
+  final Map<String, String> reasons;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Text(
+              'Motivo del acceso',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(width: 4),
+            Text(
+              '*',
+              style: TextStyle(
+                color: AppColors.error,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFB0B8C4), width: 1.5),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              isExpanded: true,
+              value: value,
+              icon: const Icon(
+                Icons.keyboard_arrow_down,
+                size: 20,
+                color: AppColors.textSecondary,
+              ),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+              items: reasons.entries.map((e) {
+                return DropdownMenuItem<String>(
+                  value: e.key,
+                  child: Text(
+                    e.value,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

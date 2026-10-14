@@ -87,24 +87,36 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
         };
 
     try {
-      await scope.syncEngine.syncAll();
+      final syncResult = await scope.syncEngine.syncAll();
       await _load();
       if (mounted) {
-        final remaining = _entries.length;
-        if (remaining == 0) {
+        if (syncResult.isFullyClean) {
           messenger.showSnackBar(
             SnackBar(
               content: Text(s.syncedSuccessfully),
               backgroundColor: AppColors.success,
             ),
           );
-        } else {
+        } else if (syncResult.hasBlockedOnly) {
           messenger.showSnackBar(
             SnackBar(
               content: Text(
                 isEs
-                    ? 'Quedan $remaining registros pendientes por sincronizar.'
-                    : '$remaining records remain pending.',
+                    ? 'Quedan ${syncResult.remainingBlocked} registro(s) bloqueados con error permanente. Revise o elimine estos registros.'
+                    : '${syncResult.remainingBlocked} record(s) remain blocked with permanent errors. Review or remove them.',
+              ),
+              backgroundColor: Colors.orange.shade800,
+            ),
+          );
+        } else {
+          final totalPending =
+              syncResult.remainingRetryable + syncResult.remainingBlocked;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                isEs
+                    ? 'Quedan $totalPending registros pendientes por sincronizar.'
+                    : '$totalPending records remain pending.',
               ),
               backgroundColor: Colors.orange.shade800,
             ),
@@ -161,7 +173,12 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
     if (mounted) {
       final (String message, Color color) = switch (result) {
         SyncOneResult.success => (s.syncedSuccessfully, AppColors.success),
-        SyncOneResult.notFound => (s.syncedSuccessfully, AppColors.success),
+        SyncOneResult.notFound => (
+          isEs
+              ? 'El registro ya no se encuentra pendiente.'
+              : 'The record is no longer pending.',
+          AppColors.secondary,
+        ),
         SyncOneResult.busy => (s.synchronizing, AppColors.secondary),
         SyncOneResult.failure => (s.syncFailedRetry, AppColors.error),
       };
@@ -493,10 +510,8 @@ class _SyncCard extends StatelessWidget {
       if (codedMessage != null) {
         errorMessage = codedMessage;
       } else if (isConflict) {
-        final rawErr = entry.syncError?.toLowerCase() ?? '';
-        final isDocumentDuplicate =
-            rawErr.contains('identity document') ||
-            rawErr.contains('documento de identidad');
+        final bool isDocumentDuplicate =
+            entry.syncError == ApiErrorCode.duplicateIdentity;
 
         if (isDocumentDuplicate) {
           errorMessage = isEs
@@ -516,7 +531,7 @@ class _SyncCard extends StatelessWidget {
             ? 'Error de validación (422): El registro contiene campos incompatibles con el backend.'
             : 'Validation error (422): The record contains incompatible fields.';
       } else {
-        errorMessage = _friendlyNetworkError(entry.syncError!, isEs);
+        errorMessage = _friendlyNetworkError(entry, isEs);
       }
     }
 
@@ -664,18 +679,13 @@ class _SyncCard extends StatelessWidget {
     );
   }
 
-  static String _friendlyNetworkError(String raw, bool isEs) {
-    final String lower = raw.toLowerCase();
-    final bool isNetwork =
-        lower.contains('timeout') ||
-        lower.contains('socketexception') ||
-        lower.contains('clientexception') ||
-        lower.contains('failed host lookup') ||
-        lower.contains('unexpected response payload format');
-    if (!isNetwork) return raw;
-    return isEs
-        ? 'No se pudo contactar el servidor. Verifique la conexión a la red.'
-        : 'Could not reach the server. Please check network connection.';
+  static String _friendlyNetworkError(LocalPatientEntry entry, bool isEs) {
+    if (entry.syncErrorCode == null) {
+      return isEs
+          ? 'No se pudo contactar el servidor. Verifique la conexión a la red.'
+          : 'Could not reach the server. Please check network connection.';
+    }
+    return entry.syncError ?? '';
   }
 
   Widget _btn(IconData icon, String label, Color color, VoidCallback onTap) =>

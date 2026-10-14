@@ -180,9 +180,14 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
     // Guardamos la referencia a AppScope ANTES de cualquier llamada asíncrona
     final scope = AppScope.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    final currentUser = scope.authRepository.currentUser;
 
     try {
-      await scope.localDatabase.savePatient(updatedRecord);
+      await scope.localDatabase.savePatient(
+        updatedRecord,
+        ownerUserId: currentUser?.id,
+        organizationId: currentUser?.organizationId,
+      );
       await scope.localDatabase.markChipsDirty(
         updatedRecord.patientId,
         guardian: true,

@@ -46,6 +46,8 @@ class MockStatsRepository extends Mock implements StatsRepository {}
 
 class MockNfcKeyring extends Mock implements NfcKeyring {}
 
+class _FakeSyncResult extends Fake implements SyncResult {}
+
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
 
 class _TestLocaleWrapper extends StatefulWidget {
@@ -150,7 +152,7 @@ void main() {
         guardian: any(named: 'guardian'),
       ),
     ).thenAnswer((_) async {});
-    when(() => sync.syncAll()).thenAnswer((_) async => true);
+    when(() => sync.syncAll()).thenAnswer((_) async => _FakeSyncResult());
     when(() => sync.pendingCount).thenReturn(ValueNotifier<int>(0));
     when(() => sync.blockedCount).thenReturn(ValueNotifier<int>(0));
     when(() => sync.refreshPendingCount()).thenAnswer((_) async {});

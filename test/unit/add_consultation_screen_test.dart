@@ -34,6 +34,8 @@ class _MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class _MockSyncEngine extends Mock implements SyncEngine {}
 
+class _MockSyncResult extends Mock implements SyncResult {}
+
 class _MockReachability extends Mock implements Reachability {}
 
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
@@ -104,7 +106,7 @@ AppScope _defaultScope({
   when(() => resolvedSync.isOnline).thenReturn(ValueNotifier<bool>(true));
   when(() => resolvedSync.pendingCount).thenReturn(ValueNotifier<int>(0));
   when(() => resolvedSync.blockedCount).thenReturn(ValueNotifier<int>(0));
-  when(() => resolvedSync.syncAll()).thenAnswer((_) async => true);
+  when(() => resolvedSync.syncAll()).thenAnswer((_) async => _MockSyncResult());
 
   final resolvedReach = _MockReachability();
   when(() => resolvedReach.probe()).thenAnswer((_) async => true);
@@ -126,11 +128,11 @@ AppScope _defaultScope({
 AppScope _scopeWithSave() {
   final db = _MockLocalDatabase();
   final sync = _MockSyncEngine();
-  when(() => db.savePatient(any())).thenAnswer((_) async {});
+  when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenAnswer((_) async {});
   when(
     () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
   ).thenAnswer((_) async {});
-  when(() => sync.syncAll()).thenAnswer((_) async => true);
+  when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
   return _defaultScope(db: db, sync: sync);
 }
 
@@ -652,8 +654,8 @@ void main() {
     ) async {
       final db = _MockLocalDatabase();
       final sync = _MockSyncEngine();
-      when(() => db.savePatient(any())).thenThrow(Exception('sin espacio'));
-      when(() => sync.syncAll()).thenAnswer((_) async => true);
+      when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenThrow(Exception('sin espacio'));
+      when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
 
       await tester.pumpWidget(
         _buildApp(
@@ -869,11 +871,11 @@ void main() {
 
         final db = _MockLocalDatabase();
         final sync = _MockSyncEngine();
-        when(() => db.savePatient(any())).thenAnswer((_) async {});
+        when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenAnswer((_) async {});
         when(
           () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
         ).thenAnswer((_) async {});
-        when(() => sync.syncAll()).thenAnswer((_) async => true);
+        when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
 
         await tester.pumpWidget(
           _buildApp(
@@ -899,7 +901,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
 
         final verifyRecord =
-            verify(() => db.savePatient(captureAny())).captured.first
+            verify(() => db.savePatient(captureAny(), ownerUserId: any(named: 'ownerUserId'))).captured.first
                 as PatientFullRecord;
         final clinicalEval =
             verifyRecord.medicalHistory.first.clinicalEvaluation;
@@ -928,11 +930,11 @@ void main() {
 
         final db = _MockLocalDatabase();
         final sync = _MockSyncEngine();
-        when(() => db.savePatient(any())).thenAnswer((_) async {});
+        when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenAnswer((_) async {});
         when(
           () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
         ).thenAnswer((_) async {});
-        when(() => sync.syncAll()).thenAnswer((_) async => true);
+        when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
 
         await tester.pumpWidget(
           _buildApp(
@@ -986,7 +988,7 @@ void main() {
         await tester.pumpAndSettle();
 
         final capturedRecord =
-            verify(() => db.savePatient(captureAny())).captured.first
+            verify(() => db.savePatient(captureAny(), ownerUserId: any(named: 'ownerUserId'))).captured.first
                 as PatientFullRecord;
         final prescriptions = capturedRecord.medicalHistory.first.prescriptions;
 
@@ -1077,11 +1079,11 @@ void main() {
 
         final db = _MockLocalDatabase();
         final sync = _MockSyncEngine();
-        when(() => db.savePatient(any())).thenAnswer((_) async {});
+        when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenAnswer((_) async {});
         when(
           () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
         ).thenAnswer((_) async {});
-        when(() => sync.syncAll()).thenAnswer((_) async => true);
+        when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
 
         await tester.pumpWidget(
           _buildApp(
@@ -1106,7 +1108,7 @@ void main() {
         await tester.pumpAndSettle();
 
         final capturedRecord =
-            verify(() => db.savePatient(captureAny())).captured.first
+            verify(() => db.savePatient(captureAny(), ownerUserId: any(named: 'ownerUserId'))).captured.first
                 as PatientFullRecord;
         final encounter = capturedRecord.medicalHistory.first;
 
@@ -1511,11 +1513,11 @@ void main() {
 
         final db = _MockLocalDatabase();
         final sync = _MockSyncEngine();
-        when(() => db.savePatient(any())).thenAnswer((_) async {});
+        when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenAnswer((_) async {});
         when(
           () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
         ).thenAnswer((_) async {});
-        when(() => sync.syncAll()).thenAnswer((_) async => true);
+        when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
 
         await tester.pumpWidget(
           _buildApp(
@@ -1545,7 +1547,7 @@ void main() {
         await tester.pumpAndSettle();
 
         final capturedRecord =
-            verify(() => db.savePatient(captureAny())).captured.first
+            verify(() => db.savePatient(captureAny(), ownerUserId: any(named: 'ownerUserId'))).captured.first
                 as PatientFullRecord;
         final encounter = capturedRecord.medicalHistory.first;
 
@@ -1734,11 +1736,11 @@ void main() {
 
         final db = _MockLocalDatabase();
         final sync = _MockSyncEngine();
-        when(() => db.savePatient(any())).thenAnswer((_) async {});
+        when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenAnswer((_) async {});
         when(
           () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
         ).thenAnswer((_) async {});
-        when(() => sync.syncAll()).thenAnswer((_) async => true);
+        when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
 
         await tester.pumpWidget(
           _buildApp(
@@ -1777,7 +1779,7 @@ void main() {
         await tester.pumpAndSettle();
 
         final capturedRecord =
-            verify(() => db.savePatient(captureAny())).captured.first
+            verify(() => db.savePatient(captureAny(), ownerUserId: any(named: 'ownerUserId'))).captured.first
                 as PatientFullRecord;
         final encounter = capturedRecord.medicalHistory.first;
 
@@ -1856,3 +1858,4 @@ void main() {
     );
   });
 }
+

@@ -271,10 +271,10 @@ class _FakeSyncEngine extends SyncEngine {
   int callCount = 0;
 
   @override
-  Future<bool> syncAll() async {
+  Future<SyncResult> syncAll() async {
     callCount++;
     if (shouldThrow) throw Exception('Error de sincronización simulado');
-    return true;
+    return _FakeSyncResult(true);
   }
 
   @override
@@ -284,18 +284,27 @@ class _FakeSyncEngine extends SyncEngine {
   void stop() {}
 }
 
-class _DelayedFakeSyncEngine extends _FakeSyncEngine {
-  Completer<bool>? _pending;
+class _FakeSyncResult implements SyncResult {
+  _FakeSyncResult(this.success);
+
+  final bool success;
 
   @override
-  Future<bool> syncAll() {
+  dynamic noSuchMethod(Invocation invocation) => success;
+}
+
+class _DelayedFakeSyncEngine extends _FakeSyncEngine {
+  Completer<SyncResult>? _pending;
+
+  @override
+  Future<SyncResult> syncAll() {
     callCount++;
-    _pending = Completer<bool>();
+    _pending = Completer<SyncResult>();
     return _pending!.future;
   }
 
   void complete({bool success = true}) {
-    _pending?.complete(success);
+    _pending?.complete(_FakeSyncResult(success));
     _pending = null;
   }
 
