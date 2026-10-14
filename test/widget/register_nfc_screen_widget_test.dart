@@ -528,7 +528,7 @@ void main() {
       final validHexKey = List.filled(32, 'ab').join();
 
       testWidgets(
-        'sin tarjeta de guardián: solo intenta la pulsera del paciente',
+        'sin dispositivo de guardián: solo intenta el dispositivo del paciente',
         (tester) async {
           when(
             () => auth.getNfcKeyring(),

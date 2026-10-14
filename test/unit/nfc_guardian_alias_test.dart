@@ -108,7 +108,7 @@ void main() {
 
   group('backward compatibility', () {
     // A card written before aliasing has no schema marker and full keys. It must
-    // read back unchanged, or every wristband already in the field breaks.
+    // read back unchanged, or every device already in the field breaks.
     test('a v1 map (no marker) is returned unchanged by unalias', () {
       final v1 = <String, dynamic>{
         'patientId': 'p-1',

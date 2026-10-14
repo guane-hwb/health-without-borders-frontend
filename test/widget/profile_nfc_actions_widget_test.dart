@@ -228,7 +228,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       final BuildContext modalContext = tester.element(
-        find.text('Pulsera del paciente'),
+        find.text('Dispositivo del paciente'),
       );
       Navigator.of(modalContext).pop(false);
 
@@ -509,7 +509,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
 
         final BuildContext modalContext = tester.element(
-          find.text('Pulsera del paciente'),
+          find.text('Dispositivo del paciente'),
         );
         Navigator.of(modalContext).pop(true);
 

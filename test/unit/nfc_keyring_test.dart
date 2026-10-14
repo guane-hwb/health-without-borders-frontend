@@ -67,7 +67,6 @@ void main() {
       expect(ring!.versions, <int>[0, 1]);
       expect(ring.currentVersion, 1);
       expect(ring.currentKey, _keyV1);
-      // La versión vieja sigue disponible para leer pulseras sin migrar.
       expect(ring.keyFor(0), _keyV0);
     });
 
