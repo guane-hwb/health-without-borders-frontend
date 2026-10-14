@@ -385,36 +385,33 @@ void main() {
   });
 
   group('reconstructFromTriage', () {
-    test(
-      'is partial, which is why the wristband-only read stays read-only',
-      () {
-        const triage = TriageSummary(
-          firstName: 'Ana',
-          lastName: 'Pérez',
-          dob: '2015-01-01',
-          biologicalSex: 'F',
-          bloodType: 'O+',
-          documentType: 'MS',
-          documentNumber: '1234567890',
-          guardianPhone: '3001234567',
-          guardianDeviceUid: 'GUARDIAN:UID',
-          chronicConditions: '',
-          allergies: <TriageAllergy>[],
-        );
+    test('is partial, which is why the device-only read stays read-only', () {
+      const triage = TriageSummary(
+        firstName: 'Ana',
+        lastName: 'Pérez',
+        dob: '2015-01-01',
+        biologicalSex: 'F',
+        bloodType: 'O+',
+        documentType: 'MS',
+        documentNumber: '1234567890',
+        guardianPhone: '3001234567',
+        guardianDeviceUid: 'GUARDIAN:UID',
+        chronicConditions: '',
+        allergies: <TriageAllergy>[],
+      );
 
-        final record = NfcGuardianPayload.reconstructFromTriage(
-          triage,
-          deviceUid: 'PATIENT:UID',
-        );
+      final record = NfcGuardianPayload.reconstructFromTriage(
+        triage,
+        deviceUid: 'PATIENT:UID',
+      );
 
-        // Syncing this back would create a second patient and blank the
-        // address on the real one. Hence read-only until the sync can carry
-        // only what changed.
-        expect(record.patientId, isEmpty);
-        expect(record.patientInfo.address.city, isEmpty);
-        expect(record.patientInfo.address.state, isEmpty);
-      },
-    );
+      // Syncing this back would create a second patient and blank the
+      // address on the real one. Hence read-only until the sync can carry
+      // only what changed.
+      expect(record.patientId, isEmpty);
+      expect(record.patientInfo.address.city, isEmpty);
+      expect(record.patientInfo.address.state, isEmpty);
+    });
 
     test('maps chronic conditions and allergies into a partial record', () {
       const triage = TriageSummary(

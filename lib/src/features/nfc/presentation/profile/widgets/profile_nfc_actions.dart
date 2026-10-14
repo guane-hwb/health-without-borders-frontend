@@ -49,10 +49,10 @@ Future<bool> executeUpdateNfcChips({
   if (patientChipDirty) {
     final ok = await showNfcGuidedWrite(
       context,
-      title: isEs ? 'Pulsera del paciente' : 'Patient wristband',
+      title: isEs ? 'Dispositivo del paciente' : 'Patient device',
       instruction: isEs
-          ? 'Acerque la pulsera del paciente al teléfono'
-          : 'Bring the patient wristband to the phone',
+          ? 'Acerque el dispositivo del paciente al teléfono'
+          : 'Bring the patient device to the phone',
       write: () => NfcPayloadService(codec: codec).writeTriagePayload(
         NfcTriagePayload.buildPatientPayload(record: record),
         expectedUid: record.deviceUid,

@@ -303,7 +303,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
     if (keyring == null || !keyring.canWrite) {
       // Finishing silently looks like the chips were written. Say so, or the
-      // patient leaves with a blank wristband nobody knows is blank.
+      // patient leaves with a blank device nobody knows is blank.
       final bool expired = await scope.authRepository.isNfcSessionExpired();
       if (!mounted) return;
       _warnChipsNotWritten(
@@ -346,10 +346,10 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
     final patientOk = await showNfcGuidedWrite(
       context,
-      title: isEs ? 'Pulsera del paciente' : 'Patient wristband',
+      title: isEs ? 'Dispositivo del paciente' : 'Patient device',
       instruction: isEs
-          ? 'Acerque la pulsera del paciente al teléfono'
-          : 'Bring the patient wristband to the phone',
+          ? 'Acerque el dispositivo del paciente al teléfono'
+          : 'Bring the patient device to the phone',
       write: () => NfcPayloadService(codec: codec).writeTriagePayload(
         NfcTriagePayload.buildPatientPayload(record: record),
         expectedUid: record.deviceUid,

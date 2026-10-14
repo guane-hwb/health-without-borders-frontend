@@ -103,9 +103,8 @@ void main() {
     });
 
     test(
-      'un lector con el anillo completo descifra una pulsera de versión vieja',
+      'un lector con el anillo completo descifra un dispositivo de versión vieja',
       () async {
-        // Pulsera escrita antes de la rotación, con la v0.
         final oldWriter = NfcPayloadCodec.fromKeyring(
           keyring: NfcKeyring.single(_keyV0),
         );
@@ -127,7 +126,7 @@ void main() {
     );
 
     test(
-      'un lector sin la versión de la pulsera retorna null (fail-safe)',
+      'un lector sin la versión del dispositivo retorna null (fail-safe)',
       () async {
         final writer = NfcPayloadCodec.fromKeyring(
           keyring: NfcKeyring.single(_keyV2, version: 2),
@@ -143,25 +142,22 @@ void main() {
       },
     );
 
-    test(
-      'una versión presente pero con llave distinta no descifra',
-      () async {
-        final writer = NfcPayloadCodec.fromKeyring(
-          keyring: NfcKeyring.single(_keyV1, version: 1),
-        );
-        final tag = await writer.encode(_record);
+    test('una versión presente pero con llave distinta no descifra', () async {
+      final writer = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring.single(_keyV1, version: 1),
+      );
+      final tag = await writer.encode(_record);
 
-        // Misma versión declarada, material distinto.
-        final reader = NfcPayloadCodec.fromKeyring(
-          keyring: NfcKeyring.single(_keyV2, version: 1),
-        );
+      // Misma versión declarada, material distinto.
+      final reader = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring.single(_keyV2, version: 1),
+      );
 
-        expect(await reader.decode(tag), isNull);
-      },
-    );
+      expect(await reader.decode(tag), isNull);
+    });
   });
 
-  group('compatibilidad con pulseras previas al versionado', () {
+  group('compatibilidad con dispositivos previos al versionado', () {
     test(
       'decode lee un payload sin encabezado usando una llave del anillo',
       () async {
@@ -206,22 +202,19 @@ void main() {
       );
     });
 
-    test(
-      'una llave inválida junto a otra válida ya no lanza: se descarta',
-      () {
-        // Antes esto lanzaba y dejaba sin NFC a todo dispositivo al que el
-        // backend le entregara un secreto mal montado. Ver el grupo
-        // «anillo parcialmente inválido» para el comportamiento completo.
-        final codec = NfcPayloadCodec.fromKeyring(
-          keyring: NfcKeyring(
-            keys: <int, String>{0: _keyV0, 1: 'abcd'},
-            currentVersion: 0,
-          ),
-        );
+    test('una llave inválida junto a otra válida ya no lanza: se descarta', () {
+      // Antes esto lanzaba y dejaba sin NFC a todo dispositivo al que el
+      // backend le entregara un secreto mal montado. Ver el grupo
+      // «anillo parcialmente inválido» para el comportamiento completo.
+      final codec = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring(
+          keys: <int, String>{0: _keyV0, 1: 'abcd'},
+          currentVersion: 0,
+        ),
+      );
 
-        expect(codec.knownKeyVersions, <int>[0]);
-      },
-    );
+      expect(codec.knownKeyVersions, <int>[0]);
+    });
 
     test('una versión fuera del rango del byte lanza ArgumentError', () {
       expect(
@@ -325,27 +318,24 @@ void main() {
   });
 
   group('encabezado autenticado (AAD)', () {
-    test(
-      'quitar el encabezado de un payload v1 lo vuelve ilegible',
-      () async {
-        final writer = NfcPayloadCodec.fromKeyring(
-          keyring: NfcKeyring.single(_keyV1, version: 1),
-        );
-        final tag = await writer.encode(_record);
-        final stripped = Uint8List.sublistView(tag, 3);
+    test('quitar el encabezado de un payload v1 lo vuelve ilegible', () async {
+      final writer = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring.single(_keyV1, version: 1),
+      );
+      final tag = await writer.encode(_record);
+      final stripped = Uint8List.sublistView(tag, 3);
 
-        final reader = NfcPayloadCodec.fromKeyring(
-          keyring: NfcKeyring(
-            keys: <int, String>{0: _keyV0, 1: _keyV1},
-            currentVersion: 1,
-          ),
-        );
+      final reader = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring(
+          keys: <int, String>{0: _keyV0, 1: _keyV1},
+          currentVersion: 1,
+        ),
+      );
 
-        // Sin AAD esto era legible por el camino legado: el encabezado no
-        // significaba nada verificable.
-        expect(await reader.decode(stripped), isNull);
-      },
-    );
+      // Sin AAD esto era legible por el camino legado: el encabezado no
+      // significaba nada verificable.
+      expect(await reader.decode(stripped), isNull);
+    });
 
     test('un payload v0 sigue descifrando sin datos asociados', () async {
       final codec = NfcPayloadCodec.fromKeyring(
@@ -357,24 +347,27 @@ void main() {
   });
 
   group('anillo parcialmente inválido', () {
-    test('descarta la versión inválida y sigue leyendo con la válida', () async {
-      final writer = NfcPayloadCodec.fromKeyring(
-        keyring: NfcKeyring.single(_keyV0),
-      );
-      final tag = await writer.encode(_record);
+    test(
+      'descarta la versión inválida y sigue leyendo con la válida',
+      () async {
+        final writer = NfcPayloadCodec.fromKeyring(
+          keyring: NfcKeyring.single(_keyV0),
+        );
+        final tag = await writer.encode(_record);
 
-      // Un secreto mal montado en el backend no debe apagar el NFC entero.
-      final reader = NfcPayloadCodec.fromKeyring(
-        keyring: NfcKeyring(
-          keys: <int, String>{0: _keyV0, 1: 'no-es-hex'},
-          currentVersion: 0,
-        ),
-      );
+        // Un secreto mal montado en el backend no debe apagar el NFC entero.
+        final reader = NfcPayloadCodec.fromKeyring(
+          keyring: NfcKeyring(
+            keys: <int, String>{0: _keyV0, 1: 'no-es-hex'},
+            currentVersion: 0,
+          ),
+        );
 
-      expect(reader.knownKeyVersions, <int>[0]);
-      expect(reader.writeKeyVersion, 0);
-      expect(await reader.decode(tag), isNotNull);
-    });
+        expect(reader.knownKeyVersions, <int>[0]);
+        expect(reader.writeKeyVersion, 0);
+        expect(await reader.decode(tag), isNotNull);
+      },
+    );
 
     test(
       'si la versión actual es inválida queda en solo lectura, no lanza',
@@ -421,7 +414,6 @@ void main() {
     });
   });
 
-
   group('decodeDetailed expone la versión observada', () {
     test('un payload v0 reporta la versión 0 y sin encabezado', () async {
       final codec = NfcPayloadCodec.fromKeyring(
@@ -448,7 +440,7 @@ void main() {
     });
 
     test(
-      'una pulsera vieja leída por un lector rotado reporta la v0',
+      'un dispositivo viejo leído por un lector rotado reporta la v0',
       () async {
         final oldWriter = NfcPayloadCodec.fromKeyring(
           keyring: NfcKeyring.single(_keyV0),
@@ -489,7 +481,6 @@ void main() {
       expect(decoded!['patientId'], 'p-123');
     });
   });
-
 }
 
 /// Emulates the pre-versioning reader: AES-256-GCM over [nonce][ct][tag], with
@@ -507,10 +498,7 @@ Future<List<int>?> _legacyDecrypt(Uint8List packed, String hexKey) async {
       nonce: Uint8List.sublistView(packed, 0, 12),
       mac: crypto.Mac(Uint8List.sublistView(packed, packed.length - 16)),
     );
-    return await algorithm.decrypt(
-      secretBox,
-      secretKey: crypto.SecretKey(key),
-    );
+    return await algorithm.decrypt(secretBox, secretKey: crypto.SecretKey(key));
   } catch (_) {
     return null;
   }
