@@ -657,7 +657,7 @@ void main() {
             statusCode: 400,
           ),
         );
-        expect(state.errorMessage, contains('vacía o no se pudo leer'));
+        expect(state.errorMessage, contains('vacío o no se pudo leer'));
       },
     );
   });

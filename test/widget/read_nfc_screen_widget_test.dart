@@ -1281,7 +1281,7 @@ void main() {
         await tester.tap(find.byIcon(Icons.wifi));
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('vacía o no se pudo leer'), findsOneWidget);
+        expect(find.textContaining('vacío o no se pudo leer'), findsOneWidget);
       },
     );
 
@@ -1415,12 +1415,11 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.textContaining('is a minor. The guardian card is required'),
+          find.textContaining('is a minor. The guardian device is required'),
           findsOneWidget,
         );
       },
     );
-
     testWidgets(
       'Acceso de emergencia: al presionar Cancelar en el diálogo no navega y cierra el diálogo',
       (tester) async {
