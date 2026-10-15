@@ -15,7 +15,7 @@ export 'nfc_session_manager.dart'
         NfcTagAlreadyPresentException,
         NfcTimeoutException;
 
-/// Reads the factory UID from NFC wristbands.
+/// Reads the factory UID from NFC devices.
 ///
 /// The UID is the immutable serial number burned into every NFC chip.
 /// It becomes the `device_uid` field in the backend.

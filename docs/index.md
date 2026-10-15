@@ -10,12 +10,12 @@
 
 ## What is this project?
 
-Health Without Borders is a mobile and web application designed for vulnerable populations (migrants, rural communities) operating in environments with limited connectivity. The frontend captures medical records in the field using NFC wristbands, stores them locally in SQLite, and automatically synchronizes them with the backend when a connection is available.
+Health Without Borders is a mobile and web application designed for vulnerable populations (migrants, rural communities) operating in environments with limited connectivity. The frontend captures medical records in the field using NFC device, stores them locally in SQLite, and automatically synchronizes them with the backend when a connection is available.
 
 ## Design Principles
 
 - **Offline-first:** The synchronization engine runs in the background when a network connection is detected.
-- **NFC como identificador:** Each patient is linked to an NFC wristband (unique UID). Read/write operations use `nfc_manager`.
+- **NFC como identificador:** Each patient is linked to an NFC device (unique UID). Read/write operations use `nfc_manager`.
 - **Contrato de API estricto:** The domain models in `lib/src/features/nfc/domain/patient_record.dart` are a 1:1 mirror of the backend schemas (FastAPI).
 - **Roles y permisos:** Access to functionalities is controlled by `UserRole` (doctor, nurse, org_admin, superadmin).
 

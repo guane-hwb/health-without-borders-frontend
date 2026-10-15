@@ -521,10 +521,10 @@ void main() {
       ),
       (
         'identity_mismatch',
-        'La pulsera pertenece a un paciente con otro documento',
+        'El dispositivo pertenece a un paciente con otro documento',
         'Conflicto',
       ),
-      ('device_retired', 'Esta pulsera fue retirada', 'Conflicto'),
+      ('device_retired', 'Este dispositivo fue retirado', 'Conflicto'),
     ]) {
       testWidgets('un 409 con code $code muestra su mensaje y "$badge"', (
         tester,

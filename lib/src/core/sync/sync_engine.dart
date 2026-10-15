@@ -307,7 +307,7 @@ class SyncEngine {
         AppLogger.d('Registro sincronizado exitosamente: ${entry.patientId}');
         if (response.conflicts.isNotEmpty) {
           // The server kept its own value for these parts of the record (e.g.
-          // it refused to re-link a retired wristband); the rest was synced.
+          // it refused to re-link a retired device); the rest was synced.
           AppLogger.d(
             'Sync de ${entry.patientId} aceptado con conflictos: '
             '${response.conflicts.join(', ')}',

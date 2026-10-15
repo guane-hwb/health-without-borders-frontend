@@ -116,7 +116,7 @@ void main() {
   });
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Capacidad — el bug que dejó la tarjeta del guardián en blanco
+  // Capacidad — el bug que dejó el dispositivo del guardián en blanco
   // ══════════════════════════════════════════════════════════════════════════
 
   group('capacidad', () {
@@ -369,7 +369,7 @@ void main() {
       expect(ndef.written, isNotNull);
     });
 
-    test('también aplica a la tarjeta del guardián', () async {
+    test('también aplica al dispositivo del guardián', () async {
       final service = _service(
         codec,
         HwbTag(
@@ -671,7 +671,7 @@ void main() {
   group('readHwbChip', () {
     test('none cuando el chip está en blanco de fábrica', () async {
       // Exactamente lo que reporta un NTAG215 virgen: formateado, mensaje de
-      // 0 bytes. Es el estado en que quedó la tarjeta del guardián al fallar
+      // 0 bytes. Es el estado en que quedó el dispositivo del guardián al fallar
       // siempre la escritura por capacidad.
       final service = _service(codec, _blankChip());
       final result = await service.readHwbChip();
