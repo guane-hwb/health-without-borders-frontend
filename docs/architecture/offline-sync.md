@@ -98,7 +98,7 @@ syncEngine.savedRecords.listen((RecordSyncResult result) {
 `PatientFullRecord.recordVersion` and sends it back to `/sync` as
 `baseVersion`: the version its copy was based on. `toJson()` writes it under
 that name, and `fromJson()` reads it back from it, so the version survives the
-local queue and the guardian card.
+local queue and the guardian device.
 
 A `/sync` that the server accepts (`201`) answers with `record_version` (the
 version after this sync) and `conflicts` (the parts it kept as it had them, for

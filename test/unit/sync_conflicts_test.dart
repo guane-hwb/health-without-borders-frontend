@@ -14,9 +14,9 @@ void main() {
       ], isEs: true);
 
       expect(lines, hasLength(3));
-      expect(lines[0], contains('pulsera o tarjeta ya retirada'));
+      expect(lines[0], contains('dispositivo ya retirado'));
       expect(lines[1], contains('ya había cambiado en el servidor'));
-      expect(lines[2], contains('Los acudientes no se cambiaron'));
+      expect(lines[2], contains('Los guardianes no se cambiaron'));
     });
 
     test('las ediciones de consultas y vacunas se cuentan, no se listan', () {
@@ -75,14 +75,14 @@ void main() {
       );
     });
 
-    test('sin ella, pide escanear de nuevo la pulsera', () {
+    test('sin ella, pide escanear de nuevo el dispositivo del paciente', () {
       expect(
         SyncConflictCode.nextStep(serverCopyShown: false, isEs: true),
-        startsWith('Escanee de nuevo la pulsera'),
+        startsWith('Escanee de nuevo el dispositivo del paciente'),
       );
       expect(
         SyncConflictCode.nextStep(serverCopyShown: false, isEs: false),
-        startsWith('Scan the wristband again'),
+        startsWith('Scan the patient device again'),
       );
     });
   });

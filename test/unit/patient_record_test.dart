@@ -1402,8 +1402,8 @@ void main() {
       expect(_buildMinimal().toJson().containsKey('baseVersion'), isFalse);
     });
 
-    test('la versión sobrevive a toJson/fromJson (cola local y tarjeta del '
-        'acudiente guardan toJson)', () {
+    test('la versión sobrevive a toJson/fromJson (cola local y dispositivo '
+        'del guardián guardan toJson)', () {
       final stored = jsonDecode(
         jsonEncode(_buildMinimal().copyWith(recordVersion: 7).toJson()),
       );
