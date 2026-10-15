@@ -191,6 +191,9 @@ void _setUpMocks() {
       ownerUserId: any(named: 'ownerUserId'),
     ),
   ).thenAnswer((_) async => 0);
+  when(
+    () => mockDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => <SyncNotice>[]);
 }
 
 void main() {
@@ -460,6 +463,52 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('5'), findsWidgets);
+    });
+  });
+
+  group('_SyncCard — avisos de sincronización', () {
+    SyncNotice notice(String id) => SyncNotice(
+      patientId: id,
+      patientName: 'Ana G.',
+      codes: const <String>['stale_payload_base_version'],
+      createdAt: '2026-10-09T15:00:00Z',
+    );
+
+    testWidgets('sin pendientes, cuenta un aviso en singular', (tester) async {
+      when(
+        () => mockDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => <SyncNotice>[notice('p-1')]);
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('· 1 aviso'), findsOneWidget);
+    });
+
+    testWidgets('con pendientes, suma los avisos en plural', (tester) async {
+      when(
+        () => mockDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 3);
+      when(
+        () => mockDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => <SyncNotice>[notice('p-1'), notice('p-2')]);
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('· 2 avisos'), findsOneWidget);
+    });
+
+    testWidgets('si no se pueden leer los avisos, no los menciona', (
+      tester,
+    ) async {
+      when(
+        () => mockDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+      ).thenThrow(Exception('db'));
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('aviso'), findsNothing);
     });
   });
 

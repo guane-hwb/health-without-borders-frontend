@@ -43,9 +43,17 @@ class _FakeAuthRepository extends Fake implements AuthRepository {
 
 class _FakeUserRepository extends Fake implements UserRepository {}
 
-class _FakeLocalDatabase extends Fake implements LocalDatabase {}
+class _FakeLocalDatabase extends Fake implements LocalDatabase {
+  @override
+  Future<List<SyncNotice>> getSyncNotices({String? ownerUserId}) async =>
+      <SyncNotice>[];
+}
 
-class _FakeSyncEngine extends Fake implements SyncEngine {}
+class _FakeSyncEngine extends Fake implements SyncEngine {
+  @override
+  Stream<RecordSyncResult> get savedRecords =>
+      const Stream<RecordSyncResult>.empty();
+}
 
 class _FakePatientRepository extends Fake implements PatientRepository {
   PatientFullRecord? result;

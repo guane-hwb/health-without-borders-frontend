@@ -73,6 +73,8 @@ void main() {
     when(() => entry.syncErrorCode).thenReturn(syncErrorCode);
     when(() => entry.revision).thenReturn(revision);
     when(() => entry.retiredDeviceReason).thenReturn(null);
+    when(() => entry.patientName).thenReturn('Ana G.');
+    when(() => entry.ownerUserId).thenReturn(null);
     return entry;
   }
 
@@ -80,12 +82,17 @@ void main() {
     String status, {
     String? message,
     String? fhirStatus = 'success',
+    int? recordVersion,
+    List<String> conflicts = const <String>[],
+    PatientFullRecord? record,
   }) {
     final response = MockPatientSyncResponse();
     when(() => response.status).thenReturn(status);
     when(() => response.message).thenReturn(message ?? '');
     when(() => response.fhirStatus).thenReturn(fhirStatus);
-    when(() => response.conflicts).thenReturn(const <String>[]);
+    when(() => response.conflicts).thenReturn(conflicts);
+    when(() => response.recordVersion).thenReturn(recordVersion);
+    when(() => response.record).thenReturn(record);
     return response;
   }
 
@@ -151,6 +158,28 @@ void main() {
         any(),
         statusCode: any(named: 'statusCode'),
         revision: any(named: 'revision'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      () => localDb.markChipsDirty(
+        any(),
+        patient: any(named: 'patient'),
+        guardian: any(named: 'guardian'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      () => localDb.addSyncNotice(
+        patientId: any(named: 'patientId'),
+        patientName: any(named: 'patientName'),
+        codes: any(named: 'codes'),
+        ownerUserId: any(named: 'ownerUserId'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      () => localDb.rebasePending(
+        any(),
+        revision: any(named: 'revision'),
+        recordVersion: any(named: 'recordVersion'),
       ),
     ).thenAnswer((_) async {});
 
@@ -698,6 +727,190 @@ void main() {
         expect(success, false);
       },
     );
+  });
+
+  group('resultado de un sync guardado (versión y conflicts)', () {
+    Future<List<RecordSyncResult>> syncCollecting(
+      LocalPatientEntry entry,
+      PatientSyncResponse response,
+    ) async {
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [entry]);
+      when(
+        () => patientRepo.syncPatient(any()),
+      ).thenAnswer((_) async => response);
+      final events = <RecordSyncResult>[];
+      final sub = engine.savedRecords.listen(events.add);
+      await engine.syncAll();
+      await Future<void>.delayed(Duration.zero);
+      await sub.cancel();
+      return events;
+    }
+
+    test('anuncia lo enviado con la versión nueva del servidor', () async {
+      final record = MockPatientFullRecord();
+      final events = await syncCollecting(
+        buildEntry('A', record: record, revision: 2),
+        buildResponse('success', recordVersion: 5),
+      );
+
+      expect(events, hasLength(1));
+      expect(events.single.patientId, 'A');
+      expect(events.single.sent, same(record));
+      expect(events.single.recordVersion, 5);
+      expect(events.single.hasConflicts, isFalse);
+      expect(events.single.serverRecord, isNull);
+      verifyNever(
+        () => localDb.addSyncNotice(
+          patientId: any(named: 'patientId'),
+          patientName: any(named: 'patientName'),
+          codes: any(named: 'codes'),
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      );
+      verifyNever(
+        () => localDb.rebasePending(
+          any(),
+          revision: any(named: 'revision'),
+          recordVersion: any(named: 'recordVersion'),
+        ),
+      );
+    });
+
+    test('con conflicts guarda el aviso, marca ambos chips y anuncia el '
+        'registro del servidor', () async {
+      final server = MockPatientFullRecord();
+      final events = await syncCollecting(
+        buildEntry('A', record: MockPatientFullRecord()),
+        buildResponse(
+          'success',
+          recordVersion: 6,
+          conflicts: const <String>[
+            'stale_payload_base_version',
+            'visit_edit_not_applied:enc-1',
+          ],
+          record: server,
+        ),
+      );
+
+      verify(
+        () => localDb.markChipsDirty('A', patient: true, guardian: true),
+      ).called(1);
+      verify(
+        () => localDb.addSyncNotice(
+          patientId: 'A',
+          patientName: 'Ana G.',
+          codes: const <String>[
+            'stale_payload_base_version',
+            'visit_edit_not_applied:enc-1',
+          ],
+          ownerUserId: 'user-test-123',
+        ),
+      ).called(1);
+      verify(
+        () => localDb.markSynced(
+          'A',
+          createdAt: any(named: 'createdAt'),
+          recordJson: any(named: 'recordJson'),
+          revision: any(named: 'revision'),
+        ),
+      ).called(1);
+      expect(events.single.conflicts, hasLength(2));
+      expect(events.single.serverRecord, same(server));
+    });
+
+    test(
+      'si no se puede guardar el aviso, el sync sigue siendo un éxito',
+      () async {
+        when(
+          () => localDb.addSyncNotice(
+            patientId: any(named: 'patientId'),
+            patientName: any(named: 'patientName'),
+            codes: any(named: 'codes'),
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenThrow(Exception('disco lleno'));
+        bool? success;
+        engine.onRecordSynced = (id, ok, err) => success = ok;
+
+        final events = await syncCollecting(
+          buildEntry('A', record: MockPatientFullRecord()),
+          buildResponse(
+            'success',
+            recordVersion: 6,
+            conflicts: const <String>['stale_payload_base_version'],
+          ),
+        );
+
+        expect(success, isTrue);
+        expect(events, hasLength(1));
+      },
+    );
+
+    test(
+      'si solo falla FHIR, la fila pendiente pasa a la versión guardada',
+      () async {
+        final events = await syncCollecting(
+          buildEntry('A', record: MockPatientFullRecord(), revision: 3),
+          buildResponse('success', fhirStatus: 'error', recordVersion: 5),
+        );
+
+        verify(
+          () => localDb.rebasePending('A', revision: 3, recordVersion: 5),
+        ).called(1);
+        verify(
+          () => localDb.markSyncError(
+            'A',
+            'Envío FHIR fallido: error',
+            statusCode: null,
+            revision: 3,
+          ),
+        ).called(1);
+        expect(events.single.recordVersion, 5);
+      },
+    );
+
+    test('si falla FHIR con conflicts, la fila conserva su versión: no '
+        'debe pisar la fusión del servidor', () async {
+      await syncCollecting(
+        buildEntry('A', record: MockPatientFullRecord(), revision: 3),
+        buildResponse(
+          'success',
+          fhirStatus: 'error',
+          recordVersion: 5,
+          conflicts: const <String>['stale_payload_base_version'],
+        ),
+      );
+
+      verifyNever(
+        () => localDb.rebasePending(
+          any(),
+          revision: any(named: 'revision'),
+          recordVersion: any(named: 'recordVersion'),
+        ),
+      );
+      verify(
+        () => localDb.markChipsDirty('A', patient: true, guardian: true),
+      ).called(1);
+    });
+
+    test('un status distinto de success no anuncia nada', () async {
+      final events = await syncCollecting(
+        buildEntry('A', record: MockPatientFullRecord()),
+        buildResponse('error', recordVersion: 5),
+      );
+
+      expect(events, isEmpty);
+    });
+
+    test('dispose cierra el stream', () async {
+      final done = Completer<void>();
+      engine.savedRecords.listen(null, onDone: done.complete);
+      engine.dispose();
+      await done.future;
+    });
   });
 
   group('syncOne', () {

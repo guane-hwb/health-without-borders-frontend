@@ -90,6 +90,7 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
     WidgetsBinding.instance.removeObserver(this);
     _authRepository.sessionExpired.removeListener(_onSessionExpired);
     _bootstrap.dispose();
+    _syncEngine.dispose();
     super.dispose();
   }
 
