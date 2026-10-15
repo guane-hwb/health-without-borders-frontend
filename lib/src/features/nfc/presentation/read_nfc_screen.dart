@@ -139,9 +139,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       setState(() {
         _scanning = false;
         _errorMessage = isEs
-            ? 'Esta es la tarjeta del guardián. Escanee primero el dispositivo '
+            ? 'Estes es el dispositivo del guardián. Escanee primero el dispositivo '
                   'del paciente.'
-            : 'This is the guardian card. Scan the patient device first.';
+            : 'This is the guardian device. Scan the patient device first.';
       });
       return;
     }
@@ -233,8 +233,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     final isEs = s.isEs;
     if (guardian) {
       return isEs
-          ? 'Acerque la tarjeta del guardián'
-          : 'Hold the guardian card near the phone';
+          ? 'Acerque el dispositivo del guardián'
+          : 'Hold the guardian device near the phone';
     }
     return isEs
         ? 'Acerque el dispositivo del paciente'
@@ -287,8 +287,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         setState(() {
           _scanning = false;
           _errorMessage = isEs
-              ? 'Esa tarjeta no corresponde al guardián de este paciente.'
-              : 'That card does not belong to this patient\'s guardian.';
+              ? 'Ese dispositivo no corresponde al guardián de este paciente.'
+              : 'That device does not belong to this patient\'s guardian.';
         });
         return;
       }
@@ -298,8 +298,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         setState(() {
           _scanning = false;
           _errorMessage = isEs
-              ? 'La tarjeta del guardián está vacía o no se pudo leer.'
-              : 'The guardian card is blank or could not be read.';
+              ? 'El dispositivo del guardián está vacío o no se pudo leer.'
+              : 'The guardian device is blank or could not be read.';
         });
         return;
       }
@@ -328,8 +328,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       setState(() {
         _scanning = false;
         _errorMessage = isEs
-            ? 'No se pudo leer la tarjeta del guardián.'
-            : 'Could not read the guardian card.';
+            ? 'No se pudo leer el dispositivo del guardián.'
+            : 'Could not read the guardian device.';
       });
     }
   }
@@ -664,9 +664,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
           const SizedBox(height: 8),
           Text(
             isEs
-                ? '$name es menor de edad. Se requiere la tarjeta del guardián '
+                ? '$name es menor de edad. Se requiere el dispositivo del guardián '
                       'para ver la historia completa.'
-                : '$name is a minor. The guardian card is required to see the '
+                : '$name is a minor. The guardian device is required to see the '
                       'full record.',
             textAlign: TextAlign.center,
             style: TextStyle(

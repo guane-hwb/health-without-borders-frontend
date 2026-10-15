@@ -346,7 +346,7 @@ class ApiClient {
     }
   }
 
-  /// `code` sits next to `detail`; the 410 of a retired wristband predates
+  /// `code` sits next to `detail`; the 410 of a retired device predates
   /// that and carries it inside `detail`.
   static String? _errorCode(Object? decoded) {
     if (decoded is! Map<String, dynamic>) return null;
