@@ -549,17 +549,45 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       );
 
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
-      await scope.syncEngine.syncAll();
+      final syncResult = await scope.syncEngine.syncAll();
       if (!mounted) return;
-      _draftController.markSynced();
+
+      if (syncResult.isFullyClean) {
+        _draftController.markSynced();
+      }
       setState(() => _isSyncing = false);
+
       if (!silent) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppStrings.of(context).savedChangesMsg),
-            backgroundColor: AppColors.success,
-          ),
-        );
+        if (syncResult.isFullyClean) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppStrings.of(context).savedChangesMsg),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        } else if (syncResult.hasBlockedOnly) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isEs
+                    ? 'El registro quedó retenido con conflicto permanente (ej. 409). Revise la cola de sincronización.'
+                    : 'Record blocked due to permanent error (e.g. 409). Check the sync queue.',
+              ),
+              backgroundColor: Colors.orange.shade800,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isEs
+                    ? 'No se pudo completar la sincronización. Se reintentará automáticamente.'
+                    : 'Sync incomplete. It will retry automatically.',
+              ),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (!mounted) return;

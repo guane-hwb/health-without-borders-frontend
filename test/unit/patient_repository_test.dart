@@ -507,32 +507,51 @@ void main() {
     );
 
     test(
-      'envía POST a /api/v1/patients/emergency-access con las entradas',
+      'envía POST a /api/v1/patients/emergency-access con las entradas sanitizadas',
       () async {
         final List<Map<String, Object?>> entries = <Map<String, Object?>>[
           <String, Object?>{
+            'client_event_id': 'evt-123',
             'patient_uid': '04:AA:BB',
+            'patient_name': 'Nombre Cifrado Omitido',
+            'user_id': 'user-456',
             'reason': 'guardian_absent_offline',
+            'occurred_at': '2026-10-15T10:00:00Z',
+            'owner_user_id': 'owner-789',
           },
         ];
 
         when(
           () => apiClient.postJson(
             path: '/api/v1/patients/emergency-access',
-            body: <String, dynamic>{'entries': entries},
+            body: any(named: 'body'),
             headers: expectedAuthHeader,
           ),
-        ).thenAnswer((_) async => <String, dynamic>{});
+        ).thenAnswer((_) async => <String, dynamic>{'received': 1});
 
         await repository.reportEmergencyAccess(entries);
 
-        verify(
-          () => apiClient.postJson(
-            path: '/api/v1/patients/emergency-access',
-            body: <String, dynamic>{'entries': entries},
-            headers: expectedAuthHeader,
-          ),
-        ).called(1);
+        final capturedBody =
+            verify(
+                  () => apiClient.postJson(
+                    path: '/api/v1/patients/emergency-access',
+                    body: captureAny(named: 'body'),
+                    headers: expectedAuthHeader,
+                  ),
+                ).captured.single
+                as Map<String, dynamic>;
+
+        final List<dynamic> sentEntries =
+            capturedBody['entries'] as List<dynamic>;
+
+        expect(sentEntries, hasLength(1));
+        expect(sentEntries.first['client_event_id'], 'evt-123');
+        expect(sentEntries.first['patient_uid'], '04:AA:BB');
+        expect(sentEntries.first['user_id'], 'user-456');
+        expect(sentEntries.first['reason'], 'guardian_absent_offline');
+        expect(sentEntries.first['occurred_at'], '2026-10-15T10:00:00Z');
+        expect(sentEntries.first.containsKey('patient_name'), isFalse);
+        expect(sentEntries.first.containsKey('owner_user_id'), isFalse);
       },
     );
   });

@@ -10,6 +10,7 @@ import '../../../core/nfc/nfc_guardian_payload.dart';
 import '../../../core/nfc/nfc_payload_codec.dart';
 import '../../../core/nfc/nfc_payload_service.dart' as payload;
 import '../../../core/nfc/nfc_service.dart';
+import '../../../core/nfc/nfc_session_types.dart' show normalizeTypedNfcUid;
 import '../../../core/nfc/nfc_session_manager.dart' show normalizeNfcUid;
 import '../../../core/nfc/nfc_triage_payload.dart';
 import '../../../design/tokens/app_colors.dart';
@@ -139,8 +140,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       setState(() {
         _scanning = false;
         _errorMessage = isEs
-            ? 'Estes es el dispositivo del guardián. Escanee primero el dispositivo '
-                  'del paciente.'
+            ? 'Estes es el dispositivo del guardián. Escanee primero el dispositivo del paciente.'
             : 'This is the guardian device. Scan the patient device first.';
       });
       return;
@@ -151,9 +151,11 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   }
 
   Future<void> _submitPatientFromForm() async {
-    final uid = _patientUidCtrl.text.trim();
-    if (uid.isEmpty) return;
-    await _submitPatient(uid);
+    final raw = _patientUidCtrl.text.trim();
+    if (raw.isEmpty) return;
+    final normalized = normalizeTypedNfcUid(raw);
+    _patientUidCtrl.text = normalized;
+    await _submitPatient(normalized);
   }
 
   Future<void> _submitPatient(
@@ -163,20 +165,19 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     setState(() {
       _scanning = true;
       _errorMessage = null;
+      _patientDeviceUid = deviceUid;
     });
     try {
       final patient = await AppScope.of(
         context,
       ).patientRepository.scanDevice(deviceUid);
       if (!mounted) return;
-      _patientDeviceUid = deviceUid;
       await _openProfile(patient);
     } on ApiException catch (e) {
       if (!mounted) return;
       if (e.statusCode == 403 && _isGuardianCheck(e)) {
         setState(() {
           _scanning = false;
-          _patientDeviceUid = deviceUid;
           _step2 = true;
           _errorMessage = null;
         });
@@ -190,7 +191,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       if (!mounted) return;
       if (chip != null && chip.kind == payload.HwbChipKind.triage) {
         final triage = chip.triage;
-        _patientDeviceUid = deviceUid;
 
         if (triage != null && triage.isMinor) {
           setState(() {
@@ -216,10 +216,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
           _scanning = false;
           _errorMessage = _nfcSessionExpired
               ? (isEs
-                    ? 'Sin conexión y su sesión expiró: inicie sesión de nuevo '
-                          'para leer el respaldo del chip.'
-                    : 'Offline and your session expired: log in again to read '
-                          'the chip backup.')
+                    ? 'Sin conexión y su sesión expiró: inicie sesión de nuevo para leer el respaldo del chip.'
+                    : 'Offline and your session expired: log in again to read the chip backup.')
               : (isEs
                     ? 'Sin conexión y sin respaldo legible en el chip.'
                     : 'Offline and no readable backup on the chip.');
@@ -260,8 +258,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         throw NfcSessionException(
           expired
               ? (isEs
-                    ? 'Su sesión expiró. Inicie sesión de nuevo para leer '
-                          'dispositivos NFC.'
+                    ? 'Su sesión expiró. Inicie sesión de nuevo para leer dispositivos NFC.'
                     : 'Your session expired. Log in again to read NFC devices.')
               : (isEs
                     ? 'No hay llave NFC disponible.'
@@ -307,7 +304,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       final record = NfcGuardianPayload.reconstruct(
         triage: triage,
         guardianRecord: chip.guardianRecord,
-        patientDeviceUid: _patientDeviceUid ?? '',
+        patientDeviceUid: _patientDeviceUid ?? chip.uid,
       );
       if (!mounted) return;
       await _openProfile(record, offline: true);
@@ -361,10 +358,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         title: Text(isEs ? 'Acceso de emergencia' : 'Emergency access'),
         content: Text(
           isEs
-              ? 'Va a ver datos de un menor sin la autorización del guardián. '
-                    'Este acceso queda registrado. ¿Continuar?'
-              : 'You are about to view a minor\'s data without the guardian\'s '
-                    'authorisation. This access is logged. Continue?',
+              ? 'Va a ver datos de un menor sin la autorización del guardián. Este acceso queda registrado. ¿Continuar?'
+              : 'You are about to view a minor\'s data without the guardian\'s authorisation. This access is logged. Continue?',
         ),
         actions: <Widget>[
           TextButton(
@@ -436,9 +431,11 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
   }
 
   Future<void> _submitGuardianFromForm() async {
-    final uid = _guardianUidCtrl.text.trim();
-    if (uid.isEmpty) return;
-    await _submitGuardian(uid);
+    final raw = _guardianUidCtrl.text.trim();
+    if (raw.isEmpty) return;
+    final normalized = normalizeTypedNfcUid(raw);
+    _guardianUidCtrl.text = normalized;
+    await _submitGuardian(normalized);
   }
 
   Future<void> _submitGuardian(String guardianUid) async {
@@ -472,12 +469,14 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       if (!mounted) return;
       setState(() {
         _scanning = false;
-        _errorMessage = e.toString();
+        _errorMessage = e
+            .toString()
+            .replaceAll('Exception: ', '')
+            .replaceAll('StateError: ', '');
       });
     }
   }
 
-  /// Evalúa únicamente la clave del ApiErrorCode sin revisar textos de mensajes
   static bool _isGuardianCheck(ApiException e) =>
       ApiErrorCode.isGuardianCheck(e.code);
 
@@ -664,10 +663,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
           const SizedBox(height: 8),
           Text(
             isEs
-                ? '$name es menor de edad. Se requiere el dispositivo del guardián '
-                      'para ver la historia completa.'
-                : '$name is a minor. The guardian device is required to see the '
-                      'full record.',
+                ? '$name es menor de edad. Se requiere el dispositivo del guardián para ver la historia completa.'
+                : '$name is a minor. The guardian device is required to see the full record.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: AppColors.white.withValues(alpha: 0.85),
@@ -713,10 +710,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
                 const SizedBox(height: 4),
                 Text(
                   isEs
-                      ? 'Muestra solo alergias, tipo de sangre y condiciones '
-                            'crónicas. Queda registrado.'
-                      : 'Shows only allergies, blood type and chronic '
-                            'conditions. It is logged.',
+                      ? 'Muestra solo alergias, tipo de sangre y condiciones crónicas. Queda registrado.'
+                      : 'Shows only allergies, blood type and chronic conditions. It is logged.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: AppColors.white.withValues(alpha: 0.8),

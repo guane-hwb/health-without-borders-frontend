@@ -23,9 +23,11 @@ class SyncQueueScreen extends StatefulWidget {
 
 class _SyncQueueScreenState extends State<SyncQueueScreen> {
   List<LocalPatientEntry> _entries = [];
+  List<MapEntry<String, String>> _quarantinedEntries = [];
   bool _loading = true, _syncing = false;
   int _syncedSoFar = 0;
   int _syncTotal = 0;
+  int _foreignPendingCount = 0;
 
   @override
   void initState() {
@@ -36,11 +38,24 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final scope = AppScope.of(context);
-    final e = await scope.localDatabase.getUnsyncedRecords();
+    final currentUserId = scope.authRepository.currentUser?.id;
+
+    final e = await scope.localDatabase.getUnsyncedRecords(
+      ownerUserId: currentUserId,
+    );
+    final q = await scope.localDatabase.getWebQuarantinedEntries();
+
+    final totalAllUnsynced = await scope.localDatabase.getUnsyncedCount();
+    final foreignCount = (totalAllUnsynced - e.length).clamp(
+      0,
+      totalAllUnsynced,
+    );
 
     if (mounted) {
       setState(() {
         _entries = e;
+        _quarantinedEntries = q;
+        _foreignPendingCount = foreignCount;
         _loading = false;
       });
       await scope.syncEngine.refreshPendingCount();
@@ -90,27 +105,32 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
       final syncResult = await scope.syncEngine.syncAll();
       await _load();
       if (mounted) {
-        if (syncResult.isFullyClean) {
+        if (syncResult.isFullyClean && _quarantinedEntries.isEmpty) {
           messenger.showSnackBar(
             SnackBar(
               content: Text(s.syncedSuccessfully),
               backgroundColor: AppColors.success,
             ),
           );
-        } else if (syncResult.hasBlockedOnly) {
+        } else if (syncResult.hasBlockedOnly ||
+            _quarantinedEntries.isNotEmpty) {
+          final blockedTotal =
+              syncResult.remainingBlocked + _quarantinedEntries.length;
           messenger.showSnackBar(
             SnackBar(
               content: Text(
                 isEs
-                    ? 'Quedan ${syncResult.remainingBlocked} registro(s) bloqueados con error permanente. Revise o elimine estos registros.'
-                    : '${syncResult.remainingBlocked} record(s) remain blocked with permanent errors. Review or remove them.',
+                    ? 'Quedan $blockedTotal registro(s) bloqueados/en cuarentena. Revise o gestione estos registros.'
+                    : '$blockedTotal record(s) remain blocked/quarantined. Review or manage them.',
               ),
               backgroundColor: Colors.orange.shade800,
             ),
           );
         } else {
           final totalPending =
-              syncResult.remainingRetryable + syncResult.remainingBlocked;
+              syncResult.remainingRetryable +
+              syncResult.remainingBlocked +
+              _quarantinedEntries.length;
           messenger.showSnackBar(
             SnackBar(
               content: Text(
@@ -332,6 +352,8 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final isEs = s.isEs;
+
     return Scaffold(
       backgroundColor: const Color(0xFFEBF2F8),
       body: SafeArea(
@@ -423,7 +445,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                 Expanded(
                   child: _loading
                       ? const Center(child: CircularProgressIndicator())
-                      : _entries.isEmpty
+                      : (_entries.isEmpty && _quarantinedEntries.isEmpty)
                       ? Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -449,19 +471,74 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                                   color: AppColors.textSecondary,
                                 ),
                               ),
+                              if (_foreignPendingCount > 0) ...[
+                                const SizedBox(height: 16),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.black12),
+                                  ),
+                                  child: Text(
+                                    isEs
+                                        ? 'Nota: Existen $_foreignPendingCount registro(s) pendiente(s) de otro usuario en este dispositivo.'
+                                        : 'Note: There are $_foreignPendingCount pending record(s) from another user on this device.',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         )
-                      : ListView.builder(
+                      : ListView(
                           padding: const EdgeInsets.fromLTRB(18, 0, 18, 60),
-                          itemCount: _entries.length,
-                          itemBuilder: (_, i) => _SyncCard(
-                            entry: _entries[i],
-                            s: s,
-                            onSync: () => _syncOne(_entries[i].patientId),
-                            onReview: () => _review(_entries[i]),
-                            onDelete: () => _delete(_entries[i]),
-                          ),
+                          children: [
+                            if (_foreignPendingCount > 0)
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE8F0FE),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: const Color(0xFFD2E3FC),
+                                  ),
+                                ),
+                                child: Text(
+                                  isEs
+                                      ? 'Existen $_foreignPendingCount registro(s) pendiente(s) pertenecientes a otro usuario en este dispositivo. Inicie sesión con la cuenta correspondiente para sincronizarlos.'
+                                      : 'There are $_foreignPendingCount pending record(s) belonging to another user on this device. Log in with that account to sync them.',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF1967D2),
+                                  ),
+                                ),
+                              ),
+                            if (_quarantinedEntries.isNotEmpty)
+                              ..._quarantinedEntries.map(
+                                (entry) => _QuarantineCard(
+                                  keyName: entry.key,
+                                  rawData: entry.value,
+                                  isEs: isEs,
+                                ),
+                              ),
+                            ..._entries.map(
+                              (e) => _SyncCard(
+                                entry: e,
+                                s: s,
+                                onSync: () => _syncOne(e.patientId),
+                                onReview: () => _review(e),
+                                onDelete: () => _delete(e),
+                              ),
+                            ),
+                          ],
                         ),
                 ),
               ],
@@ -474,6 +551,109 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _QuarantineCard extends StatelessWidget {
+  const _QuarantineCard({
+    required this.keyName,
+    required this.rawData,
+    required this.isEs,
+  });
+
+  final String keyName;
+  final String rawData;
+  final bool isEs;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3CD),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFFEEBA)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x18000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: Color(0xFF856404),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isEs
+                      ? 'Registro Web en Cuarentena'
+                      : 'Quarantined Web Record',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF856404),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isEs
+                ? 'Este registro no se pudo descifrar o procesar. Se preservó de forma segura para evitar pérdida de datos.'
+                : 'This record could not be decrypted or processed. It was safely preserved to avoid data loss.',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF856404),
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Clave: $keyName',
+            style: const TextStyle(
+              fontSize: 11,
+              fontFamily: 'monospace',
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              icon: const Icon(Icons.copy, size: 14),
+              label: Text(
+                isEs ? 'Copiar datos crudos' : 'Copy raw data',
+                style: const TextStyle(fontSize: 12),
+              ),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: rawData));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      isEs
+                          ? 'Datos en cuarentena copiados al portapapeles.'
+                          : 'Quarantined data copied to clipboard.',
+                    ),
+                    backgroundColor: AppColors.primary,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

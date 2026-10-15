@@ -5,20 +5,22 @@ import 'package:health_without_borders_frontend/src/core/nfc/nfc_session_types.d
 
 void main() {
   group('normalizeTypedNfcUid', () {
-    test('espacios y minúsculas -> formato del lector', () {
-      expect(normalizeTypedNfcUid('04 1a 2c de'), '04:1A:2C:DE');
-    });
+    test(
+      'espacios y minúsculas -> conserva minúsculas e inserta dos puntos',
+      () {
+        expect(normalizeTypedNfcUid('04 1a 2c de'), '04:1a:2c:de');
+      },
+    );
 
-    test('ya normalizado queda igual (idempotente)', () {
-      expect(normalizeTypedNfcUid('04:1A:2C:DE'), '04:1A:2C:DE');
+    test('ya normalizado con mayúsculas y minúsculas mixtas se conserva', () {
       expect(
-        normalizeTypedNfcUid(normalizeTypedNfcUid('04-1a-2c-de')),
-        '04:1A:2C:DE',
+        normalizeTypedNfcUid('06:C9:22:96:ee:56:6E'),
+        '06:C9:22:96:ee:56:6E',
       );
     });
 
     test('recorta espacios alrededor', () {
-      expect(normalizeTypedNfcUid('  04:1a:2c:de \n'), '04:1A:2C:DE');
+      expect(normalizeTypedNfcUid('  04:1a:2c:de \n'), '04:1a:2c:de');
     });
 
     test('vacío o solo espacios -> vacío', () {

@@ -351,6 +351,12 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } on ApiException catch (e) {
       if (!mounted) return;
+      if (e.message.contains('SocketException') ||
+          e.message.contains('Failed host lookup')) {
+        _showNetworkErrorSnackBar(s.loginNetworkRequired);
+        return;
+      }
+
       final errorMessage =
           ApiErrorCode.describe(e.code, isEs: s.isEs) ?? e.message;
 
@@ -374,9 +380,14 @@ class _LoginScreenState extends State<LoginScreen> {
     } on http.ClientException {
       if (!mounted) return;
       _showNetworkErrorSnackBar(s.loginNetworkRequired);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      _showNetworkErrorSnackBar(s.loginFailed);
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Failed host lookup')) {
+        _showNetworkErrorSnackBar(s.loginNetworkRequired);
+      } else {
+        _showNetworkErrorSnackBar(s.loginFailed);
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

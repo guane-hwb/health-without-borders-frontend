@@ -718,8 +718,7 @@ class AppStrings {
     'wristbandReady': 'lista — nueva',
     'nfcNotAvailable': 'NFC no disponible. Use entrada manual.',
     'manualUidHint': 'UID manual (testing)',
-    'validWristbands':
-        'dispositivo NFCs válidas: NTAG213/215 con prefijo HWB- *',
+    'validWristbands': 'Dispositivos NFC válidos: NTAG213/215/216 *',
     'patientData': 'Datos del paciente',
     'registrationComplete': 'Registro completo',
     'patientRegistered': 'Paciente registrado',
@@ -1298,7 +1297,7 @@ class AppStrings {
     'wristbandReady': 'ready — new',
     'nfcNotAvailable': 'NFC not available. Use manual entry.',
     'manualUidHint': 'Manual UID (testing)',
-    'validWristbands': 'Valid wristbands: NTAG213/215 with HWB- prefix *',
+    'validWristbands': 'Valid device: NTAG213/215/216 *',
     'patientData': 'Patient data',
     'registrationComplete': 'Registration complete',
     'patientRegistered': 'Patient registered',

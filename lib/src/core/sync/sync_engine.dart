@@ -91,10 +91,11 @@ class SyncEngine {
       final blocked = await _localDb.getBlockedCount(
         ownerUserId: _currentUserId,
       );
+      final quarantinedEntries = await _localDb.getWebQuarantinedEntries();
 
       pendingCount.value = retryable;
-      blockedCount.value = blocked;
-      totalCount.value = retryable + blocked;
+      blockedCount.value = blocked + quarantinedEntries.length;
+      totalCount.value = retryable + blocked + quarantinedEntries.length;
     } catch (e, stack) {
       AppLogger.e(
         'Error al refrescar conteo de pendientes',
@@ -234,7 +235,7 @@ class SyncEngine {
     await _syncEmergencyLogs();
     await _syncNfcKeyVersions();
 
-    bool allSuccessful = true;
+    bool cycleBatchSuccessful = true;
 
     try {
       if (_reachability != null && !await _reachability.probe()) {
@@ -268,12 +269,12 @@ class SyncEngine {
       for (final entry in pending) {
         final outcome = await _syncOne(entry);
         if (outcome == _SyncOutcome.abortBatch) {
-          allSuccessful = false;
+          cycleBatchSuccessful = false;
           AppLogger.e('Lote abortado por sesión caducada.');
           break;
         }
         if (outcome == _SyncOutcome.networkFailure) {
-          allSuccessful = false;
+          cycleBatchSuccessful = false;
           consecutiveNetworkFailures++;
           if (consecutiveNetworkFailures >= maxConsecutiveNetworkFailures) {
             AppLogger.e(
@@ -285,7 +286,7 @@ class SyncEngine {
         }
         consecutiveNetworkFailures = 0;
         if (outcome != _SyncOutcome.success) {
-          allSuccessful = false;
+          cycleBatchSuccessful = false;
         }
       }
 
@@ -298,8 +299,10 @@ class SyncEngine {
 
       onSyncStatusChanged?.call(remainingRetryable + remainingBlocked);
 
+      final bool overallSuccess = cycleBatchSuccessful && remainingBlocked == 0;
+
       return SyncResult(
-        allSuccessful: allSuccessful,
+        allSuccessful: overallSuccess,
         remainingRetryable: remainingRetryable,
         remainingBlocked: remainingBlocked,
       );
@@ -438,8 +441,7 @@ class SyncEngine {
         stackTrace: stack,
       );
 
-      final bool isSocketException =
-          e is SocketException || e.toString().contains('SocketException');
+      final bool isSocketException = e is SocketException;
       final bool isTimeout = e is TimeoutException;
 
       final bool isNetworkError =

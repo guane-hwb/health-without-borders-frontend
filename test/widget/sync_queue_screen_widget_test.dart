@@ -158,6 +158,8 @@ void main() {
 
     when(() => reachability.probe()).thenAnswer((_) async => true);
     when(() => syncEngine.refreshPendingCount()).thenAnswer((_) async {});
+    when(() => db.getWebQuarantinedEntries()).thenAnswer((_) async => []);
+    when(() => db.getUnsyncedCount()).thenAnswer((_) async => 0);
   });
 
   tearDown(() {
@@ -172,7 +174,9 @@ void main() {
     testWidgets('muestra ícono cloud_done cuando no hay registros pendientes', (
       tester,
     ) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => []);
 
       await tester.pumpWidget(
         buildTestApp(
@@ -190,7 +194,9 @@ void main() {
     testWidgets('muestra texto allSynced cuando la lista está vacía', (
       tester,
     ) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => []);
 
       await tester.pumpWidget(
         buildTestApp(
@@ -208,7 +214,9 @@ void main() {
     testWidgets('muestra texto noRecordsPending cuando la lista está vacía', (
       tester,
     ) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => []);
 
       await tester.pumpWidget(
         buildTestApp(
@@ -226,7 +234,9 @@ void main() {
     testWidgets('el botón Sync All NO se muestra cuando no hay entradas', (
       tester,
     ) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => []);
 
       await tester.pumpWidget(
         buildTestApp(
@@ -253,7 +263,9 @@ void main() {
       tester,
     ) async {
       final completer = Completer<List<LocalPatientEntry>>();
-      when(() => db.getUnsyncedRecords()).thenAnswer((_) => completer.future);
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) => completer.future);
 
       await tester.pumpWidget(
         buildTestApp(
@@ -274,7 +286,9 @@ void main() {
 
   group('SyncQueueScreen – con entradas', () {
     testWidgets('renderiza una _SyncCard por entrada', (tester) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer(
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer(
         (_) async => [
           makeEntry(patientId: 'p-1', patientName: 'Ana Avila'),
           makeEntry(patientId: 'p-2', patientName: 'Bruno Blanco'),
@@ -299,7 +313,7 @@ void main() {
       tester,
     ) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
 
       await tester.pumpWidget(
@@ -317,11 +331,9 @@ void main() {
 
     testWidgets('tocar Sync All invoca syncEngine.syncAll', (tester) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
-      when(
-        () => syncEngine.syncAll(),
-      ).thenAnswer(
+      when(() => syncEngine.syncAll()).thenAnswer(
         (_) async => const SyncResult(
           allSuccessful: true,
           remainingRetryable: 0,
@@ -349,11 +361,9 @@ void main() {
       tester,
     ) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
-      when(
-        () => syncEngine.syncAll(),
-      ).thenAnswer(
+      when(() => syncEngine.syncAll()).thenAnswer(
         (_) async => const SyncResult(
           allSuccessful: true,
           remainingRetryable: 0,
@@ -374,14 +384,16 @@ void main() {
       await tester.tap(find.text('Sincronizar todo'));
       await tester.pumpAndSettle();
 
-      verify(() => db.getUnsyncedRecords()).called(greaterThanOrEqualTo(2));
+      verify(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).called(greaterThanOrEqualTo(2));
     });
   });
 
   group('_SyncCard – estado pendiente', () {
     testWidgets('muestra el maskedName correcto', (tester) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry(patientName: 'Teresa Torres')]);
 
       await tester.pumpWidget(
@@ -399,7 +411,7 @@ void main() {
 
     testWidgets('muestra la parte de fecha antes de T', (tester) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry(createdAt: '2024-07-04T12:00:00')]);
 
       await tester.pumpWidget(
@@ -417,7 +429,7 @@ void main() {
 
     testWidgets('muestra la fecha tal cual cuando no tiene T', (tester) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry(createdAt: '2024-07-04')]);
 
       await tester.pumpWidget(
@@ -437,7 +449,7 @@ void main() {
       tester,
     ) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry(syncError: null)]);
 
       await tester.pumpWidget(
@@ -457,7 +469,7 @@ void main() {
       tester,
     ) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry(syncError: null)]);
 
       await tester.pumpWidget(
@@ -475,7 +487,7 @@ void main() {
 
     testWidgets('botón Sync Now está presente por cada card', (tester) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
 
       await tester.pumpWidget(
@@ -494,7 +506,9 @@ void main() {
     testWidgets(
       'un conflicto 409 muestra el estado del dispositivo duplicado',
       (tester) async {
-        when(() => db.getUnsyncedRecords()).thenAnswer(
+        when(
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer(
           (_) async => [
             makeEntry(
               syncError:
@@ -545,7 +559,9 @@ void main() {
       testWidgets('un 409 con code $code muestra su mensaje y "$badge"', (
         tester,
       ) async {
-        when(() => db.getUnsyncedRecords()).thenAnswer(
+        when(
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer(
           (_) async => [makeEntry(syncError: code, syncErrorCode: 409)],
         );
 
@@ -566,7 +582,9 @@ void main() {
     }
 
     testWidgets('un conflicto 409 oculta el botón Sync ahora', (tester) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer(
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer(
         (_) async => [makeEntry(syncError: 'conflict', syncErrorCode: 409)],
       );
 
@@ -587,7 +605,9 @@ void main() {
     testWidgets(
       'un error no-409 muestra la badge de Error y conserva el botón Sync ahora',
       (tester) async {
-        when(() => db.getUnsyncedRecords()).thenAnswer(
+        when(
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer(
           (_) async => [
             makeEntry(syncError: 'error de servidor', syncErrorCode: 500),
           ],
@@ -610,7 +630,7 @@ void main() {
 
     testWidgets('botón Review está presente por cada card', (tester) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
 
       await tester.pumpWidget(
@@ -630,7 +650,7 @@ void main() {
       tester,
     ) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
 
       await tester.pumpWidget(
@@ -651,7 +671,9 @@ void main() {
     testWidgets('muestra badge "Duplicado" cuando hay conflicto 409', (
       tester,
     ) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer(
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer(
         (_) async => [
           makeEntry(
             syncError: 'A patient is already registered with this device tag.',
@@ -676,7 +698,9 @@ void main() {
     testWidgets('la card tiene borde cuando hay error de conflicto', (
       tester,
     ) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer(
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer(
         (_) async => [
           makeEntry(
             syncError: 'A patient is already registered with this device tag.',
@@ -709,7 +733,7 @@ void main() {
       tester,
     ) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry(patientId: 'target-id')]);
       when(
         () => syncEngine.syncOne('target-id'),
@@ -735,7 +759,7 @@ void main() {
       tester,
     ) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
       when(
         () => syncEngine.syncOne(any()),
@@ -762,7 +786,7 @@ void main() {
       tester,
     ) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
       when(
         () => syncEngine.syncOne(any()),
@@ -794,7 +818,7 @@ void main() {
       tester,
     ) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
 
       await tester.pumpWidget(
@@ -817,7 +841,7 @@ void main() {
       tester,
     ) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry(patientName: 'Xavier Ybarra')]);
 
       await tester.pumpWidget(
@@ -846,7 +870,7 @@ void main() {
       tester,
     ) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry(patientId: 'del-me')]);
       when(() => db.deleteRecord('del-me')).thenAnswer((_) async {});
 
@@ -871,7 +895,7 @@ void main() {
 
     testWidgets('cancelar eliminar NO llama a db.deleteRecord', (tester) async {
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
 
       await tester.pumpWidget(
@@ -896,7 +920,9 @@ void main() {
 
   group('SyncQueueScreen – ScreenBottomHandle', () {
     testWidgets('ScreenBottomHandle siempre se renderiza', (tester) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => []);
 
       await tester.pumpWidget(
         buildTestApp(
@@ -916,7 +942,9 @@ void main() {
     testWidgets('el botón back hace pop de la pantalla al presionarse', (
       tester,
     ) async {
-      when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => []);
 
       final mockAuth = MockAuthRepository();
       when(
@@ -969,7 +997,9 @@ void main() {
     testWidgets(
       'alternar el idioma de ES a EN actualiza los componentes textuales de forma reactiva',
       (tester) async {
-        when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+        when(
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => []);
 
         await tester.pumpWidget(
           buildTestApp(
@@ -1009,7 +1039,7 @@ void main() {
     ) async {
       when(() => reachability.probe()).thenAnswer((_) async => false);
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
 
       await tester.pumpWidget(
@@ -1044,7 +1074,7 @@ void main() {
     ) async {
       when(() => reachability.probe()).thenAnswer((_) async => false);
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
 
       await tester.pumpWidget(
@@ -1077,7 +1107,7 @@ void main() {
     ) async {
       when(() => reachability.probe()).thenAnswer((_) async => false);
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
 
       await tester.pumpWidget(
@@ -1103,7 +1133,7 @@ void main() {
     ) async {
       when(() => reachability.probe()).thenAnswer((_) async => false);
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
 
       await tester.pumpWidget(
@@ -1132,7 +1162,7 @@ void main() {
       (tester) async {
         when(() => reachability.probe()).thenAnswer((_) async => true);
         when(
-          () => db.getUnsyncedRecords(),
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
         ).thenAnswer((_) async => [makeEntry()]);
 
         when(() => syncEngine.syncAll()).thenAnswer((_) async {
@@ -1155,7 +1185,9 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+        when(
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => []);
 
         await tester.tap(
           find.widgetWithText(ElevatedButton, 'Sincronizar todo'),
@@ -1172,11 +1204,9 @@ void main() {
     ) async {
       when(() => reachability.probe()).thenAnswer((_) async => true);
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
-      when(
-        () => syncEngine.syncAll(),
-      ).thenAnswer(
+      when(() => syncEngine.syncAll()).thenAnswer(
         (_) async => const SyncResult(
           allSuccessful: true,
           remainingRetryable: 1,
@@ -1210,7 +1240,7 @@ void main() {
     ) async {
       when(() => reachability.probe()).thenAnswer((_) async => true);
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
       when(() => syncEngine.syncAll()).thenThrow(Exception('Engine crash'));
 
@@ -1243,7 +1273,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
 
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry()]);
 
       await tester.pumpWidget(
@@ -1266,7 +1296,7 @@ void main() {
       'handles SyncOneResult.busy and SyncOneResult.notFound correctly',
       (tester) async {
         when(
-          () => db.getUnsyncedRecords(),
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
         ).thenAnswer((_) async => [makeEntry()]);
         when(
           () => syncEngine.syncOne(any()),
@@ -1295,7 +1325,9 @@ void main() {
     testWidgets(
       'handles HTTP 403 and HTTP 422 error messages in cards (ES & EN)',
       (tester) async {
-        when(() => db.getUnsyncedRecords()).thenAnswer(
+        when(
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer(
           (_) async => [
             makeEntry(
               patientId: 'p1',
@@ -1334,7 +1366,7 @@ void main() {
     ) async {
       when(() => reachability.probe()).thenAnswer((_) async => true);
       when(
-        () => db.getUnsyncedRecords(),
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
       ).thenAnswer((_) async => [makeEntry(patientId: 'p-fail')]);
       when(
         () => syncEngine.syncOne('p-fail'),
@@ -1367,7 +1399,7 @@ void main() {
       'muestra el contador "syncedSoFar / syncTotal" mientras _syncAll está en curso',
       (tester) async {
         when(
-          () => db.getUnsyncedRecords(),
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
         ).thenAnswer((_) async => [makeEntry()]);
 
         final completer = Completer<SyncResult>();
@@ -1400,7 +1432,9 @@ void main() {
             remainingBlocked: 0,
           ),
         );
-        when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+        when(
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => []);
         await tester.pumpAndSettle();
       },
     );
@@ -1411,7 +1445,7 @@ void main() {
         final spyEngine = SpySyncEngine();
         when(() => spyEngine.refreshPendingCount()).thenAnswer((_) async {});
         when(
-          () => db.getUnsyncedRecords(),
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
         ).thenAnswer((_) async => [makeEntry()]);
 
         final completer = Completer<SyncResult>();
@@ -1449,7 +1483,9 @@ void main() {
             remainingBlocked: 0,
           ),
         );
-        when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+        when(
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => []);
         await tester.pumpAndSettle();
 
         expect(find.byType(SnackBar), findsOneWidget);
@@ -1463,7 +1499,7 @@ void main() {
         final spyEngine = SpySyncEngine();
         when(() => spyEngine.refreshPendingCount()).thenAnswer((_) async {});
         when(
-          () => db.getUnsyncedRecords(),
+          () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
         ).thenAnswer((_) async => [makeEntry()]);
 
         final completer = Completer<SyncResult>();

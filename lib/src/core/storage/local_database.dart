@@ -158,15 +158,9 @@ class LocalDatabase {
           accessibility: KeychainAccessibility.first_unlock_this_device,
         ),
         aOptions: AndroidOptions(),
-        // Web: la llave vive en sessionStorage, no en localStorage junto al
-        // texto cifrado de IndexedDB. Al cerrar la pestaña la cola queda
-        // ilegible y se borra al arrancar sin sesión (AuthRepository).
         webOptions: WebOptions(useSessionStorage: true),
       );
 
-  /// iOS/macOS: almacén anterior a la migración al llavero solo-dispositivo.
-  /// Web: apunta al almacén persistente (localStorage) de versiones previas,
-  /// solo para borrar las llaves que dejaron allí.
   static const FlutterSecureStorage _defaultLegacySecureStorage =
       FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: false));
 
@@ -192,7 +186,7 @@ class LocalDatabase {
   ];
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 10;
+  static const int _dbVersion = 11;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
@@ -290,10 +284,58 @@ class LocalDatabase {
           stackTrace: stack,
         );
       }
+      try {
+        await _migrateWebPlaintextPatients();
+      } catch (e, stack) {
+        AppLogger.e(
+          'Error recifrando filas web heredadas en claro',
+          error: e,
+          stackTrace: stack,
+        );
+      }
     } finally {
       _webMigrationChecked = true;
       _webMigrationCompleter = null;
       completer.complete();
+    }
+  }
+
+  Future<void> _migrateWebPlaintextPatients() async {
+    final List<MapEntry<String, String>> entries = await _webList(
+      _webPatientPrefix,
+    );
+    int migrated = 0;
+    int failed = 0;
+    for (final MapEntry<String, String> e in entries) {
+      if (e.key.contains('::quarantine::')) continue;
+      try {
+        final Object? decoded = jsonDecode(e.value);
+        if (decoded is! Map) continue;
+        final Map<String, dynamic> row = Map<String, dynamic>.from(decoded);
+        final Object? plain = row['record_json'];
+        if (plain is! String ||
+            !plain.startsWith('{') ||
+            !plain.endsWith('}')) {
+          continue;
+        }
+        row['record_json'] = await _encryptPayload(plain);
+        final String? current = await _webGet(e.key);
+        if (current != e.value) continue;
+        await _webSet(e.key, jsonEncode(row));
+        migrated++;
+      } catch (err, stack) {
+        failed++;
+        AppLogger.e(
+          'No se pudo recifrar una fila web heredada (${e.key})',
+          error: err,
+          stackTrace: stack,
+        );
+      }
+    }
+    if (migrated > 0 || failed > 0) {
+      AppLogger.d(
+        'Migración web de filas en claro: $migrated recifradas, $failed con error.',
+      );
     }
   }
 
@@ -857,8 +899,6 @@ class LocalDatabase {
       }
     }
     if (_isWeb) {
-      // Builds anteriores guardaron las llaves en localStorage: no deben
-      // sobrevivir al cierre de sesión.
       for (final String name in <String>[
         _dbKeyStorageName,
         _auditKeyStorageName,
@@ -966,14 +1006,13 @@ class LocalDatabase {
   Future<Database> _initDb() async {
     if (!_isWeb &&
         (defaultTargetPlatform == TargetPlatform.windows ||
-            defaultTargetPlatform == TargetPlatform.linux ||
-            defaultTargetPlatform == TargetPlatform.macOS)) {
+            defaultTargetPlatform == TargetPlatform.linux)) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
 
     final String dbPath = await _resolveDbPath();
-    return openDatabase(
+    final Database opened = await openDatabase(
       dbPath,
       version: _dbVersion,
       onDowngrade: (Database db, int oldVersion, int newVersion) async {
@@ -1070,8 +1109,61 @@ class LocalDatabase {
         if (oldVersion < 10) {
           await _createKeyVersionTable(db);
         }
+        if (oldVersion < 11) {
+          await _migratePlaintextRows(db);
+        }
       },
     );
+    await _migratePlaintextRows(opened);
+    return opened;
+  }
+
+  Future<void> _migratePlaintextRows(Database db) async {
+    try {
+      final List<Map<String, Object?>> rows = await db.query(
+        _table,
+        columns: <String>['patient_id', 'record_json'],
+        where: "record_json LIKE '{%'",
+      );
+      if (rows.isEmpty) return;
+
+      int migrated = 0;
+      int failed = 0;
+      for (final Map<String, Object?> row in rows) {
+        final String? patientId = row['patient_id'] as String?;
+        final String? plain = row['record_json'] as String?;
+        if (patientId == null || plain == null || !plain.endsWith('}')) {
+          continue;
+        }
+        try {
+          final String encrypted = await _encryptPayload(plain);
+          final int updated = await db.update(
+            _table,
+            <String, Object?>{'record_json': encrypted},
+            where: 'patient_id = ? AND record_json = ?',
+            whereArgs: <Object>[patientId, plain],
+          );
+          if (updated > 0) migrated++;
+        } catch (e, stack) {
+          failed++;
+          AppLogger.e(
+            'No se pudo recifrar una fila heredada ($patientId)',
+            error: e,
+            stackTrace: stack,
+          );
+        }
+      }
+      AppLogger.d(
+        'Migración de filas heredadas en claro: $migrated recifradas, '
+        '$failed con error.',
+      );
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error migrando filas heredadas en claro',
+        error: e,
+        stackTrace: stack,
+      );
+    }
   }
 
   static Future<void> _addColumnIfMissing(
@@ -1490,9 +1582,12 @@ class LocalDatabase {
         final previous = await _webGetPatient(record.patientId);
         final String? effectiveOwner =
             ownerUserId ?? previous?['owner_user_id'] as String?;
-        if (effectiveOwner == null || effectiveOwner.isEmpty) {
+        if (effectiveOwner == null || effectiveOwner.trim().isEmpty) {
           AppLogger.e(
-            'savePatient(${record.patientId}) llamado sin ownerUserId válido',
+            'savePatient(${record.patientId}) bloqueado: ownerUserId está vacío o es nulo',
+          );
+          throw ArgumentError(
+            'No se puede guardar un paciente sin un ownerUserId válido.',
           );
         }
         if (previous != null) {
@@ -1550,9 +1645,12 @@ class LocalDatabase {
         reason ??= existing.first['pending_retired_reason'] as String?;
       }
 
-      if (prevOwner == null || prevOwner.isEmpty) {
+      if (prevOwner == null || prevOwner.trim().isEmpty) {
         AppLogger.e(
-          'savePatient(${record.patientId}) llamado sin ownerUserId válido',
+          'savePatient(${record.patientId}) bloqueado: ownerUserId está vacío o es nulo',
+        );
+        throw ArgumentError(
+          'No se puede guardar un paciente sin un ownerUserId válido.',
         );
       }
 
