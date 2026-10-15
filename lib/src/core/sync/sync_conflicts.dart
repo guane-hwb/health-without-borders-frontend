@@ -4,16 +4,16 @@
 /// keeps its own value for part of the record. Everything else was saved.
 abstract final class SyncConflictCode {
   /// The copy was based on an older recordVersion: the server kept its
-  /// wristband and guardians, merged allergies and background instead of
+  /// devices and guardians, merged allergies and background instead of
   /// replacing them, and took the new visits and vaccines.
   static const String staleBaseVersion = 'stale_payload_base_version';
 
-  /// The copy carried a wristband or guardian card that was already retired.
+  /// The copy carried a patient or guardian device that was already retired.
   static const String staleRetiredDeviceUid =
       'stale_payload_retired_device_uid';
 
-  /// The record was matched by its wristband under another patientId: the
-  /// guardians were not changed.
+  /// The record was matched by its patient device under another patientId:
+  /// the guardians were not changed.
   static const String guardiansNotChanged =
       'guardians_not_changed_by_tag_resolved_sync';
 
@@ -51,31 +51,32 @@ abstract final class SyncConflictCode {
         // answer never arrived, hence "or an earlier attempt".
         staleBaseVersion =>
           isEs
-              ? 'El registro ya había cambiado en el servidor (en otro '
-                    'dispositivo o en un envío anterior). Se conservaron sus '
-                    'acudientes y se unieron alergias y antecedentes: lo que '
-                    'se quitó aquí puede seguir en el servidor. Las consultas '
-                    'y vacunas nuevas sí se guardaron.'
-              : 'The record had already changed on the server (on another '
-                    'device or in an earlier attempt). Its guardians were '
-                    'kept and allergies and history were merged: anything '
-                    'removed here may still be on the server. New visits and '
-                    'vaccines were saved.',
+              ? 'El registro ya había cambiado en el servidor (otra persona '
+                    'lo actualizó o un envío anterior ya se había guardado). '
+                    'Se conservaron sus guardianes y se unieron alergias y '
+                    'antecedentes: lo que se quitó aquí puede seguir en el '
+                    'servidor. Las consultas y vacunas nuevas sí se guardaron.'
+              : 'The record had already changed on the server (someone else '
+                    'updated it, or an earlier attempt had already been '
+                    'saved). Its guardians were kept and allergies and history '
+                    'were merged: anything removed here may still be on the '
+                    'server. New visits and vaccines were saved.',
         staleRetiredDeviceUid =>
           isEs
-              ? 'Esta copia tenía una pulsera o tarjeta ya retirada. El '
-                    'servidor conservó la pulsera, los acudientes y sus '
-                    'tarjetas actuales; el resto se guardó.'
-              : 'This copy had a wristband or card that was already retired. '
-                    'The server kept the current wristband, guardians and '
-                    'cards; the rest was saved.',
+              ? 'Esta copia tenía un dispositivo ya retirado, del paciente o '
+                    'del guardián. El servidor conservó los dispositivos y los '
+                    'guardianes actuales; el resto se guardó.'
+              : 'This copy had a device that was already retired, a patient '
+                    'or a guardian device. The server kept the current devices '
+                    'and guardians; the rest was saved.',
         guardiansNotChanged =>
           isEs
-              ? 'La pulsera ya identificaba a este paciente en otro registro. '
-                    'Los acudientes no se cambiaron; el resto se guardó.'
-              : 'The wristband already identified this patient in another '
-                    'record. The guardians were not changed; the rest was '
-                    'saved.',
+              ? 'El dispositivo del paciente ya lo identificaba en otro '
+                    'registro. Los guardianes no se cambiaron; el resto se '
+                    'guardó.'
+              : 'The patient device already identified this patient in '
+                    'another record. The guardians were not changed; the rest '
+                    'was saved.',
         visitEditNotAppliedPrefix => _editNotApplied(
           visits,
           isEs: isEs,
@@ -108,16 +109,16 @@ abstract final class SyncConflictCode {
   static String nextStep({required bool serverCopyShown, required bool isEs}) {
     if (serverCopyShown) {
       return isEs
-          ? 'Lo que ve es la versión del servidor: actualice la pulsera y la '
-                'tarjeta.'
-          : "What you see is the server's version: update the wristband and "
-                'card.';
+          ? 'Lo que ve es la versión del servidor: actualice el dispositivo '
+                'del paciente y el del guardián.'
+          : "What you see is the server's version: update the patient device "
+                'and the guardian device.';
     }
     return isEs
-        ? 'Escanee de nuevo la pulsera para ver la versión del servidor y '
-              'actualizar la pulsera y la tarjeta.'
-        : "Scan the wristband again to see the server's version and update "
-              'the wristband and card.';
+        ? 'Escanee de nuevo el dispositivo del paciente para ver la versión '
+              'del servidor y actualizar los dispositivos.'
+        : "Scan the patient device again to see the server's version and "
+              'update the devices.';
   }
 
   static bool _isKnown(String code) =>

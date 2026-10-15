@@ -154,10 +154,10 @@ enum UserRole {
   /// Can view analytics/KPIs
   bool get canViewAnalytics => isAdmin;
 
-  /// Can scan NFC wristbands
+  /// Can scan NFC devices
   bool get canScanNfc => this == doctor || this == nurse;
 
-  /// Can search patients (loss of wristband)
+  /// Can search patients (loss of device, search by name, etc.)
   bool get canSearchPatient =>
       this == doctor || this == nurse || this == orgAdmin;
 

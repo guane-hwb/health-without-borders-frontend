@@ -713,14 +713,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
 
       expect(
-        find.textContaining('La tarjeta no corresponde a ningún acudiente'),
+        find.textContaining('El dispositivo no corresponde a ningún acudiente'),
         findsOneWidget,
       );
       expect(find.text('Guardian inválido.'), findsNothing);
     });
 
     testWidgets(
-      'un 403 de cuenta desactivada no pide la tarjeta del acudiente',
+      'un 403 de cuenta desactivada no pide el dispositivo del acudiente',
       (tester) async {
         fakeRepo.throw403ForGuardian = true;
         fakeRepo.guardianRequiredMessage = 'Inactive user (guardian)';
@@ -1153,7 +1153,7 @@ void main() {
         await tester.tap(find.byIcon(Icons.wifi));
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('tarjeta del guardián'), findsOneWidget);
+        expect(find.textContaining('dispositivo del guardián'), findsOneWidget);
         expect(fakeRepo.scanDeviceCallCount, 0);
       },
     );
@@ -1307,25 +1307,28 @@ void main() {
       },
     );
 
-    testWidgets('Chip de tipo incorrecto o sin guardianRecord muestra "tarjeta '
-        'vacía o no se pudo leer"', (tester) async {
-      final triage = makeTriage(
-        minor: true,
-        guardianDeviceUid: 'HWB-GUARDIAN-01',
-      );
-      await reachOfflineGate(tester, triage: triage);
+    testWidgets(
+      'Chip de tipo incorrecto o sin guardianRecord muestra "dispositivo '
+      'vacío o no se pudo leer"',
+      (tester) async {
+        final triage = makeTriage(
+          minor: true,
+          guardianDeviceUid: 'HWB-GUARDIAN-01',
+        );
+        await reachOfflineGate(tester, triage: triage);
 
-      ReadNfcScreen.overrideReadHwbChip =
-          ({required String alertMessage}) async => const HwbChipReadResult(
-            uid: 'HWB-GUARDIAN-01',
-            kind: HwbChipKind.triage,
-          );
+        ReadNfcScreen.overrideReadHwbChip =
+            ({required String alertMessage}) async => const HwbChipReadResult(
+              uid: 'HWB-GUARDIAN-01',
+              kind: HwbChipKind.triage,
+            );
 
-      await tester.tap(find.byIcon(Icons.wifi));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.wifi));
+        await tester.pumpAndSettle();
 
-      expect(find.textContaining('vacía o no se pudo leer'), findsOneWidget);
-    });
+        expect(find.textContaining('vacío o no se pudo leer'), findsOneWidget);
+      },
+    );
 
     testWidgets(
       'NfcNotAvailableException durante el escaneo de guardián offline '
@@ -1378,7 +1381,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.text('No se pudo leer la tarjeta del guardián.'),
+          find.text('No se pudo leer el dispositivo del guardián.'),
           findsOneWidget,
         );
       },
@@ -1457,12 +1460,11 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.textContaining('is a minor. The guardian card is required'),
+          find.textContaining('is a minor. The guardian device is required'),
           findsOneWidget,
         );
       },
     );
-
     testWidgets(
       'Acceso de emergencia: al presionar Cancelar en el diálogo no navega y cierra el diálogo',
       (tester) async {

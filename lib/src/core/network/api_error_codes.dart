@@ -24,7 +24,7 @@ abstract final class ApiErrorCode {
   /// /scan of a minor with a card that is not one of the guardians' (403).
   static const String guardianMismatch = 'guardian_mismatch';
 
-  /// /sync: the wristband already belongs to another patient (409).
+  /// /sync: the device already belongs to another patient (409).
   static const String deviceUidConflict = 'device_uid_conflict';
 
   /// /sync (503, Retry-After 5): another request created this same new
@@ -39,10 +39,10 @@ abstract final class ApiErrorCode {
   /// /sync: a new patient whose identity document is already registered (409).
   static const String duplicateIdentity = 'duplicate_identity';
 
-  /// /sync: the wristband belongs to a patient with another identity (409).
+  /// /sync: the device belongs to a patient with another identity (409).
   static const String identityMismatch = 'identity_mismatch';
 
-  /// /sync (409) or /scan (410): the wristband was retired.
+  /// /sync (409) or /scan (410): the device was retired.
   static const String deviceRetired = 'device_retired';
 
   /// /scan or /search (500): the stored record no longer reads. Not
@@ -101,13 +101,13 @@ abstract final class ApiErrorCode {
     loginPaused => tooManyAttempts(null, isEs: isEs),
     guardianRequired =>
       isEs
-          ? 'Paciente menor de edad: se requiere la tarjeta del acudiente.'
-          : 'Minor patient: the guardian card is required.',
+          ? 'Paciente menor de edad: se requiere el dispositivo del acudiente.'
+          : 'Minor patient: the guardian device is required.',
     guardianMismatch =>
       isEs
-          ? 'La tarjeta no corresponde a ningún acudiente registrado de '
+          ? 'El dispositivo no corresponde a ningún acudiente registrado de '
                 'este paciente.'
-          : 'This card does not belong to any registered guardian of this '
+          : 'This device does not belong to any registered guardian of this '
                 'patient.',
     deviceUidConflict =>
       isEs
@@ -128,16 +128,16 @@ abstract final class ApiErrorCode {
           : 'A patient is already registered with this identity document.',
     identityMismatch =>
       isEs
-          ? 'La pulsera pertenece a un paciente con otro documento de '
-                'identidad. Verifica la pulsera y los datos del paciente.'
-          : 'This wristband belongs to a patient with another identity '
-                'document. Check the wristband and the patient data.',
+          ? 'El dispositivo pertenece a un paciente con otro documento de '
+                'identidad. Verifica el dispositivo y los datos del paciente.'
+          : 'This device belongs to a patient with another identity '
+                'document. Check the device and the patient data.',
     deviceRetired =>
       isEs
-          ? 'Esta pulsera fue retirada y ya no identifica a un paciente. '
-                'Usa una pulsera nueva.'
-          : 'This wristband was retired and no longer identifies a '
-                'patient. Use a new wristband.',
+          ? 'Este dispositivo fue retirado y ya no identifica a un paciente. '
+                'Usa un dispositivo nuevo.'
+          : 'This device was retired and no longer identifies a '
+                'patient. Use a new device.',
     storedRecordInvalid =>
       isEs
           ? 'No se pudo leer el registro de este paciente en el servidor. '

@@ -491,7 +491,7 @@ class GuardianInfo {
   final String name;
   final String relationship;
   final String phone;
-  final String? deviceUid; // NFC UID of the guardian's wristband
+  final String? deviceUid; // NFC UID of the guardian's device
   final String? docType;
   final String? docNumber;
   final String? documentType;
@@ -1908,7 +1908,7 @@ class PatientFullRecord {
               .toList() ??
           <VaccinationRecordItem>[],
       // toJson() writes the version as baseVersion, the name /sync expects,
-      // and that same map is what the local queue and the guardian card hold:
+      // and that same map is what the local queue and the guardian device hold:
       // reading it back under that name keeps a stored copy's version.
       recordVersion:
           (json['recordVersion'] as num?)?.toInt() ??

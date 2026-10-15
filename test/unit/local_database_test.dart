@@ -2183,7 +2183,7 @@ void main() {
       expect(pending.first['had_header'], 1);
     });
 
-    test('distingue pulsera de tarjeta de guardián', () async {
+    test('distingue dispositivo de guardián', () async {
       final db = LocalDatabase.instance;
 
       await db.recordNfcKeyVersion(

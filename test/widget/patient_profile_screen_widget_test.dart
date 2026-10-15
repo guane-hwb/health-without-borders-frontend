@@ -1076,7 +1076,9 @@ void main() {
       },
     );
 
-    testWidgets('51. Visualización de la tarjeta del paciente', (tester) async {
+    testWidgets('51. Visualización del dispositivo del paciente', (
+      tester,
+    ) async {
       await _pumpScreen(tester, _record());
       expect(find.textContaining('Pérez'), findsAtLeastNWidgets(1));
     });
@@ -3180,7 +3182,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.textContaining('Escanee de nuevo la pulsera'),
+        find.textContaining('Escanee de nuevo el dispositivo del paciente'),
         findsOneWidget,
       );
       expect(find.byType(NfcStaleBanner), findsNothing);
@@ -3206,18 +3208,12 @@ void main() {
         syncEng: _AnnouncingSyncEngine(),
       );
       await tester.pumpAndSettle();
-      expect(
-        find.textContaining('pulsera o tarjeta ya retirada'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('dispositivo ya retirado'), findsOneWidget);
 
       await tester.tap(find.text('Entendido'));
       await tester.pumpAndSettle();
 
-      expect(
-        find.textContaining('pulsera o tarjeta ya retirada'),
-        findsNothing,
-      );
+      expect(find.textContaining('dispositivo ya retirado'), findsNothing);
       expect(await db.getSyncNotices(), isEmpty);
     });
 
@@ -3260,7 +3256,7 @@ void main() {
     });
 
     testWidgets('tras reasignar, el borrador es el registro reasignado: su '
-        'sync no lo re-guarda con la pulsera vieja', (tester) async {
+        'sync no lo re-guarda con el dispositivo viejo', (tester) async {
       final engine = _AnnouncingSyncEngine();
       late _Fakes fakes;
       await _pumpScreen(

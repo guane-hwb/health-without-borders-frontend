@@ -56,13 +56,13 @@ class PatientRepository {
   }
 
   // ── POST /api/v1/patients/scan ──────────────────────────────────────────
-  /// Retrieves a patient by scanning their NFC wristband.
+  /// Retrieves a patient by scanning their NFC device.
   ///
-  /// Both UIDs travel in the body: in the URL, the wristband UID (PHI) ended
-  /// up in Cloud Run's request logs.
+  /// Both UIDs travel in the body: in the URL, the patient device UID (PHI)
+  /// ended up in Cloud Run's request logs.
   ///
   /// A minor (<18) answers 403 `guardian_required`: the caller asks for the
-  /// guardian's card and calls again with [guardianDeviceUid]. A stored
+  /// guardian device and calls again with [guardianDeviceUid]. A stored
   /// record the server can no longer read answers 500
   /// `stored_record_invalid`; trying again does not help.
   Future<PatientFullRecord> scanDevice(

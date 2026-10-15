@@ -257,7 +257,7 @@ void main() {
       );
     });
 
-    test('sends guardian_device_uid null without a guardian card', () async {
+    test('sends guardian_device_uid null without a guardian device', () async {
       stubScan(<String, dynamic>{'patientId': 'patient-001'});
 
       await repository.scanDevice(deviceUid);

@@ -211,7 +211,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.textContaining('Escanee de nuevo la pulsera'),
+        find.textContaining('Escanee de nuevo el dispositivo del paciente'),
         findsOneWidget,
       );
       expect(find.byIcon(Icons.cloud_done), findsNothing);
@@ -248,7 +248,10 @@ void main() {
       final double noticeY = tester.getTopLeft(find.text('Ana G.')).dy;
       final double entryY = tester.getTopLeft(find.text('Juan D.')).dy;
       expect(noticeY, lessThan(entryY));
-      expect(find.textContaining('Scan the wristband again'), findsOneWidget);
+      expect(
+        find.textContaining('Scan the patient device again'),
+        findsOneWidget,
+      );
       expect(find.text('Got it'), findsOneWidget);
     });
   });
@@ -606,10 +609,10 @@ void main() {
       ),
       (
         'identity_mismatch',
-        'La pulsera pertenece a un paciente con otro documento',
+        'El dispositivo pertenece a un paciente con otro documento',
         'Conflicto',
       ),
-      ('device_retired', 'Esta pulsera fue retirada', 'Conflicto'),
+      ('device_retired', 'Este dispositivo fue retirado', 'Conflicto'),
     ]) {
       testWidgets('un 409 con code $code muestra su mensaje y "$badge"', (
         tester,
