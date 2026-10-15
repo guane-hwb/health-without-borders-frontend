@@ -12,6 +12,7 @@ From a user's detail you can:
 
 - **Create** a new user.
 - **Deactivate** a user — the account is suspended but not removed.
+- **Reset the password** of a doctor or nurse (a superadmin can also reset an organization administrator's). The app shows a temporary password **once**: give it to the user, who must replace it when they sign in. All of the user's sessions end.
 - **Delete** a user — the account is removed.
 
 ---

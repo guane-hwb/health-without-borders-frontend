@@ -146,12 +146,15 @@ class AuthRepository implements TokenProvider {
       throw ApiException('Login did not return an access token.');
     }
 
-    final UserSession fetchedSession;
+    UserSession fetchedSession;
     try {
       fetchedSession = await _fetchMe(accessToken);
     } catch (e) {
       await clearSession();
       rethrow;
+    }
+    if (tokenData['must_change_password'] == true) {
+      fetchedSession = fetchedSession.copyWith(mustChangePassword: true);
     }
 
     String? lastUserId;
@@ -309,6 +312,12 @@ class AuthRepository implements TokenProvider {
       );
     } on ApiException catch (e) {
       if (e.statusCode == 401) {
+        // A password change while this refresh was in flight revoked the
+        // token it sent and stored a new pair: the session is fine.
+        final String? current = _cachedRefreshToken;
+        if (current != null && current.isNotEmpty && current != refreshToken) {
+          return _cachedToken;
+        }
         if (ApiErrorCode.isAccountInactive(e.code)) {
           _accountInactiveCode.value = e.code;
         }
@@ -318,28 +327,62 @@ class AuthRepository implements TokenProvider {
       rethrow;
     }
 
-    final String? newAccess = data['access_token']?.toString();
-    if (newAccess == null || newAccess.isEmpty) return null;
+    final String? newAccess = await _adoptTokenPair(data);
+    if (newAccess == null) return null;
 
-    _cachedToken = newAccess;
-    try {
-      await _secureStorage.write(key: _tokenKey, value: newAccess);
-    } catch (_) {}
-
-    final String? newRefresh = data['refresh_token']?.toString();
-    if (newRefresh != null && newRefresh.isNotEmpty) {
-      _cachedRefreshToken = newRefresh;
-      await _anchorClockMark(newRefresh);
-      try {
-        await _secureStorage.write(key: _refreshKey, value: newRefresh);
-      } catch (_) {}
+    final UserSession? session = _session;
+    final bool mustChange = data['must_change_password'] == true;
+    if (session != null &&
+        data.containsKey('must_change_password') &&
+        session.mustChangePassword != mustChange) {
+      _updateSession(session.copyWith(mustChangePassword: mustChange));
+      if (session.id.isNotEmpty) await _persistSession(_session!);
     }
-
-    await _absorbKeyring(data);
 
     _sessionWindowClosed.value = false;
 
     return newAccess;
+  }
+
+  // ── Password ──────────────────────────────────────────────────────────────
+
+  /// Changes the signed-in user's password (POST /users/me/password).
+  ///
+  /// The server ends every session of the user, this device's included, and
+  /// answers with a new token pair and NFC keyring: they replace the stored
+  /// ones, or the next request would get a 401.
+  ///
+  /// Throws [ApiException]: 400 when the current password is wrong (or the
+  /// new one equals it), 422 when the new one breaks the policy, 429 when the
+  /// attempts are paused (`login_paused`, with `retryAfter`).
+  Future<UserSession> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final String token = await getAccessToken();
+    final Map<String, dynamic> data = await _apiClient.postJson(
+      path: '/api/v1/users/me/password',
+      headers: <String, String>{'Authorization': 'Bearer $token'},
+      body: <String, dynamic>{
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      },
+    );
+    if (await _adoptTokenPair(data) == null) {
+      throw ApiException('The password change did not return a token.');
+    }
+    _sessionWindowClosed.value = false;
+
+    final UserSession? session = _session;
+    if (session != null) {
+      _updateSession(
+        session.copyWith(
+          mustChangePassword: data['must_change_password'] == true,
+        ),
+      );
+      if (session.id.isNotEmpty) await _persistSession(_session!);
+    }
+    return _session!;
   }
 
   Future<NfcKeyring?> getNfcKeyring() async {
@@ -490,6 +533,30 @@ class AuthRepository implements TokenProvider {
     try {
       await _secureStorage.delete(key: _nfcKeyKey);
     } catch (_) {}
+  }
+
+  /// Stores the access and refresh tokens and the NFC keyring of a token
+  /// pair response. Returns the access token, or null when there is none.
+  Future<String?> _adoptTokenPair(Map<String, dynamic> data) async {
+    final String? access = data['access_token']?.toString();
+    if (access == null || access.isEmpty) return null;
+
+    _cachedToken = access;
+    try {
+      await _secureStorage.write(key: _tokenKey, value: access);
+    } catch (_) {}
+
+    final String? refresh = data['refresh_token']?.toString();
+    if (refresh != null && refresh.isNotEmpty) {
+      _cachedRefreshToken = refresh;
+      await _anchorClockMark(refresh);
+      try {
+        await _secureStorage.write(key: _refreshKey, value: refresh);
+      } catch (_) {}
+    }
+
+    await _absorbKeyring(data);
+    return access;
   }
 
   Future<String?> _getRefreshToken() async {

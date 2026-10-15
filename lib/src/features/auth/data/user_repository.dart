@@ -211,4 +211,23 @@ class UserRepository {
       headers: await _authHeaders(),
     );
   }
+
+  // ── POST /api/v1/users/{id}/reset-password ────────────────────────────────
+  // superadmin, u org_admin para médicos y enfermeras de su organización.
+  // Cierra todas las sesiones del usuario, que deberá cambiar la contraseña
+  // al entrar. 400 en la propia cuenta, 403, 404.
+
+  /// Returns the temporary password, to be shown once and handed over.
+  Future<String> resetPassword(String id) async {
+    final data = await _apiClient.postJson(
+      path: '/api/v1/users/$id/reset-password',
+      body: const <String, dynamic>{},
+      headers: await _authHeaders(),
+    );
+    final String? temporary = data['temporary_password']?.toString();
+    if (temporary == null || temporary.isEmpty) {
+      throw ApiException('The reset did not return a temporary password.');
+    }
+    return temporary;
+  }
 }

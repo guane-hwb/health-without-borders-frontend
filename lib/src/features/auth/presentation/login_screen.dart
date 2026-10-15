@@ -359,6 +359,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final errorMessage = isNetworkError
           ? s.loginNetworkRequired
+          : e.statusCode == 429
+          ? ApiErrorCode.tooManyAttempts(e.retryAfter, isEs: s.isEs)
           : ApiErrorCode.describe(e.code, isEs: s.isEs) ?? e.message;
 
       ScaffoldMessenger.of(context).showSnackBar(
