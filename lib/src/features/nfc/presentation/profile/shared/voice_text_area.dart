@@ -126,7 +126,7 @@ class _VoiceTextAreaState extends State<VoiceTextArea>
       listenOptions: stt.SpeechListenOptions(
         cancelOnError: true,
         partialResults: true,
-        onDevice: false,
+        onDevice: true,
       ),
       onResult: (result) {
         if (!mounted) return;

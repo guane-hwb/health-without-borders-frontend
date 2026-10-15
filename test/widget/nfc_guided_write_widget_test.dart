@@ -468,5 +468,47 @@ void main() {
         expect(harnessKey.currentState!.result, false);
       },
     );
+
+    testWidgets(
+      'un intento de retroceso del sistema durante "writing" invoca _cancel '
+      'a través de PopScope, sin cerrar la hoja',
+      (tester) async {
+        final harnessKey = GlobalKey<_HarnessState>();
+        final writeCompleter = Completer<void>();
+
+        await tester.pumpWidget(
+          _Harness(
+            key: harnessKey,
+            locale: 'es',
+            write: () => writeCompleter.future,
+          ),
+        );
+
+        await _openSheet(tester);
+        await tester.tap(find.text('Empezar'));
+        await tester.pump();
+        expect(
+          find.text('Grabando… mantenga el dispositivo cerca'),
+          findsOneWidget,
+        );
+
+        final NavigatorState navigator = tester.state(
+          find.byType(Navigator).first,
+        );
+        await navigator.maybePop();
+        await tester.pump();
+
+        expect(
+          find.text('Grabando… mantenga el dispositivo cerca'),
+          findsOneWidget,
+        );
+
+        writeCompleter.completeError(NfcCancelledException());
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(harnessKey.currentState!.result, false);
+      },
+    );
   });
 }

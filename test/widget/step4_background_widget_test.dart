@@ -663,4 +663,142 @@ void main() {
       expect(ctrlTexts, isEmpty);
     });
   });
+
+  group('Step4Background — Cobertura 100% de Hojas Modales', () {
+    testWidgets(
+      'Completa el formulario de _AddMedicationSheet e ingresa un medicamento al borrador',
+      (tester) async {
+        resizeViewport(tester);
+        final draft = _emptyDraft();
+        await tester.pumpWidget(_buildStep4(draft: draft));
+        await tester.pumpAndSettle();
+
+        final addBtns = find.text('Agregar');
+        await tester.tap(addBtns.at(1));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Agregar medicamento'), findsOneWidget);
+
+        final sheetFinder = find.byType(DraggableScrollableSheet);
+        final modalTextFields = find.descendant(
+          of: sheetFinder,
+          matching: find.byType(TextField),
+        );
+
+        await tester.enterText(modalTextFields.at(0), 'Amoxicilina');
+        await tester.pumpAndSettle();
+
+        final statusChip = find.text('Completado');
+        if (statusChip.evaluate().isNotEmpty) {
+          await tester.tap(statusChip);
+          await tester.pumpAndSettle();
+        }
+
+        await tester.enterText(modalTextFields.at(1), '500mg');
+        await tester.pumpAndSettle();
+
+        await tester.enterText(modalTextFields.at(2), 'Tomar con alimentos');
+        await tester.pumpAndSettle();
+
+        final confirmBtn = find.descendant(
+          of: sheetFinder,
+          matching: find.byType(ElevatedButton),
+        );
+        await tester.tap(confirmBtn);
+        await tester.pumpAndSettle();
+
+        expect(draft.medications, hasLength(1));
+        expect(draft.medications.first.medicationName, 'Amoxicilina');
+        expect(draft.medications.first.dosage, '500mg');
+      },
+    );
+
+    testWidgets(
+      'Completa el formulario de _AddAllergySheet e ingresa una alergia al borrador',
+      (tester) async {
+        resizeViewport(tester);
+        final draft = _emptyDraft();
+        await tester.pumpWidget(_buildStep4(draft: draft));
+        await tester.pumpAndSettle();
+
+        final addBtns = find.text('Agregar');
+        await tester.tap(addBtns.last);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Agregar alergia'), findsOneWidget);
+
+        final sheetFinder = find.byType(DraggableScrollableSheet);
+        final modalTextFields = find.descendant(
+          of: sheetFinder,
+          matching: find.byType(TextField),
+        );
+
+        final catChip = find.text('Alimento');
+        if (catChip.evaluate().isNotEmpty) {
+          await tester.tap(catChip);
+          await tester.pumpAndSettle();
+        }
+
+        await tester.enterText(modalTextFields.at(0), 'Mariscos');
+        await tester.pumpAndSettle();
+
+        await tester.enterText(modalTextFields.at(1), 'Urticaria grave');
+        await tester.pumpAndSettle();
+
+        final confirmBtn = find.descendant(
+          of: sheetFinder,
+          matching: find.byType(ElevatedButton),
+        );
+        await tester.tap(confirmBtn);
+        await tester.pumpAndSettle();
+
+        expect(draft.allergies, hasLength(1));
+        expect(draft.allergies.first.allergen, 'Mariscos');
+        expect(draft.allergies.first.reaction, 'Urticaria grave');
+      },
+    );
+
+    testWidgets(
+      'Cambia el parentesco en _AddFamilyHistorySheet e ingresa antecedente al borrador',
+      (tester) async {
+        resizeViewport(tester);
+        final draft = _emptyDraft();
+        await tester.pumpWidget(_buildStep4(draft: draft));
+        await tester.pumpAndSettle();
+
+        final addBtns = find.text('Agregar');
+        await tester.tap(addBtns.at(2));
+        await tester.pumpAndSettle();
+
+        final sheetFinder = find.byType(DraggableScrollableSheet);
+
+        final relChip = find.text('Hermanos');
+        if (relChip.evaluate().isNotEmpty) {
+          await tester.tap(relChip);
+          await tester.pumpAndSettle();
+        }
+
+        final textField = find.descendant(
+          of: sheetFinder,
+          matching: find.byType(TextField),
+        );
+        await tester.enterText(textField.last, 'Asma bronquial');
+        await tester.pumpAndSettle();
+
+        final confirmBtn = find.descendant(
+          of: sheetFinder,
+          matching: find.byType(ElevatedButton),
+        );
+        await tester.tap(confirmBtn);
+        await tester.pumpAndSettle();
+
+        expect(draft.familyHistory, hasLength(1));
+        expect(draft.familyHistory.first.relationship, '02');
+        expect(
+          draft.familyHistory.first.conditionDescription,
+          'Asma bronquial',
+        );
+      },
+    );
+  });
 }

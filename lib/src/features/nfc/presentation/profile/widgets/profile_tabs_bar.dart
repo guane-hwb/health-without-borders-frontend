@@ -19,41 +19,51 @@ class ProfileTabsBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.primary,
-      child: TabBar(
-        controller: controller,
-        isScrollable: true,
-        indicatorSize: TabBarIndicatorSize.tab,
-        indicator: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        indicatorPadding: const EdgeInsets.symmetric(
-          horizontal: 4,
-          vertical: 8,
-        ),
-        labelColor: AppColors.primary,
-        unselectedLabelColor: AppColors.white,
-        labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        unselectedLabelStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-        ),
-        dividerColor: Colors.transparent,
-        tabs: [
-          Tab(text: '  ${AppStrings.of(context).tabSummary}  '),
-          Tab(
-            child: TabLabelWithBadge(
-              text: AppStrings.of(context).consultations,
-              count: draft.medicalHistory.length,
-            ),
+      width: double.infinity,
+      alignment: Alignment.center,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: TabBar(
+          controller: controller,
+          isScrollable: false,
+          tabAlignment: TabAlignment.fill,
+          indicatorSize: TabBarIndicatorSize.tab,
+          indicator: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(20),
           ),
-          Tab(
-            child: TabLabelWithBadge(
-              text: AppStrings.of(context).vaccines,
-              count: draft.vaccinationRecord.length,
-            ),
+          indicatorPadding: const EdgeInsets.symmetric(
+            horizontal: 2,
+            vertical: 8,
           ),
-        ],
+          labelPadding: EdgeInsets.zero,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.white,
+          labelStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+          dividerColor: Colors.transparent,
+          tabs: [
+            Tab(text: AppStrings.of(context).tabSummary),
+            Tab(
+              child: TabLabelWithBadge(
+                text: AppStrings.of(context).consultations,
+                count: draft.medicalHistory.length,
+              ),
+            ),
+            Tab(
+              child: TabLabelWithBadge(
+                text: AppStrings.of(context).vaccines,
+                count: draft.vaccinationRecord.length,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -68,12 +78,15 @@ class TabLabelWithBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(text),
+        Flexible(
+          child: Text(text, overflow: TextOverflow.ellipsis, maxLines: 1),
+        ),
         if (count > 0) ...[
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
             decoration: BoxDecoration(
               color: AppColors.accent,
               borderRadius: BorderRadius.circular(10),

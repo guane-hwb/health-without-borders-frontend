@@ -220,6 +220,27 @@ void main() {
       expect(find.textContaining('2:05'), findsOneWidget);
     });
 
+    testWidgets('una hora con desfase se muestra en la hora local', (
+      tester,
+    ) async {
+      final DateTime local = DateTime.utc(2024, 1, 10, 19, 5).toLocal();
+      final int h = local.hour == 0
+          ? 12
+          : (local.hour > 12 ? local.hour - 12 : local.hour);
+      final c = _makeConsultation(startDateTime: '2024-01-10T19:05:00+00:00');
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+
+      expect(find.textContaining('$h:05'), findsOneWidget);
+    });
+
     testWidgets('muestra 12:xx para medianoche (hora 0)', (tester) async {
       final c = _makeConsultation(startDateTime: '2024-01-10T00:20:00');
       await tester.pumpWidget(
@@ -416,6 +437,82 @@ void main() {
 
   // ── Group 4: DiagChip ─────────────────────────────────────────────────────
   group('_DiagChip – chips de diagnóstico', () {
+    for (final (source, label) in <(String?, String?)>[
+      ('ai_suggested', 'Sugerido por IA'),
+      ('ai_fallback', 'IA: sin código válido'),
+      (null, 'Origen no registrado'),
+      ('clinician', null),
+    ]) {
+      testWidgets(
+        'origen ${source ?? "ausente"} → ${label ?? "sin etiqueta"}',
+        (tester) async {
+          final c = _makeConsultation(
+            diagnosis: [
+              DiagnosisItem(
+                icd10Code: 'J069',
+                description: 'IRA',
+                source: source,
+              ),
+            ],
+          );
+          await tester.pumpWidget(
+            _wrap(
+              ProfileTabConsultations(
+                draft: _makeRecord([c]),
+                canAdd: false,
+                onAdd: () {},
+              ),
+            ),
+          );
+
+          for (final other in <String>[
+            'Sugerido por IA',
+            'IA: sin código válido',
+            'Origen no registrado',
+          ]) {
+            expect(
+              find.text(other),
+              other == label ? findsOneWidget : findsNothing,
+              reason: other,
+            );
+          }
+        },
+      );
+    }
+
+    testWidgets('el detalle de la consulta indica el origen del diagnóstico', (
+      tester,
+    ) async {
+      final c = _makeConsultation(
+        clinicalEvaluation: ClinicalEvaluation(
+          historyOfCurrentIllness: 'Tos seca',
+        ),
+        diagnosis: [
+          DiagnosisItem(
+            icd10Code: 'J069',
+            description: 'IRA',
+            source: 'ai_suggested',
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+      await tester.tap(find.text('Tos seca'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('IRA · Sugerido por IA', skipOffstage: false),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('muestra chip con código ICD-10 y descripción', (tester) async {
       final diag = _makeDiagnosis(
         icd10Code: 'J00',
@@ -780,6 +877,47 @@ void main() {
 
   // ── Grupo 12: Cobertura completa de _ConsultationDetailScreen ──────────────
   group('_ConsultationDetailScreen – Cobertura Absoluta', () {
+    testWidgets('inicio y fin con desfase se muestran en la hora local', (
+      tester,
+    ) async {
+      String expected(DateTime utc) {
+        final DateTime d = utc.toLocal();
+        return '${d.day}/${d.month}/${d.year} '
+            '${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+      }
+
+      final c = _makeConsultation(
+        startDateTime: '2024-06-15T15:00:00+00:00',
+        endDateTime: '2024-06-15T17:30:00+00:00',
+        clinicalEvaluation: ClinicalEvaluation(
+          historyOfCurrentIllness: 'Dolor abdominal',
+        ),
+      );
+      await tester.pumpWidget(
+        _wrap(
+          ProfileTabConsultations(
+            draft: _makeRecord([c]),
+            canAdd: false,
+            onAdd: () {},
+          ),
+        ),
+      );
+      await tester.tap(find.text('Dolor abdominal'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(expected(DateTime.utc(2024, 6, 15, 15)), skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          expected(DateTime.utc(2024, 6, 15, 17, 30)),
+          skipOffstage: false,
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets(
       'Navega al detalle y renderiza endDateTime, provider, practitioner, evaluation completa, diagnosis, discharge, riskFactors, incapacity, payer, entryRoute y externalCause',
       (tester) async {

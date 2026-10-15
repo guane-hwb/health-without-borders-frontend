@@ -2,21 +2,41 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Directory, File;
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart' as crypto;
-import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb, visibleForTesting;
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart'
+    show getApplicationSupportDirectory;
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
 import '../utils/app_logger.dart';
+import '../utils/clinical_time.dart';
 import 'web_storage.dart' as web_storage;
 
-const Set<int> kPermanentSyncErrorCodes = <int>{400, 409, 422};
+const Set<int> kPermanentSyncErrorCodes = <int>{400, 403, 409, 422};
+
+final String _permanentCodesSql = kPermanentSyncErrorCodes.join(', ');
+
+class LocalKeyUnavailableException implements Exception {
+  LocalKeyUnavailableException(this.keyName, this.cause);
+
+  final String keyName;
+  final Object cause;
+
+  @override
+  String toString() =>
+      'LocalKeyUnavailableException: No se pudo leer la clave de cifrado "$keyName" tras varios reintentos. '
+      'No se sobrescribirá la clave existente para evitar pérdida de datos. Causa: $cause';
+}
 
 class WebStoreCorruptionException implements Exception {
   WebStoreCorruptionException(this.key, this.quarantineKey);
@@ -42,6 +62,11 @@ class AuditDecryptionException implements Exception {
 class LocalDatabase {
   LocalDatabase._({FlutterSecureStorage? secureStorage})
     : _secureStorage = secureStorage ?? _defaultSecureStorage,
+      _legacySecureStorage = _defaultLegacySecureStorage,
+      _platformOverride = null,
+      _legacyDatabasesDirectory = getDatabasesPath,
+      _protectedDirectory = _defaultProtectedDirectory,
+      _excludeFromBackup = _defaultExcludeFromBackup,
       _forceWeb = null,
       _webGet = web_storage.getWebStorageItem,
       _webSet = web_storage.setWebStorageItem,
@@ -67,7 +92,18 @@ class LocalDatabase {
     Future<void> Function()? webClearAll,
     Future<List<MapEntry<String, String>>> Function(String prefix)? webList,
     Future<void> Function(String prefix)? webDeleteByPrefix,
+    FlutterSecureStorage? legacySecureStorage,
+    TargetPlatform? platformOverride,
+    Future<String> Function()? legacyDatabasesDirectory,
+    Future<String> Function()? protectedDirectory,
+    Future<void> Function(String path)? excludeFromBackup,
   }) : _secureStorage = secureStorage ?? _defaultSecureStorage,
+       _legacySecureStorage =
+           legacySecureStorage ?? _defaultLegacySecureStorage,
+       _platformOverride = platformOverride,
+       _legacyDatabasesDirectory = legacyDatabasesDirectory ?? getDatabasesPath,
+       _protectedDirectory = protectedDirectory ?? _defaultProtectedDirectory,
+       _excludeFromBackup = excludeFromBackup ?? _defaultExcludeFromBackup,
        _forceWeb = forceWeb,
        _webGet = webGet ?? web_storage.getWebStorageItem,
        _webSet = webSet ?? web_storage.setWebStorageItem,
@@ -78,10 +114,15 @@ class LocalDatabase {
            webDeleteByPrefix ?? web_storage.deleteWebStorageByPrefix;
 
   final bool? _forceWeb;
+  final FlutterSecureStorage _legacySecureStorage;
+  final TargetPlatform? _platformOverride;
+  final Future<String> Function() _legacyDatabasesDirectory;
+  final Future<String> Function() _protectedDirectory;
+  final Future<void> Function(String path) _excludeFromBackup;
   final Future<String?> Function(String key) _webGet;
   final Future<void> Function(String key, String value) _webSet;
   final Future<void> Function(String key) _webRemove;
-  final Future<void> Function() _webClearAll;
+  final Future<void> Function()? _webClearAll;
   final Future<List<MapEntry<String, String>>> Function(String prefix) _webList;
   final Future<void> Function(String prefix) _webDeleteByPrefix;
 
@@ -103,8 +144,51 @@ class LocalDatabase {
     }
   }
 
+  static const String _keychainService = 'hwb_local_db';
+
   static const FlutterSecureStorage _defaultSecureStorage =
+      FlutterSecureStorage(
+        iOptions: IOSOptions(
+          accountName: _keychainService,
+          accessibility: KeychainAccessibility.first_unlock_this_device,
+        ),
+        mOptions: MacOsOptions(
+          accountName: _keychainService,
+          accessibility: KeychainAccessibility.first_unlock_this_device,
+        ),
+        aOptions: AndroidOptions(),
+        // Web: la llave vive en sessionStorage, no en localStorage junto al
+        // texto cifrado de IndexedDB. Al cerrar la pestaña la cola queda
+        // ilegible y se borra al arrancar sin sesión (AuthRepository).
+        webOptions: WebOptions(useSessionStorage: true),
+      );
+
+  /// iOS/macOS: almacén anterior a la migración al llavero solo-dispositivo.
+  /// Web: apunta al almacén persistente (localStorage) de versiones previas,
+  /// solo para borrar las llaves que dejaron allí.
+  static const FlutterSecureStorage _defaultLegacySecureStorage =
       FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: false));
+
+  @visibleForTesting
+  static FlutterSecureStorage get defaultSecureStorageForTesting =>
+      _defaultSecureStorage;
+
+  static const MethodChannel _backupChannel = MethodChannel(
+    'hwb/backup_exclusion',
+  );
+
+  static Future<String> _defaultProtectedDirectory() async =>
+      (await getApplicationSupportDirectory()).path;
+
+  static Future<void> _defaultExcludeFromBackup(String path) => _backupChannel
+      .invokeMethod<void>('excludeFromBackup', <String, String>{'path': path});
+
+  static const String _protectedDbDirName = 'hwb_db';
+  static const List<String> _dbSidecarSuffixes = <String>[
+    '-wal',
+    '-shm',
+    '-journal',
+  ];
 
   static const String _dbName = 'hwb_patients.db';
   static const int _dbVersion = 10;
@@ -134,6 +218,12 @@ class LocalDatabase {
   static Future<void> init() async {}
 
   bool get _isWeb => _forceWeb ?? kIsWeb;
+
+  bool get _isApple {
+    if (_isWeb) return false;
+    final TargetPlatform platform = _platformOverride ?? defaultTargetPlatform;
+    return platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
+  }
 
   bool _webMigrationChecked = false;
 
@@ -213,6 +303,15 @@ class LocalDatabase {
   @visibleForTesting
   List<String> get webQuarantinedKeysForTesting =>
       List.unmodifiable(_webQuarantinedKeys);
+
+  @visibleForTesting
+  Future<void> closeForTesting() async {
+    if (_db != null && _db!.isOpen) {
+      await _db!.close();
+      _db = null;
+      _dbInitFuture = null;
+    }
+  }
 
   Future<Map<String, dynamic>?> _webReadJsonRecord(String key) async {
     await _ensureWebMigrated();
@@ -358,10 +457,7 @@ class LocalDatabase {
       if (e.key.contains('::quarantine::')) continue;
       try {
         rows.add(Map<String, Object?>.from(jsonDecode(e.value) as Map));
-      } catch (_) {
-        // An unreadable observation is telemetry, not clinical data: skip it
-        // rather than quarantine, so a corrupt row never blocks a read.
-      }
+      } catch (_) {}
     }
     return rows;
   }
@@ -418,17 +514,92 @@ class LocalDatabase {
     return _keyInitFuture ??= _initEncryptionKey();
   }
 
-  Future<Uint8List> _initEncryptionKey() async {
+  Future<String?> _readKeyWithMigration(String name) async {
+    final String? current = await _secureStorage.read(key: name);
+    if (!_isApple) return current;
+
+    if (current != null && current.isNotEmpty) {
+      await _dropRedundantLegacyKey(name, current);
+      return current;
+    }
+
+    final String? legacy = await _legacySecureStorage.read(key: name);
+    if (legacy == null || legacy.isEmpty) return null;
+    return _migrateLegacyKey(name, legacy);
+  }
+
+  Future<String> _migrateLegacyKey(String name, String legacyValue) async {
     try {
-      final existingKeyBase64 = await _secureStorage.read(
-        key: _dbKeyStorageName,
+      await _secureStorage.write(key: name, value: legacyValue);
+      final String? check = await _secureStorage.read(key: name);
+      if (check != legacyValue) {
+        throw StateError('La verificación de la llave migrada no coincide.');
+      }
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo migrar la llave "$name" al llavero solo-dispositivo; '
+        'se sigue usando la heredada y se reintentará en el próximo arranque',
+        error: e,
+        stackTrace: stack,
       );
-      if (existingKeyBase64 != null && existingKeyBase64.isNotEmpty) {
-        _dbEncryptionKey = base64Decode(existingKeyBase64);
-        return _dbEncryptionKey!;
+      try {
+        await _secureStorage.delete(key: name);
+      } catch (_) {}
+      return legacyValue;
+    }
+
+    try {
+      await _legacySecureStorage.delete(key: name);
+    } catch (e) {
+      AppLogger.e(
+        'Llave "$name" migrada, pero no se pudo borrar la heredada: $e',
+      );
+    }
+    return legacyValue;
+  }
+
+  Future<void> _dropRedundantLegacyKey(String name, String current) async {
+    try {
+      final String? legacy = await _legacySecureStorage.read(key: name);
+      if (legacy == null || legacy.isEmpty) return;
+      if (legacy == current) {
+        await _legacySecureStorage.delete(key: name);
+      } else {
+        AppLogger.e(
+          'La llave "$name" heredada difiere de la actual; se conserva la '
+          'actual y se deja la heredada sin tocar.',
+        );
       }
     } catch (e) {
-      AppLogger.e('Error leyendo clave de cifrado local: $e');
+      AppLogger.e('No se pudo limpiar la llave heredada "$name": $e');
+    }
+  }
+
+  Future<Uint8List> _initEncryptionKey() async {
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final existingKeyBase64 = await _readKeyWithMigration(
+          _dbKeyStorageName,
+        );
+        if (existingKeyBase64 != null && existingKeyBase64.isNotEmpty) {
+          _dbEncryptionKey = base64Decode(existingKeyBase64);
+          return _dbEncryptionKey!;
+        }
+        lastError = null;
+        break;
+      } catch (e) {
+        lastError = e;
+        AppLogger.e(
+          'Error leyendo clave de cifrado local (intento $attempt): $e',
+        );
+        await Future<void>.delayed(Duration(milliseconds: 200 * (attempt + 1)));
+      }
+    }
+
+    if (lastError != null) {
+      _keyInitFuture = null;
+      throw LocalKeyUnavailableException(_dbKeyStorageName, lastError);
     }
 
     final random = Random.secure();
@@ -530,16 +701,30 @@ class LocalDatabase {
   }
 
   Future<Uint8List> _initAuditEncryptionKey() async {
-    try {
-      final existingKeyBase64 = await _secureStorage.read(
-        key: _auditKeyStorageName,
-      );
-      if (existingKeyBase64 != null && existingKeyBase64.isNotEmpty) {
-        _auditEncryptionKey = base64Decode(existingKeyBase64);
-        return _auditEncryptionKey!;
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final existingKeyBase64 = await _readKeyWithMigration(
+          _auditKeyStorageName,
+        );
+        if (existingKeyBase64 != null && existingKeyBase64.isNotEmpty) {
+          _auditEncryptionKey = base64Decode(existingKeyBase64);
+          return _auditEncryptionKey!;
+        }
+        lastError = null;
+        break;
+      } catch (e) {
+        lastError = e;
+        AppLogger.e(
+          'Error leyendo clave de cifrado de auditoría (intento $attempt): $e',
+        );
+        await Future<void>.delayed(Duration(milliseconds: 200 * (attempt + 1)));
       }
-    } catch (e) {
-      AppLogger.e('Error leyendo clave de cifrado de auditoría: $e');
+    }
+
+    if (lastError != null) {
+      _auditKeyInitFuture = null;
+      throw LocalKeyUnavailableException(_auditKeyStorageName, lastError);
     }
 
     final random = Random.secure();
@@ -602,8 +787,15 @@ class LocalDatabase {
     }
   }
 
+  static final RegExp _unpaddedBase64 = RegExp(r'^[A-Za-z0-9+/]{40,}$');
+
+  static bool _looksLikeAuditCiphertext(String value) =>
+      value.startsWith('ey') ||
+      value.contains('=') ||
+      (value.length % 4 == 0 && _unpaddedBase64.hasMatch(value));
+
   Future<String> _decryptAuditPayload(String cipherBase64) async {
-    if (!cipherBase64.startsWith('ey') && !cipherBase64.contains('=')) {
+    if (!_looksLikeAuditCiphertext(cipherBase64)) {
       return cipherBase64;
     }
 
@@ -656,9 +848,28 @@ class LocalDatabase {
     } catch (e) {
       AppLogger.e('Error borrando la clave de cifrado local: $e');
     }
-    if (_isWeb) {
+    if (_isApple) {
       try {
-        await _withWebLock(() => _webClearAll());
+        await _legacySecureStorage.delete(key: _dbKeyStorageName);
+      } catch (e) {
+        AppLogger.e('Error borrando la clave heredada de cifrado local: $e');
+      }
+    }
+    if (_isWeb) {
+      // Builds anteriores guardaron las llaves en localStorage: no deben
+      // sobrevivir al cierre de sesión.
+      for (final String name in <String>[
+        _dbKeyStorageName,
+        _auditKeyStorageName,
+      ]) {
+        try {
+          await _legacySecureStorage.delete(key: name);
+        } catch (e) {
+          AppLogger.e('Error borrando la clave web heredada $name: $e');
+        }
+      }
+      try {
+        await _withWebLock(() => _webClearAll!());
       } catch (e) {
         AppLogger.e('Error limpiando IndexedDB web tras borrar la clave: $e');
       }
@@ -669,13 +880,90 @@ class LocalDatabase {
 
   Future<Database?> get _database async {
     if (_isWeb) return null;
-    if (_db != null) return _db;
-    _db = await _initDb();
+    if (_db != null && _db!.isOpen) return _db;
+    final Future<Database> pending = _dbInitFuture ??= _initDb();
+    try {
+      _db = await pending;
+    } catch (_) {
+      _dbInitFuture = null;
+      rethrow;
+    }
     return _db;
   }
 
+  Future<Database>? _dbInitFuture;
+
+  Future<String> _resolveDbPath() async {
+    final String legacyPath = join(await _legacyDatabasesDirectory(), _dbName);
+    if (!_isApple) return legacyPath;
+
+    final String protectedDir = join(
+      await _protectedDirectory(),
+      _protectedDbDirName,
+    );
+    try {
+      await Directory(protectedDir).create(recursive: true);
+    } catch (e) {
+      AppLogger.e('No se pudo crear la carpeta protegida de la base local: $e');
+      return legacyPath;
+    }
+    try {
+      await _excludeFromBackup(protectedDir);
+    } catch (e) {
+      AppLogger.e(
+        'No se pudo excluir la base local de las copias de seguridad: $e',
+      );
+    }
+
+    final String newPath = join(protectedDir, _dbName);
+    final bool ready = await _moveLegacyDatabase(legacyPath, newPath);
+    return ready ? newPath : legacyPath;
+  }
+
+  Future<bool> _moveLegacyDatabase(String from, String to) async {
+    final File source = File(from);
+    if (await File(to).exists()) return true;
+    if (!await source.exists()) return true;
+
+    final File staging = File('$to.migrating');
+    try {
+      for (final String suffix in <String>['', ..._dbSidecarSuffixes]) {
+        final File stale = File('$to$suffix');
+        if (await stale.exists()) await stale.delete();
+      }
+      if (await staging.exists()) await staging.delete();
+
+      for (final String suffix in _dbSidecarSuffixes) {
+        final File aux = File('$from$suffix');
+        if (await aux.exists()) await aux.copy('$to$suffix');
+      }
+      await source.copy(staging.path);
+      if (await staging.length() != await source.length()) {
+        throw StateError('La copia de la base local no coincide en tamaño.');
+      }
+      await staging.rename(to);
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo trasladar la base local a Application Support',
+        error: e,
+        stackTrace: stack,
+      );
+      return false;
+    }
+
+    for (final String suffix in <String>[..._dbSidecarSuffixes, '']) {
+      try {
+        final File old = File('$from$suffix');
+        if (await old.exists()) await old.delete();
+      } catch (e) {
+        AppLogger.e('No se pudo borrar el archivo heredado $from$suffix: $e');
+      }
+    }
+    return true;
+  }
+
   Future<Database> _initDb() async {
-    final String dbPath = join(await getDatabasesPath(), _dbName);
+    final String dbPath = await _resolveDbPath();
     return openDatabase(
       dbPath,
       version: _dbVersion,
@@ -800,16 +1088,6 @@ class LocalDatabase {
     ''');
   }
 
-  /// Records which NFC key version each chip was last seen on.
-  ///
-  /// Keyed by device UID so repeated scans of the same chip update one row
-  /// instead of piling up: the question is "what version is this chip on
-  /// now", not "how often was it read".
-  ///
-  /// [device_role] separates wristbands from guardian cards. Both are written
-  /// with the same keyring, so a version cannot be retired safely by looking
-  /// at wristbands alone — guardian cards are rewritten less often and are the
-  /// likelier stragglers.
   static Future<void> _createKeyVersionTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS $_keyVersionTable (
@@ -848,13 +1126,6 @@ class LocalDatabase {
     );
   }
 
-  /// Records that [deviceUid] was just read on [keyVersion].
-  ///
-  /// Upserts by UID: repeated scans of the same chip refresh one row. Marks it
-  /// unsynced so the next sync can report it.
-  ///
-  /// Telemetry must never break a clinical read, so every failure here is
-  /// swallowed. A missing observation only delays a rotation decision.
   Future<void> recordNfcKeyVersion({
     required String deviceUid,
     required String deviceRole,
@@ -868,8 +1139,6 @@ class LocalDatabase {
       'device_role': deviceRole,
       'key_version': keyVersion,
       'had_header': hadHeader ? 1 : 0,
-      // UTC with a 'Z' suffix. A naive local timestamp is read by the
-      // server as UTC, shifting every observation by the device's offset.
       'observed_at': DateTime.now().toUtc().toIso8601String(),
       'is_synced': 0,
     };
@@ -894,7 +1163,6 @@ class LocalDatabase {
     }
   }
 
-  /// Observations not yet reported to the backend.
   Future<List<Map<String, Object?>>> pendingNfcKeyVersions() async {
     try {
       final db = await _database;
@@ -917,7 +1185,6 @@ class LocalDatabase {
     }
   }
 
-  /// Marks the given UIDs as reported.
   Future<void> markNfcKeyVersionsSynced(List<String> deviceUids) async {
     if (deviceUids.isEmpty) return;
     try {
@@ -970,7 +1237,7 @@ class LocalDatabase {
           : await _encryptAuditPayload(patientName),
       'user_id': userId == null ? null : await _encryptAuditPayload(userId),
       'reason': reason,
-      'occurred_at': DateTime.now().toIso8601String(),
+      'occurred_at': toIso8601WithOffset(DateTime.now()),
       'is_synced': 0,
       'owner_user_id': ownerUserId,
       'organization_id': organizationId,
@@ -1004,13 +1271,15 @@ class LocalDatabase {
               .where(
                 (Map<String, Object?> r) =>
                     (r['is_synced'] as num?)?.toInt() == 0 &&
-                    (ownerUserId == null || r['owner_user_id'] == ownerUserId),
+                    (ownerUserId == null ||
+                        r['owner_user_id'] == null ||
+                        r['owner_user_id'] == ownerUserId),
               )
               .toList()
         : await db.query(
             _emergencyLogTable,
             where: ownerUserId != null
-                ? 'is_synced = 0 AND owner_user_id = ?'
+                ? 'is_synced = 0 AND (owner_user_id = ? OR owner_user_id IS NULL)'
                 : 'is_synced = 0',
             whereArgs: ownerUserId != null ? [ownerUserId] : null,
           );
@@ -1018,34 +1287,60 @@ class LocalDatabase {
     final out = <Map<String, Object?>>[];
     for (final r in rows) {
       final mutable = Map<String, Object?>.from(r);
+      final int? id = (mutable['id'] as num?)?.toInt();
+      final uId = mutable['user_id'] as String?;
+      if (uId != null && uId.isNotEmpty) {
+        final decryptedUserId = await _decryptAuditPayload(uId);
+        if (decryptedUserId == '[CORRUPTED_KEY_MISSING]') {
+          throw AuditDecryptionException(id ?? 0);
+        }
+        mutable['user_id'] = decryptedUserId;
+      }
+      if (ownerUserId != null && mutable['owner_user_id'] == null) {
+        final actor = mutable['user_id'] as String?;
+        if (actor != null && actor.isNotEmpty && actor != ownerUserId) {
+          continue;
+        }
+        await _adoptEmergencyLog(id, ownerUserId);
+        mutable['owner_user_id'] = ownerUserId;
+      }
       final existingCid = mutable['client_event_id'] as String?;
       if (existingCid == null || existingCid.isEmpty) {
         final cid = const Uuid().v4();
         mutable['client_event_id'] = cid;
-        await _persistEmergencyClientEventId(
-          (mutable['id'] as num?)?.toInt(),
-          cid,
-        );
+        await _persistEmergencyClientEventId(id, cid);
       }
       final name = mutable['patient_name'] as String?;
       if (name != null && name.isNotEmpty) {
         final decryptedName = await _decryptAuditPayload(name);
         if (decryptedName == '[CORRUPTED_KEY_MISSING]') {
-          throw AuditDecryptionException((mutable['id'] as num?)?.toInt() ?? 0);
+          throw AuditDecryptionException(id ?? 0);
         }
         mutable['patient_name'] = decryptedName;
-      }
-      final uId = mutable['user_id'] as String?;
-      if (uId != null && uId.isNotEmpty) {
-        final decryptedUserId = await _decryptAuditPayload(uId);
-        if (decryptedUserId == '[CORRUPTED_KEY_MISSING]') {
-          throw AuditDecryptionException((mutable['id'] as num?)?.toInt() ?? 0);
-        }
-        mutable['user_id'] = decryptedUserId;
       }
       out.add(mutable);
     }
     return out;
+  }
+
+  Future<void> _adoptEmergencyLog(int? id, String ownerUserId) async {
+    if (id == null) return;
+    if (_isWeb) {
+      await _withWebLock(() async {
+        final row = await _webGetLogRow(id);
+        if (row == null || row['owner_user_id'] != null) return;
+        row['owner_user_id'] = ownerUserId;
+        await _webPutLogRow(id, row);
+      });
+      return;
+    }
+    final db = await _database;
+    await db?.update(
+      _emergencyLogTable,
+      <String, Object?>{'owner_user_id': ownerUserId},
+      where: 'id = ? AND owner_user_id IS NULL',
+      whereArgs: [id],
+    );
   }
 
   Future<int> getOrphanedEmergencyLogCount() async {
@@ -1294,10 +1589,20 @@ class LocalDatabase {
                 r['owner_user_id'] == null ||
                 r['owner_user_id'] == ownerUserId),
       )) {
-        final decryptedJson = await _decryptPayload(r['record_json'] as String);
-        final row = Map<String, dynamic>.from(r);
-        row['record_json'] = decryptedJson;
-        entries.add(LocalPatientEntry.fromRow(row));
+        try {
+          final decryptedJson = await _decryptPayload(
+            r['record_json'] as String,
+          );
+          final row = Map<String, dynamic>.from(r);
+          row['record_json'] = decryptedJson;
+          entries.add(LocalPatientEntry.fromRow(row));
+        } catch (e, stack) {
+          AppLogger.e(
+            'Fallo al descifrar fila web para ${r['patient_id']}',
+            error: e,
+            stackTrace: stack,
+          );
+        }
       }
       return entries..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     }
@@ -1317,11 +1622,19 @@ class LocalDatabase {
 
     final entries = <LocalPatientEntry>[];
     for (final row in rows) {
-      final mutableRow = Map<String, dynamic>.from(row);
-      mutableRow['record_json'] = await _decryptPayload(
-        row['record_json'] as String,
-      );
-      entries.add(LocalPatientEntry.fromRow(mutableRow));
+      try {
+        final mutableRow = Map<String, dynamic>.from(row);
+        mutableRow['record_json'] = await _decryptPayload(
+          row['record_json'] as String,
+        );
+        entries.add(LocalPatientEntry.fromRow(mutableRow));
+      } catch (e, stack) {
+        AppLogger.e(
+          'Fallo al descifrar fila SQLite para ${row['patient_id']}',
+          error: e,
+          stackTrace: stack,
+        );
+      }
     }
     return entries;
   }
@@ -1336,10 +1649,20 @@ class LocalDatabase {
             r['owner_user_id'] == null ||
             r['owner_user_id'] == ownerUserId,
       )) {
-        final decryptedJson = await _decryptPayload(r['record_json'] as String);
-        final row = Map<String, dynamic>.from(r);
-        row['record_json'] = decryptedJson;
-        entries.add(LocalPatientEntry.fromRow(row));
+        try {
+          final decryptedJson = await _decryptPayload(
+            r['record_json'] as String,
+          );
+          final row = Map<String, dynamic>.from(r);
+          row['record_json'] = decryptedJson;
+          entries.add(LocalPatientEntry.fromRow(row));
+        } catch (e, stack) {
+          AppLogger.e(
+            'Fallo al descifrar fila web para ${r['patient_id']}',
+            error: e,
+            stackTrace: stack,
+          );
+        }
       }
       return entries..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     }
@@ -1359,11 +1682,19 @@ class LocalDatabase {
 
     final entries = <LocalPatientEntry>[];
     for (final row in rows) {
-      final mutableRow = Map<String, dynamic>.from(row);
-      mutableRow['record_json'] = await _decryptPayload(
-        row['record_json'] as String,
-      );
-      entries.add(LocalPatientEntry.fromRow(mutableRow));
+      try {
+        final mutableRow = Map<String, dynamic>.from(row);
+        mutableRow['record_json'] = await _decryptPayload(
+          row['record_json'] as String,
+        );
+        entries.add(LocalPatientEntry.fromRow(mutableRow));
+      } catch (e, stack) {
+        AppLogger.e(
+          'Fallo al descifrar fila SQLite para ${row['patient_id']}',
+          error: e,
+          stackTrace: stack,
+        );
+      }
     }
     return entries;
   }
@@ -1450,9 +1781,9 @@ class LocalDatabase {
     final String sql = ownerUserId != null
         ? 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
               'AND (owner_user_id = ? OR owner_user_id IS NULL) '
-              'AND (sync_error_code IS NULL OR sync_error_code NOT IN (400, 409, 422))'
+              'AND (sync_error_code IS NULL OR sync_error_code NOT IN ($_permanentCodesSql))'
         : 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
-              'AND (sync_error_code IS NULL OR sync_error_code NOT IN (400, 409, 422))';
+              'AND (sync_error_code IS NULL OR sync_error_code NOT IN ($_permanentCodesSql))';
     final List<Object> args = ownerUserId != null ? [ownerUserId] : [];
 
     final result = await db!.rawQuery(sql, args);
@@ -1477,9 +1808,9 @@ class LocalDatabase {
     final String sql = ownerUserId != null
         ? 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
               'AND (owner_user_id = ? OR owner_user_id IS NULL) '
-              'AND sync_error_code IN (400, 409, 422)'
+              'AND sync_error_code IN ($_permanentCodesSql)'
         : 'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
-              'AND sync_error_code IN (400, 409, 422)';
+              'AND sync_error_code IN ($_permanentCodesSql)';
     final List<Object> args = ownerUserId != null ? [ownerUserId] : [];
 
     final result = await db!.rawQuery(sql, args);
@@ -1487,40 +1818,6 @@ class LocalDatabase {
   }
 
   // ── Sync lifecycle ────────────────────────────────────────────────────────
-
-  Future<void> purgeStalePermanentErrors({
-    Duration maxAge = const Duration(days: 30),
-  }) async {
-    final thresholdDateTime = DateTime.now().subtract(maxAge);
-    final threshold = thresholdDateTime.toIso8601String();
-    if (_isWeb) {
-      await _withWebLock(() async {
-        final store = await _webAllPatients();
-        for (final row in store) {
-          final code = (row['sync_error_code'] as num?)?.toInt();
-          final createdAtStr = row['created_at'] as String?;
-          final isPermanent = code == 400 || code == 409 || code == 422;
-          if (!isPermanent || createdAtStr == null) continue;
-
-          final createdAt = DateTime.tryParse(createdAtStr);
-          if (createdAt == null) continue;
-          if (createdAt.isAfter(thresholdDateTime)) continue;
-
-          final patientId = row['patient_id'] as String?;
-          if (patientId != null) {
-            await _webDeletePatient(patientId);
-          }
-        }
-      });
-      return;
-    }
-    final db = await _database;
-    await db!.delete(
-      _table,
-      where: 'sync_error_code IN (400, 409, 422) AND created_at <= ?',
-      whereArgs: [threshold],
-    );
-  }
 
   Future<void> markSynced(
     String patientId, {

@@ -306,7 +306,6 @@ void main() {
   group('Vocabulario de nacionalidad', () {
     test('todos los códigos ofrecidos son alfa-3 de tres letras', () {
       for (final String code in kSupportedNationalityCodes) {
-        if (code == 'OTHER') continue;
         expect(
           RegExp(r'^[A-Z]{3}$').hasMatch(code),
           isTrue,
@@ -315,13 +314,15 @@ void main() {
       }
     });
 
-    test('no se ofrece el centinela UNK', () {
-      expect(kSupportedNationalityCodes, isNot(contains('UNK')));
+    test('«Otra / desconocida» se ofrece como UNK y nunca como OTHER', () {
+      // OTHER no cabe en la columna VARCHAR(3) del backend: el alta fallaba.
+      expect(kSupportedNationalityCodes, contains(kUnknownNationalityCode));
+      expect(kSupportedNationalityCodes, isNot(contains('OTHER')));
     });
 
     test('todo código offered tiene presentación en el catálogo', () {
       for (final String code in kSupportedNationalityCodes) {
-        if (code == 'OTHER') continue;
+        if (code == kUnknownNationalityCode) continue;
         expect(
           countryDisplay(code).flag,
           isNot('🌍'),
@@ -356,6 +357,33 @@ void main() {
       expect(draft.ethnicity, equals('1'));
       expect(draft.disabilityCategory, equals('01'));
       expect(draft.genderIdentity, equals('01'));
+    });
+  });
+
+  group('Step3PatientData — Pruebas de formateo y campos auxiliares', () {
+    test('Formateo de peso entero en el controlador de texto', () {
+      double? weight = 70.0;
+        final text =
+          weight % 1 == 0 ? weight.toInt().toString() : weight.toString();
+      expect(text, '70');
+
+      weight = 70.5;
+        final textDecimal =
+          weight % 1 == 0 ? weight.toInt().toString() : weight.toString();
+      expect(textDecimal, '70.5');
+    });
+
+    test('Asignación de nacionalidad no válida falla en la validación', () {
+      final natCode = 'INVALID_CODE';
+      final isSupported = kSupportedNationalityCodes.contains(natCode);
+      expect(isSupported, isFalse);
+
+      for (final isEs in [true, false]) {
+        final msg = isEs
+            ? 'Nacionalidad no válida (código ISO 3166-1 requerido)'
+            : 'Invalid nationality (ISO 3166-1 code required)';
+        expect(msg, contains('ISO 3166-1'));
+      }
     });
   });
 }

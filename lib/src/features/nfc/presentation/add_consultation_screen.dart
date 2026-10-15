@@ -6,6 +6,8 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/nfc/nfc_service.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_error_codes.dart';
+import '../../../core/utils/clinical_time.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
@@ -134,7 +136,12 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     } on NfcNotAvailableException {
       if (mounted) setState(() => _scanError = s.nfcNotAvailableHint);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _scanError = e.message);
+      if (mounted) {
+        setState(
+          () => _scanError =
+              ApiErrorCode.describe(e.code, isEs: s.isEs) ?? e.message,
+        );
+      }
     } catch (e) {
       if (mounted) setState(() => _scanError = e.toString());
     } finally {
@@ -227,8 +234,10 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     final newConsultation = MedicalHistoryItem(
       encounterIdentifier: const Uuid().v4(),
       type: 'Consultation',
-      startDateTime: _startDateTime.toIso8601String(),
-      endDateTime: _endDateTime?.toIso8601String(),
+      startDateTime: toIso8601WithOffset(_startDateTime),
+      endDateTime: _endDateTime == null
+          ? null
+          : toIso8601WithOffset(_endDateTime!),
       careModality: _careModality,
       serviceGroup: _serviceGroup,
       careEnvironment: _careEnvironment,
@@ -487,7 +496,13 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
               .catchError((Object e) {
                 if (mounted) {
                   setState(() {
-                    _scanError = e.toString();
+                    _scanError = e is ApiException
+                        ? ApiErrorCode.describe(
+                                e.code,
+                                isEs: AppStrings.of(context).isEs,
+                              ) ??
+                              e.message
+                        : e.toString();
                     _scanning = false;
                   });
                 }

@@ -1,5 +1,6 @@
 // test/widget/voice_text_area_widget_test.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -489,5 +490,38 @@ void main() {
 
       expect(valueTyped, equals('Texto escrito'));
     });
+
+    testWidgets(
+      '10. En macOS, _initSpeech deshabilita el micrófono sin llamar a '
+      'initialize()',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+        try {
+          final fakeSpeech = FakeSpeechToText(initAvailable: true);
+
+          await tester.pumpWidget(
+            _wrapWithApp(
+              VoiceTextArea(
+                label: 'Notas',
+                controller: controller,
+                hint: 'Hint',
+                onChanged: (_) {},
+                speech: fakeSpeech,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.mic_none_rounded));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(SnackBar), findsOneWidget);
+          expect(find.text('Micrófono no disponible'), findsOneWidget);
+          expect(fakeSpeech.listenCalled, isFalse);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
   });
 }

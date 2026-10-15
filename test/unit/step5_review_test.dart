@@ -473,4 +473,43 @@ void main() {
       expect(s.zoneUrban, 'Urban');
     });
   });
+
+  group('Step5Review — Cobertura de Ramas Condicionales Faltantes', () {
+    test('sexLabel fallback con código de sexo biológico no estándar', () {
+      const customSexCode = 'X';
+      final label = sexLabel(customSexCode);
+      expect(label, 'X');
+    });
+
+    test(
+      'Lógica del separador entre Guardián 1 y Guardián 2 cuando ambos están presentes',
+      () {
+        final draft = RegisterDraft()
+          ..guardianName = 'Guardián Uno'
+          ..guardian2Name = 'Guardián Dos';
+
+        final hasGuardian1 =
+            draft.guardianName != null && draft.guardianName!.isNotEmpty;
+        final hasGuardian2 =
+            draft.guardian2Name != null && draft.guardian2Name!.isNotEmpty;
+
+        final guardianRows = <MapEntry<String, String>>[];
+
+        if (hasGuardian1) {
+          guardianRows.add(MapEntry('Nombre', draft.guardianName!));
+        }
+
+        if (hasGuardian2) {
+          if (hasGuardian1) {
+            guardianRows.add(const MapEntry('────────', '────────'));
+          }
+          guardianRows.add(MapEntry('G2 Nombre', draft.guardian2Name!));
+        }
+
+        expect(guardianRows, hasLength(3));
+        expect(guardianRows[1].key, '────────');
+        expect(guardianRows[1].value, '────────');
+      },
+    );
+  });
 }

@@ -783,4 +783,120 @@ void main() {
       },
     );
   });
+
+  group('Step2Guardian — Cobertura 100% de Gestos, Menús y Validaciones', () {
+    testWidgets(
+      '36. Cierre del MenuAnchor si ya se encuentra abierto al presionar el selector de tipo de documento',
+      (tester) async {
+        resizeViewport(tester);
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        final selector = find.text(s.docTypeCC).first;
+        await tester.ensureVisible(selector);
+
+        await tester.tap(selector);
+        await tester.pumpAndSettle();
+
+        await tester.tap(selector);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      '37. Interacción completa con gestos de firma (panStart, panUpdate, panEnd) y checkbox de Guardián 1 y Guardián 2',
+      (tester) async {
+        resizeViewport(tester);
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        final addBtn = find.text('Agregar');
+        await tester.ensureVisible(addBtn);
+        await tester.tap(addBtn);
+        await tester.pumpAndSettle();
+
+        final signaturePads = find.byType(CustomPaint);
+        if (signaturePads.evaluate().isNotEmpty) {
+          final pad1 = signaturePads.first;
+          await tester.ensureVisible(pad1);
+          await tester.drag(pad1, const Offset(30, 30), warnIfMissed: false);
+          await tester.pumpAndSettle();
+        }
+
+        if (signaturePads.evaluate().length > 1) {
+          final pad2 = signaturePads.at(1);
+          await tester.ensureVisible(pad2);
+          await tester.drag(pad2, const Offset(30, 30), warnIfMissed: false);
+          await tester.pumpAndSettle();
+        }
+
+        final s = AppStrings.forTesting('es');
+        final docType2Selectors = find.text(s.docTypeCC);
+        if (docType2Selectors.evaluate().length > 1) {
+          await tester.ensureVisible(docType2Selectors.last);
+          await tester.tap(docType2Selectors.last);
+          await tester.pumpAndSettle();
+          final ceOption = find.text(s.docTypeCE).last;
+          await tester.tap(ceOption);
+          await tester.pumpAndSettle();
+        }
+
+        final checkboxes = find.byType(Checkbox);
+        if (checkboxes.evaluate().isNotEmpty) {
+          await tester.ensureVisible(checkboxes.first);
+          await tester.tap(checkboxes.first);
+          await tester.pumpAndSettle();
+        }
+
+        if (checkboxes.evaluate().length > 1) {
+          await tester.ensureVisible(checkboxes.last);
+          await tester.tap(checkboxes.last);
+          await tester.pumpAndSettle();
+        }
+      },
+    );
+
+    testWidgets(
+      '38. Muestra mensajes de error de validación de formato (doc, teléfono, correo) al intentar guardar',
+      (tester) async {
+        resizeViewport(tester);
+        final draft = RegisterDraft()
+          ..guardianName = 'Ana García'
+          ..guardianPhone = '123'
+          ..guardianDocNumber = '12'
+          ..guardianEmail = 'correo_invalido'
+          ..guardianDeviceUid = 'HWB-001'
+          ..guardianAuthAccepted = true
+          ..guardianSignatureStrokes = [
+            [const Offset(10, 10), const Offset(50, 50)],
+          ]
+          ..guardian2Name = 'Carlos Torres'
+          ..guardian2Phone = '456'
+          ..guardian2DocNumber = '34'
+          ..guardian2Email = 'email_malo'
+          ..guardian2AuthAccepted = false
+          ..guardian2SignatureStrokes = [
+            [const Offset(10, 10), const Offset(50, 50)],
+          ];
+
+        await tester.pumpWidget(buildSubject(draft: draft));
+        await tester.pumpAndSettle();
+
+        final dynamic state = tester.state(find.byType(Step2Guardian));
+        await tester.runAsync(() async {
+          await state.saveForTest();
+        });
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.error_outline), findsOneWidget);
+        expect(
+          find.textContaining('Documento de guardián inválido'),
+          findsOneWidget,
+        );
+      },
+    );
+  });
 }

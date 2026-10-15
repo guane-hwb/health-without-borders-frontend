@@ -133,6 +133,52 @@ void main() {
   // =========================================================================
   // PatientInfo
   // =========================================================================
+  group('PatientInfo — nacionalidad', () {
+    Map<String, dynamic> infoJson(Object? nationalityCode) => <String, dynamic>{
+      'identification': <String, dynamic>{
+        'documentType': 'PT',
+        'documentNumber': 'SINT-1',
+      },
+      'firstLastName': 'García',
+      'firstName': 'Ana',
+      'dob': '2019-05-05',
+      'nationalityCode': ?nationalityCode,
+      'biologicalSex': 'F',
+      'address': <String, dynamic>{'city': 'Cúcuta', 'state': 'N. Santander'},
+    };
+
+    test('un registro antiguo con OTHER se lee como UNK', () {
+      final info = PatientInfo.fromJson(infoJson('OTHER'));
+      expect(info.nationalityCode, 'UNK');
+      expect(info.toJson()['nationalityCode'], 'UNK');
+    });
+
+    test('un código vacío se lee como UNK', () {
+      expect(PatientInfo.fromJson(infoJson('')).nationalityCode, 'UNK');
+    });
+
+    test('sin código se mantiene el valor por defecto COL', () {
+      expect(PatientInfo.fromJson(infoJson(null)).nationalityCode, 'COL');
+    });
+
+    test('un ISO alfa-3 se conserva', () {
+      expect(PatientInfo.fromJson(infoJson('ven')).nationalityCode, 'VEN');
+    });
+
+    test('toJson nunca envía OTHER aunque el modelo lo tenga en memoria', () {
+      final info = PatientInfo(
+        identification: _buildId(),
+        firstLastName: 'García',
+        firstName: 'Ana',
+        dob: '2019-05-05',
+        nationalityCode: 'OTHER',
+        biologicalSex: 'F',
+        address: _buildAddress(),
+      );
+      expect(info.toJson()['nationalityCode'], 'UNK');
+    });
+  });
+
   group('PatientInfo', () {
     test('constructor con todos los campos', () {
       final info = PatientInfo(
@@ -437,6 +483,123 @@ void main() {
   // =========================================================================
   // FamilyHistoryItem
   // =========================================================================
+  group('Procedencia de códigos clínicos (IA vs. profesional)', () {
+    test('CodeSource.isAi distingue sugerencias de IA', () {
+      expect(CodeSource.isAi('ai_suggested'), isTrue);
+      expect(CodeSource.isAi('ai_fallback'), isTrue);
+      expect(CodeSource.isAi('clinician'), isFalse);
+      expect(CodeSource.isAi(null), isFalse);
+    });
+
+    test('DiagnosisItem conserva source, model y generatedAt', () {
+      final json = <String, dynamic>{
+        'icd10Code': 'J069',
+        'description': 'Infección aguda de las vías respiratorias superiores',
+        'source': 'ai_suggested',
+        'model': 'gemini-3-flash-preview',
+        'generatedAt': '2026-09-22T15:30:00+00:00',
+      };
+      final d = DiagnosisItem.fromJson(json);
+      expect(d.source, 'ai_suggested');
+      expect(d.model, 'gemini-3-flash-preview');
+      expect(d.generatedAt, '2026-09-22T15:30:00+00:00');
+      expect(d.toJson(), json);
+    });
+
+    test('DiagnosisItem sin procedencia no emite esas claves', () {
+      final d = DiagnosisItem(icd10Code: 'R509', description: 'Fiebre');
+      expect(d.toJson().keys, <String>['icd10Code', 'description']);
+    });
+
+    test('FamilyHistoryItem conserva el texto original y el código aparte', () {
+      final json = <String, dynamic>{
+        'conditionCie10Code': 'E14',
+        'conditionDescription': 'Diabetes',
+        'relationship': '01',
+        'conditionCodedDisplay': 'Diabetes mellitus, no especificada',
+        'codingSource': 'ai_suggested',
+      };
+      final f = FamilyHistoryItem.fromJson(json);
+      expect(f.conditionDescription, 'Diabetes');
+      expect(f.conditionCodedDisplay, 'Diabetes mellitus, no especificada');
+      expect(f.codingSource, 'ai_suggested');
+      expect(f.toJson(), json);
+    });
+
+    test(
+      'ChronicConditionItem conserva el texto original y el código aparte',
+      () {
+        final json = <String, dynamic>{
+          'chronicDescription': 'Asma',
+          'chronicCie10Code': 'J459',
+          'chronicCodedDisplay': 'Asma, no especificada',
+          'codingSource': 'ai_fallback',
+        };
+        final c = ChronicConditionItem.fromJson(json);
+        expect(c.chronicDescription, 'Asma');
+        expect(c.chronicCodedDisplay, 'Asma, no especificada');
+        expect(c.codingSource, 'ai_fallback');
+        expect(c.toJson(), json);
+      },
+    );
+
+    test('un registro de /scan reenviado a /sync no pierde la procedencia', () {
+      // The server takes background items from the payload: dropping these
+      // fields locally would erase them on the next sync.
+      final record = PatientFullRecord.fromJson(<String, dynamic>{
+        'patientId': 'p-1',
+        'device_uid': 'UID-1',
+        'backgroundHistory': <String, dynamic>{
+          'chronicConditions': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'chronicDescription': 'Asma',
+              'chronicCie10Code': 'J459',
+              'chronicCodedDisplay': 'Asma, no especificada',
+              'codingSource': 'ai_suggested',
+            },
+          ],
+          'familyHistory': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'conditionDescription': 'Glaucoma',
+              'relationship': '04',
+              'conditionCie10Code': 'H409',
+              'conditionCodedDisplay': 'Glaucoma, no especificado',
+              'codingSource': 'ai_suggested',
+            },
+          ],
+        },
+        'medicalHistory': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'encounterIdentifier': 'enc-1',
+            'startDateTime': '2026-09-22T10:30:00-05:00',
+            'diagnosis': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'icd10Code': 'J069',
+                'description': 'IRA',
+                'source': 'ai_suggested',
+                'model': 'gemini-3-flash-preview',
+                'generatedAt': '2026-09-22T15:30:00+00:00',
+              },
+            ],
+          },
+        ],
+      });
+
+      final out = record.toJson();
+      final bg = out['backgroundHistory'] as Map<String, dynamic>;
+      final chronic = (bg['chronicConditions'] as List).single as Map;
+      final family = (bg['familyHistory'] as List).single as Map;
+      final diagnosis =
+          ((out['medicalHistory'] as List).single as Map)['diagnosis'] as List;
+      expect(chronic['codingSource'], 'ai_suggested');
+      expect(chronic['chronicCodedDisplay'], 'Asma, no especificada');
+      expect(family['conditionCodedDisplay'], 'Glaucoma, no especificado');
+      expect(family['codingSource'], 'ai_suggested');
+      expect((diagnosis.single as Map)['source'], 'ai_suggested');
+      expect((diagnosis.single as Map)['model'], 'gemini-3-flash-preview');
+    });
+  });
+
   group('FamilyHistoryItem', () {
     test('fromJson — con códigos CIE', () {
       final item = FamilyHistoryItem.fromJson(<String, dynamic>{
@@ -1260,6 +1423,23 @@ void main() {
       expect(r.status, '');
       expect(r.internalId, '');
       expect(r.message, '');
+      expect(r.conflicts, isEmpty);
+    });
+
+    test('fromJson — lee los conflicts que el servidor no aplicó', () {
+      final r = PatientSyncResponse.fromJson(<String, dynamic>{
+        'status': 'success',
+        'internal_id': 'int-001',
+        'message': 'ok',
+        'conflicts': <String>[
+          'stale_payload_retired_device_uid',
+          'guardians_not_changed_by_tag_resolved_sync',
+        ],
+      });
+      expect(r.conflicts, <String>[
+        'stale_payload_retired_device_uid',
+        'guardians_not_changed_by_tag_resolved_sync',
+      ]);
     });
   });
 
@@ -1308,6 +1488,10 @@ void main() {
       expect(copy.city, 'Medellín');
       expect(copy.state, 'DC');
       expect(copy.street, 'Calle 2');
+
+      final copyNoArgs = original.copyWith();
+      expect(copyNoArgs.street, original.street);
+      expect(copyNoArgs.city, original.city);
     });
 
     test('operator == y hashCode reconocen instancias iguales y distintas', () {
@@ -1331,6 +1515,9 @@ void main() {
 
       expect(copy.documentType, 'CC');
       expect(copy.documentNumber, '456');
+
+      final copyNoArgs = original.copyWith();
+      expect(copyNoArgs.documentNumber, original.documentNumber);
     });
 
     test('operator == y hashCode', () {
@@ -1364,6 +1551,10 @@ void main() {
       expect(copy.accepted, isTrue);
       expect(copy.acceptedAt, '2026-01-01');
       expect(copy.email, 'padre@mail.com');
+
+      final copyNoArgs = original.copyWith();
+      expect(copyNoArgs.accepted, original.accepted);
+      expect(copyNoArgs.email, original.email);
     });
 
     test('operator == y hashCode', () {
@@ -1397,6 +1588,9 @@ void main() {
       expect(copy.name, 'Pedro');
       expect(copy.phone, '456');
       expect(copy.deviceUid, 'DEV-1');
+
+      final copyNoArgs = original.copyWith();
+      expect(copyNoArgs.deviceUid, original.deviceUid);
     });
 
     test('operator == y hashCode', () {
@@ -1429,6 +1623,9 @@ void main() {
       expect(copy.conditionCie10Code, 'I10');
       expect(copy.conditionDescription, 'HTA');
 
+      final copyNoArgs = item.copyWith();
+      expect(copyNoArgs.conditionCie10Code, item.conditionCie10Code);
+
       final item2 = FamilyHistoryItem(
         conditionDescription: 'HTA',
         relationship: '01',
@@ -1445,6 +1642,9 @@ void main() {
 
       expect(copy.chronicCie10Code, 'J45');
 
+      final copyNoArgs = item.copyWith();
+      expect(copyNoArgs.chronicCie10Code, item.chronicCie10Code);
+
       final item2 = ChronicConditionItem(chronicDescription: 'Asma');
       expect(item, equals(item2));
       expect(item.hashCode, equals(item2.hashCode));
@@ -1457,6 +1657,9 @@ void main() {
       final copy = item.copyWith(dosage: '400mg');
 
       expect(copy.dosage, '400mg');
+
+      final copyNoArgs = item.copyWith();
+      expect(copyNoArgs.dosage, item.dosage);
 
       final item2 = MedicationStatementItem(medicationName: 'Ibuprofeno');
       expect(item, equals(item2));
@@ -1472,6 +1675,9 @@ void main() {
       expect(copy.personalHistory, 'Ninguno');
       expect(copy.familyHistoryNotes, 'Notas');
 
+      final copyNoArgs = bh.copyWith();
+      expect(copyNoArgs.familyHistoryNotes, bh.familyHistoryNotes);
+
       final bh2 = BackgroundHistory(personalHistory: 'Ninguno');
       expect(bh, equals(bh2));
       expect(bh.hashCode, equals(bh2.hashCode));
@@ -1484,6 +1690,9 @@ void main() {
       final copy = allergy.copyWith(notes: 'Leve');
 
       expect(copy.notes, 'Leve');
+
+      final copyNoArgs = allergy.copyWith();
+      expect(copyNoArgs.notes, allergy.notes);
 
       final allergy2 = AllergyInfo(category: '01', allergen: 'Polen');
       expect(allergy, equals(allergy2));
@@ -1504,6 +1713,9 @@ void main() {
       final copy = v.copyWith(dose: 2);
 
       expect(copy.dose, 2);
+
+      final copyNoArgs = v.copyWith();
+      expect(copyNoArgs.dose, v.dose);
 
       final v2 = VaccinationRecordItem(
         date: '2026-01-01',
@@ -1526,6 +1738,12 @@ void main() {
       expect(copy.historyOfCurrentIllness, 'Fiebre');
       expect(copy.generalPhysicalExamination, 'Normal');
 
+      final copyNoArgs = ce.copyWith();
+      expect(
+        copyNoArgs.generalPhysicalExamination,
+        ce.generalPhysicalExamination,
+      );
+
       final ce2 = ClinicalEvaluation(historyOfCurrentIllness: 'Fiebre');
       expect(ce, equals(ce2));
       expect(ce.hashCode, equals(ce2.hashCode));
@@ -1538,6 +1756,9 @@ void main() {
       final copy = diag.copyWith(icd11Code: '1A00');
 
       expect(copy.icd11Code, '1A00');
+
+      final copyNoArgs = diag.copyWith();
+      expect(copyNoArgs.icd11Code, diag.icd11Code);
 
       final diag2 = DiagnosisItem(icd10Code: 'A00', description: 'Cólera');
       expect(diag, equals(diag2));
@@ -1566,6 +1787,10 @@ void main() {
 
       expect(copy.days, 10);
       expect(copy.maternityLeaveDays, 84);
+
+      final copyNoArgs = inc.copyWith();
+      expect(copyNoArgs.days, inc.days);
+      expect(copyNoArgs.maternityLeaveDays, inc.maternityLeaveDays);
 
       final inc2 = IncapacityInfo(scope: '01', days: 5);
       expect(inc, equals(inc2));
@@ -1647,6 +1872,9 @@ void main() {
 
       final copy = item.copyWith(dosage: '1000mg');
       expect(copy.dosage, '1000mg');
+
+      final copyNoArgs = item.copyWith();
+      expect(copyNoArgs.dosage, item.dosage);
 
       final item2 = MedicationRequestItem.fromJson(json);
       expect(item, equals(item2));

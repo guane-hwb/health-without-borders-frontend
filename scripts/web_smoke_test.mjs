@@ -57,6 +57,10 @@ console.log(`Excepciones de página (uncaught): ${pageErrors.length}`);
 pageErrors.forEach((e) => console.log(`  [pageerror] ${e}`));
 
 if (expectFailure) {
+  const hasHttpsGuardError = pageErrors.some((e) =>
+    e.includes('API_BASE_URL must use HTTPS')
+  );
+
   if (bootedCleanly) {
     console.error(
       '\nFALLO: se esperaba que la app NO arrancara con una API_BASE_URL ' +
@@ -66,9 +70,18 @@ if (expectFailure) {
     );
     process.exit(1);
   }
+
+  if (!hasHttpsGuardError) {
+    console.error(
+      '\nFALLO: la app falló al arrancar, pero NO debido al guard de HTTPS ' +
+        'esperado ("API_BASE_URL must use HTTPS"). Ocurrió un error no relacionado.'
+    );
+    process.exit(1);
+  }
+
   console.log(
-    '\nOK: la app falló al arrancar con configuración inválida (HTTP), ' +
-      'tal como se espera. El guard de release sigue activo.'
+    '\nOK: la app falló al arrancar debido al guard de HTTPS, ' +
+      'tal como se esperaba.'
   );
   process.exit(0);
 } else {

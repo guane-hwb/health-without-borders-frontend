@@ -145,12 +145,14 @@ class _BrigadeStatsScreenState extends State<BrigadeStatsScreen>
       return;
     }
 
-    final StatsDateRange next = switch (kind) {
-      StatsRangeKind.all => StatsDateRange.all,
-      StatsRangeKind.thisMonth => StatsDateRange.thisMonth(),
-      StatsRangeKind.last30Days => StatsDateRange.last30Days(),
-      StatsRangeKind.custom => _range,
-    };
+    final StatsDateRange next;
+    if (kind == StatsRangeKind.all) {
+      next = StatsDateRange.all;
+    } else if (kind == StatsRangeKind.thisMonth) {
+      next = StatsDateRange.thisMonth();
+    } else {
+      next = StatsDateRange.last30Days();
+    }
 
     if (next == _range) return;
 
@@ -404,12 +406,7 @@ class _OrgFilterDropdownState extends State<_OrgFilterDropdown> {
     final s = AppStrings.of(context);
     final selectedFilter = widget.orgs.firstWhere(
       (o) => o.id == widget.selected,
-      orElse: () => _OrgFilter(
-        id: widget.selected,
-        name: widget.selected == kAllOrgsFilterId
-            ? s.statsFilterAll
-            : widget.selected,
-      ),
+      orElse: () => _OrgFilter(id: widget.selected, name: s.statsFilterAll),
     );
 
     final selectedName = _getOrgName(context, selectedFilter);

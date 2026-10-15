@@ -11,6 +11,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/patient_profile_screen.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/loss_of_wristband_screen.dart';
@@ -101,6 +102,16 @@ class _TestLocaleWrapperState extends State<_TestLocaleWrapper> {
       },
       child: widget.child,
     );
+  }
+}
+
+class _RecordingNavigatorObserver extends NavigatorObserver {
+  _RecordingNavigatorObserver(this.pushed);
+  final List<Route<dynamic>> pushed;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushed.add(route);
   }
 }
 
@@ -670,9 +681,76 @@ void main() {
       _resetScreenSize(tester);
     });
   });
-}
 
-// ─── Shared helper ────────────────────────────────────────────────────────────
+  group('_search() — éxito', () {
+    testWidgets(
+      'con nombre de acudiente diligenciado navega a PatientProfileScreen '
+      'permitiendo la reasignación',
+      (tester) async {
+        _setMobileScreenSize(tester);
+        final repo = _FakePatientRepository()
+          ..result = _fakePatientRecord(guardianDeviceUid: 'HWB:GUARD01');
+
+        final pushedRoutes = <Route<dynamic>>[];
+        final observer = _RecordingNavigatorObserver(pushedRoutes);
+
+        await tester.pumpWidget(
+          _wrap(
+            const LossOfWristbandScreen(),
+            patientRepo: repo,
+            observer: observer,
+          ),
+        );
+        await tester.pump();
+
+        final textFields = tester
+            .widgetList<TextField>(find.byType(TextField))
+            .toList();
+        await tester.enterText(find.byWidget(textFields[0]), '123456');
+        await tester.enterText(find.byWidget(textFields[1]), 'Ana María');
+        await tester.enterText(find.byWidget(textFields[2]), 'García Pérez');
+        await tester.enterText(find.byWidget(textFields[3]), 'Marta Ruiz');
+        await tester.pump();
+
+        await tester.tap(find.text('YYYY-MM-DD'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byType(ElevatedButton));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(PatientProfileScreen), findsOneWidget);
+        final pushed = tester.widget<PatientProfileScreen>(
+          find.byType(PatientProfileScreen),
+        );
+        expect(pushed.patient.patientId, 'p-found-1');
+        expect(pushed.allowReassign, isTrue);
+
+        expect(pushedRoutes.last, isA<MaterialPageRoute<void>>());
+
+        _resetScreenSize(tester);
+      },
+    );
+
+    testWidgets('sin nombre de acudiente también navega a PatientProfileScreen '
+        '(guardianName llega como null)', (tester) async {
+      _setMobileScreenSize(tester);
+      final repo = _FakePatientRepository()..result = _fakePatientRecord();
+
+      await tester.pumpWidget(
+        _wrap(const LossOfWristbandScreen(), patientRepo: repo),
+      );
+      await tester.pump();
+
+      await _fillAndSubmit(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+      _resetScreenSize(tester);
+    });
+  });
+}
 
 Future<void> _fillAndSubmit(WidgetTester tester) async {
   final textFields = tester
@@ -690,4 +768,29 @@ Future<void> _fillAndSubmit(WidgetTester tester) async {
 
   await tester.tap(find.byType(ElevatedButton));
   await tester.pump(const Duration(milliseconds: 20));
+}
+
+PatientFullRecord _fakePatientRecord({String? guardianDeviceUid}) {
+  return PatientFullRecord(
+    patientId: 'p-found-1',
+    deviceUid: 'HWB:AA11BB22',
+    patientInfo: PatientInfo(
+      identification: PatientIdentification(
+        documentType: 'TI',
+        documentNumber: '123456',
+      ),
+      firstLastName: 'García Pérez',
+      firstName: 'Ana María',
+      dob: '2015-06-01',
+      biologicalSex: 'F',
+      address: Address(city: '', state: ''),
+    ),
+    guardianInfo: GuardianInfo(
+      name: '',
+      relationship: '',
+      phone: '',
+      deviceUid: guardianDeviceUid,
+    ),
+    allergies: const <AllergyInfo>[],
+  );
 }

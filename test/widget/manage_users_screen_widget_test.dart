@@ -23,7 +23,9 @@ import 'package:health_without_borders_frontend/src/features/nfc/data/patient_re
 class FakeUserRepository extends Fake implements UserRepository {
   List<UserSession>? usersToReturn;
   Exception? errorToThrow;
+  Exception? deleteErrorToThrow;
   bool shouldThrowOnCreate = false;
+  bool shouldThrowOnToggle = false;
 
   @override
   Future<List<UserSession>> listUsers() async {
@@ -57,12 +59,15 @@ class FakeUserRepository extends Fake implements UserRepository {
 
   @override
   Future<void> deleteUser(String id) async {
+    if (deleteErrorToThrow != null) throw deleteErrorToThrow!;
     if (errorToThrow != null) throw errorToThrow!;
   }
 
   @override
   Future<UserSession> setUserActive(String id, bool isActive) async {
-    if (errorToThrow != null) throw errorToThrow!;
+    if (shouldThrowOnToggle) {
+      throw ApiException('Fallo al cambiar estado', statusCode: 400);
+    }
     return UserSession(
       id: id,
       fullName: 'User',
@@ -827,6 +832,138 @@ void main() {
         expect(find.text(sEs.manageUsersTitle), findsNothing);
       },
     );
+  });
+  group('ManageUsersScreen — Uncovered Branches & Error Handling', () {
+    testWidgets('toggles user active status and handles toggle error', (
+      tester,
+    ) async {
+      configureMobileScreenSize(tester);
+      fakeRepo.usersToReturn = [
+        buildUser(id: 'u1', fullName: 'Juan Active', isActive: true),
+      ];
+
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Juan Active'));
+      await tester.pumpAndSettle();
+
+      final deactivateBtn = find.widgetWithText(OutlinedButton, 'Desactivar');
+      await tester.tap(deactivateBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reactivar'), findsOneWidget);
+
+      fakeRepo.shouldThrowOnToggle = true;
+      final reactivateBtn = find.widgetWithText(OutlinedButton, 'Reactivar');
+      await tester.tap(reactivateBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Fallo al cambiar estado'), findsOneWidget);
+    });
+
+    testWidgets('scrolls filter bar to the right when tapping right arrow', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      fakeRepo.usersToReturn = [buildUser()];
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      final rightArrow = find.byIcon(Icons.arrow_forward_ios);
+      expect(rightArrow, findsOneWidget);
+
+      await tester.tap(rightArrow);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('toggles password visibility in _UserFormSheet', (
+      tester,
+    ) async {
+      configureMobileScreenSize(tester);
+      fakeRepo.usersToReturn = [];
+
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      final toggleIcon = find.byIcon(Icons.visibility_off);
+      expect(toggleIcon, findsOneWidget);
+
+      await tester.tap(toggleIcon);
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.visibility), findsOneWidget);
+    });
+
+    testWidgets(
+      'validates required empty fields and short password in _UserFormSheet',
+      (tester) async {
+        configureMobileScreenSize(tester);
+        fakeRepo.usersToReturn = [];
+
+        await tester.pumpWidget(buildTestApp(fakeRepo));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byType(FloatingActionButton));
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        final createBtn = find.widgetWithText(
+          ElevatedButton,
+          s.userFormCreateButton,
+        );
+
+        await tester.tap(createBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text(s.userFormRequiredFieldsError), findsOneWidget);
+
+        final fields = find.byType(TextField);
+        await tester.enterText(fields.at(0), 'Pedro');
+        await tester.enterText(fields.at(1), 'pedro@test.com');
+        await tester.enterText(fields.at(2), '12345');
+        await tester.pumpAndSettle();
+
+        await tester.tap(createBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text(s.passwordTooShort8), findsOneWidget);
+      },
+    );
+
+    testWidgets('handles error on delete in _UserDetailSheet', (tester) async {
+      configureMobileScreenSize(tester);
+      fakeRepo.usersToReturn = [buildUser(fullName: 'Juan Error')];
+
+      await tester.pumpWidget(buildTestApp(fakeRepo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Juan Error'));
+      await tester.pumpAndSettle();
+
+      fakeRepo.deleteErrorToThrow = ApiException(
+        'Error al eliminar usuario',
+        statusCode: 400,
+      );
+
+      final s = AppStrings.forTesting('es');
+      await tester.tap(find.widgetWithText(OutlinedButton, s.deletUser));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(TextButton, s.delete));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Error al eliminar usuario'), findsOneWidget);
+    });
   });
 }
 

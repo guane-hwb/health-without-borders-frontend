@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_error_codes.dart';
 import '../../../core/nfc/nfc_guardian_payload.dart';
 import '../../../core/nfc/nfc_payload_codec.dart';
 import '../../../core/nfc/nfc_payload_service.dart' as payload;
@@ -17,13 +18,14 @@ import '../domain/patient_record.dart';
 import 'profile/patient_profile_screen.dart';
 import 'shared_read_nfc_header.dart';
 
-/// Read-NFC flow:
-///   Step 1 — scan patient wristband (or enter UID manually for testing).
-///   Step 2 — only for minors: scan guardian wristband (or enter UID
-///   manually). Backend returns 403 with a specific message if the
-///   patient is a minor and guardian was not provided.
 class ReadNfcScreen extends StatefulWidget {
   const ReadNfcScreen({super.key});
+
+  @visibleForTesting
+  static Future<payload.HwbChipReadResult> Function({
+    required String alertMessage,
+  })?
+  overrideReadHwbChip;
 
   @override
   State<ReadNfcScreen> createState() => _ReadNfcScreenState();
@@ -31,17 +33,13 @@ class ReadNfcScreen extends StatefulWidget {
 
 class _ReadNfcScreenState extends State<ReadNfcScreen> {
   // ── Step state ──
-  bool _step2 = false; // true after backend asks for guardian
+  bool _step2 = false;
 
-  /// Offline: triage read from the patient wristband, kept while we ask for the
-  /// guardian card. Non-null means we are in the offline guardian gate.
   TriageSummary? _offlineTriage;
   bool _offlineGuardianRequired = false;
   bool _scanning = false;
   String? _errorMessage;
 
-  /// Set when a scan found no keyring because the session window closed, so the
-  /// offline fallback can say "log in again" rather than blame the chip.
   bool _nfcSessionExpired = false;
 
   // ── Stored values across steps ──
@@ -61,10 +59,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
 
   // ── Patient scan ──────────────────────────────────────────────────────────
 
-  /// Notes which key version this chip decrypted with.
-  ///
-  /// Fire-and-forget by design: this is telemetry for deciding when a key
-  /// version can be retired, and it must never interfere with a read.
   Future<void> _recordChipKeyVersion(payload.HwbChipReadResult chip) async {
     final int? version = chip.keyVersion;
     if (version == null || chip.uid.isEmpty) return;
@@ -92,13 +86,15 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       final alertMessage = _nfcAlert(guardian: false);
       final keyring = await authRepository.getNfcKeyring();
       if (keyring != null && keyring.isNotEmpty) {
-        chip = await payload.NfcPayloadService(
-          codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
-        ).readHwbChip(alertMessage: alertMessage);
+        chip = ReadNfcScreen.overrideReadHwbChip != null
+            ? await ReadNfcScreen.overrideReadHwbChip!(
+                alertMessage: alertMessage,
+              )
+            : await payload.NfcPayloadService(
+                codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
+              ).readHwbChip(alertMessage: alertMessage);
         await _recordChipKeyVersion(chip);
       } else {
-        // No keyring: the scan can still resolve the patient online from the
-        // chip UID, so only remember the reason for the offline fallback.
         _nfcSessionExpired = await authRepository.isNfcSessionExpired();
       }
     } on payload.NfcNotAvailableException {
@@ -148,9 +144,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       setState(() {
         _scanning = false;
         _errorMessage = isEs
-            ? 'Esta es la tarjeta del guardián. Escanee primero el dispositivo '
+            ? 'Estes es el dispositivo del guardián. Escanee primero el dispositivo '
                   'del paciente.'
-            : 'This is the guardian card. Scan the patient device first.';
+            : 'This is the guardian device. Scan the patient device first.';
       });
       return;
     }
@@ -182,7 +178,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       await _openProfile(patient);
     } on ApiException catch (e) {
       if (!mounted) return;
-      if (e.statusCode == 403 && e.message.toLowerCase().contains('guardian')) {
+      if (e.statusCode == 403 && _isGuardianCheck(e)) {
         setState(() {
           _scanning = false;
           _patientDeviceUid = deviceUid;
@@ -192,7 +188,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       } else {
         setState(() {
           _scanning = false;
-          _errorMessage = _retiredTagMessage(e) ?? e.message;
+          _errorMessage = _retiredTagMessage(e) ?? _apiErrorMessage(e);
         });
       }
     } catch (e) {
@@ -217,11 +213,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
           patientDeviceUid: chip.uid,
         );
         if (!mounted) return;
-        // Read-only: the wristband alone rebuilds a genuinely partial record —
-        // no patientId and an empty address — and the server takes declarative
-        // fields from whatever it is sent, so syncing an edit made from it
-        // would blank the patient's address. Making this editable needs the
-        // sync to carry only what changed, not the whole record.
         await _openProfile(record, readOnly: true, offline: true);
       } else {
         final s = AppStrings.of(context);
@@ -247,8 +238,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     final isEs = s.isEs;
     if (guardian) {
       return isEs
-          ? 'Acerque la tarjeta del guardián'
-          : 'Hold the guardian card near the phone';
+          ? 'Acerque el dispositivo del guardián'
+          : 'Hold the guardian device near the phone';
     }
     return isEs
         ? 'Acerque el dispositivo del paciente'
@@ -284,9 +275,13 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
                     : 'No NFC key available.'),
         );
       }
-      final chip = await payload.NfcPayloadService(
-        codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
-      ).readHwbChip(alertMessage: _nfcAlert(guardian: true));
+      final chip = ReadNfcScreen.overrideReadHwbChip != null
+          ? await ReadNfcScreen.overrideReadHwbChip!(
+              alertMessage: _nfcAlert(guardian: true),
+            )
+          : await payload.NfcPayloadService(
+              codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
+            ).readHwbChip(alertMessage: _nfcAlert(guardian: true));
       await _recordChipKeyVersion(chip);
       if (!mounted) return;
 
@@ -299,8 +294,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         setState(() {
           _scanning = false;
           _errorMessage = isEs
-              ? 'Esa tarjeta no corresponde al guardián de este paciente.'
-              : 'That card does not belong to this patient\'s guardian.';
+              ? 'Ese dispositivo no corresponde al guardián de este paciente.'
+              : 'That device does not belong to this patient\'s guardian.';
         });
         return;
       }
@@ -310,8 +305,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         setState(() {
           _scanning = false;
           _errorMessage = isEs
-              ? 'La tarjeta del guardián está vacía o no se pudo leer.'
-              : 'The guardian card is blank or could not be read.';
+              ? 'El dispositivo del guardián está vacío o no se pudo leer.'
+              : 'The guardian device is blank or could not be read.';
         });
         return;
       }
@@ -322,13 +317,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         patientDeviceUid: _patientDeviceUid ?? '',
       );
       if (!mounted) return;
-      // Editable, unlike the other offline paths. The guardian card carries the
-      // whole record — it only bounds the consultation and vaccination lists
-      // and strips the consent signature, and the server merges those lists by
-      // identifier and restores the signature, so syncing an edit made from
-      // this card cannot drop anything. A brigade offline with the guardian
-      // present is the ordinary case, not an exception, and it needs to be able
-      // to record a consultation.
       await _openProfile(record, offline: true);
     } on NfcNotAvailableException {
       if (!mounted) return;
@@ -347,15 +335,12 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       setState(() {
         _scanning = false;
         _errorMessage = isEs
-            ? 'No se pudo leer la tarjeta del guardián.'
-            : 'Could not read the guardian card.';
+            ? 'No se pudo leer el dispositivo del guardián.'
+            : 'Could not read the guardian device.';
       });
     }
   }
 
-  /// If [e] is the backend's 410 "device retired" response, returns a localized
-  /// message naming the retirement reason (lost / damaged / replaced). Returns
-  /// null for any other error so the caller falls back to the generic text.
   String? _retiredTagMessage(ApiException e) {
     if (e.statusCode != 410) return null;
     final Object? detail = e.detail;
@@ -411,10 +396,13 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     if (triage == null) return;
 
     final scope = AppScope.of(context);
+    final user = scope.authRepository.currentUser;
     await scope.localDatabase.logEmergencyAccess(
       patientUid: _patientDeviceUid ?? '',
       patientName: '${triage.firstName} ${triage.lastName}'.trim(),
-      userId: scope.authRepository.currentUser?.id,
+      userId: user?.id,
+      ownerUserId: user?.id,
+      organizationId: user?.organizationId,
     );
 
     final record = NfcGuardianPayload.reconstruct(
@@ -423,8 +411,6 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       patientDeviceUid: _patientDeviceUid ?? '',
     );
     if (!mounted) return;
-    // Read-only by design: break-glass exists to see emergency data when no
-    // guardian is present, not to record care.
     await _openProfile(record, readOnly: true, offline: true, emergency: true);
   }
 
@@ -481,7 +467,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       if (!mounted) return;
       setState(() {
         _scanning = false;
-        _errorMessage = _retiredTagMessage(e) ?? e.message;
+        _errorMessage = _retiredTagMessage(e) ?? _apiErrorMessage(e);
       });
     } catch (e) {
       if (!mounted) return;
@@ -491,6 +477,16 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       });
     }
   }
+
+  /// The minor needs the guardian card. Decided on the backend's code; the
+  /// text check only covers a backend that predates codes.
+  static bool _isGuardianCheck(ApiException e) =>
+      ApiErrorCode.isGuardianCheck(e.code) ||
+      (e.code == null && e.message.toLowerCase().contains('guardian'));
+
+  String _apiErrorMessage(ApiException e) =>
+      ApiErrorCode.describe(e.code, isEs: AppStrings.of(context).isEs) ??
+      e.message;
 
   Future<void> _openProfile(
     PatientFullRecord patient, {
@@ -674,9 +670,9 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
           const SizedBox(height: 8),
           Text(
             isEs
-                ? '$name es menor de edad. Se requiere la tarjeta del guardián '
+                ? '$name es menor de edad. Se requiere el dispositivo del guardián '
                       'para ver la historia completa.'
-                : '$name is a minor. The guardian card is required to see the '
+                : '$name is a minor. The guardian device is required to see the '
                       'full record.',
             textAlign: TextAlign.center,
             style: TextStyle(

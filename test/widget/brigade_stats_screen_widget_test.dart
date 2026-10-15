@@ -77,24 +77,21 @@ class FakeStatsRepository extends StatsRepository {
 
     final r = result;
     if (r is BrigadeStats) {
-      if (dateFrom != null) {
-        return BrigadeStats(
-          scope: r.scope,
-          generatedAt: r.generatedAt,
-          window: StatsWindow(
-            dateFrom: dateFrom,
-            dateTo: dateTo ?? DateTime.now(),
-          ),
-          totals: r.totals,
-          trend: r.trend,
-          vaccines: r.vaccines,
-          allergies: r.allergies,
-          allergiesOthers: r.allergiesOthers,
-          nationalities: r.nationalities,
-          nationalitiesOthers: r.nationalitiesOthers,
-        );
-      }
-      return r;
+      return BrigadeStats(
+        scope: r.scope,
+        generatedAt: r.generatedAt,
+        window: StatsWindow(
+          dateFrom: dateFrom ?? r.window.dateFrom,
+          dateTo: dateTo ?? r.window.dateTo,
+        ),
+        totals: r.totals,
+        trend: r.trend,
+        vaccines: r.vaccines,
+        allergies: r.allergies,
+        allergiesOthers: r.allergiesOthers,
+        nationalities: r.nationalities,
+        nationalitiesOthers: r.nationalitiesOthers,
+      );
     }
     throw r;
   }
@@ -171,6 +168,9 @@ BrigadeStats _stats({
   int allergiesOthers = 0,
   int nationalitiesOthers = 0,
   Map<String, dynamic>? window,
+  List<Map<String, dynamic>>? vaccines,
+  List<Map<String, dynamic>>? allergiesList,
+  List<Map<String, dynamic>>? nationalitiesList,
 }) => BrigadeStats.fromJson(<String, dynamic>{
   'scope': {'organization_id': null, 'organization_name': null},
   'generated_at': '2026-07-09T14:22:01-05:00',
@@ -190,19 +190,25 @@ BrigadeStats _stats({
     'vaccine_doses': {'current': 98, 'previous': 90, 'delta_pct': 8.9},
     'encounters': {'current': 61, 'previous': 70, 'delta_pct': -12.9},
   },
-  'vaccines': [
-    {'code': '141', 'name': 'Influenza Trivalente', 'count': 312},
-    {'code': '208', 'name': 'COVID-19 (ARNm)', 'count': 228},
-  ],
-  'allergies': [
-    {'allergen': 'Ibuprofeno', 'category': '01', 'count': 41},
-    {'allergen': 'Mariscos', 'category': '02', 'count': 29},
-  ],
+  'vaccines':
+      vaccines ??
+      [
+        {'code': '141', 'name': 'Influenza Trivalente', 'count': 312},
+        {'code': '208', 'name': 'COVID-19 (ARNm)', 'count': 228},
+      ],
+  'allergies':
+      allergiesList ??
+      [
+        {'allergen': 'Ibuprofeno', 'category': '01', 'count': 41},
+        {'allergen': 'Mariscos', 'category': '02', 'count': 29},
+      ],
   'allergies_others': allergiesOthers,
-  'nationalities': [
-    {'code': 'COL', 'count': 542},
-    {'code': 'VEN', 'count': 489},
-  ],
+  'nationalities':
+      nationalitiesList ??
+      [
+        {'code': 'COL', 'count': 542},
+        {'code': 'VEN', 'count': 489},
+      ],
   'nationalities_others': nationalitiesOthers,
 });
 
@@ -221,12 +227,11 @@ Future<void> _pump(WidgetTester tester, Widget screen) async {
 
 Future<void> _expectAfterScroll(WidgetTester tester, Finder finder) async {
   if (finder.evaluate().isEmpty) {
-    await tester.scrollUntilVisible(
-      finder,
-      240,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
+    final scrollable = find.byType(Scrollable).first;
+    if (scrollable.evaluate().isNotEmpty) {
+      await tester.drag(scrollable, const Offset(0, -300), warnIfMissed: false);
+      await tester.pumpAndSettle();
+    }
   }
   expect(finder, findsOneWidget);
 }
@@ -520,10 +525,7 @@ void main() {
           ),
         );
 
-        expect(
-          find.text('Aún no hay datos para este período.'),
-          findsOneWidget,
-        );
+        expect(find.text('Aún no hay datos para este período.'), findsWidgets);
         expect(find.byType(LinearProgressIndicator), findsNothing);
       },
     );
@@ -806,10 +808,7 @@ void main() {
           ),
         );
 
-        expect(
-          find.text('Aún no hay datos para este período.'),
-          findsOneWidget,
-        );
+        expect(find.text('Aún no hay datos para este período.'), findsWidgets);
         await _expectAfterScroll(tester, find.textContaining('Generado el'));
       },
     );
@@ -838,6 +837,298 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Todas'), findsOneWidget);
+      },
+    );
+  });
+
+  // =========================================================================
+  // ADDITIONAL TESTS FOR 100% CODE COVERAGE IN BRIGADE_STATS_SCREEN.DART
+  // =========================================================================
+
+  group('BrigadeStatsScreen — Uncovered Branches & UI Callbacks', () {
+    testWidgets('reloads stats when app resumes from background', (
+      tester,
+    ) async {
+      final statsRepo = FakeStatsRepository(_stats());
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: statsRepo,
+        ),
+      );
+
+      expect(statsRepo.callCount, 1);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(statsRepo.callCount, 2);
+    });
+
+    testWidgets(
+      'toggles organization dropdown open and closed on consecutive taps',
+      (tester) async {
+        final userRepo = FakeUserRepository(orgsResult: [_org('o1', 'Org A')]);
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: userRepo,
+            statsRepo: FakeStatsRepository(_stats()),
+          ),
+        );
+
+        final dropdownDecorator = find.byType(InputDecorator);
+        expect(dropdownDecorator, findsOneWidget);
+
+        await tester.tap(dropdownDecorator);
+        await tester.pumpAndSettle();
+
+        await tester.tap(dropdownDecorator);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('renders zero trend delta and uncoded vaccine labels', (
+      tester,
+    ) async {
+      final statsWithZeroTrend = _stats(
+        patientsDelta: 0.0,
+        vaccines: [
+          {'code': 'UNCODED', 'name': '', 'count': 10},
+        ],
+      );
+
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(statsWithZeroTrend),
+        ),
+      );
+
+      expect(find.textContaining('→ 0%'), findsOneWidget);
+      await _expectAfterScroll(tester, find.text('Sin código'));
+    });
+
+    testWidgets('renders uncoded vaccine label in English', (tester) async {
+      final statsUncoded = _stats(
+        vaccines: [
+          {'code': 'UNCODED', 'name': '', 'count': 10},
+        ],
+      );
+
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(statsUncoded),
+          locale: 'en',
+        ),
+      );
+
+      await _expectAfterScroll(tester, find.text('Uncoded'));
+    });
+
+    testWidgets('renders allergy categories 03, 04, 05 and other categories', (
+      tester,
+    ) async {
+      final statsAllergies = _stats(
+        allergiesList: [
+          {'allergen': 'Polen', 'category': '03', 'count': 10},
+          {'allergen': 'Polvo', 'category': '04', 'count': 8},
+          {'allergen': 'Sol', 'category': '05', 'count': 5},
+          {'allergen': 'Latex', 'category': '99', 'count': 2},
+        ],
+      );
+
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: FakeStatsRepository(statsAllergies),
+        ),
+      );
+
+      await _expectAfterScroll(tester, find.text('Polen (10)'));
+      await _expectAfterScroll(tester, find.text('Polvo (8)'));
+      await _expectAfterScroll(tester, find.text('Sol (5)'));
+      await _expectAfterScroll(tester, find.text('Latex (2)'));
+    });
+  });
+
+  group('custom range picker — preselected bounds', () {
+    testWidgets(
+      'reopening the picker after a preset range preselects its bounds',
+      (tester) async {
+        final statsRepo = FakeStatsRepository(_stats(period: 'custom'));
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+            statsRepo: statsRepo,
+          ),
+        );
+
+        await tester.tap(find.text('Este mes'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Personalizado'));
+        await tester.pumpAndSettle();
+
+        final dialogFinder = find.byType(DateRangePickerDialog);
+        expect(dialogFinder, findsOneWidget);
+        final picker = tester.widget<DateRangePickerDialog>(dialogFinder);
+
+        final now = DateTime.now();
+        expect(
+          picker.initialDateRange,
+          equals(
+            DateTimeRange(
+              start: DateTime(now.year, now.month, 1),
+              end: DateTime(now.year, now.month, now.day),
+            ),
+          ),
+        );
+      },
+    );
+  });
+
+  group('active-range caption — remaining month abbreviations', () {
+    Future<void> pickCustomDates(
+      WidgetTester tester,
+      String fromText,
+      String toText,
+    ) async {
+      await tester.tap(find.text('Personalizado'));
+      await tester.pumpAndSettle();
+
+      final dialogFinder = find.byType(DateRangePickerDialog);
+      await tester.tap(find.byIcon(Icons.edit_outlined));
+      await tester.pumpAndSettle();
+
+      final textFields = find.byType(TextField);
+      expect(textFields, findsNWidgets(2));
+
+      await tester.enterText(textFields.at(0), fromText);
+      await tester.enterText(textFields.at(1), toText);
+      await tester.pumpAndSettle();
+
+      final saveButton = find
+          .descendant(of: dialogFinder, matching: find.byType(TextButton))
+          .last;
+      await tester.tap(saveButton);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the active-range caption spells out October and November', (
+      tester,
+    ) async {
+      final statsRepo = FakeStatsRepository(_stats(period: 'custom'));
+      await _pump(
+        tester,
+        _buildScreen(
+          userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+          statsRepo: statsRepo,
+        ),
+      );
+
+      await pickCustomDates(tester, '10/15/2025', '11/25/2025');
+
+      final es = AppStrings.forTesting('es');
+      final expected =
+          '15 ${monthAbbrev(es, 10)} 2025 – 25 ${monthAbbrev(es, 11)} 2025';
+      await _expectAfterScroll(tester, find.text(expected));
+    });
+
+    testWidgets(
+      'the active-range caption falls back to December via the default branch',
+      (tester) async {
+        final statsRepo = FakeStatsRepository(_stats(period: 'custom'));
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+            statsRepo: statsRepo,
+          ),
+        );
+
+        await pickCustomDates(tester, '12/01/2025', '12/20/2025');
+
+        final es = AppStrings.forTesting('es');
+        final expected =
+            '1 ${monthAbbrev(es, 12)} 2025 – 20 ${monthAbbrev(es, 12)} 2025';
+        await _expectAfterScroll(tester, find.text(expected));
+      },
+    );
+  });
+
+  group('per-section empty states', () {
+    testWidgets(
+      'an empty vaccine breakdown shows the empty state instead of an empty chart',
+      (tester) async {
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+            statsRepo: FakeStatsRepository(
+              _stats(vaccines: const <Map<String, dynamic>>[]),
+            ),
+          ),
+        );
+
+        await _expectAfterScroll(
+          tester,
+          find.text('Aún no hay datos para este período.'),
+        );
+      },
+    );
+
+    testWidgets(
+      'an empty allergy breakdown with no "others" shows the empty state',
+      (tester) async {
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+            statsRepo: FakeStatsRepository(
+              _stats(
+                allergiesList: const <Map<String, dynamic>>[],
+                allergiesOthers: 0,
+              ),
+            ),
+          ),
+        );
+
+        await _expectAfterScroll(
+          tester,
+          find.text('Aún no hay datos para este período.'),
+        );
+      },
+    );
+
+    testWidgets(
+      'an empty nationality breakdown with no "others" shows the empty state',
+      (tester) async {
+        await _pump(
+          tester,
+          _buildScreen(
+            userRepo: FakeUserRepository(orgsResult: <OrgSummary>[]),
+            statsRepo: FakeStatsRepository(
+              _stats(
+                nationalitiesList: const <Map<String, dynamic>>[],
+                nationalitiesOthers: 0,
+              ),
+            ),
+          ),
+        );
+
+        await _expectAfterScroll(
+          tester,
+          find.text('Aún no hay datos para este período.'),
+        );
       },
     );
   });

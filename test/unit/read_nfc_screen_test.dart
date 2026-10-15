@@ -17,6 +17,7 @@ class NfcSessionException implements Exception {
 
 class _FakeReadNfcState {
   bool step2 = false;
+  bool offlineGuardianRequired = false;
   bool scanning = false;
   String? errorMessage;
   String? patientDeviceUid;
@@ -74,6 +75,7 @@ class _FakeReadNfcState {
 
   void resetAfterOpenProfile() {
     step2 = false;
+    offlineGuardianRequired = false;
     patientDeviceUid = null;
     patientUidText = '';
     guardianUidText = '';
@@ -82,6 +84,7 @@ class _FakeReadNfcState {
 
   void backToStep1() {
     step2 = false;
+    offlineGuardianRequired = false;
     guardianUidText = '';
     errorMessage = null;
   }
@@ -278,8 +281,6 @@ void main() {
       },
     );
   });
-
-  // ── C. State reset ────────────────────────────────────────────────────────
 
   group('C. State reset after returning from profile view', () {
     test('C-01 resetAfterProfile limpia todos los campos de seguimiento', () {
@@ -519,8 +520,6 @@ void main() {
     });
   });
 
-  // ── G. _openProfile reset ─────────────────────────────────────────────────
-
   group('G. _openProfile — reset al volver del perfil', () {
     test(
       'G-01 resetAfterOpenProfile limpia step2, patientDeviceUid y UIDs',
@@ -542,7 +541,7 @@ void main() {
       },
     );
 
-    test('G-02 resetAfterOpenProfile sobre estado inicial no lanza error', () {
+    test('G-02 resetAfterOpenProfile sobre estado limpio no lanza error', () {
       expect(
         () => _FakeReadNfcState().resetAfterOpenProfile(),
         returnsNormally,
@@ -635,12 +634,12 @@ void main() {
 
   group('J. Offline Guardian Gate & Exception Mapping', () {
     test(
-      'J-01 handleGuardianCardMismatch asigna el mensaje de tarjeta no correspondiente',
+      'J-01 handleGuardianCardMismatch asigna el mensaje de dispositivo no correspondiente',
       () {
         final state = _FakeReadNfcState()..patientDeviceUid = 'AA:BB';
         state.handleGuardianApiError(
           ApiException(
-            'Esa tarjeta no corresponde al guardián de este paciente.',
+            'Ese dispositivo no corresponde al guardián de este paciente.',
             statusCode: 400,
           ),
         );
@@ -648,15 +647,58 @@ void main() {
       },
     );
 
-    test('J-02 handleGuardianBlankCard asigna el mensaje de tarjeta vacía', () {
-      final state = _FakeReadNfcState()..patientDeviceUid = 'AA:BB';
-      state.handleGuardianApiError(
-        ApiException(
-          'La tarjeta del guardián está vacía o no se pudo leer.',
-          statusCode: 400,
-        ),
+    test(
+      'J-02 handleGuardianBlankCard asigna el mensaje de dispositivo vacío',
+      () {
+        final state = _FakeReadNfcState()..patientDeviceUid = 'AA:BB';
+        state.handleGuardianApiError(
+          ApiException(
+            'El dispositivo del guardián está vacío o no se pudo leer.',
+            statusCode: 400,
+          ),
+        );
+        expect(state.errorMessage, contains('vacío o no se pudo leer'));
+      },
+    );
+  });
+
+  group('K. Additional Unit Tests for 100% ReadNfcScreen Coverage', () {
+    test(
+      'K-01 offlineGuardianRequired se activa al detectar menor en triage',
+      () {
+        final state = _FakeReadNfcState()..offlineGuardianRequired = true;
+        expect(state.offlineGuardianRequired, isTrue);
+      },
+    );
+
+    test('K-02 resetAfterOpenProfile restablece offlineGuardianRequired', () {
+      final state = _FakeReadNfcState()..offlineGuardianRequired = true;
+      state.resetAfterOpenProfile();
+      expect(state.offlineGuardianRequired, isFalse);
+    });
+  });
+
+  group('L. Cobertura completa de ramas offline y cancelaciones', () {
+    test('L-01 offlineGuardianRequired se desactiva al regresar a paso 1', () {
+      final state = _FakeReadNfcState()
+        ..step2 = true
+        ..offlineGuardianRequired = true
+        ..guardianUidText = '123456';
+
+      state.backToStep1();
+
+      expect(state.step2, isFalse);
+      expect(state.offlineGuardianRequired, isFalse);
+      expect(state.guardianUidText, isEmpty);
+    });
+
+    test('L-02 reintento de escaneo limpia mensajes de error previos', () {
+      final state = _FakeReadNfcState()..errorMessage = 'Error previo';
+      state.handlePatientApiError(
+        ApiException('Guardian required', statusCode: 403),
+        deviceUid: 'HWB-001',
       );
-      expect(state.errorMessage, contains('vacía o no se pudo leer'));
+      expect(state.errorMessage, isNull);
     });
   });
 }

@@ -355,4 +355,54 @@ void main() {
       );
     });
   });
+
+  group('EditGuardianSheet — Identity Changes & Authorization Rules', () {
+    bool isIdentityChanged({
+      required String name,
+      required String docNumber,
+      required String initialName,
+      required String initialDocNumber,
+    }) {
+      final nameChanged = name.trim() != initialName;
+      final docNumChanged = docNumber.trim() != initialDocNumber;
+      return nameChanged && docNumChanged;
+    }
+
+    test(
+      'retorna true solo cuando AMBOS (nombre y número de documento) cambian',
+      () {
+        expect(
+          isIdentityChanged(
+            name: 'Carlos Ruiz',
+            docNumber: '99999',
+            initialName: 'María García',
+            initialDocNumber: '12345',
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('retorna false si solo cambia uno de los dos campos de identidad', () {
+      expect(
+        isIdentityChanged(
+          name: 'Carlos Ruiz',
+          docNumber: '12345',
+          initialName: 'María García',
+          initialDocNumber: '12345',
+        ),
+        isFalse,
+      );
+
+      expect(
+        isIdentityChanged(
+          name: 'María García',
+          docNumber: '99999',
+          initialName: 'María García',
+          initialDocNumber: '12345',
+        ),
+        isFalse,
+      );
+    });
+  });
 }

@@ -7,6 +7,8 @@
 // Reference: Resolution 866/2021 & 1888/2025 (RDA elements)
 // =============================================================================
 
+import '../../../shared/country_display.dart';
+
 // ---------------------------------------------------------------------------
 // Equality helper — v2-modelos-sin-copywith-ni-equals (Hallazgo 24)
 //
@@ -232,7 +234,9 @@ class PatientInfo {
       firstName: json['firstName']?.toString() ?? '',
       secondName: json['secondName']?.toString(),
       dob: json['dob']?.toString() ?? '',
-      nationalityCode: json['nationalityCode']?.toString() ?? 'COL',
+      nationalityCode: json['nationalityCode'] == null
+          ? 'COL'
+          : normalizeNationalityCode(json['nationalityCode'].toString()),
       nationalityName: json['nationalityName']?.toString(),
       biologicalSex: json['biologicalSex']?.toString() ?? 'I',
       genderIdentity: json['genderIdentity']?.toString(),
@@ -364,7 +368,7 @@ class PatientInfo {
     'firstName': firstName,
     if (secondName != null) 'secondName': secondName,
     'dob': dob,
-    'nationalityCode': nationalityCode,
+    'nationalityCode': normalizeNationalityCode(nationalityCode),
     if (nationalityName != null) 'nationalityName': nationalityName,
     'biologicalSex': biologicalSex,
     if (genderIdentity != null) 'genderIdentity': genderIdentity,
@@ -384,12 +388,16 @@ class PatientInfo {
 // ---------------------------------------------------------------------------
 // GuardianConsent — Ley 1581/2012 (Habeas Data)
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// GuardianConsent — Ley 1581/2012 (Habeas Data)
+// ---------------------------------------------------------------------------
 class GuardianConsent {
   GuardianConsent({
     required this.accepted,
     required this.acceptedAt,
     this.email,
     this.signatureBase64,
+    this.policyVersion = 'v1.1',
   });
 
   factory GuardianConsent.fromJson(Map<String, dynamic> json) {
@@ -398,6 +406,7 @@ class GuardianConsent {
       acceptedAt: json['acceptedAt']?.toString() ?? '',
       email: json['email']?.toString(),
       signatureBase64: json['signatureBase64']?.toString(),
+      policyVersion: json['policyVersion']?.toString() ?? 'v1.1',
     );
   }
 
@@ -405,12 +414,14 @@ class GuardianConsent {
   final String acceptedAt; // ISO 8601
   final String? email;
   final String? signatureBase64; // PNG base64
+  final String? policyVersion;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'accepted': accepted,
     'acceptedAt': acceptedAt,
     if (email != null) 'email': email,
     if (signatureBase64 != null) 'signatureBase64': signatureBase64,
+    if (policyVersion != null) 'policyVersion': policyVersion,
   };
 
   GuardianConsent copyWith({
@@ -418,12 +429,14 @@ class GuardianConsent {
     String? acceptedAt,
     String? email,
     String? signatureBase64,
+    String? policyVersion,
   }) {
     return GuardianConsent(
       accepted: accepted ?? this.accepted,
       acceptedAt: acceptedAt ?? this.acceptedAt,
       email: email ?? this.email,
       signatureBase64: signatureBase64 ?? this.signatureBase64,
+      policyVersion: policyVersion ?? this.policyVersion,
     );
   }
 
@@ -435,10 +448,12 @@ class GuardianConsent {
           accepted == other.accepted &&
           acceptedAt == other.acceptedAt &&
           email == other.email &&
-          signatureBase64 == other.signatureBase64;
+          signatureBase64 == other.signatureBase64 &&
+          policyVersion == other.policyVersion;
 
   @override
-  int get hashCode => Object.hash(accepted, acceptedAt, email, signatureBase64);
+  int get hashCode =>
+      Object.hash(accepted, acceptedAt, email, signatureBase64, policyVersion);
 }
 
 // ---------------------------------------------------------------------------
@@ -479,7 +494,7 @@ class GuardianInfo {
   final String name;
   final String relationship;
   final String phone;
-  final String? deviceUid; // NFC UID of the guardian's wristband
+  final String? deviceUid; // NFC UID of the guardian's device
   final String? docType;
   final String? docNumber;
   final String? documentType;
@@ -553,9 +568,6 @@ class GuardianInfo {
 
 // ---------------------------------------------------------------------------
 // FamilyHistoryItem — Res. 866 Elems. 47.3, 47.4
-//
-// Frontend sends: conditionDescription + relationship
-// Backend LLM resolves: conditionCie10Code + conditionCie11Code
 // ---------------------------------------------------------------------------
 class FamilyHistoryItem {
   FamilyHistoryItem({
@@ -563,6 +575,8 @@ class FamilyHistoryItem {
     this.conditionCie11Code,
     required this.conditionDescription,
     required this.relationship,
+    this.conditionCodedDisplay,
+    this.codingSource,
   });
 
   factory FamilyHistoryItem.fromJson(Map<String, dynamic> json) {
@@ -571,20 +585,26 @@ class FamilyHistoryItem {
       conditionCie11Code: json['conditionCie11Code']?.toString(),
       conditionDescription: json['conditionDescription']?.toString() ?? '',
       relationship: json['relationship']?.toString() ?? '01',
+      conditionCodedDisplay: json['conditionCodedDisplay']?.toString(),
+      codingSource: json['codingSource']?.toString(),
     );
   }
 
-  final String? conditionCie10Code; // Resolved by LLM
-  final String? conditionCie11Code; // Resolved by LLM
-  final String conditionDescription; // Free text from frontend
-  final String
-  relationship; // "01"=Padres, "02"=Hermanos, "03"=Tíos, "04"=Abuelos
+  final String? conditionCie10Code;
+  final String? conditionCie11Code;
+  final String conditionDescription;
+  final String relationship;
+  final String? conditionCodedDisplay;
+  final String? codingSource;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     if (conditionCie10Code != null) 'conditionCie10Code': conditionCie10Code,
     if (conditionCie11Code != null) 'conditionCie11Code': conditionCie11Code,
     'conditionDescription': conditionDescription,
     'relationship': relationship,
+    if (conditionCodedDisplay != null)
+      'conditionCodedDisplay': conditionCodedDisplay,
+    if (codingSource != null) 'codingSource': codingSource,
   };
 
   FamilyHistoryItem copyWith({
@@ -592,12 +612,17 @@ class FamilyHistoryItem {
     String? conditionCie11Code,
     String? conditionDescription,
     String? relationship,
+    String? conditionCodedDisplay,
+    String? codingSource,
   }) {
     return FamilyHistoryItem(
       conditionCie10Code: conditionCie10Code ?? this.conditionCie10Code,
       conditionCie11Code: conditionCie11Code ?? this.conditionCie11Code,
       conditionDescription: conditionDescription ?? this.conditionDescription,
       relationship: relationship ?? this.relationship,
+      conditionCodedDisplay:
+          conditionCodedDisplay ?? this.conditionCodedDisplay,
+      codingSource: codingSource ?? this.codingSource,
     );
   }
 
@@ -609,7 +634,9 @@ class FamilyHistoryItem {
           conditionCie10Code == other.conditionCie10Code &&
           conditionCie11Code == other.conditionCie11Code &&
           conditionDescription == other.conditionDescription &&
-          relationship == other.relationship;
+          relationship == other.relationship &&
+          conditionCodedDisplay == other.conditionCodedDisplay &&
+          codingSource == other.codingSource;
 
   @override
   int get hashCode => Object.hash(
@@ -617,20 +644,21 @@ class FamilyHistoryItem {
     conditionCie11Code,
     conditionDescription,
     relationship,
+    conditionCodedDisplay,
+    codingSource,
   );
 }
 
 // ---------------------------------------------------------------------------
 // ChronicConditionItem — IG RDA v0.8.1 ConditionStatementRDA
-//
-// Frontend sends: chronicDescription (free text)
-// Backend LLM resolves: chronicCie10Code + chronicCie11Code
 // ---------------------------------------------------------------------------
 class ChronicConditionItem {
   ChronicConditionItem({
     required this.chronicDescription,
     this.chronicCie10Code,
     this.chronicCie11Code,
+    this.chronicCodedDisplay,
+    this.codingSource,
   });
 
   factory ChronicConditionItem.fromJson(Map<String, dynamic> json) {
@@ -638,28 +666,38 @@ class ChronicConditionItem {
       chronicDescription: json['chronicDescription']?.toString() ?? '',
       chronicCie10Code: json['chronicCie10Code']?.toString(),
       chronicCie11Code: json['chronicCie11Code']?.toString(),
+      chronicCodedDisplay: json['chronicCodedDisplay']?.toString(),
+      codingSource: json['codingSource']?.toString(),
     );
   }
 
-  final String chronicDescription; // Free text from frontend
-  final String? chronicCie10Code; // Resolved by LLM
-  final String? chronicCie11Code; // Resolved by LLM
+  final String chronicDescription;
+  final String? chronicCie10Code;
+  final String? chronicCie11Code;
+  final String? chronicCodedDisplay;
+  final String? codingSource;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'chronicDescription': chronicDescription,
     if (chronicCie10Code != null) 'chronicCie10Code': chronicCie10Code,
     if (chronicCie11Code != null) 'chronicCie11Code': chronicCie11Code,
+    if (chronicCodedDisplay != null) 'chronicCodedDisplay': chronicCodedDisplay,
+    if (codingSource != null) 'codingSource': codingSource,
   };
 
   ChronicConditionItem copyWith({
     String? chronicDescription,
     String? chronicCie10Code,
     String? chronicCie11Code,
+    String? chronicCodedDisplay,
+    String? codingSource,
   }) {
     return ChronicConditionItem(
       chronicDescription: chronicDescription ?? this.chronicDescription,
       chronicCie10Code: chronicCie10Code ?? this.chronicCie10Code,
       chronicCie11Code: chronicCie11Code ?? this.chronicCie11Code,
+      chronicCodedDisplay: chronicCodedDisplay ?? this.chronicCodedDisplay,
+      codingSource: codingSource ?? this.codingSource,
     );
   }
 
@@ -670,11 +708,18 @@ class ChronicConditionItem {
           runtimeType == other.runtimeType &&
           chronicDescription == other.chronicDescription &&
           chronicCie10Code == other.chronicCie10Code &&
-          chronicCie11Code == other.chronicCie11Code;
+          chronicCie11Code == other.chronicCie11Code &&
+          chronicCodedDisplay == other.chronicCodedDisplay &&
+          codingSource == other.codingSource;
 
   @override
-  int get hashCode =>
-      Object.hash(chronicDescription, chronicCie10Code, chronicCie11Code);
+  int get hashCode => Object.hash(
+    chronicDescription,
+    chronicCie10Code,
+    chronicCie11Code,
+    chronicCodedDisplay,
+    codingSource,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -700,9 +745,9 @@ class MedicationStatementItem {
   }
 
   final String medicationName;
-  final String? dciCode; // Código DCI — MIPRES
-  final String status; // "active", "completed", "stopped", "unknown"
-  final String? dosage; // Free text
+  final String? dciCode;
+  final String status;
+  final String? dosage;
   final String? notes;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -939,9 +984,9 @@ class VaccinationRecordItem {
     );
   }
 
-  final String date; // YYYY-MM-DD
+  final String date;
   final String vaccineName;
-  final String vaccineCode; // CVX code
+  final String vaccineCode;
   final int dose;
   final String administratedBy;
   final String administratedAt;
@@ -1083,11 +1128,23 @@ class ClinicalEvaluation {
 // ---------------------------------------------------------------------------
 // DiagnosisItem — Resolved by backend LLM, NOT sent by frontend
 // ---------------------------------------------------------------------------
+abstract final class CodeSource {
+  static const String clinician = 'clinician';
+  static const String aiSuggested = 'ai_suggested';
+  static const String aiFallback = 'ai_fallback';
+
+  static bool isAi(String? source) =>
+      source == aiSuggested || source == aiFallback;
+}
+
 class DiagnosisItem {
   DiagnosisItem({
     required this.icd10Code,
     this.icd11Code,
     required this.description,
+    this.source,
+    this.model,
+    this.generatedAt,
   });
 
   factory DiagnosisItem.fromJson(Map<String, dynamic> json) {
@@ -1095,28 +1152,43 @@ class DiagnosisItem {
       icd10Code: json['icd10Code']?.toString() ?? '',
       icd11Code: json['icd11Code']?.toString(),
       description: json['description']?.toString() ?? '',
+      source: json['source']?.toString(),
+      model: json['model']?.toString(),
+      generatedAt: json['generatedAt']?.toString(),
     );
   }
 
   final String icd10Code;
   final String? icd11Code;
   final String description;
+  final String? source;
+  final String? model;
+  final String? generatedAt;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'icd10Code': icd10Code,
     if (icd11Code != null) 'icd11Code': icd11Code,
     'description': description,
+    if (source != null) 'source': source,
+    if (model != null) 'model': model,
+    if (generatedAt != null) 'generatedAt': generatedAt,
   };
 
   DiagnosisItem copyWith({
     String? icd10Code,
     String? icd11Code,
     String? description,
+    String? source,
+    String? model,
+    String? generatedAt,
   }) {
     return DiagnosisItem(
       icd10Code: icd10Code ?? this.icd10Code,
       icd11Code: icd11Code ?? this.icd11Code,
       description: description ?? this.description,
+      source: source ?? this.source,
+      model: model ?? this.model,
+      generatedAt: generatedAt ?? this.generatedAt,
     );
   }
 
@@ -1127,10 +1199,20 @@ class DiagnosisItem {
           runtimeType == other.runtimeType &&
           icd10Code == other.icd10Code &&
           icd11Code == other.icd11Code &&
-          description == other.description;
+          description == other.description &&
+          source == other.source &&
+          model == other.model &&
+          generatedAt == other.generatedAt;
 
   @override
-  int get hashCode => Object.hash(icd10Code, icd11Code, description);
+  int get hashCode => Object.hash(
+    icd10Code,
+    icd11Code,
+    description,
+    source,
+    model,
+    generatedAt,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1658,6 +1740,71 @@ class MedicalHistoryItem {
   final String? occupationDescription;
   final List<MedicationRequestItem> prescriptions;
 
+  MedicalHistoryItem copyWith({
+    String? encounterIdentifier,
+    String? type,
+    String? startDateTime,
+    String? endDateTime,
+    String? careModality,
+    String? serviceGroup,
+    String? careEnvironment,
+    String? entryRoute,
+    String? externalCause,
+    ProviderInfo? provider,
+    PractitionerInfo? practitioner,
+    String? location,
+    String? physician,
+    ClinicalEvaluation? clinicalEvaluation,
+    List<DiagnosisItem>? diagnosis,
+    String? diagnosisType,
+    String? dischargeDisposition,
+    List<RiskFactor>? riskFactors,
+    IncapacityInfo? incapacity,
+    PayerInfo? payer,
+    String? externalCauseDisplay,
+    String? healthcareServiceCode,
+    String? healthcareServiceDisplay,
+    String? cupsCode,
+    String? cupsDisplay,
+    String? occupation,
+    String? occupationDescription,
+    List<MedicationRequestItem>? prescriptions,
+  }) {
+    return MedicalHistoryItem(
+      encounterIdentifier: encounterIdentifier ?? this.encounterIdentifier,
+      type: type ?? this.type,
+      startDateTime: startDateTime ?? this.startDateTime,
+      endDateTime: endDateTime ?? this.endDateTime,
+      careModality: careModality ?? this.careModality,
+      serviceGroup: serviceGroup ?? this.serviceGroup,
+      careEnvironment: careEnvironment ?? this.careEnvironment,
+      entryRoute: entryRoute ?? this.entryRoute,
+      externalCause: externalCause ?? this.externalCause,
+      provider: provider ?? this.provider,
+      practitioner: practitioner ?? this.practitioner,
+      location: location ?? this.location,
+      physician: physician ?? this.physician,
+      clinicalEvaluation: clinicalEvaluation ?? this.clinicalEvaluation,
+      diagnosis: diagnosis ?? this.diagnosis,
+      diagnosisType: diagnosisType ?? this.diagnosisType,
+      dischargeDisposition: dischargeDisposition ?? this.dischargeDisposition,
+      riskFactors: riskFactors ?? this.riskFactors,
+      incapacity: incapacity ?? this.incapacity,
+      payer: payer ?? this.payer,
+      externalCauseDisplay: externalCauseDisplay ?? this.externalCauseDisplay,
+      healthcareServiceCode:
+          healthcareServiceCode ?? this.healthcareServiceCode,
+      healthcareServiceDisplay:
+          healthcareServiceDisplay ?? this.healthcareServiceDisplay,
+      cupsCode: cupsCode ?? this.cupsCode,
+      cupsDisplay: cupsDisplay ?? this.cupsDisplay,
+      occupation: occupation ?? this.occupation,
+      occupationDescription:
+          occupationDescription ?? this.occupationDescription,
+      prescriptions: prescriptions ?? this.prescriptions,
+    );
+  }
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     if (encounterIdentifier != null) 'encounterIdentifier': encounterIdentifier,
     'type': type,
@@ -1709,6 +1856,7 @@ class PatientFullRecord {
     this.allergies = const <AllergyInfo>[],
     this.medicalHistory = const <MedicalHistoryItem>[],
     this.vaccinationRecord = const <VaccinationRecordItem>[],
+    this.recordVersion,
   });
 
   factory PatientFullRecord.fromJson(Map<String, dynamic> json) {
@@ -1762,6 +1910,9 @@ class PatientFullRecord {
               )
               .toList() ??
           <VaccinationRecordItem>[],
+      recordVersion:
+          (json['recordVersion'] as num?)?.toInt() ??
+          (json['record_version'] as num?)?.toInt(),
     );
   }
 
@@ -1774,6 +1925,7 @@ class PatientFullRecord {
   final List<AllergyInfo> allergies;
   final List<MedicalHistoryItem> medicalHistory;
   final List<VaccinationRecordItem> vaccinationRecord;
+  final int? recordVersion;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'patientId': patientId,
@@ -1790,6 +1942,7 @@ class PatientFullRecord {
     'vaccinationRecord': vaccinationRecord
         .map((VaccinationRecordItem v) => v.toJson())
         .toList(),
+    if (recordVersion != null) 'baseVersion': recordVersion,
   };
 
   PatientFullRecord copyWith({
@@ -1802,6 +1955,7 @@ class PatientFullRecord {
     List<AllergyInfo>? allergies,
     List<MedicalHistoryItem>? medicalHistory,
     List<VaccinationRecordItem>? vaccinationRecord,
+    int? recordVersion,
   }) {
     return PatientFullRecord(
       patientId: patientId ?? this.patientId,
@@ -1813,6 +1967,7 @@ class PatientFullRecord {
       allergies: allergies ?? this.allergies,
       medicalHistory: medicalHistory ?? this.medicalHistory,
       vaccinationRecord: vaccinationRecord ?? this.vaccinationRecord,
+      recordVersion: recordVersion ?? this.recordVersion,
     );
   }
 
@@ -1855,6 +2010,8 @@ class PatientSyncResponse {
     this.fhirStatus,
     this.vidaCode,
     required this.message,
+    this.conflicts = const <String>[],
+    this.recordVersion,
   });
 
   factory PatientSyncResponse.fromJson(Map<String, dynamic> json) {
@@ -1864,6 +2021,14 @@ class PatientSyncResponse {
       fhirStatus: json['fhir_status']?.toString(),
       vidaCode: json['vida_code']?.toString(),
       message: json['message']?.toString() ?? '',
+      conflicts:
+          (json['conflicts'] as List<dynamic>?)
+              ?.map((dynamic c) => c.toString())
+              .toList() ??
+          const <String>[],
+      recordVersion:
+          (json['record_version'] as num?)?.toInt() ??
+          (json['recordVersion'] as num?)?.toInt(),
     );
   }
 
@@ -1872,4 +2037,6 @@ class PatientSyncResponse {
   final String? fhirStatus;
   final String? vidaCode;
   final String message;
+  final List<String> conflicts;
+  final int? recordVersion;
 }

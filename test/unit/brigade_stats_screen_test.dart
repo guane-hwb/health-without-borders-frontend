@@ -265,15 +265,17 @@ void main() {
       expect(countryDisplay('PER').name(isEs: false), 'Peru');
     });
 
-    test('"UNK" reads as not recorded, which is not the same as "other"', () {
+    test('"UNK" reads as another or unknown nationality, not as the '
+        'aggregated others bucket', () {
       final unknown = countryDisplay('UNK');
-      expect(unknown.nameEs, 'Sin registrar');
-      expect(unknown.nameEn, 'Not recorded');
+      expect(unknown.nameEs, 'Otra / desconocida');
+      expect(unknown.nameEn, 'Other / unknown');
       expect(unknown.nameEs, isNot(othersDisplay.nameEs));
     });
 
-    test('an empty code reads as not recorded', () {
-      expect(countryDisplay('').nameEs, 'Sin registrar');
+    test('an empty code and the legacy "OTHER" read as UNK', () {
+      expect(countryDisplay('').nameEs, 'Otra / desconocida');
+      expect(countryDisplay('other').nameEs, 'Otra / desconocida');
     });
 
     test(
@@ -375,6 +377,29 @@ void main() {
         'izquierda', () {
       final label = utcOffsetLabel(DateTime.now());
       expect(label, matches(RegExp(r'^UTC[+-]\d{2}:\d{2}$')));
+    });
+  });
+
+  group('monthAbbrev', () {
+    final es = AppStrings.forTesting('es');
+
+    test('resuelve cada mes de agosto a diciembre', () {
+      expect(monthAbbrev(es, 8), es.monAgo);
+      expect(monthAbbrev(es, 9), es.monSep);
+      expect(monthAbbrev(es, 10), es.monOct);
+      expect(monthAbbrev(es, 11), es.monNov);
+      expect(monthAbbrev(es, 12), es.monDic);
+    });
+
+    test('cualquier mes fuera de rango cae en el mismo valor por defecto '
+        'que diciembre', () {
+      expect(monthAbbrev(es, 13), es.monDic);
+    });
+
+    test('monthAbbrev evaluates every month from 1 to 12', () {
+      for (var month = 1; month <= 12; month++) {
+        expect(monthAbbrev(es, month).isNotEmpty, isTrue);
+      }
     });
   });
 }

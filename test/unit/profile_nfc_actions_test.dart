@@ -116,5 +116,40 @@ void main() {
         expect(updated.guardian2Info?.deviceUid, equals('G2-NEW'));
       },
     );
+
+    test(
+      'guardian2Info nulo en ReassignTarget.guardian2 retorna el registro original sin cambios',
+      () {
+        final record = PatientFullRecord(
+          patientId: 'p-1',
+          deviceUid: 'P-UID',
+          patientInfo: PatientInfo(
+            identification: PatientIdentification(
+              documentType: 'CC',
+              documentNumber: '123',
+            ),
+            firstName: 'Juan',
+            firstLastName: 'Pérez',
+            dob: '2000-01-01',
+            biologicalSex: 'M',
+            address: Address(city: 'Bogotá', state: 'Bogotá'),
+          ),
+          guardianInfo: GuardianInfo(
+            name: 'G1',
+            relationship: '01',
+            phone: '123',
+          ),
+          guardian2Info: null,
+        );
+
+        final g2 = record.guardian2Info;
+        final updated = g2 == null
+            ? record
+            : record.copyWith(guardian2Info: g2.copyWith(deviceUid: 'G2-NEW'));
+
+        expect(updated.guardian2Info, isNull);
+        expect(updated.deviceUid, equals('P-UID'));
+      },
+    );
   });
 }

@@ -11,6 +11,7 @@ import '../../features/auth/data/auth_repository.dart';
 import '../../features/nfc/data/patient_repository.dart';
 import '../../features/nfc/domain/patient_record.dart';
 import '../network/api_client.dart';
+import '../network/api_error_codes.dart';
 import '../network/reachability.dart';
 import '../storage/local_database.dart';
 import '../utils/app_logger.dart';
@@ -128,6 +129,12 @@ class SyncEngine {
   void _scheduleRetry() {
     _retryTimer?.cancel();
     _retryTimer = null;
+
+    if (_currentUserId == null) {
+      _retryAttempt = 0;
+      _pendingServerRetryAfter = null;
+      return;
+    }
 
     if (pendingCount.value <= 0) {
       _retryAttempt = 0;
@@ -298,6 +305,14 @@ class SyncEngine {
 
       if (response.status == 'success' && fhirOk) {
         AppLogger.d('Registro sincronizado exitosamente: ${entry.patientId}');
+        if (response.conflicts.isNotEmpty) {
+          // The server kept its own value for these parts of the record (e.g.
+          // it refused to re-link a retired device); the rest was synced.
+          AppLogger.d(
+            'Sync de ${entry.patientId} aceptado con conflictos: '
+            '${response.conflicts.join(', ')}',
+          );
+        }
 
         await _localDb.markSynced(
           entry.patientId,
@@ -332,6 +347,14 @@ class SyncEngine {
         return _SyncOutcome.abortBatch;
       }
 
+      // Deactivated account or organization: the session is being ended (see
+      // ApiClient.onAccountInactive). Nothing is wrong with the record, so it
+      // stays pending instead of being marked as failed.
+      if (ApiErrorCode.isAccountInactive(e.code)) {
+        onRecordSynced?.call(entry.patientId, false, e.code);
+        return _SyncOutcome.abortBatch;
+      }
+
       final bool isTransientServerError =
           e.statusCode == 408 ||
           e.statusCode == 429 ||
@@ -339,7 +362,11 @@ class SyncEngine {
               e.statusCode! >= 500 &&
               e.statusCode! <= 599);
 
-      final String safeMsg = (e.statusCode == 409 && e.message.isNotEmpty)
+      // A known code is stored as-is and translated when shown (see
+      // ApiErrorCode.describe), so the queue never has to parse server text.
+      final String safeMsg = (ApiErrorCode.describe(e.code, isEs: true) != null)
+          ? e.code!
+          : (e.statusCode == 409 && e.message.isNotEmpty)
           ? e.message
           : (e.statusCode == 422)
           ? 'Error de validación (422): Campos incompatibles con el backend'

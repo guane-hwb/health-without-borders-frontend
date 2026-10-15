@@ -674,4 +674,37 @@ void main() {
       expect(subtitle, contains('medications'));
     });
   });
+
+  group('Step4Background — Pruebas de integración de datos en borrador', () {
+    test('Agrega medicamento al borrador con todos sus campos', () {
+      final draft = RegisterDraft();
+      final med = buildMedication(
+        name: 'Paracetamol',
+        status: 'active',
+        dosage: '500mg',
+        notes: 'Cada 8 horas',
+      );
+      draft.medications.add(med);
+
+      expect(draft.medications, hasLength(1));
+      expect(draft.medications.first.medicationName, 'Paracetamol');
+      expect(draft.medications.first.dosage, '500mg');
+      expect(draft.medications.first.notes, 'Cada 8 horas');
+    });
+
+    test('Agrega alergia al borrador con todos sus campos', () {
+      final draft = RegisterDraft();
+      final allergy = buildAllergy(
+        allergen: 'Maní',
+        category: '02',
+        reaction: 'Anafilaxia',
+      );
+      draft.allergies.add(allergy);
+
+      expect(draft.allergies, hasLength(1));
+      expect(draft.allergies.first.allergen, 'Maní');
+      expect(draft.allergies.first.category, '02');
+      expect(draft.allergies.first.reaction, 'Anafilaxia');
+    });
+  });
 }

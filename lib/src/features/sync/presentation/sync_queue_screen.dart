@@ -1,15 +1,18 @@
 // lib/src/features/sync/presentation/sync_queue_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
+import '../../../core/network/api_error_codes.dart';
 import '../../../core/storage/local_database.dart';
 import '../../../core/sync/sync_engine.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/locale_switcher.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
+import '../../nfc/domain/patient_record.dart';
 import '../../nfc/presentation/profile/patient_profile_screen.dart';
 
 class SyncQueueScreen extends StatefulWidget {
@@ -179,15 +182,115 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
     );
   }
 
+  String _formatClinicalSummary(PatientFullRecord record, bool isEs) {
+    final buffer = StringBuffer();
+    buffer.writeln(
+      isEs ? '=== RESUMEN CLÍNICO ===' : '=== CLINICAL SUMMARY ===',
+    );
+    buffer.writeln(
+      '${isEs ? "Paciente" : "Patient"}: ${record.patientInfo.fullName}',
+    );
+    buffer.writeln(
+      '${isEs ? "Documento" : "Document"}: ${record.patientInfo.identification.documentType} ${record.patientInfo.identification.documentNumber}',
+    );
+    buffer.writeln('');
+
+    if (record.medicalHistory.isNotEmpty) {
+      buffer.writeln(
+        isEs ? '--- CONSULTAS MÉDICAS ---' : '--- MEDICAL CONSULTATIONS ---',
+      );
+      for (final item in record.medicalHistory) {
+        buffer.writeln('• ${isEs ? "Fecha" : "Date"}: ${item.startDateTime}');
+        if (item.clinicalEvaluation.historyOfCurrentIllness != null) {
+          buffer.writeln(
+            '  ${isEs ? "Motivo/Historia" : "Reason/History"}: ${item.clinicalEvaluation.historyOfCurrentIllness}',
+          );
+        }
+        if (item.clinicalEvaluation.treatmentPlanObservations != null) {
+          buffer.writeln(
+            '  ${isEs ? "Plan" : "Plan"}: ${item.clinicalEvaluation.treatmentPlanObservations}',
+          );
+        }
+      }
+      buffer.writeln('');
+    }
+
+    if (record.vaccinationRecord.isNotEmpty) {
+      buffer.writeln(isEs ? '--- VACUNAS ---' : '--- VACCINATIONS ---');
+      for (final v in record.vaccinationRecord) {
+        buffer.writeln(
+          '• ${v.vaccineName} (${isEs ? "Dosis" : "Dose"} ${v.dose}) - ${v.date}',
+        );
+      }
+    }
+
+    return buffer.toString();
+  }
+
   Future<void> _delete(LocalPatientEntry e) async {
     final s = AppStrings.of(context);
+    final isEs = s.isEs;
     final db = AppScope.of(context).localDatabase;
+    final messenger = ScaffoldMessenger.of(context);
+    final record = e.toPatientRecord();
+
+    final hasClinicalData =
+        record != null &&
+        (record.medicalHistory.isNotEmpty ||
+            record.vaccinationRecord.isNotEmpty);
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(s.deleteRecord),
-        content: Text('${s.deleteRecordConfirm}\n\n${e.maskedName}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${s.deleteRecordConfirm}\n\n${e.maskedName}'),
+            if (hasClinicalData) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3CD),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFFEEBA)),
+                ),
+                child: Text(
+                  isEs
+                      ? 'Atención: Este registro contiene consultas médicas o vacunas que no se han sincronizado.'
+                      : 'Warning: This record contains unsynced medical consultations or vaccines.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF856404),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
+          if (hasClinicalData)
+            TextButton.icon(
+              icon: const Icon(Icons.copy, size: 16),
+              label: Text(isEs ? 'Copiar datos' : 'Copy clinical data'),
+              onPressed: () {
+                final summary = _formatClinicalSummary(record, isEs);
+                Clipboard.setData(ClipboardData(text: summary));
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      isEs
+                          ? 'Resumen clínico copiado al portapapeles.'
+                          : 'Clinical summary copied to clipboard.',
+                    ),
+                    backgroundColor: AppColors.primary,
+                  ),
+                );
+              },
+            ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(s.cancel),
@@ -376,10 +479,20 @@ class _SyncCard extends StatelessWidget {
     final isConflict = entry.syncErrorCode == 409;
     final hasErr = entry.syncError?.isNotEmpty == true;
     final isEs = s.isEs;
+    final String? codedMessage = ApiErrorCode.describe(
+      entry.syncError,
+      isEs: isEs,
+    );
+    final bool isDuplicate =
+        isConflict &&
+        entry.syncError != ApiErrorCode.identityMismatch &&
+        entry.syncError != ApiErrorCode.deviceRetired;
 
     String? errorMessage;
     if (hasErr) {
-      if (isConflict) {
+      if (codedMessage != null) {
+        errorMessage = codedMessage;
+      } else if (isConflict) {
         final rawErr = entry.syncError?.toLowerCase() ?? '';
         final isDocumentDuplicate =
             rawErr.contains('identity document') ||
@@ -387,17 +500,17 @@ class _SyncCard extends StatelessWidget {
 
         if (isDocumentDuplicate) {
           errorMessage = isEs
-              ? 'Ya existe un paciente registrado con este número de documento.'
-              : 'A patient is already registered with this identity document.';
+              ? 'Ya existe un paciente registrado con este número de documento. Busque al paciente en el sistema e ingrese la consulta directamente en su perfil.'
+              : 'A patient is already registered with this identity document. Search for the patient in the system and record the consultation directly on their profile.';
         } else {
           errorMessage = isEs
               ? 'Este dispositivo ya está registrado para otro paciente. Registra al paciente con un dispositivo nuevo.'
-              : 'A patient is already registered with this device tag.';
+              : 'This device is already registered to another patient. Register the patient with a new device.';
         }
       } else if (entry.syncErrorCode == 403) {
         errorMessage = isEs
-            ? 'Acceso denegado (403): Tu rol no permite registrar historia médica completa.'
-            : 'Access denied (403): Your role cannot register full medical history.';
+            ? 'Acceso denegado (403): Tu rol no puede sincronizar este cambio. Pide a un usuario con rol clínico (médico o enfermería) que lo reasigne o lo registre.'
+            : 'Access denied (403): Your role cannot sync this change. Ask a clinical user (doctor or nurse) to reassign or register it.';
       } else if (entry.syncErrorCode == 422) {
         errorMessage = isEs
             ? 'Error de validación (422): El registro contiene campos incompatibles con el backend.'
@@ -408,8 +521,10 @@ class _SyncCard extends StatelessWidget {
     }
 
     final String badgeLabel = hasErr
-        ? (isConflict
+        ? (isDuplicate
               ? (isEs ? 'Duplicado' : 'Duplicate')
+              : isConflict
+              ? (isEs ? 'Conflicto' : 'Conflict')
               : (isEs ? 'Error' : 'Error'))
         : s.pending;
 

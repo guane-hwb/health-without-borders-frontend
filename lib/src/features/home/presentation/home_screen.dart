@@ -1,6 +1,7 @@
 // lib/src/features/home/presentation/home_screen.dart
 
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
@@ -25,21 +26,73 @@ class HomeScreen extends StatelessWidget {
 
   Future<void> _logout(BuildContext context) async {
     final s = AppStrings.of(context);
+    final isEs = s.isEs;
     final scope = AppScope.of(context);
     final name = scope.currentUser?.fullName ?? '';
+    final dialogContext = context;
+
+    if (!dialogContext.mounted) return;
+
+    if (kIsWeb) {
+      try {
+        await scope.syncEngine.syncAll().timeout(const Duration(seconds: 20));
+      } catch (_) {}
+    }
+
+    int pendingPatients = 0;
+    int pendingLogs = 0;
+    try {
+      pendingPatients = await scope.localDatabase.getUnsyncedCount();
+      pendingLogs = await scope.localDatabase.getUnsyncedEmergencyLogCount();
+    } catch (_) {}
+
+    if (!dialogContext.mounted) return;
+
+    final totalPending = pendingPatients + pendingLogs;
 
     final confirmed = await showDialog<bool>(
-      context: context,
+      context: dialogContext,
       builder: (_) => AlertDialog(
         title: Text(s.logoutTitle),
-        content: Text(s.logoutConfirm(name)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(s.logoutConfirm(name)),
+            if (totalPending > 0) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3CD),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFFEEBA)),
+                ),
+                child: Text(
+                  kIsWeb
+                      ? (isEs
+                            ? 'Atención: $totalPending registro(s) no se pudieron sincronizar. Al cerrar sesión se ELIMINARÁN de este navegador y no se podrán recuperar.'
+                            : 'Warning: $totalPending record(s) could not be synced. Signing out will DELETE them from this browser and they cannot be recovered.')
+                      : (isEs
+                            ? 'Atención: Hay $totalPending registro(s) pendiente(s) por sincronizar en este dispositivo.'
+                            : 'Warning: There are $totalPending pending record(s) on this device.'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF856404),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: Text(s.cancel),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text(
               s.logout,
               style: const TextStyle(color: AppColors.error),
@@ -49,10 +102,10 @@ class HomeScreen extends StatelessWidget {
       ),
     );
 
-    if (confirmed == true && context.mounted) {
+    if (confirmed == true && dialogContext.mounted) {
       unawaited(
         showDialog<void>(
-          context: context,
+          context: dialogContext,
           barrierDismissible: false,
           builder: (_) => const PopScope(
             canPop: false,
@@ -72,9 +125,9 @@ class HomeScreen extends StatelessWidget {
 
       await scope.authRepository.logout();
 
-      if (context.mounted) {
+      if (dialogContext.mounted) {
         await Navigator.of(
-          context,
+          dialogContext,
         ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
       }
     }
@@ -165,8 +218,6 @@ class HomeScreen extends StatelessWidget {
     };
   }
 
-  // ── SUPERADMIN ────────────────────────────────────────────────────────────
-
   Widget _buildSuperadminBody(BuildContext context) {
     final s = AppStrings.of(context);
     return ListView(
@@ -194,8 +245,6 @@ class HomeScreen extends StatelessWidget {
       ],
     );
   }
-
-  // ── ORG ADMIN ─────────────────────────────────────────────────────────────
 
   Widget _buildOrgAdminBody(BuildContext context) {
     final s = AppStrings.of(context);
@@ -234,8 +283,6 @@ class HomeScreen extends StatelessWidget {
       ],
     );
   }
-
-  // ── DOCTOR / NURSE ────────────────────────────────────────────────────────
 
   Widget _buildClinicalBody(BuildContext context, UserSession user) {
     final s = AppStrings.of(context);
@@ -285,10 +332,6 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// SUB-WIDGETS
-// ═════════════════════════════════════════════════════════════════════════════
 
 class _Header extends StatelessWidget {
   const _Header({required this.user, required this.greeting});
@@ -440,15 +483,15 @@ class _ActionCard extends StatelessWidget {
     required this.iconBg,
     required this.iconColor,
     required this.title,
+    required this.subtitle,
     required this.onTap,
-    this.subtitle,
   });
 
   final IconData icon;
   final Color iconBg;
   final Color iconColor;
   final String title;
-  final String? subtitle;
+  final String subtitle;
   final VoidCallback onTap;
 
   @override
@@ -487,36 +530,27 @@ class _ActionCard extends StatelessWidget {
               ),
               const SizedBox(width: 14),
               Expanded(
-                child: subtitle != null
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            subtitle!,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      )
-                    : Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
                       ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const Icon(
                 Icons.chevron_right_rounded,

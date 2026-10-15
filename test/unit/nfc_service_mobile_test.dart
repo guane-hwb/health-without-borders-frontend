@@ -41,6 +41,13 @@ void main() {
 
   tearDown(NfcService.resetForTest);
 
+  test(
+    'la probe real por defecto falla sin plugin y isAvailable reporta false',
+    () async {
+      expect(await NfcService.isAvailable, isFalse);
+    },
+  );
+
   // ══════════════════════════════════════════════════════════════════════════
   // overrideReadDeviceUid
   // ══════════════════════════════════════════════════════════════════════════
@@ -387,6 +394,10 @@ void main() {
         expect(isAvailable, isA<bool>());
       },
     );
+
+    test('el constructor privado puede instanciarse sin lanzar', () {
+      expect(NfcService.debugInstantiatePrivateConstructor, returnsNormally);
+    });
   });
 
   group('NfcService.resetForTest', () {

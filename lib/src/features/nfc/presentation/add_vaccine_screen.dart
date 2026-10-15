@@ -9,6 +9,7 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/nfc/nfc_service.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_error_codes.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/form_widgets.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
@@ -123,7 +124,12 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
     } on NfcNotAvailableException {
       if (mounted) setState(() => _scanError = s.nfcNotAvailableHint);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _scanError = e.message);
+      if (mounted) {
+        setState(
+          () => _scanError =
+              ApiErrorCode.describe(e.code, isEs: s.isEs) ?? e.message,
+        );
+      }
     } catch (_) {
       if (mounted) setState(() => _scanError = s.guardianNfcError);
     } finally {
@@ -398,7 +404,13 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                     .catchError((Object e) {
                       if (mounted) {
                         setState(() {
-                          _scanError = e.toString();
+                          _scanError = e is ApiException
+                              ? ApiErrorCode.describe(
+                                      e.code,
+                                      isEs: AppStrings.of(context).isEs,
+                                    ) ??
+                                    e.message
+                              : e.toString();
                           _scanning = false;
                         });
                       }

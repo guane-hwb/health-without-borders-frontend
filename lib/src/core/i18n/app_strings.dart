@@ -441,6 +441,7 @@ class AppStrings {
   String get medStatusStopped => _get('medStatusStopped');
   String get medStatusUnknown => _get('medStatusUnknown');
   String get cie10Label => _get('cie10Label');
+  String get consentPending => _get('consentPending');
 
   // ── Add medication sheet ─────────────────────────────────────────────────
   String get addMedicationTitle => _get('addMedicationTitle');
@@ -518,6 +519,10 @@ class AppStrings {
   String get monNov => _get('monNov');
   String get monDic => _get('monDic');
   String get timeAm => _get('timeAm');
+  String get sourceAiSuggested => _get('sourceAiSuggested');
+  String get sourceAiFallback => _get('sourceAiFallback');
+  String get sourceUnrecorded => _get('sourceUnrecorded');
+  String get codeSuggestedByAi => _get('codeSuggestedByAi');
   String get timePm => _get('timePm');
 
   // Care Modality Labels ─────────────────────────────────────────────────
@@ -1033,6 +1038,7 @@ class AppStrings {
     'medStatusStopped': 'Suspendido',
     'medStatusUnknown': 'Desconocido',
     'cie10Label': 'CIE-10: ',
+    'consentPending': 'Consentimiento pendiente',
 
     // Add medication sheet
     'addMedicationTitle': 'Agregar medicamento',
@@ -1107,6 +1113,10 @@ class AppStrings {
     'monNov': 'nov',
     'monDic': 'dic',
     'timeAm': 'a.m.',
+    'sourceAiSuggested': 'Sugerido por IA',
+    'sourceAiFallback': 'IA: sin código válido',
+    'sourceUnrecorded': 'Origen no registrado',
+    'codeSuggestedByAi': 'Código sugerido por IA',
     'timePm': 'p.m.',
     'modIntramural': 'Intramural',
     'modExtramuralMobil': 'Extramural móvil',
@@ -1614,6 +1624,7 @@ class AppStrings {
     'medStatusStopped': 'Stopped',
     'medStatusUnknown': 'Unknown',
     'cie10Label': 'ICD-10: ',
+    'consentPending': 'Consent pending',
 
     // Add medication sheet
     'addMedicationTitle': 'Add medication',
@@ -1688,6 +1699,10 @@ class AppStrings {
     'monNov': 'Nov',
     'monDic': 'Dec',
     'timeAm': 'AM',
+    'sourceAiSuggested': 'Suggested by AI',
+    'sourceAiFallback': 'AI: no valid code',
+    'sourceUnrecorded': 'Origin not recorded',
+    'codeSuggestedByAi': 'Code suggested by AI',
     'timePm': 'PM',
     'modIntramural': 'Intramural',
     'modExtramuralMobil': 'Mobile extramural',

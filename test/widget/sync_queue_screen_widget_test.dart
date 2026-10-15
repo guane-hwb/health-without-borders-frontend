@@ -34,6 +34,26 @@ class MockPatientRepository extends Mock implements PatientRepository {}
 
 class MockReachability extends Mock implements Reachability {}
 
+/// A [MockSyncEngine] subclass that keeps a *real* backing field for
+/// [SyncEngine.onRecordSynced] instead of routing it through mocktail's
+/// `noSuchMethod`. This lets tests actually invoke the callback that the
+/// screen assigns internally (mocktail mocks do not persist plain
+/// property assignments unless explicitly stubbed with `when()`).
+class SpySyncEngine extends MockSyncEngine {
+  void Function(String patientId, bool success, String? error)? _onRecordSynced;
+
+  @override
+  void Function(String patientId, bool success, String? error)?
+  get onRecordSynced => _onRecordSynced;
+
+  @override
+  set onRecordSynced(
+    void Function(String patientId, bool success, String? error)? callback,
+  ) {
+    _onRecordSynced = callback;
+  }
+}
+
 LocalPatientEntry makeEntry({
   String patientId = 'p-001',
   String deviceUid = 'device-001',
@@ -487,6 +507,47 @@ void main() {
         );
       },
     );
+
+    for (final (code, message, badge) in <(String, String, String)>[
+      (
+        'duplicate_identity',
+        'Ya existe un paciente registrado con este número de documento.',
+        'Duplicado',
+      ),
+      (
+        'device_uid_conflict',
+        'Este dispositivo ya está registrado para otro paciente',
+        'Duplicado',
+      ),
+      (
+        'identity_mismatch',
+        'El dispositivo pertenece a un paciente con otro documento',
+        'Conflicto',
+      ),
+      ('device_retired', 'Este dispositivo fue retirado', 'Conflicto'),
+    ]) {
+      testWidgets('un 409 con code $code muestra su mensaje y "$badge"', (
+        tester,
+      ) async {
+        when(() => db.getUnsyncedRecords()).thenAnswer(
+          (_) async => [makeEntry(syncError: code, syncErrorCode: 409)],
+        );
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+            reachability: reachability,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining(message), findsOneWidget);
+        expect(find.text(badge), findsOneWidget);
+        expect(find.textContaining(code), findsNothing);
+      });
+    }
 
     testWidgets('un conflicto 409 oculta el botón Sync ahora', (tester) async {
       when(() => db.getUnsyncedRecords()).thenAnswer(
@@ -1236,6 +1297,163 @@ void main() {
         expect(
           find.textContaining('Error de validación (422)'),
           findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('shows error SnackBar when _syncOne returns failure', (
+      tester,
+    ) async {
+      when(() => reachability.probe()).thenAnswer((_) async => true);
+      when(
+        () => db.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [makeEntry(patientId: 'p-fail')]);
+      when(
+        () => syncEngine.syncOne('p-fail'),
+      ).thenAnswer((_) async => SyncOneResult.failure);
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+          locale: 'es',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sync ahora'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.text('Sincronización fallida — se reintentará'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('SyncQueueScreen – progreso de _syncAll y onRecordSynced', () {
+    testWidgets(
+      'muestra el contador "syncedSoFar / syncTotal" mientras _syncAll está en curso',
+      (tester) async {
+        when(
+          () => db.getUnsyncedRecords(),
+        ).thenAnswer((_) async => [makeEntry()]);
+
+        final completer = Completer<bool>();
+        when(() => syncEngine.syncAll()).thenAnswer((_) => completer.future);
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+            reachability: reachability,
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.widgetWithText(ElevatedButton, 'Sincronizar todo'),
+        );
+        for (var i = 0; i < 4; i++) {
+          await tester.pump();
+        }
+
+        expect(find.text('0 / 1'), findsOneWidget);
+
+        completer.complete(true);
+        when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'invoca el callback real onRecordSynced e incrementa syncedSoFar mientras el widget está montado',
+      (tester) async {
+        final spyEngine = SpySyncEngine();
+        when(() => spyEngine.refreshPendingCount()).thenAnswer((_) async {});
+        when(
+          () => db.getUnsyncedRecords(),
+        ).thenAnswer((_) async => [makeEntry()]);
+
+        final completer = Completer<bool>();
+        when(() => spyEngine.syncAll()).thenAnswer((_) => completer.future);
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: spyEngine,
+            reachability: reachability,
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.widgetWithText(ElevatedButton, 'Sincronizar todo'),
+        );
+        for (var i = 0; i < 4; i++) {
+          await tester.pump();
+        }
+
+        expect(spyEngine.onRecordSynced, isNotNull);
+
+        spyEngine.onRecordSynced!.call('p-001', true, null);
+        await tester.pump();
+
+        expect(find.text('1 / 1'), findsOneWidget);
+
+        completer.complete(true);
+        when(() => db.getUnsyncedRecords()).thenAnswer((_) async => []);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(find.text('Sincronizado correctamente'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'onRecordSynced no lanza excepción ni actualiza el estado tras desmontar la pantalla',
+      (tester) async {
+        final spyEngine = SpySyncEngine();
+        when(() => spyEngine.refreshPendingCount()).thenAnswer((_) async {});
+        when(
+          () => db.getUnsyncedRecords(),
+        ).thenAnswer((_) async => [makeEntry()]);
+
+        final completer = Completer<bool>();
+        when(() => spyEngine.syncAll()).thenAnswer((_) => completer.future);
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: spyEngine,
+            reachability: reachability,
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.widgetWithText(ElevatedButton, 'Sincronizar todo'),
+        );
+        for (var i = 0; i < 4; i++) {
+          await tester.pump();
+        }
+
+        final capturedCallback = spyEngine.onRecordSynced;
+        expect(capturedCallback, isNotNull);
+        await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+
+        expect(
+          () => capturedCallback!.call('p-001', true, null),
+          returnsNormally,
         );
       },
     );

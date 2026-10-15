@@ -455,6 +455,26 @@ void main() {
 
       expect(find.textContaining('20200131'), findsOneWidget);
     });
+
+    testWidgets(
+      'fecha ISO completa se convierte a MM/DD/YYYY en inglés (locale = en)',
+      (tester) async {
+        final v = _makeVaccine(date: '2020-12-31T10:00:00');
+        await tester.pumpWidget(
+          _wrap(
+            ProfileTabVaccines(
+              draft: _makeRecord([v]),
+              canEdit: true,
+              onAdd: () {},
+            ),
+            locale: 'en',
+          ),
+        );
+
+        expect(find.textContaining('12/31/2020'), findsOneWidget);
+        expect(find.textContaining('31/12/2020'), findsNothing);
+      },
+    );
   });
 
   // ── Group 6: Internationalization ─────────────────────────────────────────

@@ -1,6 +1,6 @@
 // lib/src/core/nfc/nfc_triage_payload.dart
 //
-// Builds the minimal triage payload to write on the patient's NFC wristband.
+// Builds the minimal triage payload to write on the patient's NFC device.
 // This payload must be as small as possible because it targets NTAG chips
 // with limited capacity (180–924 bytes).
 //
@@ -20,9 +20,9 @@ import '../../features/nfc/domain/patient_record.dart';
 /// Builds the triage payload map from a full patient record.
 ///
 /// This map is fed into [NfcPayloadCodec.encode] to produce the
-/// encrypted bytes written to the patient's NFC wristband.
+/// encrypted bytes written to the patient's NFC device.
 abstract final class NfcTriagePayload {
-  /// Builds the minimal triage map for the patient's NFC wristband.
+  /// Builds the minimal triage map for the patient's NFC device.
   static Map<String, dynamic> buildPatientPayload({
     required PatientFullRecord record,
     String? vidaCode,
@@ -85,7 +85,7 @@ abstract final class NfcTriagePayload {
 
   /// Reconstructs a human-readable triage summary from a decoded payload.
   ///
-  /// Used when reading a patient's NFC wristband in emergency/triage mode.
+  /// Used when reading a patient's NFC device in emergency/triage mode.
   static TriageSummary fromPayload(Map<String, dynamic> payload) {
     final allergies = <TriageAllergy>[];
     final algList = payload['alg'];
@@ -153,7 +153,7 @@ class TriageSummary {
   final List<TriageAllergy> allergies;
   final String? vidaCode;
 
-  /// Whether the patient is under 18 today, per the wristband's date of birth.
+  /// Whether the patient is under 18 today, per the device's date of birth.
   ///
   /// Used offline to decide whether the guardian card is required, mirroring
   /// the rule the backend enforces online with its 403.

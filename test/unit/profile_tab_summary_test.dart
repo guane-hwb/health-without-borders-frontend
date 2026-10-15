@@ -83,6 +83,7 @@ extension ProfileTabSummaryTestAccess on ProfileTabSummary {
   bool get testBackgroundChanged => backgroundChanged;
   bool get testWeightChanged => weightChanged;
   bool get testHeightChanged => heightChanged;
+  bool get testBloodTypeChanged => bloodTypeChanged;
   bool get testAddressChanged => addressChanged;
   bool get testGuardianChanged => guardianChanged;
 }
@@ -251,6 +252,34 @@ void main() {
       );
       expect(w.testHeightChanged, isTrue);
     });
+  });
+
+  // ── _bloodTypeChanged ─────────────────────────────────────────────────────
+  group('_bloodTypeChanged', () {
+    test('devuelve false cuando el tipo de sangre es idéntico', () {
+      final record = _makeRecord(bloodType: 'O+');
+      final w = _makeWidget(draft: record, original: record);
+      expect(w.testBloodTypeChanged, isFalse);
+    });
+
+    test('devuelve true cuando el tipo de sangre cambia', () {
+      final w = _makeWidget(
+        draft: _makeRecord(bloodType: 'A+'),
+        original: _makeRecord(bloodType: 'O+'),
+      );
+      expect(w.testBloodTypeChanged, isTrue);
+    });
+
+    test(
+      'devuelve true cuando draft tiene tipo de sangre nulo y original no',
+      () {
+        final w = _makeWidget(
+          draft: _makeRecord(),
+          original: _makeRecord(bloodType: 'O+'),
+        );
+        expect(w.testBloodTypeChanged, isTrue);
+      },
+    );
   });
 
   // ── _addressChanged ───────────────────────────────────────────────────────

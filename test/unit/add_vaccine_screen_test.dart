@@ -803,6 +803,38 @@ void main() {
       },
     );
 
+    testWidgets(
+      'Búsqueda manual en diálogo: un error genérico (no ApiException) usa '
+      'e.toString()',
+      (tester) async {
+        final scope = _defaultScope();
+        final completer = Completer<PatientFullRecord>();
+        when(
+          () => scope.patientRepository.scanDevice('UID-GENERIC-FAIL'),
+        ).thenAnswer((_) => completer.future);
+
+        await tester.pumpWidget(_buildApp(scope: scope));
+        await tester.tap(find.text('Buscar paciente'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.widgetWithText(TextField, 'UID del dispositivo NFC'),
+          'UID-GENERIC-FAIL',
+        );
+        await tester.tap(find.text('Buscar'));
+        await tester.pump();
+
+        // No es ApiException: cae en el "else" del ternario, e.toString().
+        completer.completeError(Exception('fallo de socket inesperado'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('fallo de socket inesperado'),
+          findsOneWidget,
+        );
+      },
+    );
+
     testWidgets('Selección de fecha de administración mediante DatePicker', (
       tester,
     ) async {

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_error_codes.dart';
 import '../../../core/nfc/nfc_keyring.dart';
 import '../../../core/storage/local_database.dart';
 import '../../../core/utils/app_logger.dart';
@@ -35,7 +36,9 @@ class AuthRepository implements TokenProvider {
     required ApiClient apiClient,
     FlutterSecureStorage? secureStorage,
     LocalDatabase? localDatabase,
+    bool? forceWeb,
   }) : _apiClient = apiClient,
+       _forceWeb = forceWeb,
        _secureStorage =
            secureStorage ??
            const FlutterSecureStorage(
@@ -46,7 +49,7 @@ class AuthRepository implements TokenProvider {
                accessibility: KeychainAccessibility.first_unlock_this_device,
              ),
              aOptions: AndroidOptions(),
-             webOptions: WebOptions(useSessionStorage: false),
+             webOptions: WebOptions(useSessionStorage: true),
            ),
        _localDb = localDatabase ?? LocalDatabase.instance;
 
@@ -73,17 +76,14 @@ class AuthRepository implements TokenProvider {
   static const String _lastUserIdKey = 'hwb_last_user_id';
   static const String _clockMarkKey = 'hwb_clock_mark';
 
-  /// How far the device clock may legitimately move backwards before it is
-  /// treated as tampering rather than a correction.
-  ///
-  /// NTP corrections and timezone changes move the clock by minutes or hours;
-  /// a day of slack absorbs those without letting someone reopen an expired
-  /// window by setting the date back a week.
   static const Duration clockRollbackTolerance = Duration(hours: 24);
 
   final ApiClient _apiClient;
   final FlutterSecureStorage _secureStorage;
   final LocalDatabase _localDb;
+  final bool? _forceWeb;
+
+  bool get _isWeb => _forceWeb ?? kIsWeb;
 
   String? _cachedToken;
   String? _cachedRefreshToken;
@@ -102,18 +102,23 @@ class AuthRepository implements TokenProvider {
 
   final ValueNotifier<bool> _sessionWindowClosed = ValueNotifier<bool>(false);
 
-  /// True when the session window has lapsed but the session was still
-  /// restored locally.
-  ///
-  /// Distinct from [sessionExpired], which forces a return to the login
-  /// screen: here the person keeps access to what is already on the device
-  /// (pending records above all) while anything needing the network or an NFC
-  /// key is refused until they reconnect.
   ValueListenable<bool> get sessionWindowClosed => _sessionWindowClosed;
+
+  final ValueNotifier<String?> _accountInactiveCode = ValueNotifier<String?>(
+    null,
+  );
+
+  ValueListenable<String?> get accountInactiveCode => _accountInactiveCode;
 
   UserSession? get currentUser => _session;
 
   VoidCallback? onSessionInvalidated;
+
+  Future<void> handleAccountInactive(String code) async {
+    _accountInactiveCode.value = code;
+    if (_session == null && !hasToken) return;
+    await _invalidateSession();
+  }
 
   void _updateSession(UserSession? session) {
     _session = session;
@@ -125,9 +130,11 @@ class AuthRepository implements TokenProvider {
   Future<UserSession> login({
     required String email,
     required String password,
+    bool rememberSession = true,
   }) async {
     _sessionExpired.value = false;
     _sessionWindowClosed.value = false;
+    _accountInactiveCode.value = null;
 
     final Map<String, dynamic> tokenData = await _apiClient.postForm(
       path: '/api/v1/login/access-token',
@@ -139,7 +146,13 @@ class AuthRepository implements TokenProvider {
       throw ApiException('Login did not return an access token.');
     }
 
-    final UserSession fetchedSession = await _fetchMe(accessToken);
+    final UserSession fetchedSession;
+    try {
+      fetchedSession = await _fetchMe(accessToken);
+    } catch (e) {
+      await clearSession();
+      rethrow;
+    }
 
     String? lastUserId;
     try {
@@ -172,24 +185,28 @@ class AuthRepository implements TokenProvider {
     }
 
     _cachedToken = accessToken;
-    try {
-      await _secureStorage.write(key: _tokenKey, value: accessToken);
-    } catch (_) {}
+    if (rememberSession) {
+      try {
+        await _secureStorage.write(key: _tokenKey, value: accessToken);
+      } catch (_) {}
+    }
 
     final String? refreshToken = tokenData['refresh_token']?.toString();
     if (refreshToken != null && refreshToken.isNotEmpty) {
       _cachedRefreshToken = refreshToken;
       await _anchorClockMark(refreshToken);
-      try {
-        await _secureStorage.write(key: _refreshKey, value: refreshToken);
-      } catch (_) {}
+      if (rememberSession) {
+        try {
+          await _secureStorage.write(key: _refreshKey, value: refreshToken);
+        } catch (_) {}
+      }
     }
 
     await _absorbKeyring(tokenData);
 
     _updateSession(fetchedSession);
 
-    if (_session!.id.isNotEmpty) {
+    if (_session!.id.isNotEmpty && rememberSession) {
       await _persistSession(_session!);
       try {
         await _secureStorage.write(key: _lastUserIdKey, value: _session!.id);
@@ -200,10 +217,10 @@ class AuthRepository implements TokenProvider {
   }
 
   Future<List<LocalPatientEntry>> pendingForeignRecordsForReview() =>
-      _localDb.getUnsyncedRecords();
+      _localDb.getUnsyncedRecords(ownerUserId: _session?.id);
 
   Future<List<Map<String, Object?>>> pendingForeignEmergencyLogsForReview() =>
-      _localDb.pendingEmergencyAccessLogs();
+      _localDb.pendingEmergencyAccessLogs(ownerUserId: _session?.id);
 
   Future<void> discardForeignPendingData() async {
     await _localDb.clearAll();
@@ -228,13 +245,12 @@ class AuthRepository implements TokenProvider {
     if (_session != null) return _session;
 
     final String? token = await _readStoredToken();
-    if (token == null || token.isEmpty) return null;
+    if (token == null || token.isEmpty) {
+      if (_isWeb) await wipeLocalPhi(force: true);
+      return null;
+    }
     _cachedToken = token;
 
-    // Evaluate the window on restore instead of waiting for something to ask
-    // for the keyring. Until now a cold start outside the window looked like a
-    // healthy session and only NFC reported otherwise; and the key stayed on
-    // disk for as long as nobody happened to call getNfcKeyring().
     await _refreshSessionWindowState();
 
     final UserSession? persisted = await _readPersistedSession();
@@ -251,13 +267,6 @@ class AuthRepository implements TokenProvider {
     return _session;
   }
 
-  /// Brings [sessionExpired] and the stored keyring in line with the window.
-  ///
-  /// The session is still restored when the window has closed: the device may
-  /// hold unsynced records that the health worker needs to see, and forcing a
-  /// logout could strand them behind the different-user guard. What it cannot
-  /// do is act as if nothing happened, so the flag is raised and the key
-  /// material is dropped now rather than whenever it is next requested.
   Future<void> _refreshSessionWindowState() async {
     final bool open = await _isSessionWindowOpen();
     if (open) return;
@@ -300,6 +309,9 @@ class AuthRepository implements TokenProvider {
       );
     } on ApiException catch (e) {
       if (e.statusCode == 401) {
+        if (ApiErrorCode.isAccountInactive(e.code)) {
+          _accountInactiveCode.value = e.code;
+        }
         await _invalidateSession();
         return null;
       }
@@ -323,27 +335,14 @@ class AuthRepository implements TokenProvider {
       } catch (_) {}
     }
 
-    // /login/refresh carries the keyring as well, so a silent refresh picks up
-    // a rotated current version without waiting for the next full login.
     await _absorbKeyring(data);
 
-    // A new refresh token means a new `exp`: the window is open again.
     _sessionWindowClosed.value = false;
 
     return newAccess;
   }
 
-  /// The full set of NFC keys this device holds, or null when none are known.
-  ///
-  /// Carries every live key version, so a wristband written under an older key
-  /// still decrypts while a rotation is in progress. Always build the codec
-  /// from this rather than a single key: a codec built from a bare key stamps
-  /// version 0 into the payload while encrypting with whatever the current key
-  /// is, which after a rotation produces a chip no reader can decrypt.
   Future<NfcKeyring?> getNfcKeyring() async {
-    // The keyring is only valid inside the session window. Checking here — the
-    // one place the key is handed out — means no screen can bypass it, and the
-    // check reads the refresh token's `exp` locally, so it still holds offline.
     if (!await _isSessionWindowOpen()) {
       await _forgetNfcKeyring();
       return null;
@@ -351,7 +350,6 @@ class AuthRepository implements TokenProvider {
 
     if (_cachedKeyring?.isNotEmpty == true) return _cachedKeyring;
 
-    // Restored session / cold start: rebuild from storage.
     if (kIsWeb) return _cachedKeyring;
     try {
       final String? raw = await _secureStorage.read(key: _nfcKeyringKey);
@@ -367,9 +365,6 @@ class AuthRepository implements TokenProvider {
       }
     } catch (_) {}
 
-    // Upgrade path: a device provisioned by a build that predates versioning
-    // holds a bare single key. Treat it as key version 0, which is exactly what
-    // its already-written tags decrypt with.
     try {
       final String? legacy = await _secureStorage.read(key: _nfcKeyKey);
       if (legacy != null && legacy.isNotEmpty) {
@@ -382,12 +377,8 @@ class AuthRepository implements TokenProvider {
     return null;
   }
 
-  /// Whether NFC is unavailable because the session window closed, as opposed
-  /// to no key ever having been delivered. Lets the NFC screens tell the user
-  /// to log in again instead of reporting a reader failure.
   Future<bool> isNfcSessionExpired() async => !await _isSessionWindowOpen();
 
-  /// Drops the keyring from memory and from disk.
   Future<void> _forgetNfcKeyring() async {
     _cachedKeyring = null;
     if (kIsWeb) return;
@@ -417,8 +408,8 @@ class AuthRepository implements TokenProvider {
     } catch (_) {
     } finally {
       await clearSession();
-      if (wipeLocalData) {
-        await wipeLocalPhi();
+      if (wipeLocalData || _isWeb) {
+        await wipeLocalPhi(force: _isWeb);
       }
     }
   }
@@ -437,43 +428,30 @@ class AuthRepository implements TokenProvider {
     _cachedToken = null;
     _cachedRefreshToken = null;
     _cachedKeyring = null;
-    // The mark belongs to the session being torn down; carrying it into the
-    // next one is what leaves a stale future mark blocking NFC.
     _cachedClockMark = null;
     _updateSession(null);
 
     try {
-      await _secureStorage.delete(key: _tokenKey);
-    } catch (_) {}
-    try {
-      await _secureStorage.delete(key: _refreshKey);
-    } catch (_) {}
-    try {
-      await _secureStorage.delete(key: _nfcKeyKey);
-    } catch (_) {}
-    try {
-      await _secureStorage.delete(key: _nfcKeyringKey);
-    } catch (_) {}
-    try {
-      await _secureStorage.delete(key: _clockMarkKey);
-    } catch (_) {}
-    try {
-      await _secureStorage.delete(key: _sessionKey);
+      await _secureStorage.deleteAll();
     } catch (_) {}
   }
 
   Future<bool> wipeLocalPhi({bool force = false}) async {
     try {
       if (!force) {
-        final int pendingPatients = await _localDb.getUnsyncedCount();
+        final int pendingPatients = await _localDb.getUnsyncedCount(
+          ownerUserId: _session?.id,
+        );
         final int pendingEmergencyLogs = await _localDb
-            .getUnsyncedEmergencyLogCount();
+            .getUnsyncedEmergencyLogCount(ownerUserId: _session?.id);
         if (pendingPatients > 0 || pendingEmergencyLogs > 0) {
           return false;
         }
       }
       await _localDb.clearAll();
-      final int remainingLogs = await _localDb.getUnsyncedEmergencyLogCount();
+      final int remainingLogs = await _localDb.getUnsyncedEmergencyLogCount(
+        ownerUserId: _session?.id,
+      );
       if (remainingLogs == 0 || force) {
         await _localDb.destroyEncryptionKey();
       }
@@ -485,10 +463,8 @@ class AuthRepository implements TokenProvider {
   }
 
   Future<void> _invalidateSession() async {
-    // clearSession() already drops the keyring from memory and disk.
     await clearSession();
-    // The window banner belongs to a restored-but-lapsed session; this path
-    // sends the user to the login screen, where it would otherwise linger.
+    if (_isWeb) await wipeLocalPhi(force: true);
     _sessionWindowClosed.value = false;
     _sessionExpired.value = true;
   }
@@ -497,11 +473,6 @@ class AuthRepository implements TokenProvider {
 
   // ── Private ───────────────────────────────────────────────────────────────
 
-  /// Reads NFC key material out of a login, refresh, or `/users/me` body and
-  /// makes it the device's keyring.
-  ///
-  /// Silently does nothing when the response carries no key material, so a
-  /// response that omits it never clears a keyring the device already holds.
   Future<void> _absorbKeyring(Map<String, dynamic> data) async {
     final NfcKeyring? keyring = NfcKeyring.fromResponse(data);
     if (keyring == null || keyring.isEmpty) return;
@@ -516,8 +487,6 @@ class AuthRepository implements TokenProvider {
       );
     } catch (_) {}
 
-    // The bare single key is superseded by the ring; drop it so the same
-    // material is not left in two places.
     try {
       await _secureStorage.delete(key: _nfcKeyKey);
     } catch (_) {}
@@ -567,29 +536,14 @@ class AuthRepository implements TokenProvider {
 
   Future<UserSession> _fetchMe(String token) async {
     final headers = <String, String>{'Authorization': 'Bearer $token'};
-    try {
-      final data = await _apiClient.getJson(
-        path: '/api/v1/users/me',
-        headers: headers,
-      );
-      await _absorbKeyring(data);
-      return UserSession.fromJson(data);
-    } on ApiException catch (e) {
-      if (e.statusCode != 404 && e.statusCode != 403) rethrow;
-    } catch (_) {}
-
-    final email = _emailFromJwt(token);
-    return UserSession.fromEmail(email ?? 'user');
+    final data = await _apiClient.getJson(
+      path: '/api/v1/users/me',
+      headers: headers,
+    );
+    await _absorbKeyring(data);
+    return UserSession.fromJson(data);
   }
 
-  String? _emailFromJwt(String token) => _jwtPayload(token)?['sub']?.toString();
-
-  /// Decodes a JWT's payload without verifying its signature.
-  ///
-  /// Reading a claim is not the same as trusting the token: verification needs
-  /// the server's secret and is the backend's job. This is only used to read
-  /// claims the device can act on locally — which is what makes the NFC key
-  /// window work with no connectivity.
   Map<String, dynamic>? _jwtPayload(String token) {
     try {
       final parts = token.split('.');
@@ -604,28 +558,19 @@ class AuthRepository implements TokenProvider {
     }
   }
 
-  /// The `iat` claim of [token] as a UTC instant, or null when unreadable.
   DateTime? _jwtIssuedAt(String token) => _jwtInstant(token, 'iat');
 
-  /// The `exp` claim of [token] as a UTC instant, or null when unreadable.
   DateTime? _jwtExpiry(String token) => _jwtInstant(token, 'exp');
 
   DateTime? _jwtInstant(String token, String claim) {
     final Object? value = _jwtPayload(token)?[claim];
-    final int? seconds =
-        value is int ? value : int.tryParse(value?.toString() ?? '');
+    final int? seconds = value is int
+        ? value
+        : int.tryParse(value?.toString() ?? '');
     if (seconds == null) return null;
     return DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
   }
 
-  /// Re-anchors the clock mark to the server's own clock.
-  ///
-  /// The mark otherwise only moves forward, so a device whose clock ran ahead
-  /// — even briefly — keeps a mark in the future and refuses NFC until the
-  /// real time catches up, with no way out but clearing app storage, which
-  /// destroys pending records. A successful login or refresh proves contact
-  /// with the server, and the refresh token's `iat` is the server's view of
-  /// now, so it is the one value that can safely move the mark **backwards**.
   Future<void> _anchorClockMark(String refreshToken) async {
     final DateTime? issuedAt = _jwtIssuedAt(refreshToken);
     if (issuedAt == null) return;
@@ -640,17 +585,11 @@ class AuthRepository implements TokenProvider {
     } catch (_) {}
   }
 
-  /// Whether the refresh token still bounds a live session.
-  ///
-  /// The NFC keyring is only handed out inside this window. A device with no
-  /// refresh token has no renewable session, so it is treated as outside the
-  /// window rather than given the benefit of the doubt.
   Future<bool> _isSessionWindowOpen() async {
     final String? refreshToken = await _getRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) return false;
 
     final DateTime? expiry = _jwtExpiry(refreshToken);
-    // An unreadable refresh token cannot prove a live session either.
     if (expiry == null) return false;
 
     final DateTime now = DateTime.now().toUtc();
@@ -660,12 +599,6 @@ class AuthRepository implements TokenProvider {
     return now.isBefore(expiry);
   }
 
-  /// Whether the device clock is behind the furthest point already observed by
-  /// more than [clockRollbackTolerance].
-  ///
-  /// The window is judged against the device clock, so setting the date back
-  /// would otherwise reopen an expired session. A stored high-water mark makes
-  /// that visible: time is not supposed to run backwards.
   Future<bool> _clockMovedBackwards(DateTime now) async {
     final DateTime? mark = await _readClockMark();
     if (mark == null) return false;
@@ -690,7 +623,6 @@ class AuthRepository implements TokenProvider {
     }
   }
 
-  /// Moves the high-water mark forward. Never backwards, which is the point.
   Future<void> _recordClockMark(DateTime now) async {
     final DateTime? mark = _cachedClockMark;
     if (mark != null && !now.isAfter(mark)) return;

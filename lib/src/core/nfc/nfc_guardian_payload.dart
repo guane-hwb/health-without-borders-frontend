@@ -19,16 +19,14 @@
 //
 // Identity/linkage fields (patientId, patient device_uid, guardian device_uids)
 // are already part of toJson(), so the reconstructed record knows who it is
-// and which patient wristband it pairs with for 2FA.
+// and which patient device it pairs with for 2FA.
 
 import '../../features/nfc/domain/patient_record.dart';
 import 'nfc_guardian_alias.dart';
 import 'nfc_triage_payload.dart';
 
 /// Builds and reconstructs the guardian NFC payload (bounded full record).
-class NfcGuardianPayload {
-  NfcGuardianPayload._();
-
+abstract final class NfcGuardianPayload {
   /// Default number of most-recent consultations stored on the guardian card.
   static const int kDefaultMaxConsultations = 3;
 
@@ -66,7 +64,7 @@ class NfcGuardianPayload {
     );
 
     map['medicalHistory'] = consultations
-        .map((MedicalHistoryItem m) => m.toJson())
+        .map((MedicalHistoryItem m) => _withoutAiMetadata(m.toJson()))
         .toList();
     map['vaccinationRecord'] = vaccines
         .map((VaccinationRecordItem v) => v.toJson())
@@ -121,10 +119,8 @@ class NfcGuardianPayload {
       // neither one is starved unnecessarily.
       if (n >= m && n > 0) {
         n--;
-      } else if (m > 0) {
-        m--;
       } else {
-        n--;
+        m--;
       }
       payload = buildGuardianPayload(
         record: record,
@@ -154,7 +150,7 @@ class NfcGuardianPayload {
 
   /// Reconstructs a full record from a decoded guardian payload.
   ///
-  /// The guardian card is a superset of the patient wristband, so when it is
+  /// The guardian card is a superset of the patient device, so when it is
   /// available this is the authoritative offline source.
   static PatientFullRecord reconstructFromGuardian(
     Map<String, dynamic> decoded,
@@ -164,7 +160,7 @@ class NfcGuardianPayload {
     return PatientFullRecord.fromJson(unaliasGuardianPayload(decoded));
   }
 
-  /// Reconstructs a partial record from the patient wristband triage only.
+  /// Reconstructs a partial record from the patient device triage only.
   ///
   /// Used when the guardian card is unavailable (e.g. an adult patient with no
   /// guardian, or the guardian is not present). Fills the demographic and
@@ -272,6 +268,25 @@ class NfcGuardianPayload {
     final sorted = List<T>.from(items)
       ..sort((T a, T b) => dateOf(b).compareTo(dateOf(a)));
     return sorted.take(limit).toList();
+  }
+
+  /// Drops the AI model name and timestamp from each diagnosis of a
+  /// serialized consultation. They are audit metadata the server keeps; on a
+  /// card with a few hundred bytes they would push consultations off it. The
+  /// `source` stays: it is what tells a reader offline that a diagnosis is an
+  /// AI suggestion.
+  static Map<String, dynamic> _withoutAiMetadata(Map<String, dynamic> visit) {
+    final Object? diagnoses = visit['diagnosis'];
+    if (diagnoses is List) {
+      for (final Object? d in diagnoses) {
+        if (d is Map) {
+          d
+            ..remove('model')
+            ..remove('generatedAt');
+        }
+      }
+    }
+    return visit;
   }
 
   /// Removes a guardian's consent signature (PNG base64) from its serialized
