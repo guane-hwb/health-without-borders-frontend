@@ -313,7 +313,7 @@ void main() {
     });
   });
 
-  group('comunidad étnica en la tarjeta', () {
+  group('comunidad étnica en el dispositivo del guardián', () {
     PatientFullRecord withCommunity() {
       final r = _record();
       return r.copyWith(
@@ -337,7 +337,7 @@ void main() {
       );
     });
 
-    test('una tarjeta escrita con los dos nombres se sigue leyendo', () {
+    test('un dispositivo escrito con los dos nombres se sigue leyendo', () {
       final payload = aliasGuardianPayload(withCommunity().toJson());
       final String infoKey = payload.keys.firstWhere(
         (String k) =>
