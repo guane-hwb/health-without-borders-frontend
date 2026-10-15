@@ -17,6 +17,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/presentation/change_password_screen.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
@@ -29,6 +30,18 @@ class MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class FakeAuthRepository implements AuthRepository {
   FakeAuthRepository({this.currentUser});
+
+  final List<String> changedTo = <String>[];
+
+  @override
+  Future<UserSession> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    changedTo.add(newPassword);
+    currentUser = currentUser!.copyWith(mustChangePassword: false);
+    return currentUser!;
+  }
 
   @override
   Future<NfcKeyring?> getNfcKeyring() async => null;
@@ -165,6 +178,7 @@ Widget _wrapHome({required UserSession? user, bool isOnline = true}) {
           '/login': (_) => const LoginScreen(),
           '/nfc/loss-wristband': (_) =>
               const Scaffold(body: Text('Loss Wristband Screen')),
+          '/account/password': (_) => const ChangePasswordScreen(),
         },
         home: const HomeScreen(),
       ),
@@ -191,6 +205,9 @@ void _setUpMocks() {
       ownerUserId: any(named: 'ownerUserId'),
     ),
   ).thenAnswer((_) async => 0);
+  when(
+    () => mockDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => <SyncNotice>[]);
 }
 
 void main() {
@@ -460,6 +477,52 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('5'), findsWidgets);
+    });
+  });
+
+  group('_SyncCard — avisos de sincronización', () {
+    SyncNotice notice(String id) => SyncNotice(
+      patientId: id,
+      patientName: 'Ana G.',
+      codes: const <String>['stale_payload_base_version'],
+      createdAt: '2026-10-09T15:00:00Z',
+    );
+
+    testWidgets('sin pendientes, cuenta un aviso en singular', (tester) async {
+      when(
+        () => mockDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => <SyncNotice>[notice('p-1')]);
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('· 1 aviso'), findsOneWidget);
+    });
+
+    testWidgets('con pendientes, suma los avisos en plural', (tester) async {
+      when(
+        () => mockDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 3);
+      when(
+        () => mockDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => <SyncNotice>[notice('p-1'), notice('p-2')]);
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('· 2 avisos'), findsOneWidget);
+    });
+
+    testWidgets('si no se pueden leer los avisos, no los menciona', (
+      tester,
+    ) async {
+      when(
+        () => mockDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+      ).thenThrow(Exception('db'));
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('aviso'), findsNothing);
     });
   });
 
@@ -1186,4 +1249,83 @@ void main() {
       );
     },
   );
+
+  group('HomeScreen — contraseña', () {
+    UserSession mustChange() =>
+        _session(UserRole.nurse).copyWith(mustChangePassword: true);
+
+    Future<void> fillAndSave(WidgetTester tester) async {
+      await tester.enterText(
+        find.byKey(const Key('change_password_current')),
+        'Temporal-1',
+      );
+      for (final String key in <String>[
+        'change_password_new',
+        'change_password_confirm',
+      ]) {
+        await tester.enterText(find.byKey(Key(key)), 'una-clave-larga-1');
+      }
+      await tester.tap(find.text('Guardar contraseña'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('con contraseña asignada por un administrador, inicio pide '
+        'cambiarla y no deja volver', (tester) async {
+      await tester.pumpWidget(_wrapHome(user: mustChange()));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChangePasswordScreen), findsOneWidget);
+      expect(find.textContaining('Un administrador le asignó'), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_back_rounded), findsNothing);
+      expect(find.text('Cerrar sesión'), findsOneWidget);
+      expect(find.text('Ana Rodríguez'), findsNothing);
+    });
+
+    testWidgets('tras cambiarla sigue a inicio', (tester) async {
+      await tester.pumpWidget(_wrapHome(user: mustChange()));
+      await tester.pumpAndSettle();
+
+      await fillAndSave(tester);
+
+      expect(mockAuth.changedTo, <String>['una-clave-larga-1']);
+      expect(find.byType(ChangePasswordScreen), findsNothing);
+      expect(find.text('Ana Rodríguez'), findsOneWidget);
+    });
+
+    testWidgets('puede cerrar sesión sin cambiarla', (tester) async {
+      await tester.pumpWidget(_wrapHome(user: mustChange()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Cerrar sesión'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(AlertDialog),
+              matching: find.byType(TextButton),
+            )
+            .last,
+      );
+      await tester.pumpAndSettle();
+
+      expect(mockAuth.clearSessionCalled, isTrue);
+      expect(find.byType(LoginScreen), findsOneWidget);
+    });
+
+    testWidgets('"Cambiar contraseña" abre la pantalla desde inicio', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      final Finder button = find.text('Cambiar contraseña');
+      await tester.scrollUntilVisible(button, 80);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChangePasswordScreen), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
+    });
+  });
 }

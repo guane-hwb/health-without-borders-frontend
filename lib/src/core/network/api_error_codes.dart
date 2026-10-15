@@ -13,6 +13,11 @@ abstract final class ApiErrorCode {
   /// The user's organization is deactivated: same statuses as [userInactive].
   static const String organizationInactive = 'organization_inactive';
 
+  /// Login or password change (429): too many wrong passwords for the account
+  /// in 15 minutes. Comes with Retry-After; the pause starts at 60 s and
+  /// doubles up to 15 minutes.
+  static const String loginPaused = 'login_paused';
+
   /// /scan of a minor without the guardian card (403).
   static const String guardianRequired = 'guardian_required';
 
@@ -21,6 +26,15 @@ abstract final class ApiErrorCode {
 
   /// /sync: the device already belongs to another patient (409).
   static const String deviceUidConflict = 'device_uid_conflict';
+
+  /// /sync (503, Retry-After 5): another request created this same new
+  /// patient a moment before, usually a retry racing the first attempt.
+  /// Transient: the next attempt merges into the record it created.
+  static const String syncInProgress = 'sync_in_progress';
+
+  /// The record stays queued and the engine retries it; the queue shows it
+  /// as pending, not as an error to fix.
+  static bool isTransient(String? code) => code == syncInProgress;
 
   /// /sync: a new patient whose identity document is already registered (409).
   static const String duplicateIdentity = 'duplicate_identity';
@@ -31,12 +45,43 @@ abstract final class ApiErrorCode {
   /// /sync (409) or /scan (410): the device was retired.
   static const String deviceRetired = 'device_retired';
 
+  /// /scan or /search (500): the stored record no longer reads. Not
+  /// transient: asking again gives the same answer.
+  static const String storedRecordInvalid = 'stored_record_invalid';
+
   /// The account can no longer use the API: sign out, keep pending data.
   static bool isAccountInactive(String? code) =>
       code == userInactive || code == organizationInactive;
 
   static bool isGuardianCheck(String? code) =>
       code == guardianRequired || code == guardianMismatch;
+
+  /// A 429 from login or password change: [loginPaused], or the per-IP limit
+  /// (no code). Says how long to wait when the server sent Retry-After.
+  static String tooManyAttempts(Duration? retryAfter, {required bool isEs}) {
+    if (retryAfter == null || retryAfter <= Duration.zero) {
+      return isEs
+          ? 'Demasiados intentos. Espere unos minutos e intente de nuevo.'
+          : 'Too many attempts. Wait a few minutes and try again.';
+    }
+    final int seconds = retryAfter.inSeconds;
+    final bool inSeconds = seconds < 60;
+    final int n = inSeconds ? seconds : (seconds / 60).ceil();
+    final String unit = switch ((inSeconds, n == 1, isEs)) {
+      (true, true, true) => 'segundo',
+      (true, false, true) => 'segundos',
+      (false, true, true) => 'minuto',
+      (false, false, true) => 'minutos',
+      (true, true, false) => 'second',
+      (true, false, false) => 'seconds',
+      (false, true, false) => 'minute',
+      (false, false, false) => 'minutes',
+    };
+    final String wait = '$n $unit';
+    return isEs
+        ? 'Demasiados intentos. Intente de nuevo en $wait.'
+        : 'Too many attempts. Try again in $wait.';
+  }
 
   /// The user-facing message for [code], or null when the app has none and
   /// should fall back to the server's `detail`.
@@ -53,6 +98,7 @@ abstract final class ApiErrorCode {
                 'administrador.'
           : 'Your organization is deactivated in HWB. Contact the '
                 'administrator.',
+    loginPaused => tooManyAttempts(null, isEs: isEs),
     guardianRequired =>
       isEs
           ? 'Paciente menor de edad: se requiere el dispositivo del acudiente.'
@@ -69,6 +115,12 @@ abstract final class ApiErrorCode {
                 'Registra al paciente con un dispositivo nuevo.'
           : 'This device is already registered to another patient. '
                 'Register the patient with a new device.',
+    syncInProgress =>
+      isEs
+          ? 'Otro envío estaba guardando este paciente. Se reintentará '
+                'automáticamente en unos instantes.'
+          : 'Another request was saving this patient. It will retry '
+                'automatically in a moment.',
     duplicateIdentity =>
       isEs
           ? 'Ya existe un paciente registrado con este número de '
@@ -86,6 +138,12 @@ abstract final class ApiErrorCode {
                 'Usa un dispositivo nuevo.'
           : 'This device was retired and no longer identifies a '
                 'patient. Use a new device.',
+    storedRecordInvalid =>
+      isEs
+          ? 'No se pudo leer el registro de este paciente en el servidor. '
+                'Contacte a soporte.'
+          : "The server could not read this patient's record. Contact "
+                'support.',
     _ => null,
   };
 }

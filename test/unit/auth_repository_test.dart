@@ -1,5 +1,6 @@
 // test/unit/auth_repository_test.dart
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -593,6 +594,225 @@ void main() {
         ),
       );
     });
+  });
+
+  group('must_change_password y cambio de contraseña', () {
+    final String loginRefresh = _refreshJwt();
+
+    Future<void> signIn({bool tokenFlag = false, bool meFlag = false}) async {
+      when(
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
+      ).thenAnswer(
+        (_) async => {
+          'access_token': _validJwt('doc@hwb.org'),
+          'refresh_token': loginRefresh,
+          'must_change_password': tokenFlag,
+        },
+      );
+      when(
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer(
+        (_) async => {..._meResponse(), 'must_change_password': meFlag},
+      );
+      await repo.login(email: 'doc@hwb.org', password: 'temporal');
+    }
+
+    void stubChange(Future<Map<String, dynamic>> Function() answer) {
+      when(
+        () => api.postJson(
+          path: '/api/v1/users/me/password',
+          headers: any(named: 'headers'),
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer((_) => answer());
+    }
+
+    test('login: la marca llega del par de tokens', () async {
+      await signIn(tokenFlag: true);
+      expect(repo.currentUser!.mustChangePassword, isTrue);
+    });
+
+    test('login: la marca llega de /users/me', () async {
+      await signIn(meFlag: true);
+      expect(repo.currentUser!.mustChangePassword, isTrue);
+    });
+
+    test('login: sin marca, no hay cambio obligatorio', () async {
+      await signIn();
+      expect(repo.currentUser!.mustChangePassword, isFalse);
+    });
+
+    test('changePassword envía las dos contraseñas y adopta el par nuevo y '
+        'el anillo NFC', () async {
+      await signIn(tokenFlag: true);
+      final String newRefresh = _refreshJwt(days: 6);
+      stubChange(
+        () async => {
+          'access_token': 'access-after-change',
+          'refresh_token': newRefresh,
+          'nfc_keyring': {'2': 'AB' * 32},
+          'nfc_key_version': 2,
+          'must_change_password': false,
+        },
+      );
+
+      final session = await repo.changePassword(
+        currentPassword: 'temporal',
+        newPassword: 'una-clave-larga-1',
+      );
+
+      final captured = verify(
+        () => api.postJson(
+          path: '/api/v1/users/me/password',
+          headers: captureAny(named: 'headers'),
+          body: captureAny(named: 'body'),
+        ),
+      ).captured;
+      // Named arguments are captured in name order: body, then headers.
+      expect(captured[0], {
+        'current_password': 'temporal',
+        'new_password': 'una-clave-larga-1',
+      });
+      expect(captured[1], {
+        'Authorization': 'Bearer ${_validJwt('doc@hwb.org')}',
+      });
+      expect(session.mustChangePassword, isFalse);
+      expect(repo.currentUser!.mustChangePassword, isFalse);
+      expect(await repo.getAccessToken(), 'access-after-change');
+      verify(
+        () => storage.write(
+          key: AuthRepository.tokenKey,
+          value: 'access-after-change',
+        ),
+      ).called(1);
+      verify(
+        () => storage.write(key: AuthRepository.refreshKey, value: newRefresh),
+      ).called(1);
+      final keyring = verify(
+        () => storage.write(
+          key: AuthRepository.nfcKeyringKey,
+          value: captureAny(named: 'value'),
+        ),
+      ).captured.last;
+      expect(keyring as String, contains('"2"'));
+      final persisted = verify(
+        () => storage.write(
+          key: AuthRepository.sessionKey,
+          value: captureAny(named: 'value'),
+        ),
+      ).captured.last;
+      expect(
+        (jsonDecode(persisted as String)
+            as Map<String, dynamic>)['must_change_password'],
+        isFalse,
+      );
+    });
+
+    test('un 400 se propaga y deja la sesión como estaba', () async {
+      await signIn(tokenFlag: true);
+      stubChange(
+        () async => throw ApiException(
+          'The current password is not correct.',
+          statusCode: 400,
+        ),
+      );
+
+      await expectLater(
+        repo.changePassword(
+          currentPassword: 'mala',
+          newPassword: 'una-clave-larga-1',
+        ),
+        throwsA(
+          isA<ApiException>().having(
+            (ApiException e) => e.statusCode,
+            'statusCode',
+            400,
+          ),
+        ),
+      );
+      expect(repo.currentUser!.mustChangePassword, isTrue);
+      expect(await repo.getAccessToken(), _validJwt('doc@hwb.org'));
+    });
+
+    test('una respuesta sin access_token es un error', () async {
+      await signIn();
+      stubChange(() async => <String, dynamic>{});
+
+      await expectLater(
+        repo.changePassword(currentPassword: 'a', newPassword: 'b'),
+        throwsA(isA<ApiException>()),
+      );
+    });
+
+    test('un refresh que estaba en vuelo durante el cambio no cierra la '
+        'sesión: el cambio revocó su token y guardó uno nuevo', () async {
+      await signIn();
+      final Completer<Map<String, dynamic>> inFlight =
+          Completer<Map<String, dynamic>>();
+      when(
+        () => api.postJson(
+          path: '/api/v1/login/refresh',
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer((_) => inFlight.future);
+      stubChange(
+        () async => {
+          'access_token': 'access-after-change',
+          'refresh_token': _refreshJwt(days: 6),
+        },
+      );
+
+      final Future<String?> refresh = repo.refreshAccessToken();
+      await repo.changePassword(
+        currentPassword: 'temporal',
+        newPassword: 'una-clave-larga-1',
+      );
+      inFlight.completeError(
+        ApiException('Invalid or expired refresh token', statusCode: 401),
+      );
+
+      expect(await refresh, 'access-after-change');
+      expect(repo.currentUser, isNotNull);
+      expect(repo.sessionExpired.value, isFalse);
+    });
+
+    test(
+      'el refresh actualiza la marca solo si la respuesta la trae',
+      () async {
+        await signIn(tokenFlag: true);
+        when(
+          () => api.postJson(
+            path: '/api/v1/login/refresh',
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer(
+          (_) async => {'access_token': 'a2', 'refresh_token': _refreshJwt()},
+        );
+        await repo.refreshAccessToken();
+        expect(repo.currentUser!.mustChangePassword, isTrue);
+
+        when(
+          () => api.postJson(
+            path: '/api/v1/login/refresh',
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'access_token': 'a3',
+            'refresh_token': _refreshJwt(),
+            'must_change_password': false,
+          },
+        );
+        await repo.refreshAccessToken();
+        expect(repo.currentUser!.mustChangePassword, isFalse);
+      },
+    );
   });
 
   group('refreshAccessToken()', () {

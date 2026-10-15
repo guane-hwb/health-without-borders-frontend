@@ -11,6 +11,7 @@ import '../../../../core/nfc/nfc_keyring.dart';
 import '../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../core/storage/local_database.dart';
+import '../../../../core/sync/sync_engine.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/screen_bottom_handle.dart';
@@ -38,6 +39,7 @@ import 'widgets/profile_header.dart';
 import 'widgets/profile_nfc_actions.dart';
 import 'widgets/profile_tabs_bar.dart';
 import 'widgets/reassign_device_dialog.dart';
+import 'widgets/sync_conflict_banner.dart';
 
 /// Canonical patient profile screen.
 class PatientProfileScreen extends StatefulWidget {
@@ -114,6 +116,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   bool _lastSaveFailed = false;
   late StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
+  StreamSubscription<RecordSyncResult>? _savedRecordsSub;
+  SyncResultEffect? _conflictEffect;
 
   @override
   void initState() {
@@ -132,6 +136,9 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (!_chipStatusLoaded) {
       _chipStatusLoaded = true;
       _loadChipStatus(AppScope.of(context).localDatabase);
+      _savedRecordsSub = AppScope.of(
+        context,
+      ).syncEngine.savedRecords.listen(_onRecordSaved);
     }
   }
 
@@ -139,6 +146,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   void dispose() {
     _tabController.dispose();
     _connectivitySubscription.cancel();
+    _savedRecordsSub?.cancel();
     _draftController.removeListener(_onDraftChanged);
     _draftController.dispose();
     super.dispose();
@@ -146,6 +154,19 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   void _onDraftChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onRecordSaved(RecordSyncResult result) {
+    if (!mounted) return;
+    final effect = _draftController.applySyncResult(result);
+    final scope = AppScope.of(context);
+    if (result.hasConflicts && effect != SyncResultEffect.ignored) {
+      setState(() => _conflictEffect = effect);
+      unawaited(_loadChipStatus(scope.localDatabase));
+    } else if (effect == SyncResultEffect.resaveDraft && !widget.readOnly) {
+      final user = scope.authRepository.currentUser;
+      unawaited(resavePendingDraft(scope.localDatabase, user, _draft));
+    }
   }
 
   Future<void> _checkInitialConnectivity() async {
@@ -360,7 +381,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       );
       if (!mounted) return;
       setState(() {
-        _draftController.markSynced();
+        _draftController.reset(record);
         _isUpdatingChips = false;
       });
       await _loadChipStatus(scope.localDatabase);
@@ -553,7 +574,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       if (!mounted) return;
 
       if (syncResult.isFullyClean) {
-        _draftController.markSynced();
+        _draftController.reset(_draft);
       }
       setState(() => _isSyncing = false);
 
@@ -825,10 +846,21 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                 if (widget.emergency) const EmergencyBanner(),
                 if (!_hasInternet || widget.offline)
                   OfflineBanner(isDynamicDisconnect: !_hasInternet),
-                if (!widget.readOnly && (_chipStatus?.anyDirty ?? false))
+                if (!widget.readOnly &&
+                    (_chipStatus?.anyDirty ?? false) &&
+                    _conflictEffect != SyncResultEffect.conflictsKept)
                   NfcStaleBanner(
                     isUpdating: _isUpdatingChips,
                     onUpdate: _updateNfcChips,
+                  ),
+                if (_draft.patientId.isNotEmpty)
+                  SyncConflictBanner(
+                    patientId: _draft.patientId,
+                    serverCopyShown:
+                        _conflictEffect == SyncResultEffect.replacedByServer ||
+                        (_conflictEffect == null &&
+                            !widget.offline &&
+                            !widget.readOnly),
                   ),
                 Expanded(
                   child: TabBarView(

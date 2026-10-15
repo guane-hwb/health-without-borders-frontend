@@ -8,6 +8,7 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_error_codes.dart';
 import '../../../core/storage/local_database.dart';
+import '../../../core/sync/sync_conflicts.dart';
 import '../../../core/sync/sync_engine.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/locale_switcher.dart';
@@ -24,6 +25,7 @@ class SyncQueueScreen extends StatefulWidget {
 class _SyncQueueScreenState extends State<SyncQueueScreen> {
   List<LocalPatientEntry> _entries = [];
   List<MapEntry<String, String>> _quarantinedEntries = [];
+  List<SyncNotice> _notices = [];
   bool _loading = true, _syncing = false;
   int _syncedSoFar = 0;
   int _syncTotal = 0;
@@ -44,6 +46,9 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
       ownerUserId: currentUserId,
     );
     final q = await scope.localDatabase.getWebQuarantinedEntries();
+    final notices = await scope.localDatabase.getSyncNotices(
+      ownerUserId: currentUserId,
+    );
 
     final totalAllUnsynced = await scope.localDatabase.getUnsyncedCount();
     final foreignCount = (totalAllUnsynced - e.length).clamp(
@@ -56,6 +61,7 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
         _entries = e;
         _quarantinedEntries = q;
         _foreignPendingCount = foreignCount;
+        _notices = notices;
         _loading = false;
       });
       await scope.syncEngine.refreshPendingCount();
@@ -349,6 +355,13 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
     }
   }
 
+  Future<void> _dismissNotice(SyncNotice notice) async {
+    await AppScope.of(
+      context,
+    ).localDatabase.dismissSyncNotice(notice.patientId);
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
@@ -445,7 +458,9 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                 Expanded(
                   child: _loading
                       ? const Center(child: CircularProgressIndicator())
-                      : (_entries.isEmpty && _quarantinedEntries.isEmpty)
+                      : (_entries.isEmpty &&
+                            _quarantinedEntries.isEmpty &&
+                            _notices.isEmpty)
                       ? Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -500,6 +515,12 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                       : ListView(
                           padding: const EdgeInsets.fromLTRB(18, 0, 18, 60),
                           children: [
+                            ..._notices.map(
+                              (notice) => _SyncNoticeCard(
+                                notice: notice,
+                                onDismiss: () => _dismissNotice(notice),
+                              ),
+                            ),
                             if (_foreignPendingCount > 0)
                               Container(
                                 margin: const EdgeInsets.only(bottom: 12),
@@ -675,6 +696,10 @@ class _SyncCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isConflict = entry.syncErrorCode == 409;
     final hasErr = entry.syncError?.isNotEmpty == true;
+    // A transient refusal (sync_in_progress) retries by itself: pending, not
+    // an error the user has to fix.
+    final bool showsError =
+        hasErr && !ApiErrorCode.isTransient(entry.syncError);
     final isEs = s.isEs;
     final String? codedMessage = ApiErrorCode.describe(
       entry.syncError,
@@ -715,7 +740,7 @@ class _SyncCard extends StatelessWidget {
       }
     }
 
-    final String badgeLabel = hasErr
+    final String badgeLabel = showsError
         ? (isDuplicate
               ? (isEs ? 'Duplicado' : 'Duplicate')
               : isConflict
@@ -732,7 +757,7 @@ class _SyncCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(14),
-        border: hasErr
+        border: showsError
             ? Border.all(color: AppColors.error.withValues(alpha: 0.4))
             : null,
         boxShadow: const [
@@ -784,7 +809,7 @@ class _SyncCard extends StatelessWidget {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: hasErr
+                    color: showsError
                         ? const Color(0xFFFEE2E2)
                         : const Color(0xFFFFF3CD),
                     borderRadius: BorderRadius.circular(8),
@@ -794,7 +819,9 @@ class _SyncCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: hasErr ? AppColors.error : const Color(0xFF856404),
+                      color: showsError
+                          ? AppColors.error
+                          : const Color(0xFF856404),
                     ),
                   ),
                 ),
@@ -807,19 +834,23 @@ class _SyncCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.error_outline,
+                  Icon(
+                    showsError ? Icons.error_outline : Icons.schedule,
                     size: 15,
-                    color: AppColors.error,
+                    color: showsError
+                        ? AppColors.error
+                        : const Color(0xFF856404),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       errorMessage,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         height: 1.3,
-                        color: AppColors.error,
+                        color: showsError
+                            ? AppColors.error
+                            : const Color(0xFF856404),
                       ),
                     ),
                   ),
@@ -887,4 +918,97 @@ class _SyncCard extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// A sync the server accepted without taking all of it (see SyncNotice).
+class _SyncNoticeCard extends StatelessWidget {
+  const _SyncNoticeCard({required this.notice, required this.onDismiss});
+
+  final SyncNotice notice;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isEs = AppStrings.of(context).isEs;
+    final String date =
+        DateTime.tryParse(
+          notice.createdAt,
+        )?.toLocal().toIso8601String().split('T').first ??
+        '';
+    const TextStyle style = TextStyle(
+      fontSize: 12,
+      height: 1.3,
+      color: Color(0xFF7A4F00),
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFB26A00)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.info_outline,
+                size: 18,
+                color: Color(0xFFB26A00),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  notice.patientName,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              Text(
+                date,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          for (final String line in SyncConflictCode.describe(
+            notice.codes,
+            isEs: isEs,
+          ))
+            Padding(
+              padding: const EdgeInsets.only(top: 6, right: 6),
+              child: Text(line, style: style),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6, right: 6),
+            child: Text(
+              SyncConflictCode.nextStep(serverCopyShown: false, isEs: isEs),
+              style: style.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: onDismiss,
+              child: Text(
+                isEs ? 'Entendido' : 'Got it',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

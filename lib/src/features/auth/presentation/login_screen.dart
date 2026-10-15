@@ -357,8 +357,9 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      final errorMessage =
-          ApiErrorCode.describe(e.code, isEs: s.isEs) ?? e.message;
+      final errorMessage = e.statusCode == 429
+          ? ApiErrorCode.tooManyAttempts(e.retryAfter, isEs: s.isEs)
+          : ApiErrorCode.describe(e.code, isEs: s.isEs) ?? e.message;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

@@ -35,6 +35,33 @@ class SyncResult {
   bool get hasBlockedOnly => remainingRetryable == 0 && remainingBlocked > 0;
 }
 
+/// What the server answered for a record it saved.
+class RecordSyncResult {
+  const RecordSyncResult({
+    required this.patientId,
+    required this.sent,
+    this.recordVersion,
+    this.conflicts = const <String>[],
+    this.serverRecord,
+  });
+
+  final String patientId;
+
+  /// The copy this device sent.
+  final PatientFullRecord sent;
+
+  /// The server's version of the record after this sync.
+  final int? recordVersion;
+
+  /// Parts the server kept as it had them (see SyncConflictCode).
+  final List<String> conflicts;
+
+  /// The merged record, when the server sends it back with [conflicts].
+  final PatientFullRecord? serverRecord;
+
+  bool get hasConflicts => conflicts.isNotEmpty;
+}
+
 /// Motor de sincronización en segundo plano que envía registros locales al backend.
 class SyncEngine {
   SyncEngine({
@@ -108,6 +135,14 @@ class SyncEngine {
   void Function(int unsyncedCount)? onSyncStatusChanged;
   void Function(String patientId, bool success, String? error)? onRecordSynced;
 
+  final StreamController<RecordSyncResult> _savedRecords =
+      StreamController<RecordSyncResult>.broadcast();
+
+  /// Every record the server saves, with the version it now has. A screen
+  /// holding that record adopts the version, so its next edit is not taken
+  /// for an old copy.
+  Stream<RecordSyncResult> get savedRecords => _savedRecords.stream;
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   void start() {
@@ -140,6 +175,11 @@ class SyncEngine {
     _retryTimer = null;
     _connectivitySub?.cancel();
     _connectivitySub = null;
+  }
+
+  void dispose() {
+    stop();
+    _savedRecords.close();
   }
 
   void _scheduleRetry() {
@@ -353,7 +393,8 @@ class SyncEngine {
           response.fhirStatus!.isEmpty ||
           response.fhirStatus == 'success';
 
-      if (response.status == 'success' && fhirOk) {
+      final bool saved = response.status == 'success';
+      if (saved && fhirOk) {
         AppLogger.d('Registro sincronizado exitosamente: ${entry.patientId}');
         if (response.conflicts.isNotEmpty) {
           AppLogger.d(
@@ -368,9 +409,15 @@ class SyncEngine {
           recordJson: entry.recordJson,
           revision: entry.revision,
         );
+        await _announceSaved(entry, record, response, stillPending: false);
         onRecordSynced?.call(entry.patientId, true, null);
         return _SyncOutcome.success;
       } else {
+        // Only the FHIR delivery failed: the server did save the record, and
+        // the row stays pending so the retry re-sends the bundles.
+        if (saved) {
+          await _announceSaved(entry, record, response, stillPending: true);
+        }
         final String errorMsg = !fhirOk
             ? 'Envío FHIR fallido: ${response.fhirStatus}'
             : 'Sync returned status: ${response.status}';
@@ -467,6 +514,67 @@ class SyncEngine {
     }
   }
 
+  /// The server saved [sent]: whoever holds the record learns the version it
+  /// now has. When the server kept part of its own copy, the chips hold what
+  /// it did not take, so they need rewriting, and the user is told until they
+  /// dismiss it.
+  ///
+  /// [stillPending]: the row stays queued (only FHIR failed). Its retry
+  /// carries exactly what was saved, so it moves onto the new version instead
+  /// of reading as an old copy. Not after a conflict: the server merged, and
+  /// the row must not overwrite that merge.
+  Future<void> _announceSaved(
+    LocalPatientEntry entry,
+    PatientFullRecord sent,
+    PatientSyncResponse response, {
+    required bool stillPending,
+  }) async {
+    final List<String> conflicts = response.conflicts;
+    final int? version = response.recordVersion;
+    try {
+      if (stillPending && conflicts.isEmpty && version != null) {
+        await _localDb.rebasePending(
+          entry.patientId,
+          revision: entry.revision,
+          recordVersion: version,
+        );
+      }
+      if (conflicts.isNotEmpty) {
+        AppLogger.d(
+          'Sync de ${entry.patientId} aceptado con conflictos: '
+          '${conflicts.join(', ')}',
+        );
+        await _localDb.markChipsDirty(
+          entry.patientId,
+          patient: true,
+          guardian: true,
+        );
+        await _localDb.addSyncNotice(
+          patientId: entry.patientId,
+          patientName: entry.patientName,
+          codes: conflicts,
+          ownerUserId: entry.ownerUserId ?? _currentUserId,
+        );
+      }
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error registrando el resultado del sync de ${entry.patientId}',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+    if (_savedRecords.isClosed) return;
+    _savedRecords.add(
+      RecordSyncResult(
+        patientId: entry.patientId,
+        sent: sent,
+        recordVersion: version,
+        conflicts: conflicts,
+        serverRecord: response.record,
+      ),
+    );
+  }
+
   // ── Manual controls ───────────────────────────────────────────────────────
 
   Future<SyncOneResult> syncOne(String patientId) async {
@@ -476,6 +584,7 @@ class SyncEngine {
     final Completer<void> completion = Completer<void>();
     _syncOneCompletion = completion;
 
+    _SyncOutcome? outcome;
     try {
       final entries = await _localDb.getUnsyncedRecords(
         ownerUserId: _currentUserId,
@@ -483,7 +592,7 @@ class SyncEngine {
       final match = entries.where((e) => e.patientId == patientId);
       if (match.isEmpty) return SyncOneResult.notFound;
 
-      final outcome = await _syncOne(match.first);
+      outcome = await _syncOne(match.first);
       if (outcome == _SyncOutcome.success) {
         return SyncOneResult.success;
       } else {
@@ -493,6 +602,13 @@ class SyncEngine {
       _syncOneCompletion = null;
       completion.complete();
       await refreshPendingCount();
+      // A transient failure (5xx, 408, 429, network) is retried as in a
+      // cycle, not before the server's Retry-After. A timer a cycle already
+      // set is kept.
+      if (outcome == _SyncOutcome.networkFailure &&
+          _retryTimer?.isActive != true) {
+        _scheduleRetry();
+      }
     }
   }
 

@@ -10,11 +10,15 @@ class HwbScreenHeader extends StatelessWidget {
     required this.title,
     this.onBack,
     this.showLocaleSwitcher = true,
+    this.showBack = true,
   });
 
   final String title;
   final VoidCallback? onBack;
   final bool showLocaleSwitcher;
+
+  /// False on a screen the user may not leave (e.g. a mandatory step).
+  final bool showBack;
 
   @override
   Widget build(BuildContext context) {
@@ -23,11 +27,15 @@ class HwbScreenHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_rounded, color: AppColors.white),
-            onPressed: onBack ?? () => Navigator.of(context).pop(),
-          ),
-          const SizedBox(width: 4),
+          if (showBack)
+            IconButton(
+              icon: const Icon(
+                Icons.arrow_back_rounded,
+                color: AppColors.white,
+              ),
+              onPressed: onBack ?? () => Navigator.of(context).pop(),
+            ),
+          SizedBox(width: showBack ? 4 : 12),
           Expanded(
             child: Text(
               title,

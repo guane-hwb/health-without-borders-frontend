@@ -26,6 +26,15 @@ class FakeUserRepository extends Fake implements UserRepository {
   Exception? deleteErrorToThrow;
   bool shouldThrowOnCreate = false;
   bool shouldThrowOnToggle = false;
+  Exception? resetErrorToThrow;
+  final List<String> resetIds = <String>[];
+
+  @override
+  Future<String> resetPassword(String id) async {
+    resetIds.add(id);
+    if (resetErrorToThrow != null) throw resetErrorToThrow!;
+    return 'Temporal-9xK2';
+  }
 
   @override
   Future<List<UserSession>> listUsers() async {
@@ -471,6 +480,111 @@ void main() {
         expect(find.text(s.noUsersInFilter), findsOneWidget);
       },
     );
+  });
+
+  group('Restablecer contraseña', () {
+    Future<void> openSheet(
+      WidgetTester tester,
+      UserSession target, {
+      UserRole viewer = UserRole.orgAdmin,
+    }) async {
+      configureMobileScreenSize(tester);
+      fakeRepo.usersToReturn = [target];
+      await tester.pumpWidget(
+        buildTestApp(fakeRepo, fakeAuth: FakeAuthRepository(role: viewer)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(target.fullName));
+      await tester.pumpAndSettle();
+    }
+
+    final Map<String, (UserRole, UserSession, bool)> visibility = {
+      'org_admin → médico': (UserRole.orgAdmin, buildUser(), true),
+      'org_admin → enfermera': (
+        UserRole.orgAdmin,
+        buildUser(role: UserRole.nurse),
+        true,
+      ),
+      'org_admin → otro org_admin': (
+        UserRole.orgAdmin,
+        buildUser(role: UserRole.orgAdmin),
+        false,
+      ),
+      'superadmin → org_admin': (
+        UserRole.superadmin,
+        buildUser(role: UserRole.orgAdmin),
+        true,
+      ),
+      'superadmin → superadmin': (
+        UserRole.superadmin,
+        buildUser(role: UserRole.superadmin),
+        false,
+      ),
+      'la propia cuenta': (
+        UserRole.orgAdmin,
+        buildUser(id: 'admin-1', role: UserRole.doctor),
+        false,
+      ),
+    };
+    visibility.forEach((String name, (UserRole, UserSession, bool) c) {
+      testWidgets('botón visible: $name → ${c.$3}', (tester) async {
+        await openSheet(tester, c.$2, viewer: c.$1);
+        expect(
+          find.text('Restablecer contraseña'),
+          c.$3 ? findsOneWidget : findsNothing,
+        );
+      });
+    });
+
+    testWidgets('confirma, restablece y muestra la temporal una vez', (
+      tester,
+    ) async {
+      await openSheet(tester, buildUser());
+
+      await tester.tap(find.text('Restablecer contraseña'));
+      await tester.pumpAndSettle();
+      expect(find.text('¿Restablecer la contraseña?'), findsOneWidget);
+      await tester.tap(find.text('Restablecer'));
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.resetIds, <String>['u1']);
+      expect(find.text('Temporal-9xK2'), findsOneWidget);
+      expect(find.textContaining('No se volverá a mostrar'), findsOneWidget);
+
+      await tester.tap(find.text('Listo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Temporal-9xK2'), findsNothing);
+    });
+
+    testWidgets('cancelar no restablece', (tester) async {
+      await openSheet(tester, buildUser());
+
+      await tester.tap(find.text('Restablecer contraseña'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(AppStrings.forTesting('es').cancel));
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.resetIds, isEmpty);
+    });
+
+    testWidgets('un error del servidor se muestra en la ficha', (tester) async {
+      fakeRepo.resetErrorToThrow = ApiException(
+        'Not enough privileges to manage users.',
+        statusCode: 403,
+      );
+      await openSheet(tester, buildUser());
+
+      await tester.tap(find.text('Restablecer contraseña'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Restablecer'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Not enough privileges to manage users.'),
+        findsOneWidget,
+      );
+      expect(find.text('Temporal-9xK2'), findsNothing);
+    });
   });
 
   group('_UserDetailSheet', () {

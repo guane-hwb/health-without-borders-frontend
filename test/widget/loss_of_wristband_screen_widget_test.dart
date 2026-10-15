@@ -43,9 +43,17 @@ class _FakeAuthRepository extends Fake implements AuthRepository {
 
 class _FakeUserRepository extends Fake implements UserRepository {}
 
-class _FakeLocalDatabase extends Fake implements LocalDatabase {}
+class _FakeLocalDatabase extends Fake implements LocalDatabase {
+  @override
+  Future<List<SyncNotice>> getSyncNotices({String? ownerUserId}) async =>
+      <SyncNotice>[];
+}
 
-class _FakeSyncEngine extends Fake implements SyncEngine {}
+class _FakeSyncEngine extends Fake implements SyncEngine {
+  @override
+  Stream<RecordSyncResult> get savedRecords =>
+      const Stream<RecordSyncResult>.empty();
+}
 
 class _FakePatientRepository extends Fake implements PatientRepository {
   PatientFullRecord? result;
@@ -53,6 +61,7 @@ class _FakePatientRepository extends Fake implements PatientRepository {
   bool throwApiException = false;
   int apiStatusCode = 404;
   String apiMessage = 'Not found';
+  String? apiCode;
 
   @override
   Future<PatientFullRecord> searchPatient({
@@ -66,7 +75,11 @@ class _FakePatientRepository extends Fake implements PatientRepository {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     if (shouldThrow) {
       if (throwApiException) {
-        throw ApiException(apiMessage, statusCode: apiStatusCode);
+        throw ApiException(
+          apiMessage,
+          statusCode: apiStatusCode,
+          code: apiCode,
+        );
       }
       throw Exception('Unexpected error');
     }
@@ -463,6 +476,34 @@ void main() {
 
       final s = AppStrings.forTesting('es');
       expect(find.text(s.searchError), findsOneWidget);
+      _resetScreenSize(tester);
+    });
+
+    testWidgets('500 stored_record_invalid pide contactar a soporte', (
+      tester,
+    ) async {
+      _setMobileScreenSize(tester);
+      final repo = _FakePatientRepository()
+        ..shouldThrow = true
+        ..throwApiException = true
+        ..apiStatusCode = 500
+        ..apiCode = 'stored_record_invalid'
+        ..apiMessage = 'The stored record could not be read.';
+
+      await tester.pumpWidget(
+        _wrap(const LossOfWristbandScreen(), patientRepo: repo),
+      );
+      await tester.pump();
+
+      await _fillAndSubmit(tester);
+
+      expect(
+        find.text(
+          'No se pudo leer el registro de este paciente en el servidor. '
+          'Contacte a soporte.',
+        ),
+        findsOneWidget,
+      );
       _resetScreenSize(tester);
     });
 

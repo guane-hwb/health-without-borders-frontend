@@ -76,8 +76,12 @@ POST /api/v1/patients/sync
 | 201 | Marks as synchronized and deletes the row from local storage (markSynced)Marks as synchronized and deletes the row from local storage (markSynced) |
 | 400 / 403 / 409 / 422 | Permanent error — holds row as blocked for review or user resolution |
 | 401 | Stops synchronization entirely — token expired, requires re-login |
-| 429 / 500 | Keeps is_synced = 0 for automatic retry |
-| Timeout | Keeps is_synced = 0 for automatic retry |
+| 429 / 500 | Keeps `is_synced = 0` for automatic retry |
+| 503 `sync_in_progress` | Another request was creating the same new patient (a retry racing the first attempt). Kept pending, not blocked, and retried no sooner than `Retry-After` (5 s) or the backoff, whichever is longer; the retry merges into the record the other request created. The queue shows it as pending |
+| Timeout | Keeps `is_synced = 0` for automatic retry |
+
+Transient failures (408, 429, 5xx, network) schedule the next attempt whether
+they come from a background cycle or from **Sync now** on one record.
 
 ### Callbacks
 
@@ -89,7 +93,37 @@ syncEngine.onSyncStatusChanged = (int unsyncedCount) {
 syncEngine.onRecordSynced = (String patientId, bool success, String? error) {
   // React to the synchronization of a specific record
 };
+
+syncEngine.savedRecords.listen((RecordSyncResult result) {
+  // The server saved result.sent as result.recordVersion, keeping
+  // result.conflicts as it had them
+});
 ```
+
+### Record versions and `conflicts`
+
+`/scan` and `/search` return the server's `recordVersion`. The app keeps it on
+`PatientFullRecord.recordVersion` and sends it back to `/sync` as
+`baseVersion`: the version its copy was based on. `toJson()` writes it under
+that name, and `fromJson()` reads it back from it, so the version survives the
+local queue and the guardian device.
+
+A `/sync` that the server accepts (`201`) answers with `record_version` (the
+version after this sync) and `conflicts` (the parts it kept as it had them, for
+example `stale_payload_base_version` when `baseVersion` was older than its
+own). The engine announces every saved record on `SyncEngine.savedRecords`:
+
+- The open profile adopts the new version, so its next edit is not taken for
+  an old copy. An edit made while the sync was in flight is saved again on top
+  of the new version.
+- When `conflicts` is not empty, the engine marks both chips for rewriting and
+  stores a notice (`sync_notices` table, one per patient, masked name) that the
+  sync queue lists until the user dismisses it. If the server sends its merged
+  record back (`record`), the profile shows it; otherwise the copy keeps its
+  old version, so anything edited next is merged rather than applied over the
+  server's.
+- If only the FHIR delivery failed, the row stays queued to re-send the bundles
+  and is moved onto the new version, since it holds exactly what was saved.
 
 ## Scrubbing of Clinical Data
 

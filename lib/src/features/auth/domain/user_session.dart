@@ -12,6 +12,7 @@ class UserSession {
     required this.organizationId,
     this.organizationName,
     this.isActive = true,
+    this.mustChangePassword = false,
   });
 
   factory UserSession.fromJson(Map<String, dynamic> json) {
@@ -30,6 +31,7 @@ class UserSession {
       organizationId: json['organization_id']?.toString() ?? '',
       organizationName: json['organization_name']?.toString(),
       isActive: json['is_active'] as bool? ?? true,
+      mustChangePassword: json['must_change_password'] == true,
     );
   }
 
@@ -53,6 +55,21 @@ class UserSession {
   final String? organizationName;
   final bool isActive;
 
+  /// The password was set by an administrator (a new account, or a reset):
+  /// the user has to choose their own before using the app.
+  final bool mustChangePassword;
+
+  UserSession copyWith({bool? mustChangePassword}) => UserSession(
+    id: id,
+    email: email,
+    fullName: fullName,
+    role: role,
+    organizationId: organizationId,
+    organizationName: organizationName,
+    isActive: isActive,
+    mustChangePassword: mustChangePassword ?? this.mustChangePassword,
+  );
+
   /// Serializes the session for local persistence (secure storage), so the
   /// app can restore the authenticated user offline after the OS kills the
   /// process. Round-trips through [UserSession.fromJson]: [role] is emitted as
@@ -66,6 +83,7 @@ class UserSession {
     'organization_id': organizationId,
     'organization_name': organizationName,
     'is_active': isActive,
+    'must_change_password': mustChangePassword,
   };
 
   /// Greeting name: takes first two words of fullName.
