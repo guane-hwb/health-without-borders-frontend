@@ -19,7 +19,7 @@
 //
 // Identity/linkage fields (patientId, patient device_uid, guardian device_uids)
 // are already part of toJson(), so the reconstructed record knows who it is
-// and which patient wristband it pairs with for 2FA.
+// and which patient device it pairs with for 2FA.
 
 import '../../features/nfc/domain/patient_record.dart';
 import 'nfc_guardian_alias.dart';
@@ -150,7 +150,7 @@ abstract final class NfcGuardianPayload {
 
   /// Reconstructs a full record from a decoded guardian payload.
   ///
-  /// The guardian card is a superset of the patient wristband, so when it is
+  /// The guardian card is a superset of the patient device, so when it is
   /// available this is the authoritative offline source.
   static PatientFullRecord reconstructFromGuardian(
     Map<String, dynamic> decoded,
@@ -160,7 +160,7 @@ abstract final class NfcGuardianPayload {
     return PatientFullRecord.fromJson(unaliasGuardianPayload(decoded));
   }
 
-  /// Reconstructs a partial record from the patient wristband triage only.
+  /// Reconstructs a partial record from the patient device triage only.
   ///
   /// Used when the guardian card is unavailable (e.g. an adult patient with no
   /// guardian, or the guardian is not present). Fills the demographic and

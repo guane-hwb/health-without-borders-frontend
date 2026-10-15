@@ -56,7 +56,7 @@ class PatientRepository {
   }
 
   // ── POST /api/v1/patients/scan ──────────────────────────────────────────
-  /// Retrieves a patient by scanning their NFC wristband.
+  /// Retrieves a patient by scanning their NFC device.
   ///
   /// Both UIDs travel in the body: in the URL, the wristband UID (PHI) ended
   /// up in Cloud Run's request logs.

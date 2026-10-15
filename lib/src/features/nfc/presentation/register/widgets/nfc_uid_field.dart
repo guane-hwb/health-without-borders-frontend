@@ -2,7 +2,7 @@
 //
 // Reusable NFC UID field: an editable text field (for manual entry / testing)
 // with a scan button beside it and a "linked device" confirmation below.
-// Used for both the patient wristband and the guardian card so the two share
+// Used for both the patient device and the guardian card so the two share
 // the same look and behaviour.
 
 import 'package:flutter/material.dart';
