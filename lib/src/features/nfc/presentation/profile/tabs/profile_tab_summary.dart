@@ -298,22 +298,17 @@ class ProfileTabSummary extends StatelessWidget {
                   value: _formatDob(p.dob, isEs),
                 ),
                 right: _IdCell(
-                  label: s.gender.toUpperCase(),
+                  label: isEs ? 'SEXO BIOLÓGICO' : 'BIOLOGICAL SEX',
                   value: _sexLabel(context, p.biologicalSex),
                 ),
               ),
               const SizedBox(height: 14),
               _IdRow(
                 left: _IdCell(
-                  label: s.gender.toUpperCase(),
-                  value:
-                      _genderLabel(context, p.genderIdentity) ??
-                      _sexLabel(context, p.biologicalSex),
-                ),
-                right: _IdCell(
                   label: s.nationality.toUpperCase(),
                   value: p.nationalityName ?? p.nationalityCode,
                 ),
+                right: const SizedBox.shrink(),
               ),
             ],
           ),
@@ -512,20 +507,6 @@ class ProfileTabSummary extends StatelessWidget {
 
   String _sexLabel(BuildContext context, String c) =>
       helpers.sexLabel(AppStrings.of(context), c);
-
-  String? _genderLabel(BuildContext context, String? c) {
-    if (c == null || c.isEmpty) return null;
-    final s = AppStrings.of(context);
-    final isEs = s.isEs;
-    return {
-          '01': s.sexMale,
-          '02': s.sexFemale,
-          '03': isEs ? 'Transgénero' : 'Transgender',
-          '04': isEs ? 'No binario' : 'Non-binary',
-          '99': isEs ? 'No reporta' : 'Not reported',
-        }[c] ??
-        c;
-  }
 
   String _formatDob(String dob, bool isEs) {
     final date = tryParsePatientDate(dob);
@@ -891,8 +872,6 @@ class _GuardianContent extends StatelessWidget {
                       ],
                     ),
                   ],
-                  // No accepted consent on record — e.g. a new guardian: the
-                  // previous guardian's consent is not theirs.
                   if (guardian.consent?.accepted != true) ...[
                     const SizedBox(height: 4),
                     Row(

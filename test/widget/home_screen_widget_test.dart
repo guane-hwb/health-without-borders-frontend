@@ -606,7 +606,7 @@ void main() {
   });
 
   group(
-    'HomeScreen — Navegación de tarjetas (Superadmin, OrgAdmin, Clínico)',
+    'HomeScreen — Navegación de dispositivos (Superadmin, OrgAdmin, Clínico)',
     () {
       testWidgets(
         'Superadmin: tap en Gestionar organizaciones y Estadísticas',
@@ -986,16 +986,17 @@ void main() {
   });
 
   group('_ActionCard — Renderizado sin subtítulo', () {
-    testWidgets('Renderiza correctamente la tarjeta cuando subtitle es null', (
-      tester,
-    ) async {
-      final user = _session(UserRole.superadmin);
-      await tester.pumpWidget(_wrapHome(user: user));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'Renderiza correctamente el dispositivo cuando subtitle es null',
+      (tester) async {
+        final user = _session(UserRole.superadmin);
+        await tester.pumpWidget(_wrapHome(user: user));
+        await tester.pumpAndSettle();
 
-      final cardFinder = find.byType(InkWell).first;
-      expect(cardFinder, findsOneWidget);
-    });
+        final cardFinder = find.byType(InkWell).first;
+        expect(cardFinder, findsOneWidget);
+      },
+    );
   });
 
   group(

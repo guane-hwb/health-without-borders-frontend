@@ -48,7 +48,7 @@ class PatientRepository {
   }
 
   // ── GET /api/v1/patients/scan/{device_uid} ──────────────────────────────
-  /// Retrieves a patient by scanning their NFC wristband.
+  /// Retrieves a patient by scanning their NFC device.
   ///
   /// If the patient is a minor (<18), the backend returns 403 with
   /// "Guardian bracelet scan required for minors."  In that case, the

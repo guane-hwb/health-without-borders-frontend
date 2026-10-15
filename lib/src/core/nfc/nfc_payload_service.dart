@@ -49,7 +49,7 @@ GuardianFitBuilder guardianFitBuilder({
 const String kHwbNdefMimeType = 'application/vnd.hwb.triage';
 
 /// MIME type for the guardian card's bounded full-record payload.
-/// A distinct type lets the reader tell a patient wristband apart from a
+/// A distinct type lets the reader tell a patient device apart from a
 /// guardian card and pick the right reconstructor.
 const String kHwbGuardianMimeType = 'application/vnd.hwb.guardian';
 
@@ -293,7 +293,7 @@ class NfcPayloadService {
     );
   }
 
-  /// Reads any HWB chip — patient wristband or guardian card — in one tap.
+  /// Reads any HWB chip — patient device or guardian card — in one tap.
   ///
   /// Returns the UID plus whichever payload was found, decoded and ready to
   /// reconstruct a record. If both records are present the guardian one wins
