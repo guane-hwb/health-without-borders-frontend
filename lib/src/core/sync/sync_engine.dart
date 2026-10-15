@@ -533,6 +533,7 @@ class SyncEngine {
     final Completer<void> completion = Completer<void>();
     _syncOneCompletion = completion;
 
+    _SyncOutcome? outcome;
     try {
       final entries = await _localDb.getUnsyncedRecords(
         ownerUserId: _currentUserId,
@@ -540,7 +541,7 @@ class SyncEngine {
       final match = entries.where((e) => e.patientId == patientId);
       if (match.isEmpty) return SyncOneResult.notFound;
 
-      final outcome = await _syncOne(match.first);
+      outcome = await _syncOne(match.first);
       if (outcome == _SyncOutcome.success) {
         return SyncOneResult.success;
       } else {
@@ -550,6 +551,13 @@ class SyncEngine {
       _syncOneCompletion = null;
       completion.complete();
       await refreshPendingCount();
+      // A transient failure (5xx, 408, 429, network) is retried as in a
+      // cycle, not before the server's Retry-After. A timer a cycle already
+      // set is kept.
+      if (outcome == _SyncOutcome.networkFailure &&
+          _retryTimer?.isActive != true) {
+        _scheduleRetry();
+      }
     }
   }
 
