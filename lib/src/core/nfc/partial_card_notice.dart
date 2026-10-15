@@ -20,8 +20,8 @@ String partialCardNoticeMessage(GuardianPayloadFit fit, bool isEs) {
   }
   final dropped = parts.join(isEs ? ' y ' : ' and ');
   return isEs
-      ? 'La tarjeta es pequeña: se guardaron las entradas más recientes. '
+      ? 'El dispositivo es pequeño: se guardaron las entradas más recientes. '
             'Quedaron fuera $dropped (siguen en el servidor).'
-      : 'The card is small: the most recent entries were saved. '
+      : 'The device is small: the most recent entries were saved. '
             'Left off: $dropped (still on the server).';
 }

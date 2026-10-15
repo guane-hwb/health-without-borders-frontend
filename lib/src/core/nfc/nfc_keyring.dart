@@ -4,7 +4,7 @@
 //
 // Before key versioning there was a single global key and a tag carried no
 // hint about which key encrypted it, so the key could never be rotated: with
-// two keys in play a reader had no way to tell which one a given wristband
+// two keys in play a reader had no way to tell which one a given device
 // needed, nor any way to know when a migration had finished.
 //
 // A keyring fixes that. The backend delivers every *live* key plus the version

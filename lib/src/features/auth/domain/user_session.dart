@@ -59,14 +59,14 @@ class UserSession {
   /// its backend wire string (e.g. `org_admin`), not the Dart enum name, so the
   /// correct role is restored — never silently downgraded to the default.
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'email': email,
-        'full_name': fullName,
-        'role': role.wireValue,
-        'organization_id': organizationId,
-        'organization_name': organizationName,
-        'is_active': isActive,
-      };
+    'id': id,
+    'email': email,
+    'full_name': fullName,
+    'role': role.wireValue,
+    'organization_id': organizationId,
+    'organization_name': organizationName,
+    'is_active': isActive,
+  };
 
   /// Greeting name: takes first two words of fullName.
   /// "Juan Carlos Pérez" → "Juan Carlos"
@@ -136,10 +136,10 @@ enum UserRole {
   /// Can view analytics/KPIs
   bool get canViewAnalytics => isAdmin;
 
-  /// Can scan NFC wristbands
+  /// Can scan NFC devices
   bool get canScanNfc => this == doctor || this == nurse;
 
-  /// Can search patients (loss of wristband)
+  /// Can search patients (loss of device, search by name, etc.)
   bool get canSearchPatient =>
       this == doctor || this == nurse || this == orgAdmin;
 
