@@ -38,7 +38,7 @@ const int kMaxNfcKeyVersion = 255;
 ///
 /// Which version a chip is on cannot be known without decrypting it, and it is
 /// the only way to tell how far a rotation has drained. Retiring a version
-/// while wristbands are still on it makes those tags unreadable offline, so the
+/// while devices are still on it makes those tags unreadable offline, so the
 /// decision needs this measured rather than assumed.
 class NfcDecodeResult {
   const NfcDecodeResult({

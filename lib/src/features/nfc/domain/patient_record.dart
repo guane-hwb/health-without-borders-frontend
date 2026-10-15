@@ -491,7 +491,7 @@ class GuardianInfo {
   final String name;
   final String relationship;
   final String phone;
-  final String? deviceUid; // NFC UID of the guardian's wristband
+  final String? deviceUid; // NFC UID of the guardian's device
   final String? docType;
   final String? docNumber;
   final String? documentType;

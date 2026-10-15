@@ -27,7 +27,7 @@ Main feature of the app. It centralizes all the logic for capturing and displayi
 
 **Main Flow:**
 
-1. **NFC Read** (`read_nfc_screen.dart`) — scans the wristband and obtains the device UID.
+1. **NFC Read** (`read_nfc_screen.dart`) — scans the device and obtains the device UID.
 2. **Registration** (`register/register_nfc_screen.dart`) — a 6-step wizard to register a new patient.
 3. **Profile** (`profile/patient_profile_screen.dart`) — view of the medical record tabs.
 4. **Lost Wristband** (`loss_of_wristband_screen.dart`) — search for a patient by name/document.

@@ -32,7 +32,7 @@
 	<true/>
 	<!-- NFC — required description shown when the NFC dialog appears -->
 	<key>NFCReaderUsageDescription</key>
-	<string>Health Without Borders needs NFC access to read patient wristband identifiers.</string>
+	<string>Health Without Borders needs NFC access to read patient device identifiers.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

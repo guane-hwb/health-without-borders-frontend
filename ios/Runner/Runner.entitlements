@@ -5,7 +5,7 @@
 	<!--
 	  Core NFC will not start a tag session without this entitlement, no matter
 	  what the code does. "TAG" covers the raw tag sessions HWB uses to read
-	  NTAG wristbands and guardian cards; "NDEF" is not sufficient on its own
+	  NTAG devices and guardian cards; "NDEF" is not sufficient on its own
 	  because we need the chip identifier, not only its NDEF message.
 
 	  This file is only half of the requirement: the App ID in the Apple

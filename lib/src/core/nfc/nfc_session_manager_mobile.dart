@@ -333,7 +333,7 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
 
   /// iOS counterpart of [_adapt].
   ///
-  /// NTAG 215/216 wristbands surface as MiFare on iOS, which is where the
+  /// NTAG 215/216 devices surface as MiFare on iOS, which is where the
   /// identifier lives; DESFire cards do too. NDEF is exposed separately.
   HwbTag _adaptIos(NfcTag tag) {
     final mifare = MiFareIos.from(tag);
@@ -380,7 +380,7 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
       case AppLifecycleState.hidden:
         // The screen slept or the app was backgrounded. Android hands the radio
         // back to the OS regardless, so drop reader mode — but do NOT abort the
-        // pending read. A clinician holding a wristband to a phone whose display
+        // pending read. A clinician holding a device to a phone whose display
         // times out is the core use case; killing the wait here is the bug that
         // made every held read fail with "no chip detected". Freeze the timeout
         // instead and resume on wake.
@@ -436,7 +436,7 @@ class NfcSessionManager with WidgetsBindingObserver implements NfcTagSource {
   Future<void> _doEnableReaderMode() async {
     try {
       await NfcManagerAndroid.instance.enableReaderMode(
-        // NFC-A (NTAG 215/216 wristbands), NFC-B, NFC-V. Verified on device:
+        // NFC-A (NTAG 215/216 devices), NFC-B, NFC-V. Verified on device:
         // reader mode with exactly this mask activates an NTAG215 in under a
         // second. noPlatformSounds is intentionally NOT here — on this Samsung
         // it made enableReaderMode throw, which the catch below then swallowed,
@@ -561,7 +561,7 @@ class _Consumer {
   }
 
   /// Freezes the countdown. Called when the screen sleeps: a clinician holding
-  /// a wristband to a phone whose display times out has not walked away, so the
+  /// a device to a phone whose display times out has not walked away, so the
   /// wait must survive until the screen wakes — otherwise it dies mid-read.
   void pauseTimer() {
     if (busy || _timer == null) return;
