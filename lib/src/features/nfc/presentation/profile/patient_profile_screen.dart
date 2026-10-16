@@ -119,6 +119,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   StreamSubscription<RecordSyncResult>? _savedRecordsSub;
   SyncResultEffect? _conflictEffect;
 
+  bool _conflictsDuringSync = false;
+
   @override
   void initState() {
     super.initState();
@@ -161,6 +163,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     final effect = _draftController.applySyncResult(result);
     final scope = AppScope.of(context);
     if (result.hasConflicts && effect != SyncResultEffect.ignored) {
+      _conflictsDuringSync = true;
       setState(() => _conflictEffect = effect);
       unawaited(_loadChipStatus(scope.localDatabase));
     } else if (effect == SyncResultEffect.resaveDraft && !widget.readOnly) {
@@ -570,8 +573,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       );
 
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
+      _conflictsDuringSync = false;
       final syncResult = await scope.syncEngine.syncAll();
       if (!mounted) return;
+      final bool hadConflicts = _conflictsDuringSync;
 
       if (syncResult.isFullyClean) {
         _draftController.reset(_draft);
@@ -580,12 +585,14 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
       if (!silent) {
         if (syncResult.isFullyClean) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppStrings.of(context).savedChangesMsg),
-              backgroundColor: AppColors.success,
-            ),
-          );
+          if (!hadConflicts) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(AppStrings.of(context).savedChangesMsg),
+                backgroundColor: AppColors.success,
+              ),
+            );
+          }
         } else if (syncResult.hasBlockedOnly) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

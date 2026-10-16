@@ -227,7 +227,7 @@ void main() {
     testWidgets('shows NFC icon and scan instructions', (tester) async {
       await tester.pumpWidget(_buildApp());
 
-      find.byIcon(Icons.nfc_rounded);
+      expect(find.byIcon(Icons.nfc_rounded), findsOneWidget);
       expect(find.text('Escanear paciente'), findsOneWidget);
       expect(find.textContaining('Acerque el dispositivo NFC'), findsOneWidget);
     });
@@ -457,7 +457,10 @@ void main() {
   group('Success step', () {
     Future<void> fillAndSave(WidgetTester tester, AppScope scope) async {
       when(
-        () => scope.localDatabase.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
+        () => scope.localDatabase.savePatient(
+          any(),
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
       ).thenAnswer((_) async {});
       when(
         () => scope.localDatabase.markChipsDirty(
@@ -511,7 +514,10 @@ void main() {
     testWidgets('save failure shows error snackbar', (tester) async {
       final scope = _defaultScope();
       when(
-        () => scope.localDatabase.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
+        () => scope.localDatabase.savePatient(
+          any(),
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
       ).thenThrow(Exception('disk full'));
 
       await tester.pumpWidget(_buildApp(patient: _fakePatient(), scope: scope));
@@ -885,7 +891,10 @@ void main() {
 
         final scope = _defaultScope();
         when(
-          () => scope.localDatabase.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
+          () => scope.localDatabase.savePatient(
+            any(),
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
         ).thenAnswer((_) async {});
         when(
           () => scope.localDatabase.markChipsDirty(
@@ -957,7 +966,10 @@ void main() {
 
       final scope = _defaultScope();
       when(
-        () => scope.localDatabase.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
+        () => scope.localDatabase.savePatient(
+          any(),
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
       ).thenAnswer((_) async {});
       when(
         () => scope.localDatabase.markChipsDirty(
@@ -1005,7 +1017,10 @@ void main() {
 
       final scope = _defaultScope();
       when(
-        () => scope.localDatabase.savePatient(any()),
+        () => scope.localDatabase.savePatient(
+          any(),
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
       ).thenAnswer((_) async {});
       when(
         () => scope.localDatabase.markChipsDirty(
@@ -1016,7 +1031,9 @@ void main() {
       when(
         () => scope.syncEngine.refreshPendingCount(),
       ).thenAnswer((_) async => 0);
-      when(() => scope.syncEngine.syncAll()).thenAnswer((_) async => true);
+      when(
+        () => scope.syncEngine.syncAll(),
+      ).thenAnswer((_) async => _MockSyncResult());
 
       await tester.pumpWidget(
         _buildApp(
@@ -1039,7 +1056,10 @@ void main() {
 
       final saved =
           verify(
-                () => scope.localDatabase.savePatient(captureAny()),
+                () => scope.localDatabase.savePatient(
+                  captureAny(),
+                  ownerUserId: any(named: 'ownerUserId'),
+                ),
               ).captured.single
               as PatientFullRecord;
       expect(saved.recordVersion, 6);
@@ -1066,4 +1086,3 @@ typedef VaccineEntryTestable = VaccineEntry;
 
 String formatVaccineDate(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-

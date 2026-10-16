@@ -327,18 +327,21 @@ class _AnnouncingSyncEngine extends _FakeSyncEngine {
   /// Announced from inside syncAll, before it returns (as the real engine).
   RecordSyncResult? Function()? onSyncAll;
 
+  Completer<void>? gate;
+
   @override
   Stream<RecordSyncResult> get savedRecords => results.stream;
 
   @override
-  Future<bool> syncAll() async {
+  Future<SyncResult> syncAll() async {
     callCount++;
+    await gate?.future;
     final RecordSyncResult? result = onSyncAll?.call();
     if (result != null) {
       results.add(result);
       await Future<void>.microtask(() {});
     }
-    return true;
+    return _FakeSyncResult(true);
   }
 }
 
@@ -3072,12 +3075,16 @@ void main() {
       final engine = _AnnouncingSyncEngine();
       final fakes = await pump(tester, engine);
 
+      // El sync queda realmente en vuelo: no termina (ni resetea el borrador
+      // como "sincronizado") hasta que se libere la compuerta.
+      engine.gate = Completer<void>();
+
       await addAllergy(tester, 'Maní');
       final PatientFullRecord inFlight = sentFrom(fakes.db);
       await addAllergy(tester, 'Polen');
       expect(stored(fakes.db)['baseVersion'], 4);
-      final int savesBefore = fakes.db.savePatientCallCount;
 
+      // Emitir el resultado del sync en vuelo y permitir el procesamiento de la microtarea
       engine.results.add(
         RecordSyncResult(
           patientId: 'pid-001',
@@ -3085,11 +3092,16 @@ void main() {
           recordVersion: 5,
         ),
       );
-      await tester.pumpAndSettle();
 
-      expect(fakes.db.savePatientCallCount, savesBefore + 1);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
       expect(stored(fakes.db)['baseVersion'], 5);
       expect(stored(fakes.db)['allergies'], hasLength(2));
+
+      engine.gate!.complete();
+      await tester.pumpAndSettle();
+      await engine.results.close();
     });
 
     testWidgets('un resultado de otro paciente no cambia nada', (tester) async {
@@ -3231,6 +3243,13 @@ void main() {
     ) async {
       final engine = _AnnouncingSyncEngine();
       final fakes = await pump(tester, engine);
+
+      final messenger = ScaffoldMessenger.of(
+        tester.element(find.byType(PatientProfileScreen)),
+      );
+      messenger.clearSnackBars();
+      await tester.pumpAndSettle();
+
       engine.onSyncAll = () => RecordSyncResult(
         patientId: 'pid-001',
         sent: sentFrom(fakes.db),

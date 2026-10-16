@@ -65,7 +65,15 @@ Widget buildTestableApp({
   when(() => syncEngine.pendingCount).thenReturn(ValueNotifier<int>(0));
   when(() => syncEngine.blockedCount).thenReturn(ValueNotifier<int>(0));
   when(() => syncEngine.refreshPendingCount()).thenAnswer((_) async {});
-  when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
+
+  when(
+    () => localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => <LocalPatientEntry>[]);
+  when(
+    () => localDb.getUnsyncedRecords(),
+  ).thenAnswer((_) async => <LocalPatientEntry>[]);
+  when(() => localDb.getWebQuarantinedEntries()).thenAnswer((_) async => []);
+  when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
   when(
     () => localDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
   ).thenAnswer((_) async => <SyncNotice>[]);
