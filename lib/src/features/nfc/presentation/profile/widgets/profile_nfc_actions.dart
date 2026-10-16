@@ -136,6 +136,32 @@ Future<bool> executeUpdateNfcChips({
 }
 
 /// Ejecuta el proceso de reasignación de un dispositivo individual.
+/// Which other devices of the patient still describe the old binding after
+/// the reassignments in [done], in the order they were written.
+///
+/// The patient device's triage lists the guardian devices (`gUid`/`g2Uid`),
+/// which is what lets a guardian device open a minor's record offline. Each
+/// guardian device's copy names the patient device and both guardian devices.
+/// A device written before a later change to one of those, or not written at
+/// all, still names the old one.
+({bool patient, bool guardian}) devicesStaleAfterReassign({
+  required List<ReassignTarget> done,
+  required bool hasGuardianDevice,
+  required bool hasTwoGuardianDevices,
+}) {
+  final int lastGuardianChange = done.lastIndexWhere(
+    (ReassignTarget t) => t != ReassignTarget.patient,
+  );
+  final int lastPatientWrite = done.lastIndexOf(ReassignTarget.patient);
+  final bool guardianChanged = lastGuardianChange >= 0;
+  return (
+    patient: guardianChanged && lastPatientWrite < lastGuardianChange,
+    guardian:
+        hasGuardianDevice &&
+        (lastPatientWrite >= 0 || (guardianChanged && hasTwoGuardianDevices)),
+  );
+}
+
 Future<PatientFullRecord?> executeReassignOne({
   required BuildContext context,
   required ReassignTarget target,
