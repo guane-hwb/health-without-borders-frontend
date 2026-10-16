@@ -20,16 +20,7 @@ import '../../domain/patient_record.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
 import 'patient_profile_helpers.dart';
-import 'sheets/add_allergy_sheet.dart';
-import 'sheets/add_chronic_condition_sheet.dart';
-import 'sheets/add_family_history_sheet.dart';
-import 'sheets/add_medication_sheet.dart';
-import 'sheets/allergies_manage_sheet.dart';
-import 'sheets/background_manage_sheet.dart';
-import 'sheets/edit_address_sheet.dart';
-import 'sheets/edit_chronic_personal_sheet.dart';
-import 'sheets/edit_guardian_sheet.dart';
-import 'sheets/edit_vital_signs_sheet.dart';
+import 'patient_profile_sheets.dart';
 import 'state/patient_draft_controller.dart';
 import 'tabs/profile_tab_consultations.dart';
 import 'tabs/profile_tab_summary.dart';
@@ -276,8 +267,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
       await _loadChipStatus(scope.localDatabase);
     } finally {
-      // Without this the button stays disabled until the screen is rebuilt if
-      // anything above throws.
       if (mounted) setState(() => _isUpdatingChips = false);
     }
   }
@@ -662,167 +651,28 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (result != null && result.isNotEmpty) _addVaccines(result);
   }
 
-  Future<void> _openVitalSignsSheet() async {
-    if (widget.readOnly) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => EditVitalSignsSheet(
-        weight: _draft.patientInfo.weight,
-        height: _draft.patientInfo.height,
-        bloodType: _draft.patientInfo.bloodType,
-        previousWeight: _original.patientInfo.weight,
-        previousHeight: _original.patientInfo.height,
-        onConfirm: _updateVitalSigns,
-      ),
-    );
-  }
-
-  Future<void> _openAddressSheet() async {
-    if (widget.readOnly) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => EditAddressSheet(
-        address: _draft.patientInfo.address,
-        onConfirm: _updateAddress,
-      ),
-    );
-  }
-
-  Future<void> _openGuardianSheet(int guardianIndex) async {
-    if (widget.readOnly) return;
-    final GuardianInfo? current = guardianIndex == 1
-        ? _draft.guardianInfo
-        : _draft.guardian2Info;
-    if (current == null) return;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      enableDrag: false,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => EditGuardianSheet(
-        guardian: current,
-        guardianIndex: guardianIndex,
-        onConfirm: (updated) {
-          _draftController.updateGuardian(guardianIndex, updated);
-          unawaited(_saveAndPendingSync());
-        },
-      ),
-    );
-  }
-
-  Future<void> _openEditPersonalSheet() async {
-    if (widget.readOnly) return;
-    final bg = _draft.backgroundHistory ?? BackgroundHistory();
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => EditChronicPersonalSheet(
-        title: AppStrings.of(context).personalHistoryTitle,
-        currentValue: bg.personalHistory,
-        onConfirm: (text) => _updateBackground(personalHistory: text),
-      ),
-    );
-  }
-
-  Future<void> _openAddChronicConditionSheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AddChronicConditionSheet(onAdd: _addChronicCondition),
-    );
-  }
-
-  Future<void> _openAddMedicationSheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AddMedicationSheet(onAdd: _addMedication),
-    );
-  }
-
-  Future<void> _openAddFamilyHistorySheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AddFamilyHistorySheet(onAdd: _addFamilyHistory),
-    );
-  }
-
-  Future<void> _openAddAllergySheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AddAllergySheet(onAdd: _addAllergy),
-    );
-  }
-
   void _openAllergiesSheet() {
     if (widget.readOnly) return;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AllergiesManageSheet(
-        allergies: _draft.allergies,
-        onAdd: () async {
-          Navigator.of(context).pop();
-          await _openAddAllergySheet();
-        },
-        onRemove: (i) {
-          _removeAllergy(i);
-          Navigator.of(context).pop();
-        },
-      ),
+    PatientProfileSheets.openAllergiesSheet(
+      context,
+      draft: _draft,
+      onRemove: _removeAllergy,
+      onAddAllergy: _addAllergy,
     );
   }
 
   void _openBackgroundSheet() {
     if (widget.readOnly) return;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => BackgroundManageSheet(
-        draft: _draft,
-        onAddChronic: () {
-          Navigator.of(context).pop();
-          _openAddChronicConditionSheet();
-        },
-        onRemoveChronic: (i) {
-          _removeChronicCondition(i);
-          Navigator.of(context).pop();
-        },
-        onEditPersonal: () {
-          Navigator.of(context).pop();
-          _openEditPersonalSheet();
-        },
-        onAddFamily: () {
-          Navigator.of(context).pop();
-          _openAddFamilyHistorySheet();
-        },
-        onRemoveFamily: (i) {
-          _removeFamilyHistory(i);
-          Navigator.of(context).pop();
-        },
-        onAddMedication: () {
-          Navigator.of(context).pop();
-          _openAddMedicationSheet();
-        },
-        onRemoveMedication: (i) {
-          _removeMedication(i);
-          Navigator.of(context).pop();
-        },
-      ),
+    PatientProfileSheets.openBackgroundSheet(
+      context,
+      draft: _draft,
+      onAddChronic: _addChronicCondition,
+      onRemoveChronic: _removeChronicCondition,
+      onEditPersonal: (text) => _updateBackground(personalHistory: text),
+      onAddFamily: _addFamilyHistory,
+      onRemoveFamily: _removeFamilyHistory,
+      onAddMedication: _addMedication,
+      onRemoveMedication: _removeMedication,
     );
   }
 
@@ -880,9 +730,29 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                             !widget.readOnly &&
                             (_currentRole.canAddConsultation ||
                                 _currentRole.canAddVaccine),
-                        onEditVitalSigns: _openVitalSignsSheet,
-                        onEditAddress: _openAddressSheet,
-                        onEditGuardian: _openGuardianSheet,
+                        onEditVitalSigns: () =>
+                            PatientProfileSheets.openVitalSignsSheet(
+                              context,
+                              draft: _draft,
+                              original: _original,
+                              onConfirm: _updateVitalSigns,
+                            ),
+                        onEditAddress: () =>
+                            PatientProfileSheets.openAddressSheet(
+                              context,
+                              address: _draft.patientInfo.address,
+                              onConfirm: _updateAddress,
+                            ),
+                        onEditGuardian: (i) =>
+                            PatientProfileSheets.openGuardianSheet(
+                              context,
+                              draft: _draft,
+                              guardianIndex: i,
+                              onConfirm: (updated) {
+                                _draftController.updateGuardian(i, updated);
+                                unawaited(_saveAndPendingSync());
+                              },
+                            ),
                         onOpenAllergies: _openAllergiesSheet,
                         onOpenBackground: _openBackgroundSheet,
                         onReassignDevice:
