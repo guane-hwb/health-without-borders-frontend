@@ -44,3 +44,16 @@ Dates are shown in the format that matches the selected language (**ES / EN**).
 ## 4. Emergency access
 
 In urgent situations, the app provides an **emergency ("break-glass") access** path so that care is never blocked. Every emergency access is **recorded in an audit log** (who accessed the record and when). Use it only when clinically necessary.
+
+---
+
+## 5. Reassign a device
+
+When a patient device or a guardian device is lost or damaged, go to **Loss of device**, open the patient's record and tap **Reassign device** to write a new, blank device in its place. The old device stops working online.
+
+The patient's other devices still name the old one: the patient device lists the guardian devices, and each guardian device holds the patient device and both guardian devices. After the reassignment the app asks to **update the other devices**:
+
+- **Write now** — write them right away, in the same visit.
+- **Later** — the record shows **"NFC backup out of date"** until you write them.
+
+Write them before the patient leaves. Until then, the devices may not work offline with the new one.
