@@ -14,6 +14,8 @@ class MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class MockSyncEngine extends Mock implements SyncEngine {}
 
+class MockSyncResult extends Mock implements SyncResult {}
+
 // =============================================================================
 // Helpers
 // =============================================================================
@@ -337,7 +339,9 @@ void main() {
     test(
       'completes asynchronous task lifecycle without reporting standard error anomalies',
       () async {
-        when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
+        when(
+          () => syncEngine.syncAll(),
+        ).thenAnswer((_) async => MockSyncResult());
 
         await expectLater(syncEngine.syncAll(), completes);
       },
@@ -346,7 +350,9 @@ void main() {
     test(
       'invokes engine routine layer exactly once per explicit programmatic call tracking',
       () async {
-        when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
+        when(
+          () => syncEngine.syncAll(),
+        ).thenAnswer((_) async => MockSyncResult());
 
         await syncEngine.syncAll();
 
@@ -426,7 +432,9 @@ void main() {
         when(
           () => db.getUnsyncedRecords(),
         ).thenAnswer((_) async => [makeEntry()]);
-        when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
+        when(
+          () => syncEngine.syncAll(),
+        ).thenAnswer((_) async => MockSyncResult());
 
         final before = await db.getUnsyncedRecords();
         expect(before, hasLength(1));

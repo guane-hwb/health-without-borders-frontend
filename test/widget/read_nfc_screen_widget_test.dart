@@ -100,7 +100,7 @@ class FakePatientRepository implements PatientRepository {
       throw ApiException(
         guardianRequiredMessage,
         statusCode: 403,
-        code: guardianRequiredCode,
+        code: guardianRequiredCode ?? 'guardian_required',
       );
     }
 
@@ -126,11 +126,7 @@ class FakePatientRepository implements PatientRepository {
         biologicalSex: 'M',
         address: Address(city: 'Bogota', state: 'Cundinamarca'),
       ),
-      guardianInfo: GuardianInfo(
-        name: 'N/A',
-        relationship: 'N/A',
-        phone: 'N/A',
-      ),
+      guardianInfo: GuardianInfo(name: 'N/A', relationship: '01', phone: 'N/A'),
     );
   }
 
@@ -142,6 +138,7 @@ class FakePatientRepository implements PatientRepository {
 
   @override
   Future<PatientFullRecord> searchPatient({
+    String? accessReason,
     required String documentNumber,
     required String birthDate,
     required String firstName,
@@ -258,8 +255,7 @@ Widget _buildTestableWidget({
 Future<void> _advanceToStep2(WidgetTester tester) async {
   await tester.enterText(find.byType(TextField), 'HWB-MENOR-05');
   await tester.tap(find.byType(OutlinedButton));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 10));
+  await tester.pumpAndSettle();
 }
 
 // ===========================================================================
@@ -428,8 +424,7 @@ void main() {
       await _advanceToStep2(tester);
 
       await tester.tap(find.byIcon(Icons.arrow_back));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 10));
+      await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.check_circle), findsNothing);
       expect(find.byType(TextField), findsOneWidget);
@@ -475,8 +470,7 @@ void main() {
       fakeRepo.throwGenericError = true;
       await tester.enterText(find.byType(TextField), 'HWB-ERROR-1');
       await tester.tap(find.byType(OutlinedButton));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 10));
+      await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.error_outline), findsOneWidget);
       expect(find.text('Error de base de datos'), findsOneWidget);
@@ -532,8 +526,7 @@ void main() {
         fakeRepo.retiredReason = 'lost';
         await tester.enterText(find.byType(TextField), 'HWB-RETIRED-1');
         await tester.tap(find.byType(OutlinedButton));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 10));
+        await tester.pumpAndSettle();
 
         expect(find.byIcon(Icons.error_outline), findsOneWidget);
         expect(
@@ -563,8 +556,7 @@ void main() {
 
         await tester.enterText(find.byType(TextField), 'HWB-OFFLINE-1');
         await tester.tap(find.byType(OutlinedButton));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 10));
+        await tester.pumpAndSettle();
 
         expect(
           find.text('Sin conexión y sin respaldo legible en el chip.'),
@@ -590,8 +582,7 @@ void main() {
 
         await tester.enterText(find.byType(TextField), 'HWB-OFFLINE-2');
         await tester.tap(find.byType(OutlinedButton));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 10));
+        await tester.pumpAndSettle();
 
         expect(
           find.text('Offline and no readable backup on the chip.'),
@@ -638,10 +629,34 @@ void main() {
 
         await tester.enterText(find.byType(TextField), 'HWB-GUARDIAN-01');
         await tester.tap(find.byType(OutlinedButton));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 20));
+        await tester.pumpAndSettle();
 
         expect(fakeRepo.lastCapturedGuardianUid, 'HWB-GUARDIAN-01');
+      },
+    );
+
+    testWidgets(
+      'Guardián tecleado con espacios y minúsculas: el repo recibe el UID normalizado (04:1a:2c:de o 04:1A:2C:DE)',
+      (tester) async {
+        fakeRepo.throw403ForGuardian = true;
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: const ReadNfcScreen(),
+            repo: fakeRepo,
+            authRepo: fakeAuth,
+          ),
+        );
+        await tester.pump();
+        await _advanceToStep2(tester);
+
+        await tester.enterText(find.byType(TextField), '04 1a 2c de');
+        await tester.tap(find.byType(OutlinedButton));
+        await tester.pumpAndSettle();
+
+        expect(
+          fakeRepo.lastCapturedGuardianUid?.toLowerCase(),
+          equals('04:1a:2c:de'),
+        );
       },
     );
 
@@ -662,8 +677,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField), 'HWB-GUARDIAN-BAD');
       await tester.tap(find.byType(OutlinedButton));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 10));
+      await tester.pumpAndSettle();
 
       expect(find.text('Guardian inválido.'), findsOneWidget);
       expect(find.byIcon(Icons.error_outline), findsOneWidget);
@@ -709,8 +723,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField), 'HWB-GUARDIAN-BAD');
       await tester.tap(find.byType(OutlinedButton));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 10));
+      await tester.pumpAndSettle();
 
       expect(
         find.textContaining('El dispositivo no corresponde a ningún acudiente'),
@@ -762,8 +775,7 @@ void main() {
 
         await tester.enterText(find.byType(TextField), 'HWB-GUARDIAN-02');
         await tester.tap(find.byType(OutlinedButton));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 10));
+        await tester.pumpAndSettle();
 
         expect(find.textContaining('Network unreachable'), findsOneWidget);
       },
@@ -808,8 +820,7 @@ void main() {
         await tester.pump();
 
         await tester.tap(find.byIcon(Icons.wifi));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 10));
+        await tester.pumpAndSettle();
 
         expect(
           find.text('NFC no disponible. Use el campo manual debajo.'),
@@ -835,8 +846,7 @@ void main() {
         await tester.pump();
 
         await tester.tap(find.byIcon(Icons.wifi));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 10));
+        await tester.pumpAndSettle();
 
         expect(find.text('Tag perdido durante scan.'), findsOneWidget);
       },
@@ -857,8 +867,7 @@ void main() {
         await tester.pump();
 
         await tester.tap(find.byIcon(Icons.wifi));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 20));
+        await tester.pumpAndSettle();
 
         expect(fakeRepo.lastCapturedGuardianUid, isNull);
       },
@@ -883,8 +892,7 @@ void main() {
             throw NfcNotAvailableException();
 
         await tester.tap(find.byIcon(Icons.wifi));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 10));
+        await tester.pumpAndSettle();
 
         expect(
           find.text('NFC no disponible. Use el campo manual debajo.'),
@@ -912,8 +920,7 @@ void main() {
           throw NfcSessionException('Error NFC del tutor.');
 
       await tester.tap(find.byIcon(Icons.wifi));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 10));
+      await tester.pumpAndSettle();
 
       expect(find.text('Error NFC del tutor.'), findsOneWidget);
     });
@@ -935,8 +942,7 @@ void main() {
         NfcService.overrideReadDeviceUid = () async => 'HWB-GUARDIAN-NFC-01';
 
         await tester.tap(find.byIcon(Icons.wifi));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 20));
+        await tester.pumpAndSettle();
 
         expect(fakeRepo.lastCapturedGuardianUid, 'HWB-GUARDIAN-NFC-01');
       },
@@ -963,8 +969,7 @@ void main() {
         await tester.pump();
 
         await tester.tap(find.byIcon(Icons.wifi));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 20));
+        await tester.pumpAndSettle();
 
         expect(fakeRepo.lastCapturedGuardianUid, isNull);
       });
@@ -986,13 +991,11 @@ void main() {
 
         await tester.enterText(find.byType(TextField), 'HWB-ADULTO-RESET');
         await tester.tap(find.byType(OutlinedButton));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 20));
+        await tester.pumpAndSettle();
 
         final NavigatorState navigator = tester.state(find.byType(Navigator));
         navigator.pop();
-        await tester.pump();
-        await tester.pump();
+        await tester.pumpAndSettle();
 
         expect(find.byType(TextField), findsOneWidget);
         expect(find.byIcon(Icons.wifi), findsOneWidget);
@@ -1020,15 +1023,13 @@ void main() {
           await tester.pump();
           await tester.enterText(find.byType(TextField), 'HWB-DAMAGED');
           await tester.tap(find.byType(OutlinedButton));
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 10));
+          await tester.pumpAndSettle();
 
           expect(find.textContaining('dañada'), findsOneWidget);
 
           fakeRepo.retiredReason = 'replaced';
           await tester.tap(find.byType(OutlinedButton));
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 10));
+          await tester.pumpAndSettle();
 
           expect(find.textContaining('reemplazada'), findsOneWidget);
         },
@@ -1053,8 +1054,7 @@ void main() {
           await tester.pump();
 
           await tester.tap(find.byIcon(Icons.wifi));
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 20));
+          await tester.pumpAndSettle();
 
           expect(find.textContaining('su sesión expiró'), findsOneWidget);
         },
@@ -1219,7 +1219,17 @@ void main() {
           ({required String alertMessage}) async => const HwbChipReadResult(
             uid: 'HWB-GUARDIAN-02',
             kind: HwbChipKind.guardian,
-            guardianRecord: <String, dynamic>{'patientId': 'p-minor-01'},
+            guardianRecord: <String, dynamic>{
+              'patientId': 'p-minor-01',
+              'patientInfo': {
+                'firstName': 'Ana',
+                'firstLastName': 'Gómez',
+                'identification': {
+                  'documentType': 'CC',
+                  'documentNumber': '12345',
+                },
+              },
+            },
             keyVersion: 4,
           );
 
@@ -1232,8 +1242,8 @@ void main() {
       );
 
       expect(profileScreen.patient.patientId, equals('p-minor-01'));
+      expect(profileScreen.patient.patientInfo.firstName, equals('Ana'));
       expect(find.byIcon(Icons.wifi), findsNothing);
-      expect(tester.takeException(), isNull);
     });
 
     testWidgets(

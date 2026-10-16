@@ -115,27 +115,40 @@ String formatNfcUid(Uint8List bytes) => bytes
 
 /// Normalises a UID for comparison: hex digits only, uppercased.
 ///
-/// Tolerates formatting differences (colons, case) between the value read at
-/// scan time and the value stored on the record.
-String normalizeNfcUid(String uid) =>
-    uid.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toUpperCase();
+String normalizeNfcUid(String uid) {
+  return uid.replaceAll(RegExp(r'[^0-9a-fA-F]'), '').toUpperCase();
+}
+
+// lib/src/core/nfc/nfc_session_types.dart
+
+/// Normaliza un UID tecleado manualmente conservando el casing original (mayúsculas/minúsculas)
+/// e insertando los dos puntos `:` en bloques de a 2 caracteres si es hexadecimal.
+String normalizeTypedNfcUid(String input) {
+  final String t = input.trim();
+  if (t.isEmpty) return '';
+
+  // Verifica si es una secuencia tipo hex/tecleada con posibles espacios, guiones o puntos
+  if (RegExp(r'^[0-9a-fA-F\s:.\-]+$').hasMatch(t)) {
+    // Quita caracteres no hexadecimales SIN modificar mayúsculas o minúsculas
+    final String cleanHex = t.replaceAll(RegExp(r'[^0-9a-fA-F]'), '');
+    if (cleanHex.isEmpty) return '';
+
+    final StringBuffer buffer = StringBuffer();
+    for (int i = 0; i < cleanHex.length; i += 2) {
+      if (i > 0) buffer.write(':');
+      if (i + 2 <= cleanHex.length) {
+        buffer.write(cleanHex.substring(i, i + 2));
+      } else {
+        buffer.write(cleanHex.substring(i));
+      }
+    }
+    return buffer.toString();
+  }
+
+  return t;
+}
 
 // ── Exceptions ──────────────────────────────────────────────────────────────
-//
-// Everything the radio can throw except [NfcNotAvailableException] extends
-// [NfcSessionException], which carries a display-ready [message]. This is the
-// error contract the eight scan screens are written against: they already do
-// `on NfcSessionException catch (e) => showError(e.message)`. Making the
-// specific failures subtypes means every one of them is caught and shown
-// without touching a single call site — and any NFC exception added later is
-// covered by construction. Get this wrong and a subtype escapes the catch and
-// reaches the UI as an unhandled exception, which is exactly what happened when
-// these were all bare `implements Exception`: a timeout surfaced as nothing at
-// all, the button just sat there.
-//
-// [NfcNotAvailableException] is deliberately NOT a subtype: every screen
-// catches it separately to render a distinct "no NFC hardware" state, so it
-// must not be swallowed by the generic handler.
 
 /// Base type for every recoverable NFC failure. Carries a message the UI can
 /// show as-is.

@@ -65,6 +65,7 @@ class _FakePatientRepository extends Fake implements PatientRepository {
 
   @override
   Future<PatientFullRecord> searchPatient({
+    String? accessReason,
     required String documentNumber,
     required String birthDate,
     required String firstName,

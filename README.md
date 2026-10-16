@@ -1,7 +1,7 @@
 # Health Without Borders - Frontend
 
 ![Flutter](https://img.shields.io/badge/Flutter-3.41.5-blue.svg)
-![Dart](https://img.shields.io/badge/Dart-3.8.0-0175C2.svg)
+![Dart](https://img.shields.io/badge/Dart-3.11.3-0175C2.svg)
 ![License](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/guane-hwb/health-without-borders-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/guane-hwb/health-without-borders-frontend/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/guane-hwb/health-without-borders-frontend/graph/badge.svg)](https://codecov.io/gh/guane-hwb/health-without-borders-frontend)
@@ -17,8 +17,9 @@ Cross-platform mobile and web client for the Health Without Borders initiative.
 ## Tech Stack
 
 - Flutter 3.41.5 (via FVM)
-- Dart 3.8.0
-- Target platforms: iOS, Android, macOS, Web
+- Dart 3.11.3
+- Supported platforms (with local offline storage): iOS, Android, macOS, Web
+- Linux and Windows: not supported yet — the local database is not initialised there
 
 ## Repository Structure
 

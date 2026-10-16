@@ -20,6 +20,21 @@ enum SyncOneResult { success, failure, busy, notFound }
 
 enum _SyncOutcome { success, failure, networkFailure, abortBatch }
 
+class SyncResult {
+  const SyncResult({
+    required this.allSuccessful,
+    required this.remainingRetryable,
+    required this.remainingBlocked,
+  });
+
+  final bool allSuccessful;
+  final int remainingRetryable;
+  final int remainingBlocked;
+
+  bool get isFullyClean => remainingRetryable == 0 && remainingBlocked == 0;
+  bool get hasBlockedOnly => remainingRetryable == 0 && remainingBlocked > 0;
+}
+
 /// What the server answered for a record it saved.
 class RecordSyncResult {
   const RecordSyncResult({
@@ -83,7 +98,7 @@ class SyncEngine {
     Duration(minutes: 30),
   ];
 
-  Future<bool>? _activeSyncAllFuture;
+  Future<SyncResult>? _activeSyncAllFuture;
   Completer<void>? _syncOneCompletion;
   bool get _syncOneRunning => _syncOneCompletion != null;
   Duration? _pendingServerRetryAfter;
@@ -103,10 +118,11 @@ class SyncEngine {
       final blocked = await _localDb.getBlockedCount(
         ownerUserId: _currentUserId,
       );
+      final quarantinedEntries = await _localDb.getWebQuarantinedEntries();
 
       pendingCount.value = retryable;
-      blockedCount.value = blocked;
-      totalCount.value = retryable + blocked;
+      blockedCount.value = blocked + quarantinedEntries.length;
+      totalCount.value = retryable + blocked + quarantinedEntries.length;
     } catch (e, stack) {
       AppLogger.e(
         'Error al refrescar conteo de pendientes',
@@ -202,7 +218,7 @@ class SyncEngine {
 
   // ── Sync logic ────────────────────────────────────────────────────────────
 
-  Future<bool> syncAll() {
+  Future<SyncResult> syncAll() {
     if (_activeSyncAllFuture != null) {
       AppLogger.d(
         'syncAll en ejecución: uniendo llamada al ciclo en curso (single-flight).',
@@ -210,11 +226,11 @@ class SyncEngine {
       return _activeSyncAllFuture!;
     }
 
-    final completer = Completer<bool>();
+    final completer = Completer<SyncResult>();
     _activeSyncAllFuture = completer.future;
 
     final Completer<void>? syncOneInFlight = _syncOneCompletion;
-    final Future<bool> Function() startCycle = _executeSyncAll;
+    final Future<SyncResult> Function() startCycle = _executeSyncAll;
 
     if (syncOneInFlight != null) {
       AppLogger.d('syncAll en espera: syncOne en ejecución.');
@@ -245,22 +261,36 @@ class SyncEngine {
     return _activeSyncAllFuture!;
   }
 
-  Future<bool> _executeSyncAll() async {
+  Future<SyncResult> _executeSyncAll() async {
     if (_currentUserId == null) {
       AppLogger.d('syncAll omitido: no hay sesión activa.');
-      return false;
+      return const SyncResult(
+        allSuccessful: false,
+        remainingRetryable: 0,
+        remainingBlocked: 0,
+      );
     }
 
     await refreshPendingCount();
     await _syncEmergencyLogs();
     await _syncNfcKeyVersions();
 
-    bool allSuccessful = true;
+    bool cycleBatchSuccessful = true;
 
     try {
       if (_reachability != null && !await _reachability.probe()) {
         AppLogger.d('Backend inalcanzable. Se omite el lote.');
-        return false;
+        final retryable = await _localDb.getRetryablePendingCount(
+          ownerUserId: _currentUserId,
+        );
+        final blocked = await _localDb.getBlockedCount(
+          ownerUserId: _currentUserId,
+        );
+        return SyncResult(
+          allSuccessful: false,
+          remainingRetryable: retryable,
+          remainingBlocked: blocked,
+        );
       }
 
       final List<LocalPatientEntry> allUnsynced = await _localDb
@@ -279,12 +309,12 @@ class SyncEngine {
       for (final entry in pending) {
         final outcome = await _syncOne(entry);
         if (outcome == _SyncOutcome.abortBatch) {
-          allSuccessful = false;
+          cycleBatchSuccessful = false;
           AppLogger.e('Lote abortado por sesión caducada.');
           break;
         }
         if (outcome == _SyncOutcome.networkFailure) {
-          allSuccessful = false;
+          cycleBatchSuccessful = false;
           consecutiveNetworkFailures++;
           if (consecutiveNetworkFailures >= maxConsecutiveNetworkFailures) {
             AppLogger.e(
@@ -296,19 +326,39 @@ class SyncEngine {
         }
         consecutiveNetworkFailures = 0;
         if (outcome != _SyncOutcome.success) {
-          allSuccessful = false;
+          cycleBatchSuccessful = false;
         }
       }
 
-      final remaining = await _localDb.getRetryablePendingCount(
+      final remainingRetryable = await _localDb.getRetryablePendingCount(
         ownerUserId: _currentUserId,
       );
-      onSyncStatusChanged?.call(remaining);
+      final remainingBlocked = await _localDb.getBlockedCount(
+        ownerUserId: _currentUserId,
+      );
 
-      return allSuccessful && remaining == 0;
+      onSyncStatusChanged?.call(remainingRetryable + remainingBlocked);
+
+      final bool overallSuccess = cycleBatchSuccessful && remainingBlocked == 0;
+
+      return SyncResult(
+        allSuccessful: overallSuccess,
+        remainingRetryable: remainingRetryable,
+        remainingBlocked: remainingBlocked,
+      );
     } catch (e, stack) {
       AppLogger.e('Error crítico durante syncAll', error: e, stackTrace: stack);
-      return false;
+      final retryable = await _localDb.getRetryablePendingCount(
+        ownerUserId: _currentUserId,
+      );
+      final blocked = await _localDb.getBlockedCount(
+        ownerUserId: _currentUserId,
+      );
+      return SyncResult(
+        allSuccessful: false,
+        remainingRetryable: retryable,
+        remainingBlocked: blocked,
+      );
     } finally {
       await refreshPendingCount();
       _scheduleRetry();
@@ -346,6 +396,13 @@ class SyncEngine {
       final bool saved = response.status == 'success';
       if (saved && fhirOk) {
         AppLogger.d('Registro sincronizado exitosamente: ${entry.patientId}');
+        if (response.conflicts.isNotEmpty) {
+          AppLogger.d(
+            'Sync de ${entry.patientId} aceptado con conflictos: '
+            '${response.conflicts.join(', ')}',
+          );
+        }
+
         await _localDb.markSynced(
           entry.patientId,
           createdAt: entry.createdAt,
@@ -385,9 +442,6 @@ class SyncEngine {
         return _SyncOutcome.abortBatch;
       }
 
-      // Deactivated account or organization: the session is being ended (see
-      // ApiClient.onAccountInactive). Nothing is wrong with the record, so it
-      // stays pending instead of being marked as failed.
       if (ApiErrorCode.isAccountInactive(e.code)) {
         onRecordSynced?.call(entry.patientId, false, e.code);
         return _SyncOutcome.abortBatch;
@@ -400,8 +454,6 @@ class SyncEngine {
               e.statusCode! >= 500 &&
               e.statusCode! <= 599);
 
-      // A known code is stored as-is and translated when shown (see
-      // ApiErrorCode.describe), so the queue never has to parse server text.
       final String safeMsg = (ApiErrorCode.describe(e.code, isEs: true) != null)
           ? e.code!
           : (e.statusCode == 409 && e.message.isNotEmpty)
@@ -436,8 +488,7 @@ class SyncEngine {
         stackTrace: stack,
       );
 
-      final bool isSocketException =
-          e is SocketException || e.toString().contains('SocketException');
+      final bool isSocketException = e is SocketException;
       final bool isTimeout = e is TimeoutException;
 
       final bool isNetworkError =
@@ -561,10 +612,6 @@ class SyncEngine {
     }
   }
 
-  /// Ships pending NFC key version sightings.
-  ///
-  /// Best-effort like the audit log: a failure here delays a rotation decision,
-  /// never a clinical action, so it must not abort the batch.
   Future<void> _syncNfcKeyVersions() async {
     try {
       final pending = await _localDb.pendingNfcKeyVersions();

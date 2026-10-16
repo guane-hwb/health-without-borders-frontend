@@ -90,6 +90,7 @@ class PatientRepository {
     required String firstName,
     required String lastName,
     String? guardianName,
+    String? accessReason,
   }) async {
     final Map<String, dynamic> searchBody = <String, dynamic>{
       'document_number': documentNumber,
@@ -99,6 +100,9 @@ class PatientRepository {
     };
     if (guardianName != null && guardianName.isNotEmpty) {
       searchBody['guardian_name'] = guardianName;
+    }
+    if (accessReason != null && accessReason.isNotEmpty) {
+      searchBody['access_reason'] = accessReason;
     }
 
     final Map<String, dynamic> data = await _apiClient.postJson(
@@ -113,9 +117,22 @@ class PatientRepository {
   /// Envía la bitácora de accesos break-glass registrados offline.
   Future<void> reportEmergencyAccess(List<Map<String, Object?>> entries) async {
     if (entries.isEmpty) return;
+
+    final List<Map<String, dynamic>> sanitizedEntries = entries
+        .map(
+          (Map<String, Object?> e) => <String, dynamic>{
+            'client_event_id': e['client_event_id'],
+            'patient_uid': e['patient_uid'],
+            'user_id': e['user_id'],
+            'reason': e['reason'],
+            'occurred_at': e['occurred_at'],
+          },
+        )
+        .toList();
+
     await _apiClient.postJson(
       path: '/api/v1/patients/emergency-access',
-      body: <String, dynamic>{'entries': entries},
+      body: <String, dynamic>{'entries': sanitizedEntries},
       headers: await _authHeaders(),
     );
   }
