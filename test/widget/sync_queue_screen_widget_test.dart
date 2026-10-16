@@ -81,11 +81,13 @@ Widget buildTestApp({
   required MockSyncEngine syncEngine,
   required MockReachability reachability,
   String locale = 'es',
+  UserSession? user,
 }) {
   final mockAuth = MockAuthRepository();
   when(
     () => mockAuth.sessionNotifier,
-  ).thenReturn(ValueNotifier<UserSession?>(null));
+  ).thenReturn(ValueNotifier<UserSession?>(user));
+  when(() => mockAuth.currentUser).thenReturn(user);
 
   return AppScope(
     authRepository: mockAuth,
@@ -172,6 +174,83 @@ void main() {
           const MethodChannel('dev.fluttercommunity.plus/connectivity'),
           null,
         );
+  });
+
+  group('SyncQueueScreen – pendientes de otro usuario', () {
+    final UserSession doctorB = UserSession(
+      id: 'doc-b',
+      email: 'b@hwb.org',
+      fullName: 'Doctor B',
+      role: UserRole.doctor,
+      organizationId: 'org-1',
+    );
+
+    testWidgets(
+      'lista solo lo del usuario y cuenta, sin nombres, lo de otros',
+      (tester) async {
+        when(
+          () => db.getUnsyncedRecords(ownerUserId: 'doc-b'),
+        ).thenAnswer((_) async => [makeEntry(patientName: 'Juan Diaz')]);
+        when(
+          () => db.getForeignPendingCount(ownerUserId: 'doc-b'),
+        ).thenAnswer((_) async => 2);
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+            reachability: reachability,
+            user: doctorB,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Juan D.'), findsOneWidget);
+        expect(
+          find.text(
+            '2 registros de otro usuario esperan a que esa persona inicie '
+            'sesión en este teléfono para sincronizarse.',
+          ),
+          findsOneWidget,
+        );
+        verify(() => db.getUnsyncedRecords(ownerUserId: 'doc-b')).called(1);
+        verifyNever(() => db.getUnsyncedRecords());
+      },
+    );
+
+    testWidgets(
+      'con un solo registro ajeno y nada propio, lo dice en singular',
+      (tester) async {
+        when(
+          () => db.getUnsyncedRecords(ownerUserId: 'doc-b'),
+        ).thenAnswer((_) async => <LocalPatientEntry>[]);
+        when(
+          () => db.getForeignPendingCount(ownerUserId: 'doc-b'),
+        ).thenAnswer((_) async => 1);
+
+        await tester.pumpWidget(
+          buildTestApp(
+            child: const SyncQueueScreen(),
+            db: db,
+            syncEngine: syncEngine,
+            reachability: reachability,
+            user: doctorB,
+            locale: 'en',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(
+            '1 record from another user waits for that person to sign in on '
+            'this phone to sync.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.byIcon(Icons.cloud_done), findsOneWidget);
+      },
+    );
   });
 
   group('SyncQueueScreen – avisos de sincronización', () {
@@ -1320,6 +1399,35 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(PatientProfileScreen), findsOneWidget);
+    });
+
+    testWidgets('"Sync ahora" de un registro que ya no está pendiente no '
+        'dice que se sincronizó', (tester) async {
+      when(
+        () => db.getUnsyncedRecords(),
+      ).thenAnswer((_) async => [makeEntry()]);
+      when(
+        () => syncEngine.syncOne(any()),
+      ).thenAnswer((_) async => SyncOneResult.notFound);
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sync ahora'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Este registro ya no está pendiente.'), findsOneWidget);
+      expect(
+        find.text(AppStrings.forTesting('es').syncedSuccessfully),
+        findsNothing,
+      );
     });
 
     testWidgets(

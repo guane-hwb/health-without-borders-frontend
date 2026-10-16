@@ -25,6 +25,7 @@ class SyncQueueScreen extends StatefulWidget {
 class _SyncQueueScreenState extends State<SyncQueueScreen> {
   List<LocalPatientEntry> _entries = [];
   List<SyncNotice> _notices = [];
+  int _foreignPending = 0;
   bool _loading = true, _syncing = false;
   int _syncedSoFar = 0;
   int _syncTotal = 0;
@@ -38,15 +39,22 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final scope = AppScope.of(context);
-    final e = await scope.localDatabase.getUnsyncedRecords();
+    final String? userId = scope.authRepository.currentUser?.id;
+    // Only what this user can sync, as the engine selects it. Another
+    // user's rows wait for that person; they are counted, never listed.
+    final e = await scope.localDatabase.getUnsyncedRecords(ownerUserId: userId);
     final notices = await scope.localDatabase.getSyncNotices(
-      ownerUserId: scope.authRepository.currentUser?.id,
+      ownerUserId: userId,
     );
+    final int foreign = userId == null
+        ? 0
+        : await scope.localDatabase.getForeignPendingCount(ownerUserId: userId);
 
     if (mounted) {
       setState(() {
         _entries = e;
         _notices = notices;
+        _foreignPending = foreign;
         _loading = false;
       });
       await scope.syncEngine.refreshPendingCount();
@@ -167,7 +175,12 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
     if (mounted) {
       final (String message, Color color) = switch (result) {
         SyncOneResult.success => (s.syncedSuccessfully, AppColors.success),
-        SyncOneResult.notFound => (s.syncedSuccessfully, AppColors.success),
+        SyncOneResult.notFound => (
+          isEs
+              ? 'Este registro ya no está pendiente.'
+              : 'This record is no longer pending.',
+          AppColors.secondary,
+        ),
         SyncOneResult.busy => (s.synchronizing, AppColors.secondary),
         SyncOneResult.failure => (s.syncFailedRetry, AppColors.error),
       };
@@ -415,6 +428,8 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                     ],
                   ),
                 ),
+                if (_foreignPending > 0)
+                  _ForeignPendingNote(count: _foreignPending),
                 const SizedBox(height: 14),
                 Expanded(
                   child: _loading
@@ -815,6 +830,57 @@ class _SyncNoticeCard extends StatelessWidget {
                   color: AppColors.primary,
                   fontWeight: FontWeight.bold,
                 ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Records another user left pending on this device: only their number, no
+/// names, since this user can neither see nor sync them.
+class _ForeignPendingNote extends StatelessWidget {
+  const _ForeignPendingNote({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isEs = AppStrings.of(context).isEs;
+    final String text = switch ((count == 1, isEs)) {
+      (true, true) =>
+        '1 registro de otro usuario espera a que esa persona inicie sesión '
+            'en este teléfono para sincronizarse.',
+      (false, true) =>
+        '$count registros de otro usuario esperan a que esa persona inicie '
+            'sesión en este teléfono para sincronizarse.',
+      (true, false) =>
+        '1 record from another user waits for that person to sign in on '
+            'this phone to sync.',
+      (false, false) =>
+        '$count records from another user wait for that person to sign in '
+            'on this phone to sync.',
+    };
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.lock_outline,
+            size: 16,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.3,
+                color: AppColors.textSecondary,
               ),
             ),
           ),

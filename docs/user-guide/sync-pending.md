@@ -41,4 +41,13 @@ Scan the patient device again to see the server's version, then update the
 patient device and the guardian device from the profile. Tap **Got it** to dismiss the
 notice. The same notice appears on the patient's profile.
 
+---
+
+## 5. Records left by another user
+
+Records stay on the phone when their author signs out. If someone else signs in
+on the same phone, they do not see those records and cannot sync them: the queue
+only says how many are waiting. They sync when their author signs in on that
+phone again. Nothing is deleted when users change.
+
 **Note:** Technical system-error details are intentionally hidden from this screen to keep it clear. When you sign out, the app warns you if records are still pending — sync them first whenever possible so nothing is left only on the device.

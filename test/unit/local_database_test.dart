@@ -3625,6 +3625,35 @@ void main() {
         expect(after.revision, sent.revision);
       });
 
+      test(
+        'getForeignPendingCount cuenta solo lo pendiente de otros dueños',
+        () async {
+          await localDb.savePatient(
+            _buildRecord(patientId: 'f-a1'),
+            ownerUserId: 'doc-a',
+          );
+          await localDb.savePatient(
+            _buildRecord(patientId: 'f-a2'),
+            ownerUserId: 'doc-a',
+          );
+          await localDb.savePatient(
+            _buildRecord(patientId: 'f-b1'),
+            ownerUserId: 'doc-b',
+          );
+          await localDb.savePatient(_buildRecord(patientId: 'f-none'));
+
+          expect(await localDb.getForeignPendingCount(ownerUserId: 'doc-b'), 2);
+          expect(await localDb.getForeignPendingCount(ownerUserId: 'doc-a'), 1);
+          expect(await localDb.getForeignPendingCount(ownerUserId: 'doc-c'), 3);
+
+          final mine = await localDb.getUnsyncedRecords(ownerUserId: 'doc-b');
+          expect(
+            mine.map((LocalPatientEntry e) => e.patientId).toSet(),
+            <String>{'f-b1', 'f-none'},
+          );
+        },
+      );
+
       test('rebasePending no toca una edición posterior', () async {
         await localDb.savePatient(
           _buildRecord(patientId: 'v-3').copyWith(recordVersion: 4),
