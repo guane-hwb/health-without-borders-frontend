@@ -125,6 +125,20 @@ own). The engine announces every saved record on `SyncEngine.savedRecords`:
 - If only the FHIR delivery failed, the row stays queued to re-send the bundles
   and is moved onto the new version, since it holds exactly what was saved.
 
+### Records of another user
+
+Every row carries `owner_user_id`. The engine, the sync queue and the home counts
+select the signed-in user's rows (and ownerless rows, which the first sync
+adopts). Another user's pending rows stay on the device, encrypted and unlisted,
+until that user signs in again; the queue only shows how many there are.
+Signing in as someone else no longer blocks or offers to discard them.
+
+`AuthRepository.clearSession()` deletes only the session's keys on a phone. On
+Android `flutter_secure_storage` keeps every key in one file, the local
+database's AES keys included, so `deleteAll()` would leave the pending rows
+unreadable after a restart. On the web it still deletes everything, and logout
+wipes the local PHI.
+
 ## Scrubbing of Clinical Data
 
 Once a record is successfully synchronized with the backend (HTTP 201), the app removes the entry from local storage (markSynced deletes the row in local_patients).

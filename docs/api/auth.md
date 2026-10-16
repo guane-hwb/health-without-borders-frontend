@@ -94,7 +94,9 @@ if (AppScope.of(context).currentUser?.role.canAddConsultation ?? false)
 
 ```dart
 await authRepository.logout();
-// Deletes the token from FlutterSecureStorage and clears the session
+// Deletes the session keys (tokens, NFC keyring, clock mark, session) and
+// clears the session. The local database keys and hwb_last_user_id stay:
+// pending records survive a logout.
 ```
 
 After logout, the app navigates to the `LoginScreen` and the `SyncEngine` must stop.
