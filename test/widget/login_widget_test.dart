@@ -17,7 +17,6 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
-import 'package:health_without_borders_frontend/src/features/auth/presentation/foreign_data_reconciliation_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
@@ -571,32 +570,6 @@ void main() {
 
       expect(mockAuthRepo.loginCalled, isTrue);
     });
-
-    testWidgets(
-      'navega a ForeignDataReconciliationScreen al lanzar ForeignPendingDataException',
-      (tester) async {
-        mockAuthRepo.loginHandler =
-            ({required String email, required String password}) async {
-              throw ForeignPendingDataException(
-                previousOwnerUserId: 'previo-123',
-                newUserId: 'nuevo-456',
-                pendingPatients: 2,
-                pendingEmergencyLogs: 1,
-              );
-            };
-
-        await tester.pumpWidget(buildSubject());
-        await tester.enterText(
-          find.byType(TextFormField).first,
-          'usuario@test.com',
-        );
-        await tester.enterText(find.byType(TextFormField).last, 'password123');
-        await tester.tap(find.byType(ElevatedButton));
-        await tester.pumpAndSettle();
-
-        expect(find.byType(ForeignDataReconciliationScreen), findsOneWidget);
-      },
-    );
 
     testWidgets(
       'muestra SnackBar de conexión requerida al capturar un error genérico de SocketException',

@@ -1740,6 +1740,30 @@ class LocalDatabase {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  /// Pending records another user left on this device. They wait for that
+  /// person to sign in here again; [ownerUserId] can neither see nor sync
+  /// them, so only their number is ever shown.
+  Future<int> getForeignPendingCount({required String ownerUserId}) async {
+    if (_isWeb) {
+      final store = await _webAllPatients();
+      return store
+          .where(
+            (r) =>
+                (r['is_synced'] as int) == 0 &&
+                r['owner_user_id'] != null &&
+                r['owner_user_id'] != ownerUserId,
+          )
+          .length;
+    }
+    final db = await _database;
+    final result = await db!.rawQuery(
+      'SELECT COUNT(*) as cnt FROM $_table WHERE is_synced = 0 '
+      'AND owner_user_id IS NOT NULL AND owner_user_id != ?',
+      <Object>[ownerUserId],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
   Future<int> getUnsyncedEmergencyLogCount({String? ownerUserId}) async {
     if (_isWeb) {
       final logs = await _webAllLogRows();

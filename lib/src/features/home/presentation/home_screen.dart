@@ -43,9 +43,16 @@ class HomeScreen extends StatelessWidget {
 
     int pendingPatients = 0;
     int pendingLogs = 0;
+    // On a phone another user's pending rows stay after this logout and wait
+    // for them; on the web the logout erases everything, so all of it counts.
+    final String? owner = kIsWeb ? null : scope.currentUser?.id;
     try {
-      pendingPatients = await scope.localDatabase.getUnsyncedCount();
-      pendingLogs = await scope.localDatabase.getUnsyncedEmergencyLogCount();
+      pendingPatients = await scope.localDatabase.getUnsyncedCount(
+        ownerUserId: owner,
+      );
+      pendingLogs = await scope.localDatabase.getUnsyncedEmergencyLogCount(
+        ownerUserId: owner,
+      );
     } catch (_) {}
 
     if (!dialogContext.mounted) return;
@@ -645,8 +652,11 @@ class _SyncCardState extends State<_SyncCard> {
     int notices = _noticeCount;
 
     try {
-      pending = await scope.localDatabase.getRetryablePendingCount();
-      blocked = await scope.localDatabase.getBlockedCount();
+      final String? owner = scope.authRepository.currentUser?.id;
+      pending = await scope.localDatabase.getRetryablePendingCount(
+        ownerUserId: owner,
+      );
+      blocked = await scope.localDatabase.getBlockedCount(ownerUserId: owner);
     } catch (_) {}
     try {
       notices = (await scope.localDatabase.getSyncNotices(
