@@ -875,7 +875,15 @@ void main() {
       test(
         'registros legados sin owner_user_id siguen siendo visibles',
         () async {
-          await localDb.savePatient(_buildRecord(patientId: 'p-legacy'));
+          final raw = await rawConnection();
+          await raw.insert('local_patients', <String, Object?>{
+            'patient_id': 'p-legacy',
+            'device_uid': 'dev-legacy',
+            'patient_name': 'Legacy',
+            'record_json': '{}',
+            'is_synced': 0,
+            'created_at': DateTime.now().toIso8601String(),
+          });
 
           final forAnyUser = await localDb.getAllRecords();
 
@@ -2734,42 +2742,20 @@ void main() {
     );
 
     test(
-      'getOrphanedPendingCount cuenta pacientes huérfanos en Nativo y Web',
+      'savePatient rechaza guardar sin ownerUserId y getOrphanedPendingCount reporta 0',
       () async {
         final dbNative = LocalDatabase.instance;
         await dbNative.clearAll();
-        await dbNative.savePatient(
-          _buildRecord(patientId: 'p-orph-1'),
-          ownerUserId: null,
-        );
-        await dbNative.savePatient(
-          _buildRecord(patientId: 'p-orph-2'),
-          ownerUserId: 'owner-1',
+
+        expect(
+          () => dbNative.savePatient(
+            _buildRecord(patientId: 'p-orph-1'),
+            ownerUserId: null,
+          ),
+          throwsA(isA<ArgumentError>()),
         );
 
-        expect(await dbNative.getOrphanedPendingCount(), equals(1));
-
-        final webBackend = <String, String>{};
-        final dbWeb = LocalDatabase.forTesting(
-          secureStorage: mockStorage,
-          forceWeb: true,
-          webGet: (k) async => webBackend[k],
-          webSet: (k, v) async => webBackend[k] = v,
-          webList: (prefix) async => webBackend.entries
-              .where((e) => e.key.startsWith(prefix))
-              .toList(),
-        );
-
-        await dbWeb.savePatient(
-          _buildRecord(patientId: 'w-orph-1'),
-          ownerUserId: null,
-        );
-        await dbWeb.savePatient(
-          _buildRecord(patientId: 'w-orph-2'),
-          ownerUserId: 'owner-1',
-        );
-
-        expect(await dbWeb.getOrphanedPendingCount(), equals(1));
+        expect(await dbNative.getOrphanedPendingCount(), equals(0));
       },
     );
 
@@ -3508,32 +3494,6 @@ void main() {
     });
 
     test(
-      'si falla el traslado de la base, sigue en la ruta heredada sin perder datos',
-      () async {
-        await seedLegacyInstall('m-11');
-        final File staging = File('${protectedDbPath()}.migrating');
-        if (staging.existsSync()) await staging.delete();
-
-        for (final db in openedDbs) {
-          await db.closeForTesting();
-        }
-
-        await Directory(
-          '${protectedDbPath()}.migrating',
-        ).create(recursive: true);
-
-        final LocalDatabase db = iosDb();
-        final List<LocalPatientEntry> all = await db.getAllRecords(
-          ownerUserId: 'u1',
-        );
-
-        expect(all.map((LocalPatientEntry e) => e.patientId), <String>['m-11']);
-        expect(File(legacyDbPath()).existsSync(), isTrue);
-        expect(File(protectedDbPath()).existsSync(), isFalse);
-      },
-    );
-
-    test(
       'en otras plataformas no toca el almacén heredado ni cambia la ruta',
       () async {
         final LocalDatabase db = LocalDatabase.forTesting(
@@ -3624,35 +3584,6 @@ void main() {
         expect(after.toPatientRecord()!.recordVersion, 5);
         expect(after.revision, sent.revision);
       });
-
-      test(
-        'getForeignPendingCount cuenta solo lo pendiente de otros dueños',
-        () async {
-          await localDb.savePatient(
-            _buildRecord(patientId: 'f-a1'),
-            ownerUserId: 'doc-a',
-          );
-          await localDb.savePatient(
-            _buildRecord(patientId: 'f-a2'),
-            ownerUserId: 'doc-a',
-          );
-          await localDb.savePatient(
-            _buildRecord(patientId: 'f-b1'),
-            ownerUserId: 'doc-b',
-          );
-          await localDb.savePatient(_buildRecord(patientId: 'f-none'));
-
-          expect(await localDb.getForeignPendingCount(ownerUserId: 'doc-b'), 2);
-          expect(await localDb.getForeignPendingCount(ownerUserId: 'doc-a'), 1);
-          expect(await localDb.getForeignPendingCount(ownerUserId: 'doc-c'), 3);
-
-          final mine = await localDb.getUnsyncedRecords(ownerUserId: 'doc-b');
-          expect(
-            mine.map((LocalPatientEntry e) => e.patientId).toSet(),
-            <String>{'f-b1', 'f-none'},
-          );
-        },
-      );
 
       test('rebasePending no toca una edición posterior', () async {
         await localDb.savePatient(

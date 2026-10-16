@@ -129,6 +129,7 @@ void main() {
     when(
       () => localDb.getBlockedCount(ownerUserId: any(named: 'ownerUserId')),
     ).thenAnswer((_) async => 0);
+    when(() => localDb.getWebQuarantinedEntries()).thenAnswer((_) async => []);
     when(
       () => localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
     ).thenAnswer((_) async => []);
@@ -536,9 +537,9 @@ void main() {
           ApiException('Inactive user', statusCode: 403, code: 'user_inactive'),
         );
 
-        final ok = await engine.syncAll();
+        final result = await engine.syncAll();
 
-        expect(ok, isFalse);
+        expect(result.allSuccessful, isFalse);
         verify(() => patientRepo.syncPatient(any())).called(1);
         verifyNever(
           () => localDb.markSyncError(
@@ -1514,7 +1515,7 @@ void main() {
 
         final results = await Future.wait([syncOneFuture, syncAllFuture]);
         expect(results[0], equals(SyncOneResult.success));
-        expect(results[1], isTrue);
+        expect((results[1] as SyncResult).allSuccessful, isTrue);
       },
     );
 
@@ -1534,13 +1535,13 @@ void main() {
 
   group('_executeSyncAll condiciones límite y alcance de red', () {
     test(
-      'syncAll se omite y retorna false si no hay usuario autenticado',
+      'syncAll se omite y retorna allSuccessful = false si no hay usuario autenticado',
       () async {
         when(() => authRepo.currentUser).thenReturn(null);
 
         final result = await engine.syncAll();
 
-        expect(result, isFalse);
+        expect(result.allSuccessful, isFalse);
         verifyNever(
           () => localDb.getUnsyncedRecords(
             ownerUserId: any(named: 'ownerUserId'),
@@ -1564,7 +1565,7 @@ void main() {
 
         final result = await reachEngine.syncAll();
 
-        expect(result, isFalse);
+        expect(result.allSuccessful, isFalse);
         verifyNever(
           () => localDb.getUnsyncedRecords(
             ownerUserId: any(named: 'ownerUserId'),
@@ -1575,7 +1576,7 @@ void main() {
     );
 
     test(
-      'syncAll atrapa excepciones críticas dentro del bloque try y retorna false',
+      'syncAll atrapa excepciones críticas dentro del bloque try y retorna allSuccessful = false',
       () async {
         when(
           () => localDb.getUnsyncedRecords(
@@ -1585,7 +1586,7 @@ void main() {
 
         final result = await engine.syncAll();
 
-        expect(result, isFalse);
+        expect(result.allSuccessful, isFalse);
       },
     );
   });
@@ -1844,7 +1845,8 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       when(() => authRepo.currentUser).thenReturn(testUser);
-      await expectLater(engine.syncAll(), completion(isTrue));
+      final result = await engine.syncAll();
+      expect(result.allSuccessful, isTrue);
     });
 
     test(
