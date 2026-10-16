@@ -330,8 +330,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
     setState(() => _isUpdatingChips = true);
     var record = _draft;
-    var patientDone = false;
-    var guardianDone = false;
+    final List<ReassignTarget> done = <ReassignTarget>[];
 
     for (final target in selection.targets) {
       final updated = await PatientProfileScreen.executeReassignOneImpl(
@@ -345,14 +344,12 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       if (!mounted) return;
       if (updated == null) break;
       record = updated;
-      if (target == ReassignTarget.patient) {
-        patientDone = true;
-      } else {
-        guardianDone = true;
-      }
+      done.add(target);
     }
 
     if (!mounted) return;
+    final bool patientDone = done.contains(ReassignTarget.patient);
+    final bool guardianDone = done.any((t) => t != ReassignTarget.patient);
     if (!patientDone && !guardianDone) {
       setState(() => _isUpdatingChips = false);
       return;
@@ -371,6 +368,19 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         patient: patientDone,
         guardian: guardianDone,
       );
+      // The devices that were not written still name the old one.
+      final g1 = (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
+      final g2 = (record.guardian2Info?.deviceUid ?? '').trim().isNotEmpty;
+      final stale = devicesStaleAfterReassign(
+        done: done,
+        hasGuardianDevice: g1 || g2,
+        hasTwoGuardianDevices: g1 && g2,
+      );
+      await scope.localDatabase.markChipsDirty(
+        record.patientId,
+        patient: stale.patient,
+        guardian: stale.guardian,
+      );
       if (!mounted) return;
       setState(() {
         _draftController.reset(record);
@@ -383,6 +393,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       _showReassignSnack(
         isEs ? 'Dispositivo reasignado.' : 'Device reassigned.',
       );
+      if ((stale.patient || stale.guardian) &&
+          await confirmRewriteOtherDevices(context, isEs: isEs)) {
+        await _updateNfcChips();
+      }
     } catch (e, stack) {
       AppLogger.e('Fallo al reasignar', error: e, stackTrace: stack);
       if (!mounted) return;
