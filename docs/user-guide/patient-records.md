@@ -56,4 +56,4 @@ The patient's other devices still name the old one: the patient device lists the
 - **Write now** — write them right away, in the same visit.
 - **Later** — the record shows **"NFC backup out of date"** until you write them.
 
-Write them before the patient leaves. Until then, the devices may not work offline with the new one.
+Write them before the patient leaves. If a guardian device was reassigned, until the patient device is written the new guardian device does not open the record offline, and the old one still does.
