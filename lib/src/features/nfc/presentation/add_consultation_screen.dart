@@ -306,7 +306,13 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
     try {
       final scope = AppScope.of(context);
-      await scope.localDatabase.savePatient(updatedRecord);
+      final currentUser = scope.authRepository.currentUser;
+
+      await scope.localDatabase.savePatient(
+        updatedRecord,
+        ownerUserId: currentUser?.id,
+        organizationId: currentUser?.organizationId,
+      );
       await scope.localDatabase.markChipsDirty(
         updatedRecord.patientId,
         guardian: true,

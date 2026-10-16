@@ -1,6 +1,10 @@
 // lib/src/features/auth/presentation/login_screen.dart
 
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
@@ -15,9 +19,6 @@ import 'foreign_data_reconciliation_screen.dart';
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.showSessionExpired = false});
 
-  /// When true, shows a one-time "session expired — sign in again" notice on the
-  /// first frame. Set when a forced sign-out (rejected refresh token) routed the
-  /// user back to login.
   final bool showSessionExpired;
 
   @override
@@ -42,8 +43,6 @@ class _LoginScreenState extends State<LoginScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final s = AppStrings.of(context);
-        // A deactivated account ends the session like an expiry does, but
-        // "session expired" would send the person to sign in again in vain.
         final String? inactive = ApiErrorCode.describe(
           AppScope.of(context).authRepository.accountInactiveCode.value,
           isEs: s.isEs,
@@ -352,14 +351,13 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      final isNetworkError =
-          e.message.toLowerCase().contains('socketexception') ||
-          e.message.toLowerCase().contains('network') ||
-          e.message.toLowerCase().contains('connection');
+      if (e.message.contains('SocketException') ||
+          e.message.contains('Failed host lookup')) {
+        _showNetworkErrorSnackBar(s.loginNetworkRequired);
+        return;
+      }
 
-      final errorMessage = isNetworkError
-          ? s.loginNetworkRequired
-          : e.statusCode == 429
+      final errorMessage = e.statusCode == 429
           ? ApiErrorCode.tooManyAttempts(e.retryAfter, isEs: s.isEs)
           : ApiErrorCode.describe(e.code, isEs: s.isEs) ?? e.message;
 
@@ -374,38 +372,40 @@ class _LoginScreenState extends State<LoginScreen> {
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         ),
       );
+    } on SocketException {
+      if (!mounted) return;
+      _showNetworkErrorSnackBar(s.loginNetworkRequired);
+    } on TimeoutException {
+      if (!mounted) return;
+      _showNetworkErrorSnackBar(s.loginNetworkRequired);
+    } on http.ClientException {
+      if (!mounted) return;
+      _showNetworkErrorSnackBar(s.loginNetworkRequired);
     } catch (e) {
       if (!mounted) return;
-      final errStr = e.toString().toLowerCase();
-      final isNetworkError =
-          errStr.contains('socketexception') ||
-          errStr.contains('network') ||
-          errStr.contains('failed host lookup');
-
-      final errorMessage = isNetworkError
-          ? s.loginNetworkRequired
-          : s.loginFailed;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: Colors.red.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        ),
-      );
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Failed host lookup')) {
+        _showNetworkErrorSnackBar(s.loginNetworkRequired);
+      } else {
+        _showNetworkErrorSnackBar(s.loginFailed);
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
+  void _showNetworkErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      ),
+    );
+  }
 }
-
-// ── Logo ────────────────────────────────────────────────────────────────────
-
-// ── Labeled field ───────────────────────────────────────────────────────────
 
 class _LabeledField extends StatelessWidget {
   const _LabeledField({
@@ -507,8 +507,6 @@ class _LabeledField extends StatelessWidget {
   }
 }
 
-// ── Remember checkbox ───────────────────────────────────────────────────────
-
 class _RememberCheckbox extends StatelessWidget {
   const _RememberCheckbox({
     required this.value,
@@ -558,8 +556,6 @@ class _RememberCheckbox extends StatelessWidget {
     );
   }
 }
-
-// ── Language toggle (ES / EN pill) ──────────────────────────────────────────
 
 class _LanguageToggle extends StatelessWidget {
   const _LanguageToggle({required this.onTap});
