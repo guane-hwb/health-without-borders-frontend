@@ -28,7 +28,7 @@ import 'package:health_without_borders_frontend/src/core/network/reachability.da
 
 class MockLocalDatabase extends Mock implements LocalDatabase {}
 
-class FakeAuthRepository implements AuthRepository {
+class FakeAuthRepository extends Mock implements AuthRepository {
   FakeAuthRepository({this.currentUser});
 
   final List<String> changedTo = <String>[];
