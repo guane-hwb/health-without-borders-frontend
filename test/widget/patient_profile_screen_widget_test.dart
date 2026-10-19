@@ -3425,6 +3425,9 @@ void main() {
       ]);
       expect(await fakes.db.getChipStatus('pid-001'), isNull);
       expect(find.byType(NfcStaleBanner), findsNothing);
+      // The old guardian device is refused offline from now on.
+      expect(await fakes.db.isDeviceRetired('gdev-001'), isTrue);
+      expect(await fakes.db.isDeviceRetired('gdev-NEW'), isFalse);
     });
 
     testWidgets('cambiar el dispositivo del paciente deja marcados los del '
@@ -3444,6 +3447,7 @@ void main() {
       expect(status?.patientChipDirty, isFalse);
       expect(status?.guardianChipDirty, isTrue);
       expect(find.byType(NfcStaleBanner), findsOneWidget);
+      expect(await fakes.db.isDeviceRetired('dev-001'), isTrue);
     });
 
     testWidgets('sin otros dispositivos que lo nombren, no pregunta nada', (
