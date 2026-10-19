@@ -26,7 +26,7 @@ class ApiException implements Exception {
 
   @override
   String toString() =>
-      'ApiException(statusCode: $statusCode, message: $message, retryAfter: $retryAfter'
+      'ApiException(statusCode: $statusCode, message: $message, retryAfter:$retryAfter'
       '${code == null ? '' : ', code: $code'})';
 }
 
@@ -54,6 +54,7 @@ class ApiClient {
   static const List<String> _publicRoutes = <String>[
     '/api/v1/login/access-token',
     '/api/v1/login/refresh',
+    '/api/v1/logout',
   ];
 
   TokenProvider? _tokenProvider;

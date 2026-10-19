@@ -24,6 +24,7 @@ dependencies:
 
   # ── cryptography ──
   cryptography: ^2.5.0
+  crypto: ^3.0.6
 
   # ── Config ──
   flutter_dotenv: ^6.0.0

@@ -25,7 +25,7 @@ void main() {
 
       expect(
         exception.toString(),
-        'ApiException(statusCode: 500, message: algo falló, retryAfter: null)',
+        'ApiException(statusCode: 500, message: algo falló, retryAfter:null)',
       );
     });
 
@@ -36,7 +36,7 @@ void main() {
       expect(exception.message, 'sin status');
       expect(
         exception.toString(),
-        'ApiException(statusCode: null, message: sin status, retryAfter: null)',
+        'ApiException(statusCode: null, message: sin status, retryAfter:null)',
       );
     });
   });
@@ -98,7 +98,7 @@ void main() {
     test('toString incluye el code cuando existe', () {
       expect(
         ApiException('x', statusCode: 403, code: 'user_inactive').toString(),
-        'ApiException(statusCode: 403, message: x, retryAfter: null, '
+        'ApiException(statusCode: 403, message: x, retryAfter:null, '
         'code: user_inactive)',
       );
     });

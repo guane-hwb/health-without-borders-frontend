@@ -1,0 +1,327 @@
+name: Release Pipeline
+
+# Una etiqueta vX.Y.Z publica los binarios firmados en una Release.
+# workflow_dispatch construye y deja los artefactos en la ejecución, sin publicar:
+# sirve para probar el pipeline (en especial el job de iOS) sin crear una etiqueta.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: "3.41.5"
+  # La URL de producción se puede cambiar con la variable de repositorio API_BASE_URL.
+  API_BASE_URL: ${{ vars.API_BASE_URL || 'https://api.healthwithoutborders.org' }}
+
+jobs:
+  # ── Versión: la etiqueta manda; el número de build crece con cada ejecución ──
+  prepare:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.v.outputs.name }}
+      number: ${{ steps.v.outputs.number }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Resolve build name and number
+        id: v
+        env:
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [[ "$REF" == refs/tags/v* ]]; then
+            NAME="${REF_NAME#v}"
+          else
+            NAME="$(sed -nE 's/^version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' pubspec.yaml | head -n1)"
+          fi
+          if ! [[ "$NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Versión inválida '$NAME'. Use una etiqueta vMAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "number=$RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "Versión: $NAME+$RUN_NUMBER"
+
+  # ── Compuerta de calidad: no se firma nada que no pase análisis y tests ──
+  verify:
+    name: Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Create env files
+        run: |
+          printf 'API_BASE_URL=%s\n' "$API_BASE_URL" > .env
+          cp .env .env.production
+
+      - name: Analyze
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: Test
+        run: flutter test
+
+  # ── Android + Web ──
+  build-android-web:
+    name: Build Android & Web
+    needs: [prepare, verify]
+    runs-on: ubuntu-latest
+    env:
+      BUILD_NAME: ${{ needs.prepare.outputs.name }}
+      BUILD_NUMBER: ${{ needs.prepare.outputs.number }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # pubspec.yaml lista .env y .env.production como assets: los dos tienen que
+      # existir, y ninguno puede apuntar a localhost en un binario de release.
+      - name: Setup Release Environment
+        run: |
+          printf 'API_BASE_URL=%s\n' "$API_BASE_URL" > .env
+          cp .env .env.production
+
+      - name: Decode Android Release Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Falta el secreto ANDROID_KEYSTORE_BASE64: un release no se construye sin firma."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.jks
+
+      - name: Build Android Release (AAB & APK, signed and obfuscated)
+        env:
+          ANDROID_KEYSTORE_PATH: "release.jks"
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p build/debug-symbols
+          flutter build appbundle --release \
+            --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER" \
+            --obfuscate --split-debug-info=build/debug-symbols \
+            --dart-define=ENV_FILE=.env.production
+
+          flutter build apk --release \
+            --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER" \
+            --obfuscate --split-debug-info=build/debug-symbols \
+            --dart-define=ENV_FILE=.env.production
+
+      - name: Build Web Release
+        run: |
+          flutter build web --release \
+            --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER" \
+            --dart-define=ENV_FILE=.env.production
+
+      - name: Package artifacts
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/bundle/release/app-release.aab "dist/hwb-${BUILD_NAME}+${BUILD_NUMBER}.aab"
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/hwb-${BUILD_NAME}+${BUILD_NUMBER}.apk"
+          (cd build/web && zip -qr "../../dist/hwb-web-${BUILD_NAME}+${BUILD_NUMBER}.zip" .)
+          tar -czf "debug-symbols-android-${BUILD_NAME}+${BUILD_NUMBER}.tar.gz" -C build debug-symbols
+
+      - name: Remove keystore from the runner
+        if: always()
+        run: rm -f android/app/release.jks
+
+      - name: Upload release files
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-android-web
+          path: dist/*
+          if-no-files-found: error
+
+      # Sin estos símbolos no se pueden leer los fallos de un binario ofuscado.
+      # Se guardan como artefacto privado de la ejecución, no en la Release pública.
+      - name: Archive debug symbols
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: debug-symbols-android
+          path: debug-symbols-android-*.tar.gz
+          retention-days: 365
+          if-no-files-found: error
+
+  # ── iOS (opcional: se activa con la variable de repositorio IOS_RELEASE_ENABLED=true) ──
+  build-ios:
+    name: Build iOS (IPA)
+    if: ${{ vars.IOS_RELEASE_ENABLED == 'true' }}
+    needs: [prepare, verify]
+    runs-on: macos-15
+    env:
+      BUILD_NAME: ${{ needs.prepare.outputs.name }}
+      BUILD_NUMBER: ${{ needs.prepare.outputs.number }}
+      BUNDLE_ID: co.guane.healthWithoutBordersFrontend
+      EXPORT_METHOD: ${{ vars.IOS_EXPORT_METHOD || 'app-store-connect' }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Setup Release Environment
+        run: |
+          printf 'API_BASE_URL=%s\n' "$API_BASE_URL" > .env
+          cp .env .env.production
+
+      - name: Import signing certificate and provisioning profile
+        env:
+          CERT_P12_BASE64: ${{ secrets.IOS_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          for v in CERT_P12_BASE64 CERT_PASSWORD PROFILE_BASE64 KEYCHAIN_PASSWORD TEAM_ID; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Falta el secreto de iOS correspondiente a $v."
+              exit 1
+            fi
+          done
+
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+
+          echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")"
+          PROFILE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/profile.plist")"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+
+          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
+
+      # El Runner usa firma automática; en CI se pasa a manual solo para el target
+      # Runner, con la xcconfig que su configuración Release ya incluye. Así los
+      # Pods no reciben el perfil de aprovisionamiento.
+      - name: Configure manual signing for the Runner target
+        env:
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          {
+            echo ""
+            echo "CODE_SIGN_STYLE = Manual"
+            echo "DEVELOPMENT_TEAM = $TEAM_ID"
+            echo "PROVISIONING_PROFILE_SPECIFIER = $PROFILE_NAME"
+            echo "CODE_SIGN_IDENTITY = Apple Distribution"
+            echo "CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution"
+          } >> ios/Flutter/Release.xcconfig
+
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>$EXPORT_METHOD</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>stripSwiftSymbols</key><true/>
+            <key>provisioningProfiles</key>
+            <dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Build IPA (signed and obfuscated)
+        run: |
+          mkdir -p build/debug-symbols-ios
+          flutter build ipa --release \
+            --export-options-plist="$RUNNER_TEMP/ExportOptions.plist" \
+            --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER" \
+            --obfuscate --split-debug-info=build/debug-symbols-ios \
+            --dart-define=ENV_FILE=.env.production
+
+      - name: Package artifacts
+        run: |
+          mkdir -p dist
+          cp build/ios/ipa/*.ipa "dist/hwb-${BUILD_NAME}+${BUILD_NUMBER}.ipa"
+          tar -czf "debug-symbols-ios-${BUILD_NAME}+${BUILD_NUMBER}.tar.gz" -C build debug-symbols-ios
+
+      - name: Remove signing material from the runner
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/build.keychain-db" || true
+          rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/profile.mobileprovision"
+
+      - name: Upload release files
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-ios
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Archive debug symbols
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: debug-symbols-ios
+          path: debug-symbols-ios-*.tar.gz
+          retention-days: 365
+          if-no-files-found: error
+
+  # ── Publicación: solo con etiqueta ──
+  publish:
+    name: Publish GitHub Release
+    needs: [build-android-web, build-ios]
+    if: ${{ !cancelled() && needs.build-android-web.result == 'success' && (needs.build-ios.result == 'success' || needs.build-ios.result == 'skipped') && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release files
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
+
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@c95fe0f26b377c9e6121521041ab9107f31f584f # v2.2.1
+        with:
+          files: dist/*
+          draft: false
+          prerelease: false

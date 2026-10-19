@@ -50,6 +50,12 @@ class FakeAuthRepository implements AuthRepository {
   Future<bool> isNfcSessionExpired() async => false;
 
   @override
+  Future<bool> verifyLocalLockPassword(String password) async => false;
+
+  @override
+  bool get isSessionRestoredFromStorage => currentUser != null;
+
+  @override
   UserSession? currentUser;
 
   bool clearSessionCalled = false;
