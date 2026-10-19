@@ -1,6 +1,7 @@
 // lib/src/features/nfc/data/patient_repository.dart
 
 import '../../../core/network/api_client.dart';
+import '../../../core/nfc/retired_device_hash.dart';
 import '../../auth/data/auth_repository.dart';
 import '../domain/patient_record.dart';
 
@@ -178,4 +179,41 @@ class PatientRepository {
       headers: await _authHeaders(),
     );
   }
+
+  // ── GET /api/v1/patients/retired-devices ────────────────────────────────
+  /// Retired patient and guardian devices, as hashes (see
+  /// [retiredDeviceHash]), retired after [since]; all of them without it.
+  ///
+  /// Pass the returned [RetiredDeviceList.serverTime] as [since] next time.
+  Future<RetiredDeviceList> fetchRetiredDevices({String? since}) async {
+    final Map<String, dynamic> data = await _apiClient.getJson(
+      path: '/api/v1/patients/retired-devices',
+      headers: await _authHeaders(),
+      queryParams: since == null || since.isEmpty
+          ? null
+          : <String, String>{'since': since},
+    );
+    return RetiredDeviceList.fromJson(data);
+  }
+}
+
+/// A page of `GET /patients/retired-devices`.
+class RetiredDeviceList {
+  const RetiredDeviceList({required this.uidHashes, required this.serverTime});
+
+  /// Only well-formed hashes are kept.
+  factory RetiredDeviceList.fromJson(Map<String, dynamic> json) {
+    final Object? raw = json['uid_hashes'];
+    final Object? time = json['server_time'];
+    if (raw is! List || time is! String || time.isEmpty) {
+      throw const FormatException('Lista de dispositivos retirados inválida');
+    }
+    return RetiredDeviceList(
+      uidHashes: raw.whereType<String>().where(isRetiredDeviceHash).toList(),
+      serverTime: time,
+    );
+  }
+
+  final List<String> uidHashes;
+  final String serverTime;
 }

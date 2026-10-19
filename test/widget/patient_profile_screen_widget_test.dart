@@ -569,6 +569,18 @@ Future<void> _pumpScreen(
   await tester.pump(const Duration(milliseconds: 100));
 }
 
+/// Lets a reassignment started in [WidgetTester.runAsync] finish: the fake
+/// web store's lock moves on only when the test pumps.
+Future<void> _settleReassign(WidgetTester tester) async {
+  for (var i = 0; i < 3; i++) {
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+  }
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUp(() {
     _resetScreenSeams();
@@ -1761,6 +1773,10 @@ void main() {
           summary.onReassignDevice!();
           await Future<void>.delayed(const Duration(milliseconds: 200));
         });
+        await _settleReassign(tester);
+        // The guardian device still names the old patient device.
+        expect(find.text('Actualizar los otros dispositivos'), findsOneWidget);
+        await tester.tap(find.text('Más tarde'));
         await tester.pumpAndSettle();
 
         expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
@@ -3321,6 +3337,8 @@ void main() {
             .onReassignDevice!();
         await Future<void>.delayed(const Duration(milliseconds: 200));
       });
+      await _settleReassign(tester);
+      await tester.tap(find.text('Más tarde'));
       await tester.pumpAndSettle();
       final int savesAfterReassign = fakes.db.savePatientCallCount;
       expect(stored(fakes.db)['device_uid'], 'dev-NEW');
@@ -3330,6 +3348,125 @@ void main() {
       expect(fakes.db.savePatientCallCount, greaterThan(savesAfterReassign));
       expect(stored(fakes.db)['device_uid'], 'dev-NEW');
       expect(stored(fakes.db)['baseVersion'], 5);
+    });
+  });
+  group('Reasignar deja marcados los otros dispositivos del paciente', () {
+    Future<_Fakes> reassign(
+      WidgetTester tester, {
+      required List<ReassignTarget> targets,
+      PatientFullRecord? patient,
+      List<Map<String, bool>>? writes,
+    }) async {
+      late _Fakes fakes;
+      await _pumpScreen(
+        tester,
+        patient ?? _record(),
+        allowReassign: true,
+        onFakesReady: (f) => fakes = f,
+      );
+      PatientProfileScreen.showReassignDeviceDialogImpl =
+          (context, {required isEs, required hasG1, required hasG2}) async =>
+              ReassignSelection(targets: targets, reason: 'lost');
+      PatientProfileScreen.executeReassignOneImpl =
+          ({
+            required context,
+            required target,
+            required record,
+            required codec,
+            required isEs,
+            required showSnack,
+          }) async => switch (target) {
+            ReassignTarget.patient => record.copyWith(deviceUid: 'dev-NEW'),
+            ReassignTarget.guardian1 => record.copyWith(
+              guardianInfo: record.guardianInfo.copyWith(deviceUid: 'gdev-NEW'),
+            ),
+            ReassignTarget.guardian2 => record,
+          };
+      PatientProfileScreen.executeUpdateNfcChipsImpl =
+          ({
+            required context,
+            required record,
+            required keyring,
+            required patientChipDirty,
+            required guardianChipDirty,
+          }) async {
+            writes?.add(<String, bool>{
+              'patient': patientChipDirty,
+              'guardian': guardianChipDirty,
+            });
+            return true;
+          };
+
+      await tester.runAsync(() async {
+        tester
+            .widget<ProfileTabSummary>(find.byType(ProfileTabSummary))
+            .onReassignDevice!();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await _settleReassign(tester);
+      return fakes;
+    }
+
+    testWidgets('cambiar el dispositivo del guardián ofrece grabar ya el del '
+        'paciente, que lo nombra', (tester) async {
+      final writes = <Map<String, bool>>[];
+      final fakes = await reassign(
+        tester,
+        targets: [ReassignTarget.guardian1],
+        writes: writes,
+      );
+
+      expect(find.text('Actualizar los otros dispositivos'), findsOneWidget);
+      await tester.tap(find.text('Grabar ahora'));
+      await _settleReassign(tester);
+
+      expect(writes, [
+        {'patient': true, 'guardian': false},
+      ]);
+      expect(await fakes.db.getChipStatus('pid-001'), isNull);
+      expect(find.byType(NfcStaleBanner), findsNothing);
+      // The old guardian device is refused offline from now on.
+      expect(await fakes.db.isDeviceRetired('gdev-001'), isTrue);
+      expect(await fakes.db.isDeviceRetired('gdev-NEW'), isFalse);
+    });
+
+    testWidgets('cambiar el dispositivo del paciente deja marcados los del '
+        'guardián; "Más tarde" los deja en el aviso', (tester) async {
+      final writes = <Map<String, bool>>[];
+      final fakes = await reassign(
+        tester,
+        targets: [ReassignTarget.patient],
+        writes: writes,
+      );
+
+      await tester.tap(find.text('Más tarde'));
+      await _settleReassign(tester);
+
+      expect(writes, isEmpty);
+      final status = await fakes.db.getChipStatus('pid-001');
+      expect(status?.patientChipDirty, isFalse);
+      expect(status?.guardianChipDirty, isTrue);
+      expect(find.byType(NfcStaleBanner), findsOneWidget);
+      expect(await fakes.db.isDeviceRetired('dev-001'), isTrue);
+    });
+
+    testWidgets('sin otros dispositivos que lo nombren, no pregunta nada', (
+      tester,
+    ) async {
+      await reassign(
+        tester,
+        targets: [ReassignTarget.patient],
+        patient: _record(
+          guardian: GuardianInfo(
+            name: 'Guardia 1',
+            relationship: '01',
+            phone: '123',
+          ),
+        ),
+      );
+
+      expect(find.text('Actualizar los otros dispositivos'), findsNothing);
+      expect(find.byType(NfcStaleBanner), findsNothing);
     });
   });
 }

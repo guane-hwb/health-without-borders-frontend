@@ -125,6 +125,45 @@ own). The engine announces every saved record on `SyncEngine.savedRecords`:
 - If only the FHIR delivery failed, the row stays queued to re-send the bundles
   and is moved onto the new version, since it holds exactly what was saved.
 
+### Records of another user
+
+Every row carries `owner_user_id`. The engine, the sync queue and the home counts
+select the signed-in user's rows (and ownerless rows, which the first sync
+adopts). Another user's pending rows stay on the device, encrypted and unlisted,
+until that user signs in again; the queue only shows how many there are.
+Signing in as someone else no longer blocks or offers to discard them.
+
+`AuthRepository.clearSession()` deletes only the session's keys on a phone. On
+Android `flutter_secure_storage` keeps every key in one file, the local
+database's AES keys included, so `deleteAll()` would leave the pending rows
+unreadable after a restart. On the web it still deletes everything, and logout
+wipes the local PHI.
+
+### Retired devices
+
+A lost, damaged or replaced patient or guardian device still holds its data, and
+offline the reader opens a record from the devices alone. Online the server
+answers `410 device_retired`; offline the reader checks a local list first.
+
+- **The list.** `GET /api/v1/patients/retired-devices` returns, for every retired
+  device, `sha256("hwb-retired-device:v1:" + UID)` with the UID reduced to its hex
+  digits in upper case (`retiredDeviceHash` in
+  `lib/src/core/nfc/retired_device_hash.dart`). The phone keeps hashes, not UIDs.
+  The test vectors are shared with the backend
+  (`tests/contract/fixtures/retired_device_hashes.json` there).
+- **Download.** Each `syncAll()` cycle, once the backend is reachable, asks for
+  what was retired since the last `server_time` and stores it with the new one
+  (tables `retired_devices` and `retired_devices_cursor`, schema v12). A failure
+  keeps the previous list. `clearAll()` keeps it: it belongs to no user.
+- **Learned on the spot.** A `410 device_retired` from `/scan`, and the old UIDs
+  of a reassignment made on this phone, go into the list right away.
+- **Offline read.** A retired patient device is refused with the same message as
+  online, without the guardian step or emergency access. A retired guardian device
+  is refused, and the guardian step stays open for the new one.
+- **Never downloaded.** Until the first list arrives, a record still opens
+  offline, with a warning that the device could not be checked.
+- **Storage errors** answer "not retired": a local failure never blocks care.
+
 ## Scrubbing of Clinical Data
 
 Once a record is successfully synchronized with the backend (HTTP 201), the app removes the entry from local storage (markSynced deletes the row in local_patients).

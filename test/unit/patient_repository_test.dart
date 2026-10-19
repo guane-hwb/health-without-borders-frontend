@@ -711,4 +711,71 @@ void main() {
       expect(result.status, 'success');
     });
   });
+
+  group('fetchRetiredDevices', () {
+    final String hash = 'a' * 64;
+
+    void stubGet(Map<String, dynamic> data) {
+      when(
+        () => apiClient.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+          queryParams: any(named: 'queryParams'),
+        ),
+      ).thenAnswer((_) async => data);
+    }
+
+    Map<String, String>? capturedQuery() =>
+        verify(
+              () => apiClient.getJson(
+                path: '/api/v1/patients/retired-devices',
+                headers: expectedAuthHeader,
+                queryParams: captureAny(named: 'queryParams'),
+              ),
+            ).captured.single
+            as Map<String, String>?;
+
+    test('sin since pide la lista completa y descarta entradas mal '
+        'formadas', () async {
+      stubGet(<String, dynamic>{
+        'uid_hashes': <Object?>[hash, 'ABC', 7, null],
+        'server_time': '2026-10-19T10:00:00Z',
+      });
+
+      final list = await repository.fetchRetiredDevices();
+
+      expect(capturedQuery(), isNull);
+      expect(list.uidHashes, <String>[hash]);
+      expect(list.serverTime, '2026-10-19T10:00:00Z');
+    });
+
+    test('con since lo envía como parámetro', () async {
+      stubGet(<String, dynamic>{
+        'uid_hashes': <String>[],
+        'server_time': '2026-10-19T11:00:00Z',
+      });
+
+      await repository.fetchRetiredDevices(since: '2026-10-19T10:00:00Z');
+
+      expect(capturedQuery(), <String, String>{
+        'since': '2026-10-19T10:00:00Z',
+      });
+    });
+
+    test('una respuesta sin server_time o sin lista es un error', () async {
+      stubGet(<String, dynamic>{
+        'uid_hashes': <String>[hash],
+      });
+      await expectLater(
+        repository.fetchRetiredDevices(),
+        throwsFormatException,
+      );
+
+      stubGet(<String, dynamic>{'server_time': '2026-10-19T10:00:00Z'});
+      await expectLater(
+        repository.fetchRetiredDevices(),
+        throwsFormatException,
+      );
+    });
+  });
 }

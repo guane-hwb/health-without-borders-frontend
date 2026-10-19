@@ -122,17 +122,6 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   VoidCallback? onSessionInvalidated;
-
-  @override
-  Future<void> discardForeignPendingData() async {}
-
-  @override
-  Future<List<Map<String, Object?>>>
-  pendingForeignEmergencyLogsForReview() async => <Map<String, Object?>>[];
-
-  @override
-  Future<List<LocalPatientEntry>> pendingForeignRecordsForReview() async =>
-      <LocalPatientEntry>[];
 }
 
 UserSession _session(UserRole role, {String name = 'Ana Rodríguez'}) =>
@@ -483,6 +472,39 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('5'), findsWidgets);
+    });
+  });
+
+  group('_SyncCard — solo los pendientes del usuario', () {
+    testWidgets('los conteos piden los del usuario actual', (tester) async {
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      verify(
+        () => mockDb.getRetryablePendingCount(ownerUserId: 'uid-001'),
+      ).called(greaterThanOrEqualTo(1));
+      verify(
+        () => mockDb.getBlockedCount(ownerUserId: 'uid-001'),
+      ).called(greaterThanOrEqualTo(1));
+    });
+
+    testWidgets('el aviso al cerrar sesión cuenta solo lo propio', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      final logoutIcon = find.byIcon(Icons.logout_rounded);
+      await tester.scrollUntilVisible(logoutIcon, 80);
+      await tester.ensureVisible(logoutIcon);
+      await tester.pumpAndSettle();
+      await tester.tap(logoutIcon);
+      await tester.pumpAndSettle();
+
+      verify(() => mockDb.getUnsyncedCount(ownerUserId: 'uid-001')).called(1);
+      verify(
+        () => mockDb.getUnsyncedEmergencyLogCount(ownerUserId: 'uid-001'),
+      ).called(1);
     });
   });
 

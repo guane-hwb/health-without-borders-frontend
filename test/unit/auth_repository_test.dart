@@ -384,59 +384,51 @@ void main() {
       },
     );
 
-    test(
-      'usuario distinto con pacientes pendientes: NO borra nada y bloquea login',
-      () async {
-        when(
-          () => storage.read(key: AuthRepository.lastUserIdKey),
-        ).thenAnswer((_) async => '11');
-        when(
-          () =>
-              localDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
-        ).thenAnswer((_) async => 4);
-        when(
-          () => localDb.getUnsyncedEmergencyLogCount(
-            ownerUserId: any(named: 'ownerUserId'),
-          ),
-        ).thenAnswer((_) async => 0);
-        stubLoginAs('doc@hwb.org');
+    test('usuario distinto con pacientes pendientes de otro: entra sin borrar '
+        'nada (quedan aislados hasta que vuelva su dueño)', () async {
+      when(
+        () => storage.read(key: AuthRepository.lastUserIdKey),
+      ).thenAnswer((_) async => '11');
+      when(
+        () => localDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => 4);
+      when(
+        () => localDb.getUnsyncedEmergencyLogCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 0);
+      stubLoginAs('doc@hwb.org');
 
-        await expectLater(
-          () => repo.login(email: 'doc@hwb.org', password: 'x'),
-          throwsA(isA<ForeignPendingDataException>()),
-        );
+      final session = await repo.login(email: 'doc@hwb.org', password: 'x');
 
-        verifyNever(() => localDb.clearAll());
-        verifyNever(() => localDb.destroyEncryptionKey());
-      },
-    );
+      expect(session.id, '42');
+      expect(repo.currentUser, same(session));
+      verifyNever(() => localDb.clearAll());
+      verifyNever(() => localDb.destroyEncryptionKey());
+    });
 
-    test(
-      'usuario distinto con accesos de emergencia pendientes: NO borra nada y bloquea login',
-      () async {
-        when(
-          () => storage.read(key: AuthRepository.lastUserIdKey),
-        ).thenAnswer((_) async => '11');
-        when(
-          () =>
-              localDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
-        ).thenAnswer((_) async => 0);
-        when(
-          () => localDb.getUnsyncedEmergencyLogCount(
-            ownerUserId: any(named: 'ownerUserId'),
-          ),
-        ).thenAnswer((_) async => 1);
-        stubLoginAs('doc@hwb.org');
+    test('usuario distinto con accesos de emergencia pendientes de otro: entra '
+        'sin borrar nada', () async {
+      when(
+        () => storage.read(key: AuthRepository.lastUserIdKey),
+      ).thenAnswer((_) async => '11');
+      when(
+        () => localDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => 0);
+      when(
+        () => localDb.getUnsyncedEmergencyLogCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 1);
+      stubLoginAs('doc@hwb.org');
 
-        await expectLater(
-          () => repo.login(email: 'doc@hwb.org', password: 'x'),
-          throwsA(isA<ForeignPendingDataException>()),
-        );
+      final session = await repo.login(email: 'doc@hwb.org', password: 'x');
 
-        verifyNever(() => localDb.clearAll());
-        verifyNever(() => localDb.destroyEncryptionKey());
-      },
-    );
+      expect(session.id, '42');
+      expect(repo.currentUser, same(session));
+      verifyNever(() => localDb.clearAll());
+      verifyNever(() => localDb.destroyEncryptionKey());
+    });
 
     test(
       'mismo usuario que vuelve a entrar: no dispara ningún borrado',
@@ -495,7 +487,8 @@ void main() {
       await repo.logout();
 
       expect(repo.hasToken, isFalse);
-      verify(() => storage.deleteAll()).called(greaterThanOrEqualTo(1));
+      verify(() => storage.delete(key: AuthRepository.tokenKey)).called(1);
+      verifyNever(() => storage.deleteAll());
     });
 
     test('limpia la sesión aunque el servidor falle (offline)', () async {
@@ -524,7 +517,8 @@ void main() {
       await repo.logout();
 
       expect(repo.hasToken, isFalse);
-      verify(() => storage.deleteAll()).called(greaterThanOrEqualTo(1));
+      verify(() => storage.delete(key: AuthRepository.tokenKey)).called(1);
+      verifyNever(() => storage.deleteAll());
     });
 
     test('sin token no llama al servidor pero limpia la sesión', () async {
@@ -900,7 +894,8 @@ void main() {
       expect(token, isNull);
       expect(repo.sessionExpired.value, isTrue);
       expect(repo.currentUser, isNull);
-      verify(() => storage.deleteAll()).called(greaterThanOrEqualTo(1));
+      verify(() => storage.delete(key: AuthRepository.refreshKey)).called(1);
+      verifyNever(() => storage.deleteAll());
     });
   });
 
@@ -1030,7 +1025,7 @@ void main() {
   });
 
   group('clearSession()', () {
-    test('limpia _cachedToken, _session e invoca deleteAll', () async {
+    test('en el teléfono borra solo las llaves de la sesión', () async {
       final jwt = _validJwt('a@b.com');
       when(
         () => api.postForm(
@@ -1050,7 +1045,34 @@ void main() {
 
       expect(repo.currentUser, isNull);
       expect(repo.hasToken, isFalse);
-      verify(() => storage.deleteAll()).called(greaterThanOrEqualTo(1));
+      for (final String key in <String>[
+        AuthRepository.tokenKey,
+        AuthRepository.refreshKey,
+        AuthRepository.nfcKeyKey,
+        AuthRepository.nfcKeyringKey,
+        AuthRepository.clockMarkKey,
+        AuthRepository.sessionKey,
+      ]) {
+        verify(() => storage.delete(key: key)).called(1);
+      }
+      // On Android deleteAll() would also take the keys of the local
+      // database (same storage file); hwb_last_user_id says whose rows stay.
+      verifyNever(() => storage.deleteAll());
+      verifyNever(() => storage.delete(key: AuthRepository.lastUserIdKey));
+    });
+
+    test('en la web borra todo el almacén', () async {
+      final webRepo = _makeRepo(
+        api: api,
+        storage: storage,
+        localDb: localDb,
+        forceWeb: true,
+      );
+
+      await webRepo.clearSession();
+
+      verify(() => storage.deleteAll()).called(1);
+      verifyNever(() => storage.delete(key: AuthRepository.tokenKey));
     });
 
     test('clearSession CONSERVA la clave de cifrado local', () async {
@@ -1176,55 +1198,7 @@ void main() {
     );
   });
 
-  group('Foreign Data Methods & Session Callbacks', () {
-    test('pendingForeignRecordsForReview queries local database', () async {
-      when(
-        () =>
-            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
-      ).thenAnswer((_) async => []);
-
-      final result = await repo.pendingForeignRecordsForReview();
-
-      expect(result, isEmpty);
-      verify(
-        () =>
-            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
-      ).called(1);
-    });
-
-    test(
-      'pendingForeignEmergencyLogsForReview queries emergency logs',
-      () async {
-        when(
-          () => localDb.pendingEmergencyAccessLogs(
-            ownerUserId: any(named: 'ownerUserId'),
-          ),
-        ).thenAnswer((_) async => []);
-
-        final result = await repo.pendingForeignEmergencyLogsForReview();
-
-        expect(result, isEmpty);
-        verify(
-          () => localDb.pendingEmergencyAccessLogs(
-            ownerUserId: any(named: 'ownerUserId'),
-          ),
-        ).called(1);
-      },
-    );
-
-    test(
-      'discardForeignPendingData clears local db, encryption key and lastUserIdKey',
-      () async {
-        await repo.discardForeignPendingData();
-
-        verify(() => localDb.clearAll()).called(1);
-        verify(() => localDb.destroyEncryptionKey()).called(1);
-        verify(
-          () => storage.delete(key: AuthRepository.lastUserIdKey),
-        ).called(1);
-      },
-    );
-
+  group('Session Callbacks', () {
     test(
       'clearSession invokes onSessionInvalidated callback and handles error',
       () async {

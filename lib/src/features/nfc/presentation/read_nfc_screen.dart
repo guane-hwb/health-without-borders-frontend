@@ -182,14 +182,19 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
           _errorMessage = null;
         });
       } else {
+        final String? retired = _retiredTagMessage(e);
+        if (retired != null) await _rememberRetired(deviceUid);
+        if (!mounted) return;
         setState(() {
           _scanning = false;
-          _errorMessage = _retiredTagMessage(e) ?? _apiErrorMessage(e);
+          _errorMessage = retired ?? _apiErrorMessage(e);
         });
       }
     } catch (e) {
       if (!mounted) return;
       if (chip != null && chip.kind == payload.HwbChipKind.triage) {
+        if (await _refuseIfRetired(chip.uid, patientDevice: true)) return;
+        if (!mounted) return;
         final triage = chip.triage;
 
         if (triage != null && triage.isMinor) {
@@ -207,6 +212,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
           guardianRecord: null,
           patientDeviceUid: chip.uid,
         );
+        await _warnIfRetiredListMissing();
         if (!mounted) return;
         await _openProfile(record, readOnly: true, offline: true);
       } else {
@@ -274,6 +280,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
             ).readHwbChip(alertMessage: _nfcAlert(guardian: true));
       await _recordChipKeyVersion(chip);
       if (!mounted) return;
+      if (await _refuseIfRetired(chip.uid, patientDevice: false)) return;
+      if (!mounted) return;
 
       final expected = <String>[
         triage.guardianDeviceUid,
@@ -306,6 +314,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         guardianRecord: chip.guardianRecord,
         patientDeviceUid: _patientDeviceUid ?? chip.uid,
       );
+      await _warnIfRetiredListMissing();
       if (!mounted) return;
       await _openProfile(record, offline: true);
     } on NfcNotAvailableException {
@@ -339,14 +348,69 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     final bool isEs = AppStrings.of(context).isEs;
     final String? reason = detail['reason']?.toString();
     final String reasonLabel = switch (reason) {
-      'lost' => isEs ? 'perdida' : 'lost',
-      'damaged' => isEs ? 'dañada' : 'damaged',
-      'replaced' => isEs ? 'reemplazada' : 'replaced',
-      _ => isEs ? 'retirada' : 'retired',
+      'lost' => isEs ? 'perdido' : 'lost',
+      'damaged' => isEs ? 'dañado' : 'damaged',
+      'replaced' => isEs ? 'reemplazado' : 'replaced',
+      _ => isEs ? 'retirado' : 'retired',
     };
     return isEs
         ? 'Este dispositivo fue retirado ($reasonLabel) y ya no pertenece a HWB.'
         : 'This device was retired ($reasonLabel) and no longer belongs to HWB.';
+  }
+
+  /// A 410 from the server: the device is refused offline from now on too,
+  /// without waiting for the next sync to bring it.
+  Future<void> _rememberRetired(String uid) =>
+      AppScope.of(context).localDatabase.markDevicesRetired(<String>[uid]);
+
+  /// Offline, a retired device is refused as the server would (it answers 410
+  /// online). True when it was refused. A retired patient device also ends
+  /// the guardian step; a retired guardian device does not, so the new one
+  /// (or emergency access) can still be used.
+  Future<bool> _refuseIfRetired(
+    String uid, {
+    required bool patientDevice,
+  }) async {
+    final bool retired = await AppScope.of(
+      context,
+    ).localDatabase.isDeviceRetired(uid);
+    if (!retired || !mounted) return retired;
+    final bool isEs = AppStrings.of(context).isEs;
+    setState(() {
+      _scanning = false;
+      if (patientDevice) {
+        _offlineTriage = null;
+        _offlineGuardianRequired = false;
+      }
+      _errorMessage = isEs
+          ? 'Este dispositivo fue retirado y ya no pertenece a HWB.'
+          : 'This device was retired and no longer belongs to HWB.';
+    });
+    return true;
+  }
+
+  /// Without a downloaded list, a retired device cannot be told apart
+  /// offline: the record opens, with a warning.
+  Future<void> _warnIfRetiredListMissing() async {
+    final String? syncedAt = await AppScope.of(
+      context,
+    ).localDatabase.retiredDevicesSyncedAt();
+    if (syncedAt != null || !mounted) return;
+    final bool isEs = AppStrings.of(context).isEs;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 6),
+        content: Text(
+          isEs
+              ? 'No se pudo comprobar si este dispositivo sigue activo: '
+                    'sincronice con conexión para descargar la lista de '
+                    'dispositivos retirados.'
+              : 'Could not check whether this device is still active: '
+                    'sync while online to download the list of retired '
+                    'devices.',
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmEmergencyAccess() async {
@@ -398,6 +462,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       guardianRecord: null,
       patientDeviceUid: _patientDeviceUid ?? '',
     );
+    await _warnIfRetiredListMissing();
     if (!mounted) return;
     await _openProfile(record, readOnly: true, offline: true, emergency: true);
   }
@@ -461,9 +526,12 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       await _openProfile(patient);
     } on ApiException catch (e) {
       if (!mounted) return;
+      final String? retired = _retiredTagMessage(e);
+      if (retired != null) await _rememberRetired(_patientDeviceUid!);
+      if (!mounted) return;
       setState(() {
         _scanning = false;
-        _errorMessage = _retiredTagMessage(e) ?? _apiErrorMessage(e);
+        _errorMessage = retired ?? _apiErrorMessage(e);
       });
     } catch (e) {
       if (!mounted) return;

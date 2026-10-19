@@ -12,26 +12,6 @@ import '../../../core/storage/local_database.dart';
 import '../../../core/utils/app_logger.dart';
 import '../domain/user_session.dart';
 
-class ForeignPendingDataException implements Exception {
-  ForeignPendingDataException({
-    required this.previousOwnerUserId,
-    required this.newUserId,
-    required this.pendingPatients,
-    required this.pendingEmergencyLogs,
-  });
-
-  final String previousOwnerUserId;
-  final String newUserId;
-  final int pendingPatients;
-  final int pendingEmergencyLogs;
-
-  @override
-  String toString() =>
-      'ForeignPendingDataException(previousOwner: $previousOwnerUserId, '
-      'newUser: $newUserId, pendingPatients: $pendingPatients, '
-      'pendingEmergencyLogs: $pendingEmergencyLogs)';
-}
-
 class AuthRepository implements TokenProvider {
   AuthRepository({
     required ApiClient apiClient,
@@ -77,6 +57,16 @@ class AuthRepository implements TokenProvider {
   static const String _sessionKey = 'hwb_user_session';
   static const String _lastUserIdKey = 'hwb_last_user_id';
   static const String _clockMarkKey = 'hwb_clock_mark';
+
+  /// What [clearSession] deletes on a phone: the session, not the device.
+  static const List<String> _sessionKeys = <String>[
+    _tokenKey,
+    _refreshKey,
+    _nfcKeyKey,
+    _nfcKeyringKey,
+    _clockMarkKey,
+    _sessionKey,
+  ];
 
   static const Duration clockRollbackTolerance = Duration(hours: 24);
 
@@ -177,20 +167,10 @@ class AuthRepository implements TokenProvider {
       if (pendingPatients == 0 && pendingEmergencyLogs == 0) {
         await _localDb.clearAll();
         await _localDb.destroyEncryptionKey();
-      } else {
-        AppLogger.e(
-          'Login bloqueado: cambio de usuario detectado (de $lastUserId a '
-          '${fetchedSession.id}) con $pendingPatients registro(s) y '
-          '$pendingEmergencyLogs acceso(s) de emergencia pendientes de '
-          '$lastUserId aún en el dispositivo.',
-        );
-        throw ForeignPendingDataException(
-          previousOwnerUserId: lastUserId,
-          newUserId: fetchedSession.id,
-          pendingPatients: pendingPatients,
-          pendingEmergencyLogs: pendingEmergencyLogs,
-        );
       }
+      // Otherwise the previous user's pending rows stay on the device,
+      // encrypted and out of this user's queue (every query filters by
+      // owner), until that person signs in here again and syncs them.
     }
 
     _cachedToken = accessToken;
@@ -515,9 +495,24 @@ class AuthRepository implements TokenProvider {
     _isSessionRestoredFromStorage = false;
     _updateSession(null);
 
-    try {
-      await _secureStorage.deleteAll();
-    } catch (_) {}
+    if (_isWeb) {
+      // The web keeps its keys in localStorage next to what they encrypt:
+      // everything goes, and logout wipes the local PHI as well.
+      try {
+        await _secureStorage.deleteAll();
+      } catch (_) {}
+      return;
+    }
+    // On Android this storage is the same file LocalDatabase keeps its keys
+    // in: deleteAll() would also delete the keys of the pending records the
+    // device keeps on purpose, leaving them unreadable after a restart. Only
+    // the session's own keys go; hwb_last_user_id stays so the next login
+    // knows whose rows those are.
+    for (final String key in _sessionKeys) {
+      try {
+        await _secureStorage.delete(key: key);
+      } catch (_) {}
+    }
   }
 
   Future<bool> wipeLocalPhi({bool force = false}) async {
