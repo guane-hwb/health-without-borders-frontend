@@ -121,8 +121,6 @@ void main() {
 
   group('capacidad', () {
     test('el overhead del registro MIME es real y medible', () {
-      // 3 (header + type len + payload len) + 26 (application/vnd.hwb.triage)
-      // + 3 (registro largo, payload > 255). El chequeo viejo lo ignoraba.
       final message = _messageOf(kHwbNdefMimeType, Uint8List(300));
       expect(message.byteLength, 300 + 32);
     });
@@ -130,11 +128,10 @@ void main() {
     test(
       'rechaza un payload que el chequeo viejo habría dejado pasar',
       () async {
-        // 470 bytes contra un NTAG215 de 492: el chequeo anterior comparaba
-        // payload contra maxSize (470 <= 492 → pasa) y reventaba dentro de
-        // write(). El mensaje NDEF real ocupa 502.
         final payload = Uint8List(470);
-        when(() => codec.encode(any())).thenAnswer((_) async => payload);
+        when(
+          () => codec.encode(any(), extraAad: any(named: 'extraAad')),
+        ).thenAnswer((_) async => payload);
         final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
         final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
 
@@ -154,7 +151,9 @@ void main() {
 
     test('acepta un payload que llena el chip exactamente', () async {
       final payload = Uint8List(kNtag215MaxSize - 32);
-      when(() => codec.encode(any())).thenAnswer((_) async => payload);
+      when(
+        () => codec.encode(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer((_) async => payload);
       final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
       final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
 
@@ -166,7 +165,9 @@ void main() {
 
     test('rechaza un solo byte de más', () async {
       final payload = Uint8List(kNtag215MaxSize - 32 + 1);
-      when(() => codec.encode(any())).thenAnswer((_) async => payload);
+      when(
+        () => codec.encode(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer((_) async => payload);
       final service = _service(
         codec,
         HwbTag(
@@ -187,7 +188,6 @@ void main() {
     });
 
     test('el payload del guardián paga más overhead que el de triage', () {
-      // 'application/vnd.hwb.guardian' es dos caracteres más largo.
       final triage = _messageOf(kHwbNdefMimeType, Uint8List(300)).byteLength;
       final guardian = _messageOf(
         kHwbGuardianMimeType,
@@ -216,7 +216,7 @@ void main() {
   group('writeTriagePayload', () {
     setUp(() {
       when(
-        () => codec.encode(any()),
+        () => codec.encode(any(), extraAad: any(named: 'extraAad')),
       ).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
     });
 
@@ -237,11 +237,11 @@ void main() {
     });
 
     test('cifra antes de pedir el tap, no durante', () async {
-      // Si encode() ocurriera dentro de withTag, el chip tendría que quedarse
-      // en el campo mientras corre CBOR + DEFLATE + AES-GCM.
       final service = _service(codec, _blankChip());
       await service.writeTriagePayload({'fn': 'Martha'});
-      verify(() => codec.encode({'fn': 'Martha'})).called(1);
+      verify(
+        () => codec.encode({'fn': 'Martha'}, extraAad: any(named: 'extraAad')),
+      ).called(1);
     });
 
     test('falla si el chip no tiene identificador legible', () async {
@@ -259,7 +259,6 @@ void main() {
     });
 
     test('falla si el chip no está formateado como NDEF', () async {
-      // Una DESFire virgen se ve así: Ndef.from(tag) devuelve null.
       final service = _service(codec, const HwbTag(uid: kExpectedUid));
       await expectLater(
         service.writeTriagePayload({'a': 1}),
@@ -336,7 +335,7 @@ void main() {
   group('expectedUid', () {
     setUp(() {
       when(
-        () => codec.encode(any()),
+        () => codec.encode(any(), extraAad: any(named: 'extraAad')),
       ).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
     });
 
@@ -391,7 +390,7 @@ void main() {
   group('writeGuardianPayload', () {
     setUp(() {
       when(
-        () => codec.encode(any()),
+        () => codec.encode(any(), extraAad: any(named: 'extraAad')),
       ).thenAnswer((_) async => Uint8List.fromList([9, 8, 7]));
     });
 
@@ -424,12 +423,10 @@ void main() {
   group('writeGuardianRecord', () {
     setUp(() {
       when(
-        () => codec.encode(any()),
+        () => codec.encode(any(), extraAad: any(named: 'extraAad')),
       ).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
     });
 
-    /// A fit builder that records the budget it was handed and returns a payload
-    /// of [kept] consultations out of [total].
     GuardianFitBuilder recordingBuilder({
       required List<int> budgetSink,
       int kept = 1,
@@ -458,11 +455,9 @@ void main() {
         buildFit: recordingBuilder(budgetSink: budgets),
       );
 
-      // Overhead is the byteLength of an empty guardian MIME record. The budget
-      // must be strictly below the raw chip capacity.
       expect(budgets, hasLength(1));
       expect(budgets.single, lessThan(888));
-      expect(budgets.single, greaterThan(888 - 60)); // overhead is small
+      expect(budgets.single, greaterThan(888 - 60));
     });
 
     test('carries the fit back on the result', () async {
@@ -507,7 +502,6 @@ void main() {
     });
 
     test('falla si el chip no está formateado como NDEF', () async {
-      // Una DESFire virgen se ve así: Ndef.from(tag) devuelve null.
       final service = _service(codec, const HwbTag(uid: kExpectedUid));
       await expectLater(
         service.writeGuardianRecord(
@@ -550,8 +544,9 @@ void main() {
     });
 
     test('throws when even the trimmed base does not fit', () async {
-      // Encoded payload larger than the tiny chip; nothing left to trim.
-      when(() => codec.encode(any())).thenAnswer((_) async => Uint8List(600));
+      when(
+        () => codec.encode(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer((_) async => Uint8List(600));
       final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
       final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
 
@@ -580,7 +575,9 @@ void main() {
   group('readTriagePayload', () {
     test('devuelve el triage decodificado', () async {
       final payload = Uint8List.fromList([1, 2, 3]);
-      when(() => codec.decodeDetailed(any())).thenAnswer(
+      when(
+        () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer(
         (_) async => const NfcDecodeResult(
           data: <String, dynamic>{'fn': 'Martha'},
           keyVersion: 0,
@@ -593,7 +590,9 @@ void main() {
 
       expect(result.uid, kExpectedUid);
       expect(result.triage, isNotNull);
-      verify(() => codec.decodeDetailed(payload)).called(1);
+      verify(
+        () => codec.decodeDetailed(payload, extraAad: any(named: 'extraAad')),
+      ).called(1);
     });
 
     test('triage null cuando el chip está en blanco', () async {
@@ -601,7 +600,9 @@ void main() {
       final result = await service.readTriagePayload();
       expect(result.uid, kExpectedUid);
       expect(result.triage, isNull);
-      verifyNever(() => codec.decodeDetailed(any()));
+      verifyNever(
+        () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
+      );
     });
 
     test('triage null cuando el chip no soporta NDEF', () async {
@@ -617,11 +618,15 @@ void main() {
       );
       final result = await service.readTriagePayload();
       expect(result.triage, isNull);
-      verifyNever(() => codec.decodeDetailed(any()));
+      verifyNever(
+        () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
+      );
     });
 
     test('triage null cuando el codec no puede descifrar', () async {
-      when(() => codec.decodeDetailed(any())).thenAnswer((_) async => null);
+      when(
+        () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer((_) async => null);
       final service = _service(
         codec,
         _chipWith(kHwbNdefMimeType, Uint8List.fromList([1])),
@@ -652,7 +657,9 @@ void main() {
       );
       final result = await service.readTriagePayload();
       expect(result.triage, isNull);
-      verifyNever(() => codec.decodeDetailed(any()));
+      verifyNever(
+        () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
+      );
     });
 
     test('falla si el chip no tiene identificador legible', () async {
@@ -670,9 +677,6 @@ void main() {
 
   group('readHwbChip', () {
     test('none cuando el chip está en blanco de fábrica', () async {
-      // Exactamente lo que reporta un NTAG215 virgen: formateado, mensaje de
-      // 0 bytes. Es el estado en que quedó el dispositivo del guardián al fallar
-      // siempre la escritura por capacidad.
       final service = _service(codec, _blankChip());
       final result = await service.readHwbChip();
       expect(result.kind, HwbChipKind.none);
@@ -690,7 +694,9 @@ void main() {
 
     test('guardian cuando el chip trae el registro del guardián', () async {
       final payload = Uint8List.fromList([5, 5]);
-      when(() => codec.decodeDetailed(any())).thenAnswer(
+      when(
+        () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer(
         (_) async => const NfcDecodeResult(
           data: <String, dynamic>{'patientId': 'x'},
           keyVersion: 0,
@@ -707,7 +713,9 @@ void main() {
     });
 
     test('triage cuando el chip solo trae el registro de triage', () async {
-      when(() => codec.decodeDetailed(any())).thenAnswer(
+      when(
+        () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer(
         (_) async => const NfcDecodeResult(
           data: <String, dynamic>{'fn': 'Martha'},
           keyVersion: 0,
@@ -727,9 +735,10 @@ void main() {
     });
 
     test('prefiere el registro del guardián si el chip trae los dos', () async {
-      // El del guardián es un superconjunto del de triage.
       final guardianPayload = Uint8List.fromList([9]);
-      when(() => codec.decodeDetailed(any())).thenAnswer(
+      when(
+        () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer(
         (_) async => const NfcDecodeResult(
           data: <String, dynamic>{'patientId': 'x'},
           keyVersion: 0,
@@ -761,11 +770,18 @@ void main() {
       final result = await service.readHwbChip();
 
       expect(result.kind, HwbChipKind.guardian);
-      verify(() => codec.decodeDetailed(guardianPayload)).called(1);
+      verify(
+        () => codec.decodeDetailed(
+          guardianPayload,
+          extraAad: any(named: 'extraAad'),
+        ),
+      ).called(1);
     });
 
     test('none cuando el guardián no se puede descifrar', () async {
-      when(() => codec.decodeDetailed(any())).thenAnswer((_) async => null);
+      when(
+        () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer((_) async => null);
       final service = _service(
         codec,
         _chipWith(kHwbGuardianMimeType, Uint8List.fromList([1])),
@@ -823,9 +839,6 @@ void main() {
     });
 
     test('NfcNotAvailableException es una sola clase en toda la app', () {
-      // Antes estaba declarada por separado en nfc_service_mobile.dart y en
-      // nfc_payload_service.dart: dos clases distintas con el mismo nombre que
-      // ningún archivo podía importar a la vez.
       expect(NfcNotAvailableException().toString(), isNotEmpty);
     });
   });

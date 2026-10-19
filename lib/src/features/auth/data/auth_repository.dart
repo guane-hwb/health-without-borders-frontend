@@ -1,6 +1,7 @@
 // lib/src/features/auth/data/auth_repository.dart
 
 import 'dart:convert';
+import 'package:crypto/crypto.dart' as crypto_pkg;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -47,6 +48,7 @@ class AuthRepository implements TokenProvider {
   static const String sessionKey = _sessionKey;
   @visibleForTesting
   static const String lastUserIdKey = _lastUserIdKey;
+  static const String _lockHashKey = 'hwb_local_lock_hash';
 
   static const String _tokenKey = 'hwb_access_token';
   static const String _refreshKey = 'hwb_refresh_token';
@@ -80,6 +82,9 @@ class AuthRepository implements TokenProvider {
   NfcKeyring? _cachedKeyring;
   DateTime? _cachedClockMark;
   UserSession? _session;
+  bool _isSessionRestoredFromStorage = false;
+
+  bool get isSessionRestoredFromStorage => _isSessionRestoredFromStorage;
 
   final ValueNotifier<UserSession?> _sessionNotifier =
       ValueNotifier<UserSession?>(null);
@@ -125,6 +130,7 @@ class AuthRepository implements TokenProvider {
     _sessionExpired.value = false;
     _sessionWindowClosed.value = false;
     _accountInactiveCode.value = null;
+    _isSessionRestoredFromStorage = false;
 
     final Map<String, dynamic> tokenData = await _apiClient.postForm(
       path: '/api/v1/login/access-token',
@@ -168,9 +174,16 @@ class AuthRepository implements TokenProvider {
     }
 
     _cachedToken = accessToken;
+
+    await _saveLocalLockHash(fetchedSession.email, password);
+
     if (rememberSession) {
       try {
         await _secureStorage.write(key: _tokenKey, value: accessToken);
+      } catch (_) {}
+    } else {
+      try {
+        await _secureStorage.delete(key: _tokenKey);
       } catch (_) {}
     }
 
@@ -182,6 +195,10 @@ class AuthRepository implements TokenProvider {
         try {
           await _secureStorage.write(key: _refreshKey, value: refreshToken);
         } catch (_) {}
+      } else {
+        try {
+          await _secureStorage.delete(key: _refreshKey);
+        } catch (_) {}
       }
     }
 
@@ -189,14 +206,60 @@ class AuthRepository implements TokenProvider {
 
     _updateSession(fetchedSession);
 
-    if (_session!.id.isNotEmpty && rememberSession) {
-      await _persistSession(_session!);
-      try {
-        await _secureStorage.write(key: _lastUserIdKey, value: _session!.id);
-      } catch (_) {}
+    if (_session!.id.isNotEmpty) {
+      if (rememberSession) {
+        await _persistSession(_session!);
+        try {
+          await _secureStorage.write(key: _lastUserIdKey, value: _session!.id);
+        } catch (_) {}
+      } else {
+        try {
+          await _secureStorage.delete(key: _sessionKey);
+        } catch (_) {}
+      }
     }
 
     return _session!;
+  }
+
+  Future<void> _saveLocalLockHash(String email, String rawPassword) async {
+    final bytes = utf8.encode('${email.trim().toLowerCase()}:$rawPassword');
+    final digest = crypto_pkg.sha256.convert(bytes).toString();
+    try {
+      await _secureStorage.write(key: _lockHashKey, value: digest);
+    } catch (_) {}
+  }
+
+  Future<bool> verifyLocalLockPassword(String rawPassword) async {
+    final session = _session;
+    if (session == null || session.email.isEmpty) return false;
+
+    try {
+      final storedHash = await _secureStorage.read(key: _lockHashKey);
+      if (storedHash == null || storedHash.isEmpty) return false;
+
+      final bytes = utf8.encode(
+        '${session.email.trim().toLowerCase()}:$rawPassword',
+      );
+      final currentHash = crypto_pkg.sha256.convert(bytes).toString();
+      return currentHash == storedHash;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<LocalPatientEntry>> pendingForeignRecordsForReview() =>
+      _localDb.getUnsyncedRecords(ownerUserId: _session?.id);
+
+  Future<List<Map<String, Object?>>> pendingForeignEmergencyLogsForReview() =>
+      _localDb.pendingEmergencyAccessLogs(ownerUserId: _session?.id);
+
+  Future<void> discardForeignPendingData() async {
+    await _localDb.clearAll();
+    await _localDb.destroyEncryptionKey();
+    try {
+      await _secureStorage.delete(key: _lastUserIdKey);
+    } catch (_) {}
   }
 
   // ── Session ───────────────────────────────────────────────────────────────
@@ -224,6 +287,7 @@ class AuthRepository implements TokenProvider {
 
     final UserSession? persisted = await _readPersistedSession();
     if (persisted != null) {
+      _isSessionRestoredFromStorage = true;
       _updateSession(persisted);
       return _session;
     }
@@ -278,8 +342,6 @@ class AuthRepository implements TokenProvider {
       );
     } on ApiException catch (e) {
       if (e.statusCode == 401) {
-        // A password change while this refresh was in flight revoked the
-        // token it sent and stored a new pair: the session is fine.
         final String? current = _cachedRefreshToken;
         if (current != null && current.isNotEmpty && current != refreshToken) {
           return _cachedToken;
@@ -312,15 +374,6 @@ class AuthRepository implements TokenProvider {
 
   // ── Password ──────────────────────────────────────────────────────────────
 
-  /// Changes the signed-in user's password (POST /users/me/password).
-  ///
-  /// The server ends every session of the user, this device's included, and
-  /// answers with a new token pair and NFC keyring: they replace the stored
-  /// ones, or the next request would get a 401.
-  ///
-  /// Throws [ApiException]: 400 when the current password is wrong (or the
-  /// new one equals it), 422 when the new one breaks the policy, 429 when the
-  /// attempts are paused (`login_paused`, with `retryAfter`).
   Future<UserSession> changePassword({
     required String currentPassword,
     required String newPassword,
@@ -347,6 +400,7 @@ class AuthRepository implements TokenProvider {
         ),
       );
       if (session.id.isNotEmpty) await _persistSession(_session!);
+      await _saveLocalLockHash(session.email, newPassword);
     }
     return _session!;
   }
@@ -438,6 +492,7 @@ class AuthRepository implements TokenProvider {
     _cachedRefreshToken = null;
     _cachedKeyring = null;
     _cachedClockMark = null;
+    _isSessionRestoredFromStorage = false;
     _updateSession(null);
 
     if (_isWeb) {
@@ -516,8 +571,6 @@ class AuthRepository implements TokenProvider {
     } catch (_) {}
   }
 
-  /// Stores the access and refresh tokens and the NFC keyring of a token
-  /// pair response. Returns the access token, or null when there is none.
   Future<String?> _adoptTokenPair(Map<String, dynamic> data) async {
     final String? access = data['access_token']?.toString();
     if (access == null || access.isEmpty) return null;

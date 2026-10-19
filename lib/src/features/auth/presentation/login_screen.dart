@@ -332,6 +332,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await AppScope.of(context).authRepository.login(
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
+        rememberSession: _rememberSession,
       );
       if (!mounted) return;
       await Navigator.of(context).pushReplacement(

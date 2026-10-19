@@ -1,8 +1,8 @@
 // lib/src/core/nfc/nfc_triage_payload.dart
 //
 // Builds the minimal triage payload to write on the patient's NFC device.
-// This payload must be as small as possible because it targets NTAG chips
-// with limited capacity (180–924 bytes).
+// Requires NTAG215 (504B) or NTAG216 (888B) chips, as encrypted CBOR payloads
+// typically range between 190–350 bytes and exceed the capacity of NTAG213 (180B).
 //
 // Field keys are abbreviated to minimize CBOR size:
 //   fn  = firstName         ln  = firstLastName

@@ -42,7 +42,6 @@ void main() {
     });
 
     test('lanza ArgumentError si la clave no tiene 32 bytes (muy larga)', () {
-      // CORRECCIÓN: Se utiliza interpolación de strings para eliminar el linter warning
       final tooLong = '${_validHexKey}ff';
       expect(
         () => NfcPayloadCodec(hexKey: tooLong),
@@ -51,9 +50,6 @@ void main() {
     });
 
     test('lanza ArgumentError si el hex tiene longitud impar', () {
-      // El constructor ahora reporta de forma uniforme «no queda ninguna llave
-      // usable», sin importar por qué la llave era inválida: antes el hex
-      // impar se distinguía con FormatException.
       expect(
         () => NfcPayloadCodec(hexKey: 'abc'),
         throwsA(isA<ArgumentError>()),
@@ -82,6 +78,24 @@ void main() {
       final decoded = await codec.decode(encrypted);
       expect(decoded, equals(original));
     });
+
+    test(
+      'roundtrip con AAD extendido opcional (bind de hardware/UID)',
+      () async {
+        final original = <String, dynamic>{'patientId': 'p-123'};
+        final extraAad = Uint8List.fromList([0x04, 0x1A, 0x2C, 0xDE]);
+
+        final encrypted = await codec.encode(original, extraAad: extraAad);
+        final decodedWithAad = await codec.decode(
+          encrypted,
+          extraAad: extraAad,
+        );
+        final decodedWithoutAad = await codec.decode(encrypted);
+
+        expect(decodedWithAad, equals(original));
+        expect(decodedWithoutAad, isNull);
+      },
+    );
 
     test('roundtrip con mapa anidado y listas', () async {
       final original = <String, dynamic>{
@@ -224,7 +238,7 @@ void main() {
 
     test('mapa vacío produce un tamaño estimado mínimo pero positivo', () {
       final estimated = codec.estimateSize(<String, dynamic>{});
-      expect(estimated, greaterThan(28)); // al menos el overhead AES-GCM
+      expect(estimated, greaterThan(28));
     });
   });
 

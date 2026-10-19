@@ -28,7 +28,7 @@ import 'package:health_without_borders_frontend/src/core/network/reachability.da
 
 class MockLocalDatabase extends Mock implements LocalDatabase {}
 
-class FakeAuthRepository implements AuthRepository {
+class FakeAuthRepository extends Mock implements AuthRepository {
   FakeAuthRepository({this.currentUser});
 
   final List<String> changedTo = <String>[];
@@ -48,6 +48,12 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<bool> isNfcSessionExpired() async => false;
+
+  @override
+  Future<bool> verifyLocalLockPassword(String password) async => false;
+
+  @override
+  bool get isSessionRestoredFromStorage => currentUser != null;
 
   @override
   UserSession? currentUser;
