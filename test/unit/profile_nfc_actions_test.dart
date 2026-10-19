@@ -207,4 +207,79 @@ void main() {
       expect(stale([]), (patient: false, guardian: false));
     });
   });
+
+  group('devicesReplacedByReassign', () {
+    PatientFullRecord record({
+      String patient = 'P-OLD',
+      String? guardian1 = 'G1-OLD',
+      String? guardian2,
+    }) => PatientFullRecord(
+      patientId: 'p-1',
+      deviceUid: patient,
+      patientInfo: PatientInfo(
+        identification: PatientIdentification(
+          documentType: 'CC',
+          documentNumber: '123',
+        ),
+        firstName: 'Juan',
+        firstLastName: 'Pérez',
+        dob: '2000-01-01',
+        biologicalSex: 'M',
+        address: Address(city: 'Bogotá', state: 'DC'),
+      ),
+      guardianInfo: GuardianInfo(
+        name: 'Ana',
+        relationship: '01',
+        phone: '3000000000',
+        deviceUid: guardian1,
+      ),
+      guardian2Info: guardian2 == null
+          ? null
+          : GuardianInfo(
+              name: 'Luis',
+              relationship: '02',
+              phone: '3000000001',
+              deviceUid: guardian2,
+            ),
+    );
+
+    test('devuelve los UID que cambiaron, en cualquier ranura', () {
+      expect(
+        devicesReplacedByReassign(
+          before: record(guardian2: 'G2-OLD'),
+          after: record(patient: 'P-NEW', guardian2: 'G2-NEW'),
+        ),
+        <String>['P-OLD', 'G2-OLD'],
+      );
+      expect(
+        devicesReplacedByReassign(
+          before: record(),
+          after: record(guardian1: 'G1-NEW'),
+        ),
+        <String>['G1-OLD'],
+      );
+    });
+
+    test('sin cambios, o con una ranura que estaba vacía, nada', () {
+      expect(
+        devicesReplacedByReassign(before: record(), after: record()),
+        isEmpty,
+      );
+      expect(
+        devicesReplacedByReassign(
+          before: record(guardian1: null),
+          after: record(guardian1: 'G1-NEW'),
+        ),
+        isEmpty,
+      );
+      // Solo espacios alrededor: es el mismo dispositivo.
+      expect(
+        devicesReplacedByReassign(
+          before: record(patient: ' P-OLD '),
+          after: record(),
+        ),
+        isEmpty,
+      );
+    });
+  });
 }

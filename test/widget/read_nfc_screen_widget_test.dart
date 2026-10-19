@@ -224,6 +224,13 @@ Widget _buildTestableWidget({
     () => mockDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
   ).thenAnswer((_) async => <SyncNotice>[]);
 
+  // By default nothing is retired and the list was downloaded once.
+  when(() => mockDb.isDeviceRetired(any())).thenAnswer((_) async => false);
+  when(
+    () => mockDb.retiredDevicesSyncedAt(),
+  ).thenAnswer((_) async => '2026-10-19T09:00:00Z');
+  when(() => mockDb.markDevicesRetired(any())).thenAnswer((_) async {});
+
   return _FakeLocaleProvider(
     locale: locale,
     child: AppScope(
@@ -531,7 +538,7 @@ void main() {
         expect(find.byIcon(Icons.error_outline), findsOneWidget);
         expect(
           find.text(
-            'Este dispositivo fue retirado (perdida) y ya no pertenece a HWB.',
+            'Este dispositivo fue retirado (perdido) y ya no pertenece a HWB.',
           ),
           findsOneWidget,
         );
@@ -1025,13 +1032,13 @@ void main() {
           await tester.tap(find.byType(OutlinedButton));
           await tester.pumpAndSettle();
 
-          expect(find.textContaining('dañada'), findsOneWidget);
+          expect(find.textContaining('dañado'), findsOneWidget);
 
           fakeRepo.retiredReason = 'replaced';
           await tester.tap(find.byType(OutlinedButton));
           await tester.pumpAndSettle();
 
-          expect(find.textContaining('reemplazada'), findsOneWidget);
+          expect(find.textContaining('reemplazado'), findsOneWidget);
         },
       );
 
@@ -1584,4 +1591,202 @@ void main() {
       },
     );
   });
+
+  group('Dispositivos retirados', () {
+    const String retiredMessage =
+        'Este dispositivo fue retirado y ya no pertenece a HWB.';
+    const String noListWarning =
+        'No se pudo comprobar si este dispositivo sigue activo: sincronice '
+        'con conexión para descargar la lista de dispositivos retirados.';
+
+    testWidgets('un 410 en línea lo guarda como retirado', (tester) async {
+      await tester.pumpWidget(
+        _buildTestableWidget(
+          child: const ReadNfcScreen(),
+          repo: fakeRepo,
+          authRepo: fakeAuth,
+        ),
+      );
+      await tester.pump();
+
+      fakeRepo.throwRetired410 = true;
+      await tester.enterText(find.byType(TextField), 'HWB-RETIRED-1');
+      await tester.tap(find.byType(OutlinedButton));
+      await tester.pumpAndSettle();
+
+      verify(
+        () => mockDb.markDevicesRetired(<String>['HWB-RETIRED-1']),
+      ).called(1);
+    });
+
+    testWidgets('un 410 en el paso del guardián guarda el dispositivo del '
+        'paciente como retirado', (tester) async {
+      fakeRepo.throw403ForGuardian = true;
+      await tester.pumpWidget(
+        _buildTestableWidget(
+          child: const ReadNfcScreen(),
+          repo: fakeRepo,
+          authRepo: fakeAuth,
+        ),
+      );
+      await tester.pump();
+      await _advanceToStep2(tester);
+
+      fakeRepo.throwRetired410 = true;
+      await tester.enterText(find.byType(TextField), 'HWB-GUARDIAN-01');
+      await tester.tap(find.byType(OutlinedButton));
+      await tester.pumpAndSettle();
+
+      verify(
+        () => mockDb.markDevicesRetired(<String>['HWB-MENOR-05']),
+      ).called(1);
+      expect(find.textContaining('fue retirado (perdido)'), findsOneWidget);
+    });
+
+    testWidgets('sin conexión, el dispositivo retirado de un adulto no abre '
+        'el registro', (tester) async {
+      final db = MockLocalDatabase();
+      final retired = <String>{'HWB-PATIENT-GATE'};
+      await _reachOfflineGateWith(
+        tester,
+        db,
+        fakeRepo,
+        fakeAuth,
+        makeTriage(),
+        retired: retired,
+      );
+
+      expect(find.text(retiredMessage), findsOneWidget);
+      expect(find.byType(PatientProfileScreen), findsNothing);
+    });
+
+    testWidgets('sin conexión, el dispositivo retirado de un menor no abre la '
+        'puerta del guardián ni el acceso de emergencia', (tester) async {
+      final db = MockLocalDatabase();
+      final retired = <String>{'HWB-PATIENT-GATE'};
+      await _reachOfflineGateWith(
+        tester,
+        db,
+        fakeRepo,
+        fakeAuth,
+        makeTriage(minor: true),
+        retired: retired,
+      );
+
+      expect(find.text(retiredMessage), findsOneWidget);
+      expect(find.text('Acceso de emergencia'), findsNothing);
+    });
+
+    testWidgets('sin conexión, un dispositivo del guardián retirado se '
+        'rechaza y la puerta sigue abierta para el nuevo', (tester) async {
+      final db = MockLocalDatabase();
+      final retired = <String>{'HWB-GUARDIAN-01'};
+      await _reachOfflineGateWith(
+        tester,
+        db,
+        fakeRepo,
+        fakeAuth,
+        makeTriage(minor: true),
+        retired: retired,
+      );
+
+      ReadNfcScreen.overrideReadHwbChip =
+          ({required String alertMessage}) async => const HwbChipReadResult(
+            uid: 'HWB-GUARDIAN-01',
+            kind: HwbChipKind.guardian,
+            guardianRecord: <String, dynamic>{'patientId': 'p-minor-01'},
+          );
+      await tester.tap(find.byIcon(Icons.wifi));
+      await tester.pumpAndSettle();
+
+      expect(find.text(retiredMessage), findsOneWidget);
+      expect(find.byType(PatientProfileScreen), findsNothing);
+      expect(find.text('Acceso de emergencia'), findsOneWidget);
+    });
+
+    testWidgets('sin la lista descargada abre sin conexión, con un aviso', (
+      tester,
+    ) async {
+      final db = MockLocalDatabase();
+      await _reachOfflineGateWith(
+        tester,
+        db,
+        fakeRepo,
+        fakeAuth,
+        makeTriage(),
+        neverSynced: true,
+      );
+
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+      expect(find.text(noListWarning), findsOneWidget);
+    });
+
+    testWidgets('con la lista descargada no hay aviso', (tester) async {
+      await reachOfflineGate(tester, triage: makeTriage());
+
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+      expect(find.text(noListWarning), findsNothing);
+    });
+
+    testWidgets('el acceso de emergencia también avisa si nunca se descargó '
+        'la lista', (tester) async {
+      final db = MockLocalDatabase();
+      await _reachOfflineGateWith(
+        tester,
+        db,
+        fakeRepo,
+        fakeAuth,
+        makeTriage(minor: true),
+        neverSynced: true,
+      );
+
+      await tester.tap(find.text('Acceso de emergencia'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continuar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+      expect(find.text(noListWarning), findsOneWidget);
+    });
+  });
+}
+
+/// Like `reachOfflineGate`, with the devices in [retired] retired and,
+/// with [neverSynced], no list downloaded. Set after the harness defaults:
+/// mocktail answers with the latest matching stub.
+Future<void> _reachOfflineGateWith(
+  WidgetTester tester,
+  MockLocalDatabase db,
+  FakePatientRepository repo,
+  FakeAuthRepository auth,
+  TriageSummary triage, {
+  Set<String> retired = const <String>{},
+  bool neverSynced = false,
+}) async {
+  auth.nfcKey = 'secret-key';
+  repo.throwNonApiError = true;
+  ReadNfcScreen.overrideReadHwbChip = ({required String alertMessage}) async =>
+      HwbChipReadResult(
+        uid: 'HWB-PATIENT-GATE',
+        kind: HwbChipKind.triage,
+        triage: triage,
+      );
+
+  final Widget app = _buildTestableWidget(
+    child: const ReadNfcScreen(),
+    repo: repo,
+    authRepo: auth,
+    database: db,
+  );
+  when(() => db.isDeviceRetired(any())).thenAnswer(
+    (Invocation i) async => retired.contains(i.positionalArguments.first),
+  );
+  if (neverSynced) {
+    when(() => db.retiredDevicesSyncedAt()).thenAnswer((_) async => null);
+  }
+  await tester.pumpWidget(app);
+  await tester.pump();
+
+  await tester.tap(find.byIcon(Icons.wifi));
+  await tester.pumpAndSettle();
 }

@@ -13,6 +13,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:health_without_borders_frontend/src/core/nfc/retired_device_hash.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 
@@ -1677,6 +1678,10 @@ void main() {
         expect(tables, contains('nfc_chip_status'));
         expect(tables, contains('emergency_access_log'));
         expect(tables, contains('sync_notices'));
+        expect(
+          tables,
+          containsAll(<String>['retired_devices', 'retired_devices_cursor']),
+        );
 
         final emergencyColumns = (await raw.rawQuery(
           'PRAGMA table_info(emergency_access_log)',
@@ -3706,4 +3711,90 @@ void main() {
       });
     });
   }
+
+  for (final bool web in <bool>[false, true]) {
+    group('Dispositivos retirados (${web ? 'web' : 'nativo'})', () {
+      late LocalDatabase localDb;
+
+      setUp(() async {
+        final Map<String, String> webBackend = <String, String>{};
+        localDb = web
+            ? LocalDatabase.forTesting(
+                secureStorage: mockStorage,
+                forceWeb: true,
+                webGet: (key) async => webBackend[key],
+                webSet: (key, value) async => webBackend[key] = value,
+                webRemove: (key) async => webBackend.remove(key),
+                webClearAll: () async => webBackend.clear(),
+                webList: (prefix) async => webBackend.entries
+                    .where((e) => e.key.startsWith(prefix))
+                    .toList(growable: false),
+                webDeleteByPrefix: (prefix) async =>
+                    webBackend.removeWhere((k, _) => k.startsWith(prefix)),
+              )
+            : LocalDatabase.instance;
+      });
+
+      test('sin lista descargada no hay retirados ni fecha', () async {
+        expect(await localDb.isDeviceRetired('04:A1:B2'), isFalse);
+        expect(await localDb.retiredDevicesSyncedAt(), isNull);
+      });
+
+      test('guarda los hashes del servidor y su server_time; ignora los '
+          'inválidos', () async {
+        await localDb.addRetiredDeviceHashes(<String>[
+          retiredDeviceHash('04A1B2C3D4E5F6')!,
+          'no-es-un-hash',
+        ], serverTime: '2026-10-19T10:00:00Z');
+
+        // El mismo dispositivo escrito de otra forma.
+        expect(await localDb.isDeviceRetired('04:a1:b2:c3:d4:e5:f6'), isTrue);
+        expect(await localDb.isDeviceRetired('04:99'), isFalse);
+        expect(await localDb.isDeviceRetired('XYZ'), isFalse);
+        expect(await localDb.retiredDevicesSyncedAt(), '2026-10-19T10:00:00Z');
+
+        // Repetidos (el solape del servidor) no fallan; la fecha avanza.
+        await localDb.addRetiredDeviceHashes(<String>[
+          retiredDeviceHash('04A1B2C3D4E5F6')!,
+        ], serverTime: '2026-10-19T11:00:00Z');
+        expect(await localDb.retiredDevicesSyncedAt(), '2026-10-19T11:00:00Z');
+      });
+
+      test('markDevicesRetired los agrega sin mover la fecha, y clearAll no '
+          'los borra', () async {
+        await localDb.markDevicesRetired(<String>['53:8C:2E:91', 'XYZ']);
+
+        expect(await localDb.isDeviceRetired('538c2e91'), isTrue);
+        expect(await localDb.retiredDevicesSyncedAt(), isNull);
+
+        await localDb.clearAll();
+        expect(await localDb.isDeviceRetired('53:8C:2E:91'), isTrue);
+      });
+    });
+  }
+
+  group('Dispositivos retirados — errores de almacenamiento (web)', () {
+    LocalDatabase failing() => LocalDatabase.forTesting(
+      secureStorage: mockStorage,
+      forceWeb: true,
+      webGet: (key) async => throw StateError('get'),
+      webSet: (key, value) async => throw StateError('set'),
+      webList: (prefix) async => const <MapEntry<String, String>>[],
+    );
+
+    test('consultar responde false y la fecha es null', () async {
+      final db = failing();
+      expect(await db.isDeviceRetired('04:A1'), isFalse);
+      expect(await db.retiredDevicesSyncedAt(), isNull);
+    });
+
+    test('markDevicesRetired no lanza; addRetiredDeviceHashes sí', () async {
+      final db = failing();
+      await expectLater(db.markDevicesRetired(<String>['04:A1']), completes);
+      await expectLater(
+        db.addRetiredDeviceHashes(<String>[retiredDeviceHash('04A1')!]),
+        throwsStateError,
+      );
+    });
+  });
 }

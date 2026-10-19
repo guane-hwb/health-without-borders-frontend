@@ -19,6 +19,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
+import '../nfc/retired_device_hash.dart';
 import '../utils/app_logger.dart';
 import '../utils/clinical_time.dart';
 import 'web_storage.dart' as web_storage;
@@ -186,12 +187,14 @@ class LocalDatabase {
   ];
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 11;
+  static const int _dbVersion = 12;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
   static const String _keyVersionTable = 'nfc_key_version_observations';
   static const String _syncNoticeTable = 'sync_notices';
+  static const String _retiredDeviceTable = 'retired_devices';
+  static const String _retiredCursorTable = 'retired_devices_cursor';
   static const String _dbKeyStorageName = 'hwb_sqlite_aes_key';
   static const String _auditKeyStorageName = 'hwb_sqlite_audit_aes_key';
 
@@ -204,6 +207,8 @@ class LocalDatabase {
   static const String _webKeyVersionPrefix = 'hwb_web_keyver::';
   static const String _webLogPrefix = 'hwb_web_emlog::';
   static const String _webNoticePrefix = 'hwb_web_notice::';
+  static const String _webRetiredPrefix = 'hwb_web_retired::';
+  static const String _webRetiredCursorKey = 'hwb_web_retired_cursor';
 
   final FlutterSecureStorage _secureStorage;
   Database? _db;
@@ -1047,6 +1052,7 @@ class LocalDatabase {
         await _createEmergencyLogTable(db);
         await _createKeyVersionTable(db);
         await _createSyncNoticeTable(db);
+        await _createRetiredDeviceTables(db);
       },
       onUpgrade: (Database db, int oldVersion, int newVersion) async {
         if (oldVersion < 2) {
@@ -1114,6 +1120,9 @@ class LocalDatabase {
         }
         if (oldVersion < 11) {
           await _createSyncNoticeTable(db);
+        }
+        if (oldVersion < 12) {
+          await _createRetiredDeviceTables(db);
         }
       },
     );
@@ -1217,6 +1226,20 @@ class LocalDatabase {
         codes         TEXT NOT NULL,
         owner_user_id TEXT,
         created_at    TEXT NOT NULL
+      )
+    ''');
+  }
+
+  static Future<void> _createRetiredDeviceTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_retiredDeviceTable (
+        uid_hash TEXT PRIMARY KEY
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_retiredCursorTable (
+        id          INTEGER PRIMARY KEY CHECK (id = 1),
+        server_time TEXT NOT NULL
       )
     ''');
   }
@@ -2282,6 +2305,113 @@ class LocalDatabase {
         error: e,
         stackTrace: stack,
       );
+    }
+  }
+
+  // ── Retired devices ───────────────────────────────────────────────────────
+  //
+  // Hashes of the patient and guardian devices the server retired (see
+  // retiredDeviceHash), so a retired device is refused offline too. They
+  // belong to no user: clearAll() keeps them.
+
+  /// Stores [hashes] from the server and, with them, the [serverTime] to send
+  /// back as `since` next time. Invalid entries are skipped.
+  Future<void> addRetiredDeviceHashes(
+    Iterable<String> hashes, {
+    String? serverTime,
+  }) async {
+    final List<String> valid = hashes.where(isRetiredDeviceHash).toList();
+    final db = await _database;
+    if (db == null) {
+      await _withWebLock(() async {
+        await _ensureWebMigrated();
+        for (final String hash in valid) {
+          await _webSet('$_webRetiredPrefix$hash', '1');
+        }
+        if (serverTime != null && serverTime.isNotEmpty) {
+          await _webSet(_webRetiredCursorKey, serverTime);
+        }
+      });
+      return;
+    }
+    await db.transaction((txn) async {
+      final Batch batch = txn.batch();
+      for (final String hash in valid) {
+        batch.insert(_retiredDeviceTable, <String, Object?>{
+          'uid_hash': hash,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      if (serverTime != null && serverTime.isNotEmpty) {
+        batch.insert(_retiredCursorTable, <String, Object?>{
+          'id': 1,
+          'server_time': serverTime,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
+  /// Records devices this phone knows were retired (a 410 from the server, a
+  /// reassignment made here) before the next sync brings them.
+  Future<void> markDevicesRetired(Iterable<String> uids) async {
+    try {
+      await addRetiredDeviceHashes(
+        uids.map(retiredDeviceHash).whereType<String>(),
+      );
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo guardar el dispositivo retirado',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  /// Whether [uid] is a retired device. On a storage error the answer is
+  /// false: care is not blocked by a local failure.
+  Future<bool> isDeviceRetired(String uid) async {
+    final String? hash = retiredDeviceHash(uid);
+    if (hash == null) return false;
+    try {
+      final db = await _database;
+      if (db == null) {
+        await _ensureWebMigrated();
+        return await _webGet('$_webRetiredPrefix$hash') != null;
+      }
+      final rows = await db.query(
+        _retiredDeviceTable,
+        where: 'uid_hash = ?',
+        whereArgs: <String>[hash],
+        limit: 1,
+      );
+      return rows.isNotEmpty;
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo consultar la lista de dispositivos retirados',
+        error: e,
+        stackTrace: stack,
+      );
+      return false;
+    }
+  }
+
+  /// `server_time` of the last list downloaded; null if it never was.
+  Future<String?> retiredDevicesSyncedAt() async {
+    try {
+      final db = await _database;
+      if (db == null) {
+        await _ensureWebMigrated();
+        return await _webGet(_webRetiredCursorKey);
+      }
+      final rows = await db.query(_retiredCursorTable, limit: 1);
+      return rows.isEmpty ? null : rows.first['server_time'] as String?;
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo leer la fecha de la lista de dispositivos retirados',
+        error: e,
+        stackTrace: stack,
+      );
+      return null;
     }
   }
 

@@ -135,6 +135,24 @@ Future<bool> executeUpdateNfcChips({
   return true;
 }
 
+/// UIDs a reassignment took out of use: each device of [before] whose slot
+/// in [after] holds another one. The server retires them on the next sync.
+List<String> devicesReplacedByReassign({
+  required PatientFullRecord before,
+  required PatientFullRecord after,
+}) {
+  final List<(String?, String?)> slots = <(String?, String?)>[
+    (before.deviceUid, after.deviceUid),
+    (before.guardianInfo.deviceUid, after.guardianInfo.deviceUid),
+    (before.guardian2Info?.deviceUid, after.guardian2Info?.deviceUid),
+  ];
+  return <String>[
+    for (final (String? old, String? now) in slots)
+      if ((old ?? '').trim().isNotEmpty && old!.trim() != (now ?? '').trim())
+        old.trim(),
+  ];
+}
+
 /// Ejecuta el proceso de reasignación de un dispositivo individual.
 /// Which other devices of the patient still describe the old binding after
 /// the reassignments in [done], in the order they were written.

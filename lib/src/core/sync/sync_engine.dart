@@ -293,6 +293,8 @@ class SyncEngine {
         );
       }
 
+      await _syncRetiredDevices();
+
       final List<LocalPatientEntry> allUnsynced = await _localDb
           .getUnsyncedRecords(ownerUserId: _currentUserId);
 
@@ -609,6 +611,29 @@ class SyncEngine {
           _retryTimer?.isActive != true) {
         _scheduleRetry();
       }
+    }
+  }
+
+  /// Downloads the devices retired since the last list, so the reader can
+  /// refuse them offline. Best effort: a failure keeps the previous list and
+  /// the next cycle tries again from the same `since`.
+  Future<void> _syncRetiredDevices() async {
+    try {
+      final String? since = await _localDb.retiredDevicesSyncedAt();
+      final RetiredDeviceList list = await _patientRepo.fetchRetiredDevices(
+        since: since,
+      );
+      await _localDb.addRetiredDeviceHashes(
+        list.uidHashes,
+        serverTime: list.serverTime,
+      );
+      AppLogger.d('Dispositivos retirados recibidos: ${list.uidHashes.length}');
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error descargando la lista de dispositivos retirados',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 

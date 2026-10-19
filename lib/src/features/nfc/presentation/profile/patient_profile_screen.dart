@@ -381,6 +381,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         patient: stale.patient,
         guardian: stale.guardian,
       );
+      // Refused offline from now on, before the server's list brings them.
+      await scope.localDatabase.markDevicesRetired(
+        devicesReplacedByReassign(before: _draft, after: record),
+      );
       if (!mounted) return;
       setState(() {
         _draftController.reset(record);

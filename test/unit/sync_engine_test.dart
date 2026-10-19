@@ -139,6 +139,21 @@ void main() {
       ),
     ).thenAnswer((_) async => []);
     when(() => localDb.pendingNfcKeyVersions()).thenAnswer((_) async => []);
+    when(() => localDb.retiredDevicesSyncedAt()).thenAnswer((_) async => null);
+    when(
+      () => localDb.addRetiredDeviceHashes(
+        any(),
+        serverTime: any(named: 'serverTime'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      () => patientRepo.fetchRetiredDevices(since: any(named: 'since')),
+    ).thenAnswer(
+      (_) async => const RetiredDeviceList(
+        uidHashes: <String>[],
+        serverTime: '2026-10-19T09:00:00Z',
+      ),
+    );
     when(
       () => localDb.markNfcKeyVersionsSynced(any()),
     ).thenAnswer((_) async {});
@@ -1307,6 +1322,79 @@ void main() {
       // La telemetría nunca puede tumbar la sincronización clínica.
       await expectLater(engine.syncAll(), completes);
       verifyNever(() => localDb.markNfcKeyVersionsSynced(any()));
+    });
+  });
+
+  group('lista de dispositivos retirados', () {
+    final String hash = 'b' * 64;
+
+    test('la primera vez pide la lista completa y la guarda con su '
+        'server_time', () async {
+      when(
+        () => patientRepo.fetchRetiredDevices(since: any(named: 'since')),
+      ).thenAnswer(
+        (_) async => RetiredDeviceList(
+          uidHashes: <String>[hash],
+          serverTime: '2026-10-19T10:00:00Z',
+        ),
+      );
+
+      await engine.syncAll();
+
+      verify(() => patientRepo.fetchRetiredDevices(since: null)).called(1);
+      verify(
+        () => localDb.addRetiredDeviceHashes(<String>[
+          hash,
+        ], serverTime: '2026-10-19T10:00:00Z'),
+      ).called(1);
+    });
+
+    test('después pide solo lo nuevo desde el último server_time', () async {
+      when(
+        () => localDb.retiredDevicesSyncedAt(),
+      ).thenAnswer((_) async => '2026-10-19T10:00:00Z');
+
+      await engine.syncAll();
+
+      verify(
+        () => patientRepo.fetchRetiredDevices(since: '2026-10-19T10:00:00Z'),
+      ).called(1);
+    });
+
+    test('un fallo no aborta el lote ni guarda nada', () async {
+      when(
+        () => patientRepo.fetchRetiredDevices(since: any(named: 'since')),
+      ).thenThrow(Exception('sin red'));
+
+      await expectLater(engine.syncAll(), completes);
+      verifyNever(
+        () => localDb.addRetiredDeviceHashes(
+          any(),
+          serverTime: any(named: 'serverTime'),
+        ),
+      );
+      verify(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).called(1);
+    });
+
+    test('con el backend inalcanzable no la pide', () async {
+      final reachability = MockReachability();
+      when(() => reachability.probe()).thenAnswer((_) async => false);
+      final offline = SyncEngine(
+        patientRepository: patientRepo,
+        authRepository: authRepo,
+        localDatabase: localDb,
+        reachability: reachability,
+      );
+
+      await offline.syncAll();
+
+      verifyNever(
+        () => patientRepo.fetchRetiredDevices(since: any(named: 'since')),
+      );
+      offline.stop();
     });
   });
 
