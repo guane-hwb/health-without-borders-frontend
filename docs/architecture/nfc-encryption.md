@@ -27,6 +27,14 @@ matters: a device with connectivity can resolve the patient from the UID alone
 through `/patients/scan`, even when it cannot decrypt the payload. The chip is a
 cache for offline use; the backend is the source of truth.
 
+A guardian device holds the bounded record of **one** patient, so every minor
+needs a guardian device of their own. `writeGuardianRecord(patientId: ...)`
+refuses a chip that is a patient device or holds another patient's copy
+(`NfcDeviceInUseException`); registration checks the same when the guardian
+device is scanned. Offline, the reader uses the guardian copy only when its
+`device_uid` is the patient device just scanned; otherwise it shows the triage,
+read-only.
+
 ---
 
 ## Wire format

@@ -54,12 +54,17 @@ class Step2Guardian extends StatefulWidget {
     required this.requiredForMinor,
     required this.onBack,
     required this.onContinue,
+    this.readDevice,
   });
 
   final RegisterDraft draft;
   final bool requiredForMinor;
   final VoidCallback onBack;
   final VoidCallback onContinue;
+
+  /// Reads a guardian device's UID. Returns null when the device was refused
+  /// (the caller has said why). Defaults to reading the UID only.
+  final Future<String?> Function()? readDevice;
 
   @override
   State<Step2Guardian> createState() => _Step2State();
@@ -185,10 +190,10 @@ class _Step2State extends State<Step2Guardian> {
     final s = AppStrings.of(context);
     setState(() => _scanning = true);
     try {
-      final uid = await NfcService.readDeviceUid();
+      final uid = await (widget.readDevice ?? NfcService.readDeviceUid)();
       if (mounted) {
         setState(() {
-          _uid.text = uid;
+          if (uid != null) _uid.text = uid;
           _scanning = false;
         });
       }
@@ -228,10 +233,10 @@ class _Step2State extends State<Step2Guardian> {
     final s = AppStrings.of(context);
     setState(() => _scanning2 = true);
     try {
-      final uid = await NfcService.readDeviceUid();
+      final uid = await (widget.readDevice ?? NfcService.readDeviceUid)();
       if (mounted) {
         setState(() {
-          _uid2.text = uid;
+          if (uid != null) _uid2.text = uid;
           _scanning2 = false;
         });
       }

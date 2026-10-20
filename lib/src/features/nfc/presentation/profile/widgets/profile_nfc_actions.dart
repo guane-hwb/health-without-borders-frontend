@@ -83,6 +83,7 @@ Future<bool> executeUpdateNfcChips({
               .writeGuardianRecord(
                 buildFit: guardianFitBuilder(record: record, codec: codec),
                 expectedUid: expectedUid,
+                patientId: record.patientId,
               );
           fit = result.fit;
         },
@@ -286,6 +287,7 @@ Future<PatientFullRecord?> executeReassignOne({
         await service.writeGuardianRecord(
           buildFit: guardianFitBuilder(record: updated, codec: codec),
           expectedUid: normalizedNew,
+          patientId: updated.patientId,
         );
       }
     },

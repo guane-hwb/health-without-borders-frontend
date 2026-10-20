@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:nfc_manager/ndef_record.dart';
 
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_alias.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_payload.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
@@ -571,6 +572,150 @@ void main() {
   // ══════════════════════════════════════════════════════════════════════════
   // readTriagePayload
   // ══════════════════════════════════════════════════════════════════════════
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Un dispositivo del guardián por menor
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('writeGuardianRecord con patientId', () {
+    GuardianPayloadFit fit(int _) => const GuardianPayloadFit(
+      payload: {'a': 1},
+      includedConsultations: 0,
+      includedVaccines: 0,
+      totalConsultations: 0,
+      totalVaccines: 0,
+      estimatedBytes: 3,
+      fits: true,
+    );
+
+    void decodesTo(Map<String, dynamic>? data) {
+      when(
+        () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer(
+        (_) async => data == null
+            ? null
+            : NfcDecodeResult(data: data, keyVersion: 0, hadHeader: false),
+      );
+    }
+
+    setUp(() {
+      when(
+        () => codec.encode(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
+    });
+
+    Future<_FakeNdef> write(HwbTag tag) async {
+      await _service(
+        codec,
+        tag,
+      ).writeGuardianRecord(buildFit: fit, patientId: 'p-ana');
+      return tag.ndef! as _FakeNdef;
+    }
+
+    test('rechaza la copia de otro menor y no graba nada', () async {
+      decodesTo(<String, dynamic>{'patientId': 'p-hermano'});
+      final tag = _chipWith(kHwbGuardianMimeType, Uint8List.fromList([7]));
+
+      await expectLater(
+        write(tag),
+        throwsA(
+          isA<NfcDeviceInUseException>().having(
+            (e) => e.patientDevice,
+            'patientDevice',
+            isFalse,
+          ),
+        ),
+      );
+      expect((tag.ndef! as _FakeNdef).written, isNull);
+    });
+
+    test('lee el patientId de una copia con claves cortas', () async {
+      decodesTo(<String, dynamic>{
+        kAliasSchemaKey: kAliasSchemaVersion,
+        'pid': 'p-hermano',
+      });
+
+      await expectLater(
+        write(_chipWith(kHwbGuardianMimeType, Uint8List.fromList([7]))),
+        throwsA(isA<NfcDeviceInUseException>()),
+      );
+    });
+
+    test('rechaza un dispositivo del paciente', () async {
+      decodesTo(<String, dynamic>{'fn': 'Martha'});
+
+      await expectLater(
+        write(_chipWith(kHwbNdefMimeType, Uint8List.fromList([1]))),
+        throwsA(
+          isA<NfcDeviceInUseException>().having(
+            (e) => e.patientDevice,
+            'patientDevice',
+            isTrue,
+          ),
+        ),
+      );
+    });
+
+    test('graba sobre la copia del mismo menor', () async {
+      decodesTo(<String, dynamic>{'patientId': 'p-ana'});
+
+      final ndef = await write(
+        _chipWith(kHwbGuardianMimeType, Uint8List.fromList([7])),
+      );
+
+      expect(ndef.written, isNotNull);
+    });
+
+    test('graba sobre un dispositivo en blanco', () async {
+      final ndef = await write(_blankChip());
+      expect(ndef.written, isNotNull);
+    });
+
+    test('graba si ninguna llave abre lo que trae (no hay con qué '
+        'comparar)', () async {
+      decodesTo(null);
+
+      final guardian = await write(
+        _chipWith(kHwbGuardianMimeType, Uint8List.fromList([7])),
+      );
+      final patient = await write(
+        _chipWith(kHwbNdefMimeType, Uint8List.fromList([1])),
+      );
+
+      expect(guardian.written, isNotNull);
+      expect(patient.written, isNotNull);
+    });
+
+    test('una copia sin patientId no se puede atribuir: se graba', () async {
+      decodesTo(<String, dynamic>{'patientInfo': <String, dynamic>{}});
+
+      final ndef = await write(
+        _chipWith(kHwbGuardianMimeType, Uint8List.fromList([7])),
+      );
+
+      expect(ndef.written, isNotNull);
+    });
+
+    test('sin patientId no compara (comportamiento anterior)', () async {
+      decodesTo(<String, dynamic>{'patientId': 'p-hermano'});
+      final tag = _chipWith(kHwbGuardianMimeType, Uint8List.fromList([7]));
+
+      await _service(codec, tag).writeGuardianRecord(buildFit: fit);
+
+      expect((tag.ndef! as _FakeNdef).written, isNotNull);
+    });
+
+    test('NfcDeviceInUseException se describe', () {
+      expect(
+        NfcDeviceInUseException(patientDevice: true).toString(),
+        contains('patient device'),
+      );
+      expect(
+        NfcDeviceInUseException(patientDevice: false).toString(),
+        contains('guardian copy'),
+      );
+    });
+  });
 
   group('readTriagePayload', () {
     test('devuelve el triage decodificado', () async {

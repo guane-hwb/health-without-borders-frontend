@@ -45,6 +45,8 @@ For patients who require a guardian, you can register **up to two guardians**:
 
 **Note:** The guardian's consent signature is preserved on the server; it is not lost when the guardian card is synchronized.
 
+**One guardian device per minor.** A guardian device holds the record of one patient, and offline it opens that record. A guardian with two or more children needs a separate guardian device for each child. If the device you scan already belongs to another patient, the app says *"This device already belongs to another patient. Each minor needs their own guardian device: use a blank one."* and does not use it.
+
 ---
 
 ## 5. Finish and save
