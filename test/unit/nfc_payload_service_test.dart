@@ -7,6 +7,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:nfc_manager/ndef_record.dart';
 
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_payload.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart'
+    show kLegacyNfcKeyVersion;
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_session_manager.dart';
@@ -862,6 +864,162 @@ void main() {
 
       expect(result.uid, kExpectedUid);
       expect(result.kind, HwbChipKind.none);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Binding al chip — la clave de escritura ya no es la legacy
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('binding al chip', () {
+    // Any version that is neither null nor the legacy one turns binding on.
+    const int boundVersion = kLegacyNfcKeyVersion + 1;
+
+    setUp(() {
+      when(
+        () => codec.encode(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
+    });
+
+    /// The extraAad handed to the (single) codec.encode call.
+    Uint8List? capturedAad() {
+      final captured = verify(
+        () => codec.encode(any(), extraAad: captureAny(named: 'extraAad')),
+      ).captured;
+      expect(captured, hasLength(1), reason: 'encode debe llamarse una vez');
+      return captured.single as Uint8List?;
+    }
+
+    test('sin versión de clave (null) no ata el payload al chip', () async {
+      when(() => codec.writeKeyVersion).thenReturn(null);
+      final service = _service(codec, _blankChip());
+
+      await service.writeTriagePayload({'a': 1}, expectedUid: kExpectedUid);
+
+      expect(capturedAad(), isNull);
+    });
+
+    test('con la clave legacy no ata el payload al chip', () async {
+      when(() => codec.writeKeyVersion).thenReturn(kLegacyNfcKeyVersion);
+      final service = _service(codec, _blankChip());
+
+      await service.writeTriagePayload({'a': 1}, expectedUid: kExpectedUid);
+
+      expect(capturedAad(), isNull);
+    });
+
+    test(
+      'sin expectedUid cifra dentro del tap, atado al UID del chip',
+      () async {
+        when(() => codec.writeKeyVersion).thenReturn(boundVersion);
+        final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+        final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+        final result = await service.writeTriagePayload({'a': 1});
+
+        expect(
+          capturedAad(),
+          orderedEquals(chipBindingAad(kExpectedUid, kHwbNdefMimeType)),
+        );
+        expect(result.bytesWritten, 3);
+        expect(ndef.written!.records, hasLength(1));
+        final record = ndef.written!.records.single;
+        expect(String.fromCharCodes(record.type), kHwbNdefMimeType);
+        expect(record.payload, orderedEquals([1, 2, 3]));
+      },
+    );
+
+    test('con expectedUid vacío también cifra dentro del tap', () async {
+      when(() => codec.writeKeyVersion).thenReturn(boundVersion);
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      await service.writeTriagePayload({'a': 1}, expectedUid: '');
+
+      expect(
+        capturedAad(),
+        orderedEquals(chipBindingAad(kExpectedUid, kHwbNdefMimeType)),
+      );
+      expect(ndef.written, isNotNull);
+    });
+
+    test('con expectedUid cifra antes del tap, atado a ese UID', () async {
+      when(() => codec.writeKeyVersion).thenReturn(boundVersion);
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      // Same chip, different UID formatting: the binding is normalized.
+      final service = _service(codec, HwbTag(uid: 'ab:cd:ef', ndef: ndef));
+
+      await service.writeTriagePayload({'a': 1}, expectedUid: 'AB-CD-EF');
+
+      expect(
+        capturedAad(),
+        orderedEquals(chipBindingAad(kExpectedUid, kHwbNdefMimeType)),
+        reason: 'el payload ya cifrado se reutiliza, sin cifrar de nuevo',
+      );
+      expect(ndef.written!.records.single.payload, orderedEquals([1, 2, 3]));
+    });
+
+    test('el guardián usa su propio MIME en el binding', () async {
+      when(() => codec.writeKeyVersion).thenReturn(boundVersion);
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      await service.writeGuardianPayload({'a': 1});
+
+      expect(
+        capturedAad(),
+        orderedEquals(chipBindingAad(kExpectedUid, kHwbGuardianMimeType)),
+      );
+      expect(
+        String.fromCharCodes(ndef.written!.records.single.type),
+        kHwbGuardianMimeType,
+      );
+    });
+
+    test('writeGuardianRecord ata el payload al UID del chip', () async {
+      when(() => codec.writeKeyVersion).thenReturn(boundVersion);
+      final ndef = _FakeNdef(maxSize: 888);
+      final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+      await service.writeGuardianRecord(
+        buildFit: (int budget) => const GuardianPayloadFit(
+          payload: {'a': 1},
+          includedConsultations: 1,
+          includedVaccines: 0,
+          totalConsultations: 1,
+          totalVaccines: 0,
+          estimatedBytes: 3,
+          fits: true,
+        ),
+      );
+
+      expect(
+        capturedAad(),
+        orderedEquals(chipBindingAad(kExpectedUid, kHwbGuardianMimeType)),
+      );
+      expect(ndef.written, isNotNull);
+    });
+
+    test('writeGuardianRecord con clave legacy no ata el payload', () async {
+      when(() => codec.writeKeyVersion).thenReturn(kLegacyNfcKeyVersion);
+      final service = _service(
+        codec,
+        HwbTag(uid: kExpectedUid, ndef: _FakeNdef(maxSize: 888)),
+      );
+
+      await service.writeGuardianRecord(
+        buildFit: (int budget) => const GuardianPayloadFit(
+          payload: {'a': 1},
+          includedConsultations: 1,
+          includedVaccines: 0,
+          totalConsultations: 1,
+          totalVaccines: 0,
+          estimatedBytes: 3,
+          fits: true,
+        ),
+      );
+
+      expect(capturedAad(), isNull);
     });
   });
 }

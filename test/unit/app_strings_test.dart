@@ -7485,6 +7485,16 @@ void main() {
       expect(en.loginNetworkRequired, isNot('loginNetworkRequired'));
     });
 
+    test('codeSuggestedByAi returns the correct text (es and en)', () {
+      final es = AppStrings.forTesting('es');
+      final en = AppStrings.forTesting('en');
+
+      expect(es.codeSuggestedByAi, 'Código sugerido por IA');
+      expect(en.codeSuggestedByAi, 'Code suggested by AI');
+      expect(es.codeSuggestedByAi, isNot('codeSuggestedByAi'));
+      expect(en.codeSuggestedByAi, isNot('codeSuggestedByAi'));
+    });
+
     testWidgets(
       'AppLocale.of throws a StateError when no AppLocale ancestor exists',
       (tester) async {

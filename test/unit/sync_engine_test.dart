@@ -1974,4 +1974,46 @@ void main() {
       },
     );
   });
+
+  group('_scheduleRetry — sesión cerrada durante el ciclo', () {
+    test('si la sesión se cierra a mitad de ciclo no programa reintento aunque '
+        'queden pendientes', () async {
+      var loggedOut = false;
+      when(
+        () => authRepo.currentUser,
+      ).thenAnswer((_) => loggedOut ? null : testUser);
+
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async {
+        loggedOut = true;
+        return <LocalPatientEntry>[];
+      });
+      when(
+        () => localDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 1);
+
+      final SyncEngine loggedOutEngine = SyncEngine(
+        patientRepository: patientRepo,
+        authRepository: authRepo,
+        localDatabase: localDb,
+        retryBackoff: const <Duration>[Duration(milliseconds: 10)],
+      );
+
+      await loggedOutEngine.syncAll();
+      expect(loggedOutEngine.pendingCount.value, 1);
+
+      clearInteractions(localDb);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      verifyNever(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      );
+      loggedOutEngine.stop();
+    });
+  });
 }

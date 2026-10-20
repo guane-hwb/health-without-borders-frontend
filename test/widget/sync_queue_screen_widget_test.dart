@@ -1,6 +1,7 @@
 // test/widget/sync_queue_screen_widget_test.dart
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1657,5 +1658,442 @@ void main() {
         );
       },
     );
+  });
+
+  List<String> captureClipboard() {
+    final List<String> copied = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (
+          MethodCall call,
+        ) async {
+          if (call.method == 'Clipboard.setData') {
+            final Map<Object?, Object?> args =
+                call.arguments as Map<Object?, Object?>;
+            copied.add(args['text'] as String);
+          }
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+    return copied;
+  }
+
+  Future<void> pumpScreen(WidgetTester tester, {String locale = 'es'}) async {
+    await tester.pumpWidget(
+      buildTestApp(
+        child: const SyncQueueScreen(),
+        db: db,
+        syncEngine: syncEngine,
+        reachability: reachability,
+        locale: locale,
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  group('SyncQueueScreen – aviso de registros bloqueados/en cuarentena', () {
+    setUp(() {
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [makeEntry()]);
+    });
+
+    testWidgets('solo bloqueados tras syncAll muestra el aviso naranja (ES)', (
+      tester,
+    ) async {
+      when(() => syncEngine.syncAll()).thenAnswer(
+        (_) async => const SyncResult(
+          allSuccessful: false,
+          remainingRetryable: 0,
+          remainingBlocked: 2,
+        ),
+      );
+
+      await pumpScreen(tester);
+      await tester.tap(find.byIcon(Icons.cloud_upload).first);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Quedan 2 registro(s) bloqueados/en cuarentena. '
+          'Revise o gestione estos registros.',
+        ),
+        findsOneWidget,
+      );
+      final SnackBar bar = tester.widget<SnackBar>(find.byType(SnackBar));
+      expect(bar.backgroundColor, equals(Colors.orange.shade800));
+    });
+
+    testWidgets('solo bloqueados tras syncAll muestra el aviso naranja (EN)', (
+      tester,
+    ) async {
+      when(() => syncEngine.syncAll()).thenAnswer(
+        (_) async => const SyncResult(
+          allSuccessful: false,
+          remainingRetryable: 0,
+          remainingBlocked: 3,
+        ),
+      );
+
+      await pumpScreen(tester, locale: 'en');
+      await tester.tap(find.byIcon(Icons.cloud_upload).first);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          '3 record(s) remain blocked/quarantined. Review or manage them.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+      'un registro en cuarentena suma al aviso aunque el sync sea limpio',
+      (tester) async {
+        when(() => db.getWebQuarantinedEntries()).thenAnswer(
+          (_) async => <MapEntry<String, String>>[
+            const MapEntry<String, String>(
+              'hwb_web_patient::q-1::quarantine::2026',
+              '{"dato":"crudo"}',
+            ),
+          ],
+        );
+        when(() => syncEngine.syncAll()).thenAnswer(
+          (_) async => const SyncResult(
+            allSuccessful: true,
+            remainingRetryable: 0,
+            remainingBlocked: 0,
+          ),
+        );
+
+        await pumpScreen(tester);
+        await tester.tap(find.byIcon(Icons.cloud_upload).first);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(
+            'Quedan 1 registro(s) bloqueados/en cuarentena. '
+            'Revise o gestione estos registros.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Sincronizado correctamente'), findsNothing);
+      },
+    );
+  });
+
+  group('SyncQueueScreen – registros en cuarentena (_QuarantineCard)', () {
+    const MapEntry<String, String> quarantined = MapEntry<String, String>(
+      'hwb_web_patient::q-1::quarantine::2026-10-20',
+      '{"dato":"crudo"}',
+    );
+
+    setUp(() {
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => <LocalPatientEntry>[]);
+      when(
+        () => db.getWebQuarantinedEntries(),
+      ).thenAnswer((_) async => <MapEntry<String, String>>[quarantined]);
+    });
+
+    testWidgets('muestra la tarjeta y "Copiar datos crudos" copia (ES)', (
+      tester,
+    ) async {
+      final List<String> copied = captureClipboard();
+
+      await pumpScreen(tester);
+
+      expect(find.byIcon(Icons.cloud_done), findsNothing);
+      expect(find.text('Registro Web en Cuarentena'), findsOneWidget);
+      expect(
+        find.textContaining('Este registro no se pudo descifrar o procesar'),
+        findsOneWidget,
+      );
+      expect(find.text('Clave: ${quarantined.key}'), findsOneWidget);
+
+      await tester.tap(find.text('Copiar datos crudos'));
+      await tester.pumpAndSettle();
+
+      expect(copied, <String>[quarantined.value]);
+      expect(
+        find.text('Datos en cuarentena copiados al portapapeles.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('muestra la tarjeta y "Copy raw data" copia (EN)', (
+      tester,
+    ) async {
+      final List<String> copied = captureClipboard();
+
+      await pumpScreen(tester, locale: 'en');
+
+      expect(find.text('Quarantined Web Record'), findsOneWidget);
+      expect(
+        find.textContaining('This record could not be decrypted or processed'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Copy raw data'));
+      await tester.pumpAndSettle();
+
+      expect(copied, <String>[quarantined.value]);
+      expect(
+        find.text('Quarantined data copied to clipboard.'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('SyncQueueScreen – pendientes de otro usuario', () {
+    testWidgets('estado vacío: muestra la nota del otro usuario (ES)', (
+      tester,
+    ) async {
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => <LocalPatientEntry>[]);
+      when(() => db.getUnsyncedCount()).thenAnswer((_) async => 3);
+
+      await pumpScreen(tester);
+
+      expect(find.byIcon(Icons.cloud_done), findsOneWidget);
+      expect(
+        find.text(
+          'Nota: Existen 3 registro(s) pendiente(s) de otro usuario en este '
+          'dispositivo.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('estado vacío: muestra la nota del otro usuario (EN)', (
+      tester,
+    ) async {
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => <LocalPatientEntry>[]);
+      when(() => db.getUnsyncedCount()).thenAnswer((_) async => 3);
+
+      await pumpScreen(tester, locale: 'en');
+
+      expect(
+        find.text(
+          'Note: There are 3 pending record(s) from another user on this '
+          'device.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('con pendientes propios: muestra el aviso en la lista (ES)', (
+      tester,
+    ) async {
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [makeEntry()]);
+      when(() => db.getUnsyncedCount()).thenAnswer((_) async => 3);
+
+      await pumpScreen(tester);
+
+      expect(
+        find.text(
+          'Existen 2 registro(s) pendiente(s) pertenecientes a otro usuario '
+          'en este dispositivo. Inicie sesión con la cuenta correspondiente '
+          'para sincronizarlos.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('con pendientes propios: muestra el aviso en la lista (EN)', (
+      tester,
+    ) async {
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [makeEntry()]);
+      when(() => db.getUnsyncedCount()).thenAnswer((_) async => 3);
+
+      await pumpScreen(tester, locale: 'en');
+
+      expect(
+        find.text(
+          'There are 2 pending record(s) belonging to another user on this '
+          'device. Log in with that account to sync them.',
+        ),
+        findsOneWidget,
+      );
+    });
+  });
+
+  LocalPatientEntry makeClinicalEntry({
+    bool consultations = true,
+    bool vaccines = true,
+    bool details = true,
+  }) {
+    final Map<String, dynamic> json =
+        jsonDecode(makeEntry().recordJson) as Map<String, dynamic>;
+    if (consultations) {
+      json['medicalHistory'] = <Map<String, dynamic>>[
+        <String, dynamic>{
+          'startDateTime': '2024-03-01T09:00:00',
+          'clinicalEvaluation': <String, dynamic>{
+            if (details) 'historyOfCurrentIllness': 'Fiebre alta',
+            if (details) 'treatmentPlanObservations': 'Reposo e hidratación',
+          },
+        },
+      ];
+    }
+    if (vaccines) {
+      json['vaccinationRecord'] = <Map<String, dynamic>>[
+        <String, dynamic>{
+          'vaccineName': 'BCG',
+          'dose': 1,
+          'date': '2024-01-02',
+        },
+      ];
+    }
+    final LocalPatientEntry entry = makeEntry(recordJson: jsonEncode(json));
+    final record = entry.toPatientRecord();
+    expect(
+      record,
+      isNotNull,
+      reason: 'PatientFullRecord.fromJson no aceptó el JSON del helper',
+    );
+    expect(
+      record!.medicalHistory.isNotEmpty || record.vaccinationRecord.isNotEmpty,
+      isTrue,
+      reason: 'Las llaves medicalHistory/vaccinationRecord no coinciden',
+    );
+    return entry;
+  }
+
+  group('SyncQueueScreen – borrar con datos clínicos sin sincronizar', () {
+    Future<void> openDeleteDialog(
+      WidgetTester tester,
+      LocalPatientEntry entry, {
+      String locale = 'es',
+    }) async {
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [entry]);
+      await pumpScreen(tester, locale: locale);
+      await tester.tap(find.byIcon(Icons.delete_outline));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('advierte y "Copiar datos" copia el resumen completo (ES)', (
+      tester,
+    ) async {
+      final List<String> copied = captureClipboard();
+
+      await openDeleteDialog(tester, makeClinicalEntry());
+
+      expect(
+        find.text(
+          'Atención: Este registro contiene consultas médicas o vacunas que '
+          'no se han sincronizado.',
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Copiar datos'));
+      await tester.pumpAndSettle();
+
+      expect(copied, hasLength(1));
+      final String summary = copied.single;
+      expect(summary, contains('=== RESUMEN CLÍNICO ==='));
+      expect(summary, contains('Paciente: '));
+      expect(summary, contains('Juan'));
+      expect(summary, contains('Documento: CC 123'));
+      expect(summary, contains('--- CONSULTAS MÉDICAS ---'));
+      expect(summary, contains('• Fecha: '));
+      expect(summary, contains('Motivo/Historia: Fiebre alta'));
+      expect(summary, contains('Plan: Reposo e hidratación'));
+      expect(summary, contains('--- VACUNAS ---'));
+      expect(summary, contains('• BCG (Dosis 1) - '));
+      expect(
+        find.text('Resumen clínico copiado al portapapeles.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('advierte y "Copy clinical data" copia el resumen (EN)', (
+      tester,
+    ) async {
+      final List<String> copied = captureClipboard();
+
+      await openDeleteDialog(tester, makeClinicalEntry(), locale: 'en');
+
+      expect(
+        find.text(
+          'Warning: This record contains unsynced medical consultations or '
+          'vaccines.',
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Copy clinical data'));
+      await tester.pumpAndSettle();
+
+      final String summary = copied.single;
+      expect(summary, contains('=== CLINICAL SUMMARY ==='));
+      expect(summary, contains('Patient: '));
+      expect(summary, contains('Document: CC 123'));
+      expect(summary, contains('--- MEDICAL CONSULTATIONS ---'));
+      expect(summary, contains('Date: '));
+      expect(summary, contains('Reason/History: Fiebre alta'));
+      expect(summary, contains('Plan: Reposo e hidratación'));
+      expect(summary, contains('--- VACCINATIONS ---'));
+      expect(summary, contains('(Dose 1)'));
+      expect(
+        find.text('Clinical summary copied to clipboard.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('solo vacunas: el resumen omite las consultas', (tester) async {
+      final List<String> copied = captureClipboard();
+
+      await openDeleteDialog(tester, makeClinicalEntry(consultations: false));
+      await tester.tap(find.text('Copiar datos'));
+      await tester.pumpAndSettle();
+
+      expect(copied.single, isNot(contains('CONSULTAS MÉDICAS')));
+      expect(copied.single, contains('--- VACUNAS ---'));
+    });
+
+    testWidgets(
+      'consulta sin motivo ni plan: el resumen no incluye esas líneas',
+      (tester) async {
+        final List<String> copied = captureClipboard();
+
+        await openDeleteDialog(
+          tester,
+          makeClinicalEntry(vaccines: false, details: false),
+        );
+        await tester.tap(find.text('Copiar datos'));
+        await tester.pumpAndSettle();
+
+        expect(copied.single, contains('--- CONSULTAS MÉDICAS ---'));
+        expect(copied.single, isNot(contains('Motivo/Historia')));
+        expect(copied.single, isNot(contains('Plan:')));
+        expect(copied.single, isNot(contains('VACUNAS')));
+      },
+    );
+
+    testWidgets('sin datos clínicos no aparece la advertencia ni el botón', (
+      tester,
+    ) async {
+      await openDeleteDialog(tester, makeEntry());
+
+      expect(
+        find.textContaining('Atención: Este registro contiene'),
+        findsNothing,
+      );
+      expect(find.text('Copiar datos'), findsNothing);
+    });
   });
 }
