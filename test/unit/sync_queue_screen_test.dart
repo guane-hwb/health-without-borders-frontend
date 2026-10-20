@@ -513,4 +513,49 @@ void main() {
       },
     );
   });
+
+  group('SyncResult – clasificación que usa la pantalla de cola', () {
+    test('solo bloqueados: hasBlockedOnly y no isFullyClean', () {
+      const result = SyncResult(
+        allSuccessful: false,
+        remainingRetryable: 0,
+        remainingBlocked: 2,
+      );
+      expect(result.hasBlockedOnly, isTrue);
+      expect(result.isFullyClean, isFalse);
+    });
+
+    test('con reintentables pendientes no es "solo bloqueados"', () {
+      const result = SyncResult(
+        allSuccessful: false,
+        remainingRetryable: 1,
+        remainingBlocked: 2,
+      );
+      expect(result.hasBlockedOnly, isFalse);
+      expect(result.isFullyClean, isFalse);
+    });
+
+    test('sin pendientes ni bloqueados está completamente limpio', () {
+      const result = SyncResult(
+        allSuccessful: true,
+        remainingRetryable: 0,
+        remainingBlocked: 0,
+      );
+      expect(result.isFullyClean, isTrue);
+      expect(result.hasBlockedOnly, isFalse);
+    });
+  });
+
+  group('Conteo de pendientes de otro usuario', () {
+    int foreign(int totalAllUnsynced, int own) =>
+        (totalAllUnsynced - own).clamp(0, totalAllUnsynced);
+
+    test('resta los propios del total del dispositivo', () {
+      expect(foreign(5, 2), equals(3));
+    });
+
+    test('nunca es negativo', () {
+      expect(foreign(1, 4), equals(0));
+    });
+  });
 }
