@@ -4320,6 +4320,48 @@ void main() {
 
       await expectLater(localDb.dismissSyncNotice('cualquiera'), completes);
     });
+
+    test(
+      'savePatient sin ownerUserId conserva el owner del registro previo (nativo)',
+      () async {
+        await localDb.savePatient(
+          _buildRecord(patientId: 'native-keep'),
+          ownerUserId: 'u1',
+        );
+
+        await localDb.savePatient(
+          _buildRecord(patientId: 'native-keep', firstName: 'Bea'),
+          ownerUserId: null,
+        );
+
+        final List<LocalPatientEntry> mine = await localDb.getAllRecords(
+          ownerUserId: 'u1',
+        );
+        expect(mine, hasLength(1));
+        expect(mine.single.patientId, equals('native-keep'));
+        expect(mine.single.revision, equals(1));
+        expect(
+          await localDb.getAllRecords(ownerUserId: 'u2'),
+          isEmpty,
+          reason: 'el owner sigue siendo u1, no quedó huérfano',
+        );
+      },
+    );
+
+    test('addSyncNotice captura el error si la tabla no existe', () async {
+      final Database raw = await rawConnection();
+      await raw.execute('DROP TABLE sync_notices');
+
+      await expectLater(
+        localDb.addSyncNotice(
+          patientId: 'p-sin-tabla',
+          patientName: 'Ana García',
+          codes: <String>['E1'],
+          ownerUserId: 'u1',
+        ),
+        completes,
+      );
+    });
   });
 
   group('Cobertura adicional — Web', () {

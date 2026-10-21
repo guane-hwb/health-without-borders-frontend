@@ -153,6 +153,7 @@ void main() {
       },
     );
   });
+
   group('devicesStaleAfterReassign', () {
     ({bool patient, bool guardian}) stale(
       List<ReassignTarget> done, {
@@ -272,7 +273,6 @@ void main() {
         ),
         isEmpty,
       );
-      // Solo espacios alrededor: es el mismo dispositivo.
       expect(
         devicesReplacedByReassign(
           before: record(patient: ' P-OLD '),

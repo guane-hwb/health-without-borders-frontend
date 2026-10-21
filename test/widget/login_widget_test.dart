@@ -1,10 +1,12 @@
 // test/widget/login_widget_test.dart
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
@@ -636,5 +638,83 @@ void main() {
         expect(checkbox.value, isFalse);
       },
     );
+  });
+
+  group('LoginScreen — errores de red tipados (catch dedicados)', () {
+    final errors = <(String, Object Function())>[
+      ('SocketException', () => const SocketException('sin red')),
+      ('TimeoutException', () => TimeoutException('tiempo agotado')),
+      ('http.ClientException', () => http.ClientException('conexión caída')),
+    ];
+
+    Future<void> submit(WidgetTester tester) async {
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
+      await tester.enterText(find.byType(TextFormField).last, 'password123');
+      await tester.tap(find.byType(ElevatedButton));
+    }
+
+    for (final (name, build) in errors) {
+      testWidgets(
+        '$name muestra el aviso de conexión requerida y reactiva el botón',
+        (tester) async {
+          mockAuthRepo.loginHandler =
+              ({required String email, required String password}) async {
+                throw build();
+              };
+
+          await tester.pumpWidget(buildSubject());
+          await submit(tester);
+          await tester.pumpAndSettle();
+
+          final s = AppStrings.forTesting('es');
+          expect(find.byType(SnackBar), findsOneWidget);
+          expect(find.text(s.loginNetworkRequired), findsOneWidget);
+          expect(find.text(s.loginFailed), findsNothing);
+          final btn = tester.widget<ElevatedButton>(
+            find.byType(ElevatedButton),
+          );
+          expect(btn.onPressed, isNotNull);
+        },
+      );
+
+      testWidgets('$name muestra el aviso de conexión en inglés', (
+        tester,
+      ) async {
+        mockAuthRepo.loginHandler =
+            ({required String email, required String password}) async {
+              throw build();
+            };
+
+        await tester.pumpWidget(buildSubject(locale: 'en'));
+        await submit(tester);
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('en');
+        expect(find.text(s.loginNetworkRequired), findsOneWidget);
+      });
+
+      testWidgets(
+        '$name con la pantalla desmontada no muestra aviso ni lanza errores',
+        (tester) async {
+          final completer = Completer<UserSession>();
+          mockAuthRepo.loginHandler =
+              ({required String email, required String password}) =>
+                  completer.future;
+
+          await tester.pumpWidget(buildSubject());
+          await submit(tester);
+          await tester.pump();
+
+          await tester.pumpWidget(const SizedBox());
+          completer.completeError(build());
+          await tester.pump();
+
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
   });
 }

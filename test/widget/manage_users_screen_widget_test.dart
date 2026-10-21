@@ -567,6 +567,63 @@ void main() {
       expect(fakeRepo.resetIds, isEmpty);
     });
 
+    testWidgets('en inglés confirma, restablece y muestra la temporal', (
+      tester,
+    ) async {
+      configureMobileScreenSize(tester);
+      fakeRepo.usersToReturn = [buildUser()];
+      await tester.pumpWidget(buildTestApp(fakeRepo, locale: 'en'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Juan Galvis'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Reset password'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reset password?'), findsOneWidget);
+      expect(
+        find.text(
+          'A temporary password will be generated for Juan Galvis and all '
+          'their sessions will end. They must change it when they '
+          'sign in.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('¿Restablecer la contraseña?'), findsNothing);
+
+      await tester.tap(find.text('Reset'));
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.resetIds, <String>['u1']);
+      expect(find.text('Temporary password'), findsOneWidget);
+      expect(find.text('Temporal-9xK2'), findsOneWidget);
+      expect(
+        find.text('Give it to Juan Galvis. It will not be shown again.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.text('Temporal-9xK2'), findsNothing);
+    });
+
+    testWidgets('en inglés, cancelar el diálogo no restablece', (tester) async {
+      configureMobileScreenSize(tester);
+      fakeRepo.usersToReturn = [buildUser()];
+      await tester.pumpWidget(buildTestApp(fakeRepo, locale: 'en'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Juan Galvis'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Reset password'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(AppStrings.forTesting('en').cancel));
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.resetIds, isEmpty);
+      expect(find.text('Reset password?'), findsNothing);
+    });
+
     testWidgets('un error del servidor se muestra en la ficha', (tester) async {
       fakeRepo.resetErrorToThrow = ApiException(
         'Not enough privileges to manage users.',
