@@ -5,10 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
-// import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_payload.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
-// import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_payload.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/partial_card_notice.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/profile_nfc_actions.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/reassign_device_dialog.dart';
@@ -18,6 +19,74 @@ class _MockNfcKeyring extends Mock implements NfcKeyring {}
 class _MockNfcPayloadCodec extends Mock implements NfcPayloadCodec {}
 
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
+
+class _FakeNfcService extends Fake implements NfcPayloadService {
+  _FakeNfcService({
+    this.readResult = const HwbChipReadResult(
+      uid: 'NEW-UID',
+      kind: HwbChipKind.none,
+    ),
+    this.guardianFit,
+    this.writeError,
+  });
+
+  final HwbChipReadResult readResult;
+  final GuardianPayloadFit? guardianFit;
+  final Object? writeError;
+
+  int reads = 0;
+  final List<String?> triageUids = <String?>[];
+  final List<Map<String, dynamic>> triagePayloads = <Map<String, dynamic>>[];
+  final List<String?> guardianUids = <String?>[];
+
+  @override
+  Future<NfcWriteResult> writeTriagePayload(
+    Map<String, dynamic> triagePayload, {
+    String? expectedUid,
+    Duration timeout = const Duration(seconds: 20),
+    NfcCancelToken? cancel,
+    String? alertMessage,
+  }) async {
+    triageUids.add(expectedUid);
+    triagePayloads.add(triagePayload);
+    if (writeError != null) throw writeError!;
+    return const NfcWriteResult(
+      uid: 'X',
+      bytesWritten: 10,
+      messageBytes: 20,
+      chipCapacity: 504,
+    );
+  }
+
+  @override
+  Future<NfcWriteResult> writeGuardianRecord({
+    required GuardianFitBuilder buildFit,
+    String? expectedUid,
+    Duration timeout = const Duration(seconds: 20),
+    NfcCancelToken? cancel,
+    String? alertMessage,
+  }) async {
+    guardianUids.add(expectedUid);
+    if (writeError != null) throw writeError!;
+    return NfcWriteResult(
+      uid: 'X',
+      bytesWritten: 10,
+      messageBytes: 20,
+      chipCapacity: 504,
+      fit: guardianFit,
+    );
+  }
+
+  @override
+  Future<HwbChipReadResult> readHwbChip({
+    Duration timeout = const Duration(seconds: 20),
+    NfcCancelToken? cancel,
+    String? alertMessage,
+  }) async {
+    reads++;
+    return readResult;
+  }
+}
 
 Widget _wrap(Widget child, {String locale = 'es'}) {
   return AppLocale(
@@ -652,5 +721,554 @@ void main() {
         }
       },
     );
+  });
+
+  group('flujos guiados con servicio NFC simulado', () {
+    const GuardianPayloadFit completeFit = GuardianPayloadFit(
+      payload: {'a': 1},
+      includedConsultations: 2,
+      includedVaccines: 1,
+      totalConsultations: 2,
+      totalVaccines: 1,
+      estimatedBytes: 3,
+      fits: true,
+    );
+    const GuardianPayloadFit partialFit = GuardianPayloadFit(
+      payload: {'a': 1},
+      includedConsultations: 1,
+      includedVaccines: 0,
+      totalConsultations: 3,
+      totalVaccines: 0,
+      estimatedBytes: 3,
+      fits: true,
+    );
+
+    void stubKeyring() {
+      when(() => mockKeyring.isEmpty).thenReturn(false);
+      when(() => mockKeyring.versions).thenReturn(<int>[1]);
+      when(() => mockKeyring.keys).thenReturn(<int, String>{1: validHexKey});
+    }
+
+    Future<void> finishSheet(
+      WidgetTester tester, {
+      String start = 'Empezar',
+    }) async {
+      await tester.tap(find.text(start));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    Future<void> skipSheet(WidgetTester tester) async {
+      await tester.tap(find.text('Omitir'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    Future<void> pumpUpdate(
+      WidgetTester tester, {
+      required _FakeNfcService service,
+      required PatientFullRecord record,
+      required void Function(bool) onDone,
+      bool patientChipDirty = false,
+      bool guardianChipDirty = false,
+    }) async {
+      stubKeyring();
+      await tester.pumpWidget(
+        _wrap(
+          Builder(
+            builder: (ctx) => ElevatedButton(
+              onPressed: () async {
+                onDone(
+                  await executeUpdateNfcChips(
+                    context: ctx,
+                    record: record,
+                    keyring: mockKeyring,
+                    patientChipDirty: patientChipDirty,
+                    guardianChipDirty: guardianChipDirty,
+                    serviceBuilder: (_) => service,
+                  ),
+                );
+              },
+              child: const Text('Run'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Run'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    Future<void> pumpReassign(
+      WidgetTester tester, {
+      required ReassignTarget target,
+      required PatientFullRecord record,
+      required _FakeNfcService service,
+      required List<String> messages,
+      required List<bool> errors,
+      required void Function(PatientFullRecord?) onDone,
+      bool isEs = true,
+    }) async {
+      stubKeyring();
+      final NfcPayloadCodec codec = NfcPayloadCodec.fromKeyring(
+        keyring: mockKeyring,
+      );
+      await tester.pumpWidget(
+        _wrap(
+          Builder(
+            builder: (ctx) => ElevatedButton(
+              onPressed: () async {
+                onDone(
+                  await executeReassignOne(
+                    context: ctx,
+                    target: target,
+                    record: record,
+                    codec: codec,
+                    isEs: isEs,
+                    showSnack: (String message, {bool error = false}) {
+                      messages.add(message);
+                      errors.add(error);
+                    },
+                    serviceBuilder: (_) => service,
+                  ),
+                );
+              },
+              child: const Text('Run'),
+            ),
+          ),
+          locale: isEs ? 'es' : 'en',
+        ),
+      );
+      await tester.tap(find.text('Run'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    // ── executeUpdateNfcChips ───────────────────────────────────────────────
+
+    testWidgets('graba el chip del paciente con el UID esperado', (
+      tester,
+    ) async {
+      final service = _FakeNfcService();
+      bool? result;
+
+      await pumpUpdate(
+        tester,
+        service: service,
+        record: _createRecord(),
+        patientChipDirty: true,
+        onDone: (r) => result = r,
+      );
+      await finishSheet(tester);
+
+      expect(result, isTrue);
+      expect(service.triageUids, <String?>['P-123']);
+      expect(service.triagePayloads, hasLength(1));
+      expect(service.guardianUids, isEmpty);
+    });
+
+    testWidgets('paciente y guardián con ficha completa: sin avisos', (
+      tester,
+    ) async {
+      final service = _FakeNfcService(guardianFit: completeFit);
+      bool? result;
+
+      await pumpUpdate(
+        tester,
+        service: service,
+        record: _createRecord(),
+        patientChipDirty: true,
+        guardianChipDirty: true,
+        onDone: (r) => result = r,
+      );
+      await finishSheet(tester); // paciente
+      await finishSheet(tester); // guardián
+
+      expect(result, isTrue);
+      expect(service.triageUids, <String?>['P-123']);
+      expect(service.guardianUids, <String?>['G1-123']);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets(
+      'avisa con un SnackBar cuando la ficha del guardián es parcial',
+      (tester) async {
+        final service = _FakeNfcService(guardianFit: partialFit);
+        bool? result;
+
+        await pumpUpdate(
+          tester,
+          service: service,
+          record: _createRecord(),
+          guardianChipDirty: true,
+          onDone: (r) => result = r,
+        );
+        await finishSheet(tester);
+
+        expect(result, isTrue);
+        expect(service.guardianUids, <String?>['G1-123']);
+        expect(
+          find.text(partialCardNoticeMessage(partialFit, true)),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('con dos guardianes graba ambos en orden y avisa del parcial', (
+      tester,
+    ) async {
+      final service = _FakeNfcService(guardianFit: partialFit);
+      bool? result;
+
+      await pumpUpdate(
+        tester,
+        service: service,
+        record: _createRecord(g1Uid: 'G1-123', g2Uid: 'G2-456'),
+        guardianChipDirty: true,
+        onDone: (r) => result = r,
+      );
+      expect(find.text('Dispositivo del guardián 1'), findsOneWidget);
+      await finishSheet(tester);
+
+      expect(
+        find.text(partialCardNoticeMessage(partialFit, true)),
+        findsOneWidget,
+      );
+      expect(find.text('Dispositivo del guardián 2'), findsOneWidget);
+      await finishSheet(tester);
+
+      expect(result, isTrue);
+      expect(service.guardianUids, <String?>['G1-123', 'G2-456']);
+    });
+
+    testWidgets('un fallo de escritura permite omitir y devuelve false', (
+      tester,
+    ) async {
+      final service = _FakeNfcService(
+        writeError: NfcTimeoutException(const Duration(seconds: 1)),
+      );
+      bool? result;
+
+      await pumpUpdate(
+        tester,
+        service: service,
+        record: _createRecord(),
+        patientChipDirty: true,
+        guardianChipDirty: true,
+        onDone: (r) => result = r,
+      );
+      await tester.tap(find.text('Empezar'));
+      await tester.pump();
+
+      expect(
+        find.textContaining('No se detectó ningún dispositivo'),
+        findsOneWidget,
+      );
+      await skipSheet(tester);
+
+      expect(result, isFalse);
+      expect(service.triageUids, <String?>['P-123']);
+      expect(service.guardianUids, isEmpty);
+    });
+
+    testWidgets('omitir el segundo guardián devuelve false', (tester) async {
+      final service = _FakeNfcService(guardianFit: completeFit);
+      bool? result;
+
+      await pumpUpdate(
+        tester,
+        service: service,
+        record: _createRecord(g1Uid: 'G1-123', g2Uid: 'G2-456'),
+        guardianChipDirty: true,
+        onDone: (r) => result = r,
+      );
+      await finishSheet(tester); // guardián 1
+      await skipSheet(tester); // guardián 2
+
+      expect(result, isFalse);
+      expect(service.guardianUids, <String?>['G1-123']);
+    });
+
+    // ── executeReassignOne ──────────────────────────────────────────────────
+
+    testWidgets('reasigna el dispositivo del paciente con un chip en blanco', (
+      tester,
+    ) async {
+      final service = _FakeNfcService(
+        readResult: const HwbChipReadResult(
+          uid: ' NEW-UID ',
+          kind: HwbChipKind.none,
+        ),
+      );
+      final messages = <String>[];
+      final errors = <bool>[];
+      bool done = false;
+      PatientFullRecord? result;
+
+      await pumpReassign(
+        tester,
+        target: ReassignTarget.patient,
+        record: _createRecord(),
+        service: service,
+        messages: messages,
+        errors: errors,
+        onDone: (r) {
+          done = true;
+          result = r;
+        },
+      );
+      await finishSheet(tester);
+      await finishSheet(tester);
+
+      expect(done, isTrue);
+      expect(service.reads, 1);
+      expect(service.triageUids, <String?>['NEW-UID']);
+      expect(service.guardianUids, isEmpty);
+      expect(result?.deviceUid, 'NEW-UID');
+      expect(result?.guardianInfo.deviceUid, 'G1-123');
+      expect(messages, isEmpty);
+    });
+
+    testWidgets('reasigna el dispositivo del guardián 1', (tester) async {
+      final service = _FakeNfcService();
+      bool done = false;
+      PatientFullRecord? result;
+
+      await pumpReassign(
+        tester,
+        target: ReassignTarget.guardian1,
+        record: _createRecord(g1Uid: 'G1-123', g2Uid: 'G2-456'),
+        service: service,
+        messages: <String>[],
+        errors: <bool>[],
+        onDone: (r) {
+          done = true;
+          result = r;
+        },
+      );
+      await finishSheet(tester);
+      await finishSheet(tester);
+
+      expect(done, isTrue);
+      expect(service.guardianUids, <String?>['NEW-UID']);
+      expect(service.triageUids, isEmpty);
+      expect(result?.guardianInfo.deviceUid, 'NEW-UID');
+      expect(result?.deviceUid, 'P-123');
+      expect(result?.guardian2Info?.deviceUid, 'G2-456');
+    });
+
+    testWidgets('reasigna el dispositivo del guardián 2', (tester) async {
+      final service = _FakeNfcService();
+      bool done = false;
+      PatientFullRecord? result;
+
+      await pumpReassign(
+        tester,
+        target: ReassignTarget.guardian2,
+        record: _createRecord(g1Uid: 'G1-123', g2Uid: 'G2-456'),
+        service: service,
+        messages: <String>[],
+        errors: <bool>[],
+        onDone: (r) {
+          done = true;
+          result = r;
+        },
+      );
+      await finishSheet(tester);
+      await finishSheet(tester);
+
+      expect(done, isTrue);
+      expect(service.guardianUids, <String?>['NEW-UID']);
+      expect(result?.guardian2Info?.deviceUid, 'NEW-UID');
+      expect(result?.guardianInfo.deviceUid, 'G1-123');
+    });
+
+    testWidgets('guardián 2 sin segundo guardián devuelve el registro igual', (
+      tester,
+    ) async {
+      final service = _FakeNfcService();
+      final PatientFullRecord record = _createRecord(g1Uid: 'G1-123');
+      bool done = false;
+      PatientFullRecord? result;
+
+      await pumpReassign(
+        tester,
+        target: ReassignTarget.guardian2,
+        record: record,
+        service: service,
+        messages: <String>[],
+        errors: <bool>[],
+        onDone: (r) {
+          done = true;
+          result = r;
+        },
+      );
+      await finishSheet(tester);
+      await finishSheet(tester);
+
+      expect(done, isTrue);
+      expect(result, same(record));
+      expect(service.guardianUids, <String?>['NEW-UID']);
+    });
+
+    testWidgets('rechaza un chip que ya está en uso (ES)', (tester) async {
+      final service = _FakeNfcService(
+        readResult: const HwbChipReadResult(
+          uid: 'USED-1',
+          kind: HwbChipKind.guardian,
+        ),
+      );
+      final messages = <String>[];
+      final errors = <bool>[];
+      bool done = false;
+      PatientFullRecord? result = _createRecord();
+
+      await pumpReassign(
+        tester,
+        target: ReassignTarget.patient,
+        record: _createRecord(),
+        service: service,
+        messages: messages,
+        errors: errors,
+        onDone: (r) {
+          done = true;
+          result = r;
+        },
+      );
+      await finishSheet(tester);
+
+      expect(done, isTrue);
+      expect(result, isNull);
+      expect(messages, <String>[
+        'Ese dispositivo ya está en uso. Use uno en blanco.',
+      ]);
+      expect(errors, <bool>[true]);
+      expect(service.triageUids, isEmpty);
+      expect(service.guardianUids, isEmpty);
+    });
+
+    testWidgets('rechaza un chip que ya está en uso (EN)', (tester) async {
+      final service = _FakeNfcService(
+        readResult: const HwbChipReadResult(
+          uid: 'USED-1',
+          kind: HwbChipKind.triage,
+        ),
+      );
+      final messages = <String>[];
+      PatientFullRecord? result = _createRecord();
+
+      await pumpReassign(
+        tester,
+        target: ReassignTarget.patient,
+        record: _createRecord(),
+        service: service,
+        messages: messages,
+        errors: <bool>[],
+        isEs: false,
+        onDone: (r) => result = r,
+      );
+      await finishSheet(tester, start: 'Start');
+
+      expect(result, isNull);
+      expect(messages, <String>[
+        'That device is already in use. Use a blank one.',
+      ]);
+    });
+
+    testWidgets('rechaza un chip que ya pertenece al paciente', (tester) async {
+      final service = _FakeNfcService(
+        readResult: const HwbChipReadResult(
+          uid: 'G1-123',
+          kind: HwbChipKind.none,
+        ),
+      );
+      final messages = <String>[];
+      final errors = <bool>[];
+      bool done = false;
+      PatientFullRecord? result = _createRecord();
+
+      await pumpReassign(
+        tester,
+        target: ReassignTarget.patient,
+        record: _createRecord(),
+        service: service,
+        messages: messages,
+        errors: errors,
+        onDone: (r) {
+          done = true;
+          result = r;
+        },
+      );
+      await finishSheet(tester);
+
+      expect(done, isTrue);
+      expect(result, isNull);
+      expect(messages, <String>[
+        'Ese dispositivo ya pertenece a este paciente.',
+      ]);
+      expect(errors, <bool>[true]);
+      expect(service.triageUids, isEmpty);
+    });
+
+    testWidgets('un UID en blanco cancela sin mostrar mensajes', (
+      tester,
+    ) async {
+      final service = _FakeNfcService(
+        readResult: const HwbChipReadResult(uid: '   ', kind: HwbChipKind.none),
+      );
+      final messages = <String>[];
+      bool done = false;
+      PatientFullRecord? result = _createRecord();
+
+      await pumpReassign(
+        tester,
+        target: ReassignTarget.patient,
+        record: _createRecord(),
+        service: service,
+        messages: messages,
+        errors: <bool>[],
+        onDone: (r) {
+          done = true;
+          result = r;
+        },
+      );
+      await finishSheet(tester);
+
+      expect(done, isTrue);
+      expect(result, isNull);
+      expect(messages, isEmpty);
+      expect(service.triageUids, isEmpty);
+    });
+
+    testWidgets('omitir la grabación del chip nuevo devuelve null', (
+      tester,
+    ) async {
+      final service = _FakeNfcService();
+      bool done = false;
+      PatientFullRecord? result = _createRecord();
+
+      await pumpReassign(
+        tester,
+        target: ReassignTarget.patient,
+        record: _createRecord(),
+        service: service,
+        messages: <String>[],
+        errors: <bool>[],
+        onDone: (r) {
+          done = true;
+          result = r;
+        },
+      );
+      await finishSheet(tester);
+      await skipSheet(tester);
+
+      expect(done, isTrue);
+      expect(result, isNull);
+      expect(service.reads, 1);
+      expect(service.triageUids, isEmpty);
+    });
   });
 }
