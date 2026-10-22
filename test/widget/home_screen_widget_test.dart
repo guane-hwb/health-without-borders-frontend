@@ -136,7 +136,11 @@ UserSession _session(UserRole role, {String name = 'Ana Rodríguez'}) =>
 late FakeAuthRepository mockAuth;
 late MockLocalDatabase mockDb;
 
-Widget _wrapHome({required UserSession? user, bool isOnline = true}) {
+Widget _wrapHome({
+  required UserSession? user,
+  bool isOnline = true,
+  String locale = 'es',
+}) {
   mockAuth.currentUser = user;
 
   final apiClient = ApiClient(baseUrl: 'https://example.com');
@@ -155,7 +159,7 @@ Widget _wrapHome({required UserSession? user, bool isOnline = true}) {
   syncEngine.isOnline.value = isOnline;
 
   return AppLocale(
-    locale: 'es',
+    locale: locale,
     setLocale: (_) {},
     child: AppScope(
       authRepository: mockAuth,
@@ -203,6 +207,10 @@ void _setUpMocks() {
   when(
     () => mockDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
   ).thenAnswer((_) async => <SyncNotice>[]);
+
+  when(
+    () => mockDb.getWebQuarantinedEntries(),
+  ).thenAnswer((_) async => <MapEntry<String, String>>[]);
 }
 
 void main() {
@@ -1355,5 +1363,146 @@ void main() {
       expect(find.byType(ChangePasswordScreen), findsOneWidget);
       expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
     });
+  });
+
+  group('HomeScreen — Cobertura 100% (aviso de pendientes al cerrar sesión)', () {
+    Future<void> tapLogout(WidgetTester tester) async {
+      final logoutIcon = find.byIcon(Icons.logout_rounded);
+      await tester.scrollUntilVisible(logoutIcon, 80);
+      await tester.ensureVisible(logoutIcon);
+      await tester.pumpAndSettle();
+      await tester.tap(logoutIcon);
+      await tester.pumpAndSettle();
+    }
+
+    void stubPending({int patients = 0, int logs = 0}) {
+      when(
+        () => mockDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => patients);
+      when(
+        () => mockDb.getUnsyncedEmergencyLogCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => logs);
+    }
+
+    String expectedEs(int total) => kIsWeb
+        ? 'Atención: $total registro(s) no se pudieron sincronizar. Al cerrar '
+              'sesión se ELIMINARÁN de este navegador y no se podrán recuperar.'
+        : 'Atención: Hay $total registro(s) pendiente(s) por sincronizar en '
+              'este dispositivo.';
+    String expectedEn(int total) => kIsWeb
+        ? 'Warning: $total record(s) could not be synced. Signing out will '
+              'DELETE them from this browser and they cannot be recovered.'
+        : 'Warning: There are $total pending record(s) on this device.';
+
+    testWidgets('con registros pendientes muestra el aviso en español', (
+      tester,
+    ) async {
+      stubPending(patients: 2, logs: 1);
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      await tapLogout(tester);
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.text(expectedEs(3)), findsOneWidget);
+    });
+
+    testWidgets('con registros pendientes muestra el aviso en inglés', (
+      tester,
+    ) async {
+      stubPending(patients: 2, logs: 1);
+      await tester.pumpWidget(
+        _wrapHome(user: _session(UserRole.doctor), locale: 'en'),
+      );
+      await tester.pumpAndSettle();
+
+      await tapLogout(tester);
+
+      expect(find.text(expectedEn(3)), findsOneWidget);
+    });
+
+    testWidgets('solo con logs de emergencia pendientes también avisa', (
+      tester,
+    ) async {
+      stubPending(patients: 0, logs: 4);
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.nurse)));
+      await tester.pumpAndSettle();
+
+      await tapLogout(tester);
+
+      expect(find.text(expectedEs(4)), findsOneWidget);
+    });
+
+    testWidgets('el aviso usa el estilo de advertencia (fondo ámbar)', (
+      tester,
+    ) async {
+      stubPending(patients: 1);
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      await tapLogout(tester);
+
+      final box = tester.widget<Container>(
+        find
+            .ancestor(
+              of: find.text(expectedEs(1)),
+              matching: find.byType(Container),
+            )
+            .first,
+      );
+      final deco = box.decoration! as BoxDecoration;
+      expect(deco.color, const Color(0xFFFFF3CD));
+      expect(deco.borderRadius, BorderRadius.circular(8));
+      expect(deco.border, Border.all(color: const Color(0xFFFFEEBA)));
+    });
+
+    testWidgets('sin pendientes NO muestra el aviso', (tester) async {
+      stubPending();
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      await tapLogout(tester);
+
+      expect(find.textContaining('Atención'), findsNothing);
+    });
+
+    testWidgets('confirmar con pendientes igualmente cierra sesión', (
+      tester,
+    ) async {
+      stubPending(patients: 2);
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+
+      await tapLogout(tester);
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(AlertDialog),
+              matching: find.byType(TextButton),
+            )
+            .last,
+      );
+      await tester.pumpAndSettle();
+
+      expect(mockAuth.clearSessionCalled, isTrue);
+    });
+
+    testWidgets(
+      'web: sincroniza antes de preguntar y advierte que se ELIMINARÁN',
+      (tester) async {
+        stubPending(patients: 2, logs: 1);
+        await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+        await tester.pumpAndSettle();
+
+        await tapLogout(tester);
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(find.textContaining('ELIMINARÁN'), findsOneWidget);
+        verify(() => mockDb.getUnsyncedCount(ownerUserId: null)).called(1);
+      },
+      skip: !kIsWeb,
+    );
   });
 }

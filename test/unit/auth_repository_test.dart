@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_error_codes.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
@@ -1225,6 +1226,566 @@ void main() {
         expect(success, isFalse);
       },
     );
+  });
+
+  void stubLogin({
+    Map<String, dynamic> token = const <String, dynamic>{},
+    String email = 'doc@hwb.org',
+  }) {
+    when(
+      () => api.postForm(
+        path: any(named: 'path'),
+        form: any(named: 'form'),
+      ),
+    ).thenAnswer(
+      (_) async => <String, dynamic>{
+        'access_token': _validJwt(email),
+        ...token,
+      },
+    );
+    when(
+      () => api.getJson(
+        path: any(named: 'path'),
+        headers: any(named: 'headers'),
+      ),
+    ).thenAnswer((_) async => _meResponse(email: email));
+  }
+
+  void stubStoredRefresh(String refreshJwt) {
+    when(
+      () => storage.read(key: AuthRepository.refreshKey),
+    ).thenAnswer((_) async => refreshJwt);
+  }
+
+  String jwtAt({required Duration iat, required Duration exp}) {
+    final DateTime now = DateTime.now().toUtc();
+    return _buildJwt(<String, dynamic>{
+      'sub': 'doc@hwb.org',
+      'type': 'refresh',
+      'iat': now.add(iat).millisecondsSinceEpoch ~/ 1000,
+      'exp': now.add(exp).millisecondsSinceEpoch ~/ 1000,
+    });
+  }
+
+  String inactiveAccountCode() {
+    const List<String> candidates = <String>[
+      'account_inactive',
+      'ACCOUNT_INACTIVE',
+      'user_inactive',
+      'USER_INACTIVE',
+      'inactive_account',
+      'inactive_user',
+      'account_disabled',
+      'ACCOUNT_DISABLED',
+      'user_disabled',
+      'organization_inactive',
+      'ORGANIZATION_INACTIVE',
+      'org_inactive',
+    ];
+    for (final String code in candidates) {
+      if (ApiErrorCode.isAccountInactive(code)) return code;
+    }
+    fail(
+      'Ningún candidato es reconocido por ApiErrorCode.isAccountInactive: '
+      'agregue el código real a inactiveAccountCode().',
+    );
+  }
+
+  group('cuenta inactiva y sesión restaurada', () {
+    test('accountInactiveCode empieza en null', () {
+      expect(repo.accountInactiveCode.value, isNull);
+    });
+
+    test(
+      'handleAccountInactive sin sesión ni token solo guarda el código',
+      () async {
+        await repo.handleAccountInactive('ACCOUNT_X');
+
+        expect(repo.accountInactiveCode.value, 'ACCOUNT_X');
+        expect(repo.sessionExpired.value, isFalse);
+        verifyNever(() => storage.delete(key: any(named: 'key')));
+      },
+    );
+
+    test('handleAccountInactive con token invalida la sesión', () async {
+      when(
+        () => storage.read(key: AuthRepository.tokenKey),
+      ).thenAnswer((_) async => _validJwt('doc@hwb.org'));
+      await repo.getAccessToken();
+      expect(repo.hasToken, isTrue);
+
+      await repo.handleAccountInactive('ACCOUNT_X');
+
+      expect(repo.accountInactiveCode.value, 'ACCOUNT_X');
+      expect(repo.sessionExpired.value, isTrue);
+      expect(repo.hasToken, isFalse);
+      expect(repo.currentUser, isNull);
+    });
+
+    test(
+      'handleAccountInactive con sesión activa también la invalida',
+      () async {
+        stubLogin();
+        await repo.login(email: 'doc@hwb.org', password: 'x');
+
+        await repo.handleAccountInactive('ACCOUNT_X');
+
+        expect(repo.sessionExpired.value, isTrue);
+        expect(repo.currentUser, isNull);
+      },
+    );
+
+    test('un refresh 401 con código de cuenta inactiva lo publica', () async {
+      final String code = inactiveAccountCode();
+      stubStoredRefresh('old-refresh');
+      when(
+        () => api.postJson(
+          path: '/api/v1/login/refresh',
+          body: any(named: 'body'),
+        ),
+      ).thenThrow(ApiException('Cuenta inactiva', statusCode: 401, code: code));
+
+      final String? token = await repo.refreshAccessToken();
+
+      expect(token, isNull);
+      expect(repo.accountInactiveCode.value, code);
+      expect(repo.sessionExpired.value, isTrue);
+    });
+
+    test(
+      'isSessionRestoredFromStorage: false al inicio y true al restaurar',
+      () async {
+        expect(repo.isSessionRestoredFromStorage, isFalse);
+
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenAnswer((_) async => _validJwt('admin@hwb.org'));
+        when(() => storage.read(key: AuthRepository.sessionKey)).thenAnswer(
+          (_) async => jsonEncode(<String, dynamic>{
+            'id': '7',
+            'email': 'admin@hwb.org',
+            'full_name': 'Admin Real',
+            'role': 'org_admin',
+            'organization_id': 'org-1',
+          }),
+        );
+        stubStoredRefresh(_refreshJwt(days: 2));
+
+        await repo.restoreSession();
+
+        expect(repo.isSessionRestoredFromStorage, isTrue);
+      },
+    );
+  });
+
+  group('login() sin recordar la sesión', () {
+    test(
+      'borra token, refresh y sesión persistidos en vez de guardarlos',
+      () async {
+        stubLogin(token: <String, dynamic>{'refresh_token': _refreshJwt()});
+
+        final UserSession session = await repo.login(
+          email: 'doc@hwb.org',
+          password: 'secret',
+          rememberSession: false,
+        );
+
+        expect(session.id, '42');
+        verify(() => storage.delete(key: AuthRepository.tokenKey)).called(1);
+        verify(() => storage.delete(key: AuthRepository.refreshKey)).called(1);
+        verify(() => storage.delete(key: AuthRepository.sessionKey)).called(1);
+        verifyNever(
+          () => storage.write(
+            key: AuthRepository.tokenKey,
+            value: any(named: 'value'),
+          ),
+        );
+        verifyNever(
+          () => storage.write(
+            key: AuthRepository.sessionKey,
+            value: any(named: 'value'),
+          ),
+        );
+      },
+    );
+
+    test('tolera que el almacén falle al borrar', () async {
+      stubLogin(token: <String, dynamic>{'refresh_token': _refreshJwt()});
+      when(
+        () => storage.delete(key: any(named: 'key')),
+      ).thenThrow(Exception('almacén no disponible'));
+
+      final UserSession session = await repo.login(
+        email: 'doc@hwb.org',
+        password: 'secret',
+        rememberSession: false,
+      );
+
+      expect(session.email, 'doc@hwb.org');
+    });
+  });
+
+  group('verifyLocalLockPassword()', () {
+    const String lockKey = 'hwb_local_lock_hash';
+
+    test('sin sesión devuelve false', () async {
+      expect(await repo.verifyLocalLockPassword('secret'), isFalse);
+    });
+
+    test('con sesión sin email devuelve false', () async {
+      stubLogin(email: '');
+      await repo.login(email: '', password: 'secret');
+
+      expect(await repo.verifyLocalLockPassword('secret'), isFalse);
+    });
+
+    test('sin hash guardado devuelve false', () async {
+      stubLogin();
+      await repo.login(email: 'doc@hwb.org', password: 'secret');
+      when(() => storage.read(key: lockKey)).thenAnswer((_) async => null);
+
+      expect(await repo.verifyLocalLockPassword('secret'), isFalse);
+    });
+
+    test('con hash guardado vacío devuelve false', () async {
+      stubLogin();
+      await repo.login(email: 'doc@hwb.org', password: 'secret');
+      when(() => storage.read(key: lockKey)).thenAnswer((_) async => '');
+
+      expect(await repo.verifyLocalLockPassword('secret'), isFalse);
+    });
+
+    test('acepta la contraseña correcta y rechaza la incorrecta', () async {
+      stubLogin();
+      await repo.login(email: 'doc@hwb.org', password: 'secret');
+      final String hash =
+          verify(
+                () => storage.write(
+                  key: lockKey,
+                  value: captureAny(named: 'value'),
+                ),
+              ).captured.single
+              as String;
+      when(() => storage.read(key: lockKey)).thenAnswer((_) async => hash);
+
+      expect(await repo.verifyLocalLockPassword('secret'), isTrue);
+      expect(await repo.verifyLocalLockPassword('otra-clave'), isFalse);
+    });
+
+    test('si el almacén falla al leer devuelve false', () async {
+      stubLogin();
+      await repo.login(email: 'doc@hwb.org', password: 'secret');
+      when(
+        () => storage.read(key: lockKey),
+      ).thenThrow(Exception('llavero bloqueado'));
+
+      expect(await repo.verifyLocalLockPassword('secret'), isFalse);
+    });
+  });
+
+  group('datos pendientes de otro usuario', () {
+    test(
+      'pendingForeignRecordsForReview consulta con el id de la sesión',
+      () async {
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => <LocalPatientEntry>[]);
+
+        expect(await repo.pendingForeignRecordsForReview(), isEmpty);
+        verify(() => localDb.getUnsyncedRecords(ownerUserId: null)).called(1);
+
+        stubLogin();
+        await repo.login(email: 'doc@hwb.org', password: 'x');
+        await repo.pendingForeignRecordsForReview();
+        verify(() => localDb.getUnsyncedRecords(ownerUserId: '42')).called(1);
+      },
+    );
+
+    test(
+      'pendingForeignEmergencyLogsForReview consulta con el id de la sesión',
+      () async {
+        when(
+          () => localDb.pendingEmergencyAccessLogs(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => <Map<String, Object?>>[]);
+
+        expect(await repo.pendingForeignEmergencyLogsForReview(), isEmpty);
+        verify(
+          () => localDb.pendingEmergencyAccessLogs(ownerUserId: null),
+        ).called(1);
+
+        stubLogin();
+        await repo.login(email: 'doc@hwb.org', password: 'x');
+        await repo.pendingForeignEmergencyLogsForReview();
+        verify(
+          () => localDb.pendingEmergencyAccessLogs(ownerUserId: '42'),
+        ).called(1);
+      },
+    );
+
+    test(
+      'discardForeignPendingData borra la base, la llave y el último usuario',
+      () async {
+        await repo.discardForeignPendingData();
+
+        verify(() => localDb.clearAll()).called(1);
+        verify(() => localDb.destroyEncryptionKey()).called(1);
+        verify(
+          () => storage.delete(key: AuthRepository.lastUserIdKey),
+        ).called(1);
+      },
+    );
+
+    test(
+      'discardForeignPendingData tolera que falle el borrado del usuario',
+      () async {
+        when(
+          () => storage.delete(key: AuthRepository.lastUserIdKey),
+        ).thenThrow(Exception('almacén no disponible'));
+
+        await expectLater(repo.discardForeignPendingData(), completes);
+        verify(() => localDb.destroyEncryptionKey()).called(1);
+      },
+    );
+  });
+
+  group('getNfcKeyring()', () {
+    test(
+      'fuera de la ventana de sesión olvida el anillo y devuelve null',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => null);
+
+        expect(await repo.getNfcKeyring(), isNull);
+        verify(
+          () => storage.delete(key: AuthRepository.nfcKeyringKey),
+        ).called(1);
+        verify(() => storage.delete(key: AuthRepository.nfcKeyKey)).called(1);
+      },
+    );
+
+    test('devuelve el anillo en caché sin leer del almacén', () async {
+      stubLogin(
+        token: <String, dynamic>{
+          'refresh_token': _refreshJwt(),
+          'nfc_encryption_key': 'cached-nfc',
+        },
+      );
+      await repo.login(email: 'doc@hwb.org', password: 'x');
+
+      final NfcKeyring? keyring = await repo.getNfcKeyring();
+
+      expect(keyring, isNotNull);
+      expect(keyring!.keyFor(0), 'cached-nfc');
+      verifyNever(() => storage.read(key: AuthRepository.nfcKeyringKey));
+    });
+
+    test('restaura el anillo guardado y lo deja en caché', () async {
+      stubStoredRefresh(_refreshJwt());
+      when(() => storage.read(key: AuthRepository.nfcKeyringKey)).thenAnswer(
+        (_) async => jsonEncode(NfcKeyring.single('stored-nfc').toJson()),
+      );
+
+      final NfcKeyring? first = await repo.getNfcKeyring();
+      final NfcKeyring? second = await repo.getNfcKeyring();
+
+      expect(first, isNotNull);
+      expect(first!.keyFor(0), 'stored-nfc');
+      expect(second, same(first));
+      verify(() => storage.read(key: AuthRepository.nfcKeyringKey)).called(1);
+    });
+
+    test(
+      'un anillo guardado que no es un mapa cae a la llave heredada',
+      () async {
+        stubStoredRefresh(_refreshJwt());
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyringKey),
+        ).thenAnswer((_) async => jsonEncode(<int>[1, 2, 3]));
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyKey),
+        ).thenAnswer((_) async => 'legacy-nfc');
+
+        final NfcKeyring? keyring = await repo.getNfcKeyring();
+
+        expect(keyring, isNotNull);
+        expect(keyring!.keyFor(0), 'legacy-nfc');
+      },
+    );
+
+    test('un anillo guardado vacío cae a la llave heredada', () async {
+      stubStoredRefresh(_refreshJwt());
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => jsonEncode(<String, dynamic>{}));
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyKey),
+      ).thenAnswer((_) async => 'legacy-nfc');
+
+      final NfcKeyring? keyring = await repo.getNfcKeyring();
+
+      expect(keyring?.keyFor(0), 'legacy-nfc');
+    });
+
+    test(
+      'un anillo guardado con JSON inválido cae a la llave heredada',
+      () async {
+        stubStoredRefresh(_refreshJwt());
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyringKey),
+        ).thenAnswer((_) async => 'esto no es json');
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyKey),
+        ).thenAnswer((_) async => 'legacy-nfc');
+
+        final NfcKeyring? keyring = await repo.getNfcKeyring();
+
+        expect(keyring?.keyFor(0), 'legacy-nfc');
+      },
+    );
+
+    test('sin anillo ni llave heredada devuelve null', () async {
+      stubStoredRefresh(_refreshJwt());
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => null);
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyKey),
+      ).thenAnswer((_) async => '');
+
+      expect(await repo.getNfcKeyring(), isNull);
+    });
+
+    test('si falla la lectura de la llave heredada devuelve null', () async {
+      stubStoredRefresh(_refreshJwt());
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => '');
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyKey),
+      ).thenThrow(Exception('llavero bloqueado'));
+
+      expect(await repo.getNfcKeyring(), isNull);
+    });
+  });
+
+  group('isNfcSessionExpired() y marca de reloj', () {
+    const String clockKey = 'hwb_clock_mark';
+
+    test('false con refresh vigente', () async {
+      stubStoredRefresh(_refreshJwt());
+
+      expect(await repo.isNfcSessionExpired(), isFalse);
+    });
+
+    test('true sin refresh token', () async {
+      when(
+        () => storage.read(key: AuthRepository.refreshKey),
+      ).thenAnswer((_) async => null);
+
+      expect(await repo.isNfcSessionExpired(), isTrue);
+    });
+
+    test('lee la marca de reloj guardada y la acepta si es reciente', () async {
+      stubStoredRefresh(_refreshJwt());
+      when(() => storage.read(key: clockKey)).thenAnswer(
+        (_) async => DateTime.now().toUtc().millisecondsSinceEpoch.toString(),
+      );
+
+      expect(await repo.isNfcSessionExpired(), isFalse);
+      verify(() => storage.read(key: clockKey)).called(1);
+    });
+
+    test('una marca guardada vacía se ignora', () async {
+      stubStoredRefresh(_refreshJwt());
+      when(() => storage.read(key: clockKey)).thenAnswer((_) async => '');
+
+      expect(await repo.isNfcSessionExpired(), isFalse);
+    });
+
+    test('una marca guardada no numérica se ignora', () async {
+      stubStoredRefresh(_refreshJwt());
+      when(() => storage.read(key: clockKey)).thenAnswer((_) async => 'abc');
+
+      expect(await repo.isNfcSessionExpired(), isFalse);
+    });
+
+    test('si falla la lectura de la marca se ignora', () async {
+      stubStoredRefresh(_refreshJwt());
+      when(
+        () => storage.read(key: clockKey),
+      ).thenThrow(Exception('llavero bloqueado'));
+
+      expect(await repo.isNfcSessionExpired(), isFalse);
+    });
+
+    test(
+      'una marca guardada muy en el futuro detecta el reloj atrasado',
+      () async {
+        stubStoredRefresh(_refreshJwt());
+        when(() => storage.read(key: clockKey)).thenAnswer(
+          (_) async => DateTime.now()
+              .toUtc()
+              .add(const Duration(days: 10))
+              .millisecondsSinceEpoch
+              .toString(),
+        );
+
+        expect(await repo.isNfcSessionExpired(), isTrue);
+      },
+    );
+
+    test(
+      'un refresh emitido en el futuro lejano detecta el reloj atrasado',
+      () async {
+        stubLogin(
+          token: <String, dynamic>{
+            'refresh_token': jwtAt(
+              iat: const Duration(days: 10),
+              exp: const Duration(days: 20),
+            ),
+          },
+        );
+        await repo.login(email: 'doc@hwb.org', password: 'x');
+
+        expect(await repo.isNfcSessionExpired(), isTrue);
+      },
+    );
+
+    test(
+      'una marca dentro de la tolerancia no cuenta como reloj atrasado',
+      () async {
+        stubLogin(
+          token: <String, dynamic>{
+            // Emitido 1 h en el futuro: dentro de las 24 h de tolerancia.
+            'refresh_token': jwtAt(
+              iat: const Duration(hours: 1),
+              exp: const Duration(days: 20),
+            ),
+          },
+        );
+        await repo.login(email: 'doc@hwb.org', password: 'x');
+
+        expect(await repo.isNfcSessionExpired(), isFalse);
+        // Segunda consulta: la marca en caché no es anterior a "ahora".
+        expect(await repo.isNfcSessionExpired(), isFalse);
+      },
+    );
+  });
+
+  group('clearSession() con callback defectuoso', () {
+    test('registra el error y sigue limpiando la sesión', () async {
+      repo.onSessionInvalidated = () => throw StateError('motor de sync caído');
+
+      await expectLater(repo.clearSession(), completes);
+
+      expect(repo.currentUser, isNull);
+      expect(repo.hasToken, isFalse);
+    });
   });
 }
 
