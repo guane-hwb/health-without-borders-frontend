@@ -38,6 +38,7 @@ class _FakeNfcService extends Fake implements NfcPayloadService {
   final List<String?> triageUids = <String?>[];
   final List<Map<String, dynamic>> triagePayloads = <Map<String, dynamic>>[];
   final List<String?> guardianUids = <String?>[];
+  final List<String?> guardianPatientIds = <String?>[];
 
   @override
   Future<NfcWriteResult> writeTriagePayload(
@@ -62,11 +63,13 @@ class _FakeNfcService extends Fake implements NfcPayloadService {
   Future<NfcWriteResult> writeGuardianRecord({
     required GuardianFitBuilder buildFit,
     String? expectedUid,
+    String? patientId,
     Duration timeout = const Duration(seconds: 20),
     NfcCancelToken? cancel,
     String? alertMessage,
   }) async {
     guardianUids.add(expectedUid);
+    guardianPatientIds.add(patientId);
     if (writeError != null) throw writeError!;
     return NfcWriteResult(
       uid: 'X',
@@ -890,6 +893,7 @@ void main() {
       expect(result, isTrue);
       expect(service.triageUids, <String?>['P-123']);
       expect(service.guardianUids, <String?>['G1-123']);
+      expect(service.guardianPatientIds, <String?>['patient-uuid']);
       expect(find.byType(SnackBar), findsNothing);
     });
 
@@ -1054,6 +1058,7 @@ void main() {
 
       expect(done, isTrue);
       expect(service.guardianUids, <String?>['NEW-UID']);
+      expect(service.guardianPatientIds, <String?>['patient-uuid']);
       expect(service.triageUids, isEmpty);
       expect(result?.guardianInfo.deviceUid, 'NEW-UID');
       expect(result?.deviceUid, 'P-123');

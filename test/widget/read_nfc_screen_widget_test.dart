@@ -1228,6 +1228,8 @@ void main() {
             kind: HwbChipKind.guardian,
             guardianRecord: <String, dynamic>{
               'patientId': 'p-minor-01',
+              // The copy names the patient device that was scanned.
+              'device_uid': 'hwb-patient-gate',
               'patientInfo': {
                 'firstName': 'Ana',
                 'firstLastName': 'Gómez',
@@ -1590,6 +1592,76 @@ void main() {
         ).called(1);
       },
     );
+  });
+
+  group('Copia del dispositivo del guardián de otro menor', () {
+    const String notice =
+        'El dispositivo del guardián no tiene la información de este '
+        'paciente (es de otro menor o está desactualizado). Se muestran '
+        'solo los datos del dispositivo del paciente, sin editar.';
+
+    Future<PatientProfileScreen> scanGuardianWithCopy(
+      WidgetTester tester,
+      Map<String, dynamic> copy,
+    ) async {
+      await reachOfflineGate(tester, triage: makeTriage(minor: true));
+      ReadNfcScreen.overrideReadHwbChip =
+          ({required String alertMessage}) async => HwbChipReadResult(
+            uid: 'HWB-GUARDIAN-01',
+            kind: HwbChipKind.guardian,
+            guardianRecord: copy,
+          );
+      await tester.tap(find.byIcon(Icons.wifi));
+      await tester.pumpAndSettle();
+      return tester.widget<PatientProfileScreen>(
+        find.byType(PatientProfileScreen),
+      );
+    }
+
+    testWidgets('la copia de un hermano no se abre: solo el triaje del menor '
+        'escaneado, en solo lectura', (tester) async {
+      final profile = await scanGuardianWithCopy(tester, <String, dynamic>{
+        'patientId': 'p-hermano',
+        'device_uid': 'HWB-HERMANO-DEV',
+        'patientInfo': {
+          'firstName': 'Luis',
+          'firstLastName': 'Gómez',
+          'identification': {'documentType': 'TI', 'documentNumber': '999'},
+        },
+      });
+
+      expect(profile.readOnly, isTrue);
+      expect(profile.patient.patientId, isEmpty);
+      expect(profile.patient.patientInfo.firstName, 'Ana');
+      expect(profile.patient.deviceUid, 'HWB-PATIENT-GATE');
+      expect(find.text(notice), findsOneWidget);
+    });
+
+    testWidgets('una copia que no nombra ningún dispositivo del paciente '
+        'tampoco se usa', (tester) async {
+      final profile = await scanGuardianWithCopy(tester, <String, dynamic>{
+        'patientId': 'p-minor-01',
+        'patientInfo': {'firstName': 'Ana', 'firstLastName': 'Gómez'},
+      });
+
+      expect(profile.readOnly, isTrue);
+      expect(profile.patient.patientId, isEmpty);
+      expect(find.text(notice), findsOneWidget);
+    });
+
+    testWidgets('la copia del propio menor se abre editable y sin aviso', (
+      tester,
+    ) async {
+      final profile = await scanGuardianWithCopy(tester, <String, dynamic>{
+        'patientId': 'p-minor-01',
+        'device_uid': 'HWB-PATIENT-GATE',
+        'patientInfo': {'firstName': 'Ana', 'firstLastName': 'Gómez'},
+      });
+
+      expect(profile.readOnly, isFalse);
+      expect(profile.patient.patientId, 'p-minor-01');
+      expect(find.text(notice), findsNothing);
+    });
   });
 
   group('Dispositivos retirados', () {
