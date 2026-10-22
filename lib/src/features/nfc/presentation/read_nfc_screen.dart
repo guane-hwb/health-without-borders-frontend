@@ -309,14 +309,46 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         return;
       }
 
-      final record = NfcGuardianPayload.reconstruct(
-        triage: triage,
-        guardianRecord: chip.guardianRecord,
-        patientDeviceUid: _patientDeviceUid ?? chip.uid,
+      // The guardian is verified (listed by the patient device), but the copy
+      // on the guardian device is only this patient's if it names the patient
+      // device that was scanned. Otherwise it is another minor's, or out of
+      // date: show the patient device's data, read-only.
+      final String patientUid = _patientDeviceUid ?? '';
+      final PatientFullRecord copy = NfcGuardianPayload.reconstructFromGuardian(
+        chip.guardianRecord!,
       );
+      final bool ownCopy =
+          patientUid.isNotEmpty &&
+          normalizeNfcUid(copy.deviceUid) == normalizeNfcUid(patientUid);
       await _warnIfRetiredListMissing();
       if (!mounted) return;
-      await _openProfile(record, offline: true);
+      if (!ownCopy) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 8),
+            content: Text(
+              isEs
+                  ? 'El dispositivo del guardián no tiene la información de '
+                        'este paciente (es de otro menor o está '
+                        'desactualizado). Se muestran solo los datos del '
+                        'dispositivo del paciente, sin editar.'
+                  : "The guardian device does not hold this patient's "
+                        "information (it is another minor's or out of date). "
+                        "Only the patient device's data is shown, read-only.",
+            ),
+          ),
+        );
+        await _openProfile(
+          NfcGuardianPayload.reconstructFromTriage(
+            triage,
+            deviceUid: patientUid,
+          ),
+          readOnly: true,
+          offline: true,
+        );
+        return;
+      }
+      await _openProfile(copy, offline: true);
     } on NfcNotAvailableException {
       if (!mounted) return;
       setState(() {

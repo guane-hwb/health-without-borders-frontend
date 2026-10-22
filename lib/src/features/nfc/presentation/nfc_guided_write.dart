@@ -94,6 +94,10 @@ enum _Failure {
   /// NFC is switched off in system settings.
   nfcOff,
 
+  /// The chip already belongs to another patient (see
+  /// [NfcDeviceInUseException]).
+  inUse,
+
   /// Anything else: transceive error, chip left the field, locked chip.
   generic,
 }
@@ -179,6 +183,8 @@ class _NfcGuidedWriteSheetState extends State<_NfcGuidedWriteSheet>
       _fail(_Failure.tooLarge, tooLarge: e);
     } on NfcDisabledException {
       _fail(_Failure.nfcOff);
+    } on NfcDeviceInUseException {
+      _fail(_Failure.inUse);
     } catch (_) {
       _fail(_Failure.generic);
     }
@@ -381,6 +387,13 @@ class _NfcGuidedWriteSheetState extends State<_NfcGuidedWriteSheet>
         return isEs
             ? 'El NFC está apagado. Actívelo en los ajustes del teléfono.'
             : 'NFC is turned off. Enable it in system settings.';
+      case _Failure.inUse:
+        return isEs
+            ? 'Este dispositivo ya pertenece a otro paciente. Cada menor '
+                  'necesita su propio dispositivo del guardián: use uno en '
+                  'blanco.'
+            : 'This device already belongs to another patient. Each minor '
+                  'needs their own guardian device: use a blank one.';
       case _Failure.generic:
         if (widget.readMode) {
           return isEs ? 'No se pudo leer' : 'Could not read';

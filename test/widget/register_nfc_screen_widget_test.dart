@@ -10,6 +10,9 @@ import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_service.dart'
+    show NfcService;
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
@@ -310,6 +313,62 @@ void main() {
         expect(find.text('1/4'), findsNothing);
       },
     );
+  });
+
+  group('RegisterNfcScreen — un dispositivo del guardián por menor', () {
+    const String inUse =
+        'Este dispositivo ya pertenece a otro paciente. Cada menor necesita '
+        'su propio dispositivo del guardián: use uno en blanco.';
+
+    tearDown(() {
+      RegisterNfcScreen.overrideReadHwbChip = null;
+      NfcService.overrideReadDeviceUid = null;
+    });
+
+    Future<String?> readFromStep2(WidgetTester tester) async {
+      await pumpScreen(tester);
+      await goToStep1(tester);
+      final step2 = tester.widget<Step2Guardian>(find.byType(Step2Guardian));
+      String? uid;
+      await tester.runAsync(() async => uid = await step2.readDevice!());
+      await tester.pump();
+      return uid;
+    }
+
+    testWidgets('acepta un dispositivo en blanco', (tester) async {
+      when(() => auth.getNfcKeyring()).thenAnswer(
+        (_) async => NfcKeyring.single(List.filled(32, 'ab').join()),
+      );
+      RegisterNfcScreen.overrideReadHwbChip = () async =>
+          const HwbChipReadResult(uid: '04:AA:BB', kind: HwbChipKind.none);
+
+      expect(await readFromStep2(tester), '04:AA:BB');
+      expect(find.text(inUse), findsNothing);
+    });
+
+    for (final HwbChipKind kind in <HwbChipKind>[
+      HwbChipKind.guardian,
+      HwbChipKind.triage,
+    ]) {
+      testWidgets('rechaza un dispositivo que ya es de un paciente ($kind)', (
+        tester,
+      ) async {
+        when(() => auth.getNfcKeyring()).thenAnswer(
+          (_) async => NfcKeyring.single(List.filled(32, 'ab').join()),
+        );
+        RegisterNfcScreen.overrideReadHwbChip = () async =>
+            HwbChipReadResult(uid: '04:CC:DD', kind: kind);
+
+        expect(await readFromStep2(tester), isNull);
+        expect(find.text(inUse), findsOneWidget);
+      });
+    }
+
+    testWidgets('sin llave NFC solo lee el UID', (tester) async {
+      NfcService.overrideReadDeviceUid = () async => '04:EE:FF';
+
+      expect(await readFromStep2(tester), '04:EE:FF');
+    });
   });
 
   group('RegisterNfcScreen — _isMinor', () {

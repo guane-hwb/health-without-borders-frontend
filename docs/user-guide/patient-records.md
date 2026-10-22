@@ -26,6 +26,8 @@ At the point of care, the fastest way to open a record is to **scan the patient'
 
 **Note:** The bracelet identifier is unambiguous, so scanning always opens the correct patient. Manual search is best when the bracelet is unavailable.
 
+**Guardian device of another minor:** offline, the record opens from the guardian device only if that device holds this patient's record. If it holds another minor's record (or one from before the patient device was reassigned), the app shows only the data on the patient device, read-only, and says so. Online, the server always returns the right record.
+
 **Retired devices:** a patient or guardian device that was retired (lost, damaged or replaced) shows *"This device was retired and no longer belongs to HWB."* and does not open the record, online or offline. Offline, the phone checks a list of retired devices that it downloads each time it syncs with a connection. If it has never synced, the record opens with a warning that the device could not be checked.
 
 ---

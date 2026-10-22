@@ -14,6 +14,7 @@ Widget buildSubject({
   VoidCallback? onBack,
   VoidCallback? onContinue,
   String locale = 'es',
+  Future<String?> Function()? readDevice,
 }) {
   return _LocaleWrapper(
     locale: locale,
@@ -24,6 +25,7 @@ Widget buildSubject({
           requiredForMinor: requiredForMinor,
           onBack: onBack ?? () {},
           onContinue: onContinue ?? () {},
+          readDevice: readDevice,
         ),
       ),
     ),
@@ -898,5 +900,60 @@ void main() {
         );
       },
     );
+  });
+
+  group('Lectura del dispositivo del guardián con readDevice', () {
+    Finder scanButton({required bool last}) {
+      final f = find.descendant(
+        of: find.byType(ElevatedButton),
+        matching: find.byIcon(Icons.nfc),
+      );
+      return last ? f.last : f.first;
+    }
+
+    testWidgets('usa el UID que devuelve, en los dos guardianes', (
+      tester,
+    ) async {
+      resizeViewport(tester);
+      var uid = 'NFC-PROPIO-001';
+      await tester.pumpWidget(buildSubject(readDevice: () async => uid));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(scanButton(last: false));
+      await tester.tap(scanButton(last: false));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('NFC-PROPIO-001'), findsWidgets);
+
+      await tester.tap(find.text('Agregar'));
+      await tester.pumpAndSettle();
+      uid = 'NFC-PROPIO-002';
+      await tester.ensureVisible(scanButton(last: true));
+      await tester.tap(scanButton(last: true));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('NFC-PROPIO-002'), findsWidgets);
+    });
+
+    testWidgets('si lo rechaza (null), el campo queda como estaba', (
+      tester,
+    ) async {
+      resizeViewport(tester);
+      final draft = RegisterDraft()..guardianDeviceUid = 'NFC-ANTERIOR';
+      await tester.pumpWidget(
+        buildSubject(draft: draft, readDevice: () async => null),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(scanButton(last: false));
+      await tester.tap(scanButton(last: false));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('NFC-ANTERIOR'), findsWidgets);
+
+      await tester.tap(find.text('Agregar'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(scanButton(last: true));
+      await tester.tap(scanButton(last: true));
+      await tester.pumpAndSettle();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
   });
 }

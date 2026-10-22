@@ -14,6 +14,7 @@ import '../../domain/register_draft.dart';
 import '../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../core/nfc/nfc_payload_service.dart';
+import '../../../../core/nfc/nfc_service.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../nfc_guided_write.dart';
 import '../add_consultation_screen.dart';
@@ -27,6 +28,9 @@ import '../../../../core/i18n/app_strings.dart';
 
 class RegisterNfcScreen extends StatefulWidget {
   const RegisterNfcScreen({super.key});
+
+  @visibleForTesting
+  static Future<HwbChipReadResult> Function()? overrideReadHwbChip;
   @override
   State<RegisterNfcScreen> createState() => _RegisterNfcScreenState();
 }
@@ -376,6 +380,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         write: () => NfcPayloadService(codec: codec).writeGuardianRecord(
           buildFit: guardianFitBuilder(record: record, codec: codec),
           expectedUid: expectedUid,
+          patientId: record.patientId,
         ),
       );
       if (!mounted) return;
@@ -420,6 +425,40 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     }
 
     _completeFinalize();
+  }
+
+  /// Reads the device about to be this new patient's guardian device. Each
+  /// minor needs one of their own: it holds a single copy, and offline it
+  /// opens that copy. With the NFC key the device's data is checked, and one
+  /// that already belongs to a patient (another minor's guardian device, or a
+  /// patient device) is refused: null. Without the key only the UID is read;
+  /// the write at the end refuses it then.
+  Future<String?> _readNewGuardianDevice() async {
+    final keyring = await AppScope.of(context).authRepository.getNfcKeyring();
+    if (keyring == null || keyring.isEmpty) return NfcService.readDeviceUid();
+    final HwbChipReadResult chip =
+        await (RegisterNfcScreen.overrideReadHwbChip?.call() ??
+            NfcPayloadService(
+              codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
+            ).readHwbChip());
+    if (chip.kind == HwbChipKind.none) return chip.uid;
+    if (!mounted) return null;
+    final bool isEs = AppStrings.of(context).isEs;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppColors.error,
+        duration: const Duration(seconds: 6),
+        content: Text(
+          isEs
+              ? 'Este dispositivo ya pertenece a otro paciente. Cada menor '
+                    'necesita su propio dispositivo del guardián: use uno en '
+                    'blanco.'
+              : 'This device already belongs to another patient. Each minor '
+                    'needs their own guardian device: use a blank one.',
+        ),
+      ),
+    );
+    return null;
   }
 
   /// Tells the user the record was saved but the chips were not written.
@@ -508,6 +547,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           requiredForMinor: _isMinor,
           onBack: _stepBack,
           onContinue: _next,
+          readDevice: _readNewGuardianDevice,
         );
       case 2:
         return Step4Background(

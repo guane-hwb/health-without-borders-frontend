@@ -382,6 +382,35 @@ void main() {
       },
     );
 
+    for (final String locale in <String>['es', 'en']) {
+      testWidgets(
+        'NfcDeviceInUseException pide un dispositivo propio ($locale)',
+        (tester) async {
+          await tester.pumpWidget(
+            _Harness(
+              key: GlobalKey<_HarnessState>(),
+              locale: locale,
+              write: () async =>
+                  throw NfcDeviceInUseException(patientDevice: false),
+            ),
+          );
+          await _openSheet(tester);
+          await tester.tap(find.text(locale == 'es' ? 'Empezar' : 'Start'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+
+          expect(
+            find.textContaining(
+              locale == 'es'
+                  ? 'Cada menor necesita su propio dispositivo del guardián'
+                  : 'Each minor needs their own guardian device',
+            ),
+            findsOneWidget,
+          );
+        },
+      );
+    }
+
     testWidgets(
       'Error NfcPayloadTooLargeException muestra el detalle de bytes en es y en',
       (tester) async {
