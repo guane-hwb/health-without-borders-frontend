@@ -1787,6 +1787,76 @@ void main() {
       expect(repo.hasToken, isFalse);
     });
   });
+
+  group('modo web (forceWeb)', () {
+    late AuthRepository webRepo;
+
+    setUp(() {
+      webRepo = _makeRepo(
+        api: api,
+        storage: storage,
+        localDb: localDb,
+        forceWeb: true,
+      );
+    });
+
+    test(
+      'getNfcKeyring sin anillo en memoria devuelve null sin leer el almacén',
+      () async {
+        stubStoredRefresh(_refreshJwt());
+        when(() => storage.read(key: AuthRepository.nfcKeyringKey)).thenAnswer(
+          (_) async => jsonEncode(NfcKeyring.single('stored-nfc').toJson()),
+        );
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyKey),
+        ).thenAnswer((_) async => 'legacy-nfc');
+
+        expect(await webRepo.getNfcKeyring(), isNull);
+        expect(await webRepo.getNfcKeyring(), isNull);
+
+        verifyNever(() => storage.read(key: AuthRepository.nfcKeyringKey));
+        verifyNever(() => storage.read(key: AuthRepository.nfcKeyKey));
+      },
+    );
+
+    test('getNfcKeyring devuelve el anillo de la sesión en memoria', () async {
+      stubLogin(
+        token: <String, dynamic>{
+          'refresh_token': _refreshJwt(),
+          'nfc_encryption_key': 'web-nfc',
+        },
+      );
+      await webRepo.login(email: 'doc@hwb.org', password: 'x');
+
+      final NfcKeyring? keyring = await webRepo.getNfcKeyring();
+
+      expect(keyring, isNotNull);
+      expect(keyring!.keyFor(0), 'web-nfc');
+      verifyNever(() => storage.read(key: AuthRepository.nfcKeyringKey));
+    });
+
+    test('la marca de reloj guardada no se lee del almacén', () async {
+      stubStoredRefresh(_refreshJwt());
+      when(() => storage.read(key: AuthRepository.clockMarkKey)).thenAnswer(
+        (_) async => DateTime.now()
+            .toUtc()
+            .add(const Duration(days: 30))
+            .millisecondsSinceEpoch
+            .toString(),
+      );
+
+      expect(await webRepo.isNfcSessionExpired(), isFalse);
+      verifyNever(() => storage.read(key: AuthRepository.clockMarkKey));
+    });
+
+    test('la marca en memoria sigue detectando un reloj atrasado', () async {
+      stubStoredRefresh(_refreshJwt());
+
+      expect(await webRepo.isNfcSessionExpired(), isFalse);
+      expect(await webRepo.isNfcSessionExpired(), isFalse);
+      verifyNever(() => storage.read(key: AuthRepository.clockMarkKey));
+    });
+  });
 }
 
 String _docJwt() => _validJwt('doc@hwb.org');

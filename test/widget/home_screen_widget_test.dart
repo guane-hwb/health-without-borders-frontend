@@ -1504,5 +1504,121 @@ void main() {
       },
       skip: !kIsWeb,
     );
+
+    testWidgets(
+      'web: el aviso en inglés indica que se eliminarán de este navegador',
+      (tester) async {
+        stubPending(patients: 2, logs: 1);
+        await tester.pumpWidget(
+          _wrapHome(user: _session(UserRole.doctor), locale: 'en'),
+        );
+        await tester.pumpAndSettle();
+
+        await tapLogout(tester);
+
+        expect(
+          find.text(
+            'Warning: 3 record(s) could not be synced. Signing out will '
+            'DELETE them from this browser and they cannot be recovered.',
+          ),
+          findsOneWidget,
+        );
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'web: tras la sincronización previa permite confirmar y cerrar sesión',
+      (tester) async {
+        stubPending(patients: 1);
+        await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+        await tester.pumpAndSettle();
+
+        await tapLogout(tester);
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(
+          find
+              .descendant(
+                of: find.byType(AlertDialog),
+                matching: find.byType(TextButton),
+              )
+              .last,
+        );
+        await tester.pumpAndSettle();
+
+        expect(mockAuth.clearSessionCalled, isTrue);
+      },
+      skip: !kIsWeb,
+    );
+
+    group('forzando el comportamiento web', () {
+      setUp(() {
+        HomeScreen.debugIsWebOverride = true;
+        addTearDown(() => HomeScreen.debugIsWebOverride = null);
+      });
+
+      testWidgets('el aviso en español dice que se ELIMINARÁN del navegador', (
+        tester,
+      ) async {
+        stubPending(patients: 2, logs: 1);
+        await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+        await tester.pumpAndSettle();
+
+        await tapLogout(tester);
+
+        expect(
+          find.text(
+            'Atención: 3 registro(s) no se pudieron sincronizar. Al cerrar '
+            'sesión se ELIMINARÁN de este navegador y no se podrán recuperar.',
+          ),
+          findsOneWidget,
+        );
+        verify(() => mockDb.getUnsyncedCount(ownerUserId: null)).called(1);
+      });
+
+      testWidgets('el aviso en inglés dice que se eliminarán del navegador', (
+        tester,
+      ) async {
+        stubPending(patients: 2, logs: 1);
+        await tester.pumpWidget(
+          _wrapHome(user: _session(UserRole.doctor), locale: 'en'),
+        );
+        await tester.pumpAndSettle();
+
+        await tapLogout(tester);
+
+        expect(
+          find.text(
+            'Warning: 3 record(s) could not be synced. Signing out will '
+            'DELETE them from this browser and they cannot be recovered.',
+          ),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('sincroniza antes de preguntar y permite cerrar sesión', (
+        tester,
+      ) async {
+        stubPending(patients: 1);
+        await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+        await tester.pumpAndSettle();
+
+        await tapLogout(tester);
+        expect(find.byType(AlertDialog), findsOneWidget);
+
+        await tester.tap(
+          find
+              .descendant(
+                of: find.byType(AlertDialog),
+                matching: find.byType(TextButton),
+              )
+              .last,
+        );
+        await tester.pumpAndSettle();
+
+        expect(mockAuth.clearSessionCalled, isTrue);
+      });
+    });
   });
 }

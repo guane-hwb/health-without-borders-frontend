@@ -144,7 +144,7 @@ void main() {
       'firstLastName': 'García',
       'firstName': 'Ana',
       'dob': '2019-05-05',
-      'nationalityCode': ?nationalityCode,
+      'nationalityCode': nationalityCode,
       'biologicalSex': 'F',
       'address': <String, dynamic>{'city': 'Cúcuta', 'state': 'N. Santander'},
     };
@@ -924,7 +924,7 @@ void main() {
       final ce = ClinicalEvaluation.fromJson(<String, dynamic>{
         'historyOfCurrentIllness': 'Fiebre 3 días',
         'generalPhysicalExamination': 'Normal',
-        'systemsExamination': 'Sin alteraciones',
+        'systemsExamination': 'Sin alterations',
         'treatmentPlanObservations': 'Reposo',
       });
       expect(ce.historyOfCurrentIllness, 'Fiebre 3 días');
@@ -1890,9 +1890,20 @@ void main() {
         documentNumber: '123',
         name: 'Dr. Smith',
       );
-      final copy = prac.copyWith(firstName: 'John');
+      final copy = prac.copyWith(
+        firstName: 'John',
+        secondName: 'Edward',
+        firstLastName: 'Smith',
+        secondLastName: 'Doe',
+      );
 
       expect(copy.firstName, 'John');
+      expect(copy.secondName, 'Edward');
+      expect(copy.firstLastName, 'Smith');
+      expect(copy.secondLastName, 'Doe');
+
+      final copyNoArgs = prac.copyWith();
+      expect(copyNoArgs.firstName, prac.firstName);
 
       final prac2 = PractitionerInfo(
         documentType: 'CC',
@@ -1907,9 +1918,16 @@ void main() {
   group('ProviderInfo — copyWith, operator ==, hashCode', () {
     test('copyWith, operator == y hashCode', () {
       final prov = ProviderInfo(repsCode: 'REP1', name: 'Hospital');
-      final copy = prov.copyWith(nitNumber: '900123');
+      final copy = prov.copyWith(
+        nitNumber: '900123',
+        locationSeatCode: 'SEAT01',
+      );
 
       expect(copy.nitNumber, '900123');
+      expect(copy.locationSeatCode, 'SEAT01');
+
+      final copyNoArgs = prov.copyWith();
+      expect(copyNoArgs.nitNumber, prov.nitNumber);
 
       final prov2 = ProviderInfo(repsCode: 'REP1', name: 'Hospital');
       expect(prov, equals(prov2));
@@ -1998,6 +2016,81 @@ void main() {
         expect(serialized['prescriptions'], isA<List<dynamic>>());
       },
     );
+
+    test('copyWith sobreescribe todos los parametros opcionales', () {
+      final original = MedicalHistoryItem(startDateTime: '2026-09-18T10:00:00');
+
+      final copy = original.copyWith(
+        encounterIdentifier: 'enc-123',
+        type: 'Emergency',
+        startDateTime: '2026-09-18T11:00:00',
+        endDateTime: '2026-09-18T12:00:00',
+        careModality: '02',
+        serviceGroup: '02',
+        careEnvironment: '01',
+        entryRoute: '02',
+        externalCause: '02',
+        provider: ProviderInfo(repsCode: 'REP2', name: 'Clínica 2'),
+        practitioner: PractitionerInfo(
+          documentType: 'CC',
+          documentNumber: '456',
+          name: 'Dra. Ana',
+        ),
+        location: 'Piso 2',
+        physician: 'Dra. Ana',
+        clinicalEvaluation: ClinicalEvaluation(
+          historyOfCurrentIllness: 'Dolor',
+        ),
+        diagnosis: [DiagnosisItem(icd10Code: 'K219', description: 'Reflujo')],
+        diagnosisType: '02',
+        dischargeDisposition: '02',
+        riskFactors: [RiskFactor(type: '02', name: 'Sedentarismo')],
+        incapacity: IncapacityInfo(scope: '01', days: 2),
+        payer: PayerInfo(code: 'EPS2', name: 'Compensar'),
+        externalCauseDisplay: 'Enfermedad general',
+        healthcareServiceCode: '102',
+        healthcareServiceDisplay: 'Urgencias',
+        cupsCode: '890201',
+        cupsDisplay: 'Consulta de urgencias',
+        occupation: '01',
+        occupationDescription: 'Docente',
+        prescriptions: [
+          MedicationRequestItem(medicationName: 'Omeprazol', dosage: '20mg'),
+        ],
+      );
+
+      expect(copy.encounterIdentifier, 'enc-123');
+      expect(copy.type, 'Emergency');
+      expect(copy.startDateTime, '2026-09-18T11:00:00');
+      expect(copy.endDateTime, '2026-09-18T12:00:00');
+      expect(copy.careModality, '02');
+      expect(copy.serviceGroup, '02');
+      expect(copy.careEnvironment, '01');
+      expect(copy.entryRoute, '02');
+      expect(copy.externalCause, '02');
+      expect(copy.provider?.repsCode, 'REP2');
+      expect(copy.practitioner?.documentNumber, '456');
+      expect(copy.location, 'Piso 2');
+      expect(copy.physician, 'Dra. Ana');
+      expect(copy.clinicalEvaluation.historyOfCurrentIllness, 'Dolor');
+      expect(copy.diagnosis.first.icd10Code, 'K219');
+      expect(copy.diagnosisType, '02');
+      expect(copy.dischargeDisposition, '02');
+      expect(copy.riskFactors.first.name, 'Sedentarismo');
+      expect(copy.incapacity?.days, 2);
+      expect(copy.payer?.code, 'EPS2');
+      expect(copy.externalCauseDisplay, 'Enfermedad general');
+      expect(copy.healthcareServiceCode, '102');
+      expect(copy.healthcareServiceDisplay, 'Urgencias');
+      expect(copy.cupsCode, '890201');
+      expect(copy.cupsDisplay, 'Consulta de urgencias');
+      expect(copy.occupation, '01');
+      expect(copy.occupationDescription, 'Docente');
+      expect(copy.prescriptions.first.medicationName, 'Omeprazol');
+
+      final copyNoArgs = original.copyWith();
+      expect(copyNoArgs.startDateTime, original.startDateTime);
+    });
   });
 
   group('PatientFullRecord — copyWith, operator == y hashCode', () {

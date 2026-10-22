@@ -1,7 +1,7 @@
 // lib/src/features/home/presentation/home_screen.dart
 
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
@@ -17,6 +17,11 @@ import '../../../core/sync/sync_engine.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
+
+  @visibleForTesting
+  static bool? debugIsWebOverride;
+
+  static bool get _isWeb => debugIsWebOverride ?? kIsWeb;
 
   static String _greeting(AppStrings s) {
     final hour = DateTime.now().hour;
@@ -35,7 +40,7 @@ class HomeScreen extends StatelessWidget {
 
     if (!dialogContext.mounted) return;
 
-    if (kIsWeb) {
+    if (_isWeb) {
       try {
         await scope.syncEngine.syncAll().timeout(const Duration(seconds: 20));
       } catch (_) {}
@@ -45,7 +50,7 @@ class HomeScreen extends StatelessWidget {
     int pendingLogs = 0;
     // On a phone another user's pending rows stay after this logout and wait
     // for them; on the web the logout erases everything, so all of it counts.
-    final String? owner = kIsWeb ? null : scope.currentUser?.id;
+    final String? owner = _isWeb ? null : scope.currentUser?.id;
     try {
       pendingPatients = await scope.localDatabase.getUnsyncedCount(
         ownerUserId: owner,
@@ -78,7 +83,7 @@ class HomeScreen extends StatelessWidget {
                   border: Border.all(color: const Color(0xFFFFEEBA)),
                 ),
                 child: Text(
-                  kIsWeb
+                  _isWeb
                       ? (isEs
                             ? 'Atención: $totalPending registro(s) no se pudieron sincronizar. Al cerrar sesión se ELIMINARÁN de este navegador y no se podrán recuperar.'
                             : 'Warning: $totalPending record(s) could not be synced. Signing out will DELETE them from this browser and they cannot be recovered.')
