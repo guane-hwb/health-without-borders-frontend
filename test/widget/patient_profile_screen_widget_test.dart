@@ -345,6 +345,35 @@ class _AnnouncingSyncEngine extends _FakeSyncEngine {
   }
 }
 
+/// A sync outcome whose two flags the profile reads can be set independently
+/// ([_FakeSyncResult] answers every flag with the same value).
+class _SyncOutcome implements SyncResult {
+  _SyncOutcome({required this.clean, required this.blockedOnly});
+
+  final bool clean;
+  final bool blockedOnly;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #isFullyClean) return clean;
+    if (invocation.memberName == #hasBlockedOnly) return blockedOnly;
+    return false;
+  }
+}
+
+class _OutcomeSyncEngine extends _FakeSyncEngine {
+  _OutcomeSyncEngine({required this.clean, required this.blockedOnly});
+
+  final bool clean;
+  final bool blockedOnly;
+
+  @override
+  Future<SyncResult> syncAll() async {
+    callCount++;
+    return _SyncOutcome(clean: clean, blockedOnly: blockedOnly);
+  }
+}
+
 class _LocaleWrapper extends StatefulWidget {
   const _LocaleWrapper({required this.locale, required this.child});
   final String locale;
@@ -3467,6 +3496,143 @@ void main() {
 
       expect(find.text('Actualizar los otros dispositivos'), findsNothing);
       expect(find.byType(NfcStaleBanner), findsNothing);
+    });
+  });
+
+  group('Cobertura 100% — rol sin permiso y resultados de sync', () {
+    final List<UserRole> blockedRoles = UserRole.values
+        .where((UserRole r) => !r.canSyncPatient)
+        .toList();
+
+    test('hay al menos un rol sin permiso para sincronizar dispositivos', () {
+      expect(
+        blockedRoles,
+        isNotEmpty,
+        reason:
+            'si todos los roles pueden sincronizar, la rama es inalcanzable',
+      );
+    });
+
+    testWidgets('reasignar con un rol sin permiso avisa y no abre el diálogo', (
+      tester,
+    ) async {
+      for (final UserRole role in blockedRoles) {
+        var dialogCalls = 0;
+        await _pumpScreen(tester, _record(), allowReassign: true, role: role);
+        PatientProfileScreen.showReassignDeviceDialogImpl =
+            (context, {required isEs, required hasG1, required hasG2}) async {
+              dialogCalls++;
+              return null;
+            };
+
+        tester
+            .widget<ProfileTabSummary>(find.byType(ProfileTabSummary))
+            .onReassignDevice!();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Tu rol no permite reasignar o sincronizar dispositivos.'),
+          findsOneWidget,
+          reason: 'rol $role',
+        );
+        expect(dialogCalls, 0, reason: 'rol $role');
+
+        await tester.pumpWidget(const SizedBox());
+      }
+    });
+
+    testWidgets('el aviso de rol sin permiso también sale en inglés', (
+      tester,
+    ) async {
+      await _pumpScreen(
+        tester,
+        _record(),
+        allowReassign: true,
+        role: blockedRoles.first,
+        locale: 'en',
+      );
+
+      tester
+          .widget<ProfileTabSummary>(find.byType(ProfileTabSummary))
+          .onReassignDevice!();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Your role is not authorized to reassign or sync devices.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sync con registro retenido por conflicto permanente (ES)', (
+      tester,
+    ) async {
+      final engine = _OutcomeSyncEngine(clean: false, blockedOnly: true);
+      await _pumpScreen(tester, _record(), syncEng: engine);
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(engine.callCount, 1);
+      expect(
+        find.text(
+          'El registro quedó retenido con conflicto permanente (ej. 409). '
+          'Revise la cola de sincronización.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Fallo al sincronizar.'), findsNothing);
+    });
+
+    testWidgets('sync con registro retenido por conflicto permanente (EN)', (
+      tester,
+    ) async {
+      final engine = _OutcomeSyncEngine(clean: false, blockedOnly: true);
+      await _pumpScreen(tester, _record(), syncEng: engine, locale: 'en');
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Record blocked due to permanent error (e.g. 409). '
+          'Check the sync queue.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sync incompleto avisa que se reintentará (ES)', (
+      tester,
+    ) async {
+      final engine = _OutcomeSyncEngine(clean: false, blockedOnly: false);
+      await _pumpScreen(tester, _record(), syncEng: engine);
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(engine.callCount, 1);
+      expect(
+        find.text(
+          'No se pudo completar la sincronización. '
+          'Se reintentará automáticamente.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sync incompleto avisa que se reintentará (EN)', (
+      tester,
+    ) async {
+      final engine = _OutcomeSyncEngine(clean: false, blockedOnly: false);
+      await _pumpScreen(tester, _record(), syncEng: engine, locale: 'en');
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Sync incomplete. It will retry automatically.'),
+        findsOneWidget,
+      );
     });
   });
 }

@@ -7,6 +7,7 @@ import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_error_codes.dart';
 import '../../../core/nfc/nfc_guardian_payload.dart';
+import '../../../core/nfc/nfc_keyring.dart';
 import '../../../core/nfc/nfc_payload_codec.dart';
 import '../../../core/nfc/nfc_payload_service.dart' as payload;
 import '../../../core/nfc/nfc_service.dart';
@@ -27,6 +28,16 @@ class ReadNfcScreen extends StatefulWidget {
     required String alertMessage,
   })?
   overrideReadHwbChip;
+
+  @visibleForTesting
+  static payload.NfcPayloadService Function(NfcKeyring keyring)
+  payloadServiceFactory = createPayloadService;
+
+  @visibleForTesting
+  static payload.NfcPayloadService createPayloadService(NfcKeyring keyring) =>
+      payload.NfcPayloadService(
+        codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
+      );
 
   @override
   State<ReadNfcScreen> createState() => _ReadNfcScreenState();
@@ -86,8 +97,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
             ? await ReadNfcScreen.overrideReadHwbChip!(
                 alertMessage: alertMessage,
               )
-            : await payload.NfcPayloadService(
-                codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
+            : await ReadNfcScreen.payloadServiceFactory(
+                keyring,
               ).readHwbChip(alertMessage: alertMessage);
         await _recordChipKeyVersion(chip);
       } else {
@@ -275,8 +286,8 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
           ? await ReadNfcScreen.overrideReadHwbChip!(
               alertMessage: _nfcAlert(guardian: true),
             )
-          : await payload.NfcPayloadService(
-              codec: NfcPayloadCodec.fromKeyring(keyring: keyring),
+          : await ReadNfcScreen.payloadServiceFactory(
+              keyring,
             ).readHwbChip(alertMessage: _nfcAlert(guardian: true));
       await _recordChipKeyVersion(chip);
       if (!mounted) return;

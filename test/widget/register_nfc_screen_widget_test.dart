@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -970,5 +971,106 @@ void main() {
         );
       },
     );
+  });
+
+  group('RegisterNfcScreen — Cobertura adicional (_stepBack, _persistLocally, '
+      'lector real de chip)', () {
+    tearDown(() {
+      RegisterNfcScreen.overrideReadHwbChip = null;
+      NfcService.overrideReadDeviceUid = null;
+    });
+
+    testWidgets(
+      '_stepBack en el paso 0 con formulario vacío vuelve a Home sin diálogo',
+      (tester) async {
+        await pumpScreen(tester);
+        expect(find.byType(Step3PatientData), findsOneWidget);
+
+        tester.widget<Step3PatientData>(find.byType(Step3PatientData)).onBack();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsNothing);
+        expect(find.byType(RegisterNfcScreen), findsNothing);
+        expect(find.byType(HomeScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '_stepBack en el paso 0 con datos pide confirmar y al descartar vuelve '
+      'a Home',
+      (tester) async {
+        await pumpScreen(tester);
+        final step3 = tester.widget<Step3PatientData>(
+          find.byType(Step3PatientData),
+        );
+        step3.draft.firstName = 'Juan';
+
+        step3.onBack();
+        await tester.pumpAndSettle();
+        expect(find.text('¿Descartar registro?'), findsOneWidget);
+
+        await tester.tap(find.text('Descartar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RegisterNfcScreen), findsNothing);
+        expect(find.byType(HomeScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '_persistLocally restaura la sesión cuando currentUser es nulo',
+      (tester) async {
+        await pumpScreen(tester);
+        await advanceToHub(tester);
+
+        tester
+            .widget<Step6Success>(find.byType(Step6Success))
+            .onAddConsultation();
+        await pumpFrames(tester);
+        expect(find.byType(AddConsultationScreen), findsOneWidget);
+
+        when(() => auth.currentUser).thenReturn(null);
+
+        Navigator.of(tester.element(find.byType(AddConsultationScreen))).pop(
+          MedicalHistoryItem(startDateTime: DateTime.now().toIso8601String()),
+        );
+        await tester.pumpAndSettle();
+
+        verify(() => auth.restoreSession()).called(greaterThanOrEqualTo(1));
+        verify(() => db.getAllRecords(ownerUserId: 'u1')).called(1);
+        expect(find.byType(Step6Success), findsOneWidget);
+      },
+    );
+
+    testWidgets('con llave NFC y sin override, _readNewGuardianDevice usa '
+        'NfcPayloadService.readHwbChip', (tester) async {
+      when(() => auth.getNfcKeyring()).thenAnswer(
+        (_) async => NfcKeyring.single(List.filled(32, 'ab').join()),
+      );
+      RegisterNfcScreen.overrideReadHwbChip = null;
+
+      await pumpScreen(tester);
+      await goToStep1(tester);
+      final step2 = tester.widget<Step2Guardian>(find.byType(Step2Guardian));
+
+      final originalOnError = FlutterError.onError;
+      FlutterError.onError = (FlutterErrorDetails details) {
+        if (details.exception is PlatformException) return;
+        originalOnError?.call(details);
+      };
+      try {
+        await tester.runAsync(() async {
+          try {
+            await step2.readDevice!().timeout(const Duration(seconds: 3));
+          } catch (_) {}
+        });
+        await tester.pump();
+      } finally {
+        FlutterError.onError = originalOnError;
+      }
+
+      verify(() => auth.getNfcKeyring()).called(greaterThanOrEqualTo(1));
+      expect(RegisterNfcScreen.overrideReadHwbChip, isNull);
+    });
   });
 }

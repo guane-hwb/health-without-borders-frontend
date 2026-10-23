@@ -29,6 +29,8 @@ import 'package:health_without_borders_frontend/src/features/nfc/presentation/pr
 
 class MockLocalDatabase extends Mock implements LocalDatabase {}
 
+class _MockPayloadService extends Mock implements NfcPayloadService {}
+
 class FakePatientRepository implements PatientRepository {
   bool throw403ForGuardian = false;
   bool throwGenericError = false;
@@ -278,6 +280,7 @@ void main() {
     fakeAuth = FakeAuthRepository();
     NfcService.overrideReadDeviceUid = null;
     ReadNfcScreen.overrideReadHwbChip = null;
+    ReadNfcScreen.payloadServiceFactory = ReadNfcScreen.createPayloadService;
 
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
     binding.platformDispatcher.views.first.physicalSize = const Size(
@@ -290,6 +293,7 @@ void main() {
   tearDown(() {
     NfcService.overrideReadDeviceUid = null;
     ReadNfcScreen.overrideReadHwbChip = null;
+    ReadNfcScreen.payloadServiceFactory = ReadNfcScreen.createPayloadService;
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
     binding.platformDispatcher.views.first.resetPhysicalSize();
     binding.platformDispatcher.views.first.resetDevicePixelRatio();
@@ -1590,6 +1594,145 @@ void main() {
             organizationId: null,
           ),
         ).called(1);
+      },
+    );
+  });
+
+  group('ReadNfcScreen — Servicio de payload real y casos restantes', () {
+    test('createPayloadService construye el servicio sin tocar la radio', () {
+      final NfcPayloadService service = ReadNfcScreen.createPayloadService(
+        NfcKeyring.single('AA' * 32),
+      );
+
+      expect(service, isA<NfcPayloadService>());
+    });
+
+    testWidgets(
+      'Con keyring y sin override, el escaneo de paciente lee el chip con el '
+      'servicio de la fábrica',
+      (tester) async {
+        final _MockPayloadService service = _MockPayloadService();
+        when(
+          () => service.readHwbChip(alertMessage: any(named: 'alertMessage')),
+        ).thenAnswer(
+          (_) async => const HwbChipReadResult(
+            uid: 'HWB-REAL-01',
+            kind: HwbChipKind.none,
+          ),
+        );
+        ReadNfcScreen.payloadServiceFactory = (_) => service;
+        fakeAuth.nfcKey = 'secret-key';
+
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: const ReadNfcScreen(),
+            repo: fakeRepo,
+            authRepo: fakeAuth,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.wifi));
+        await tester.pumpAndSettle();
+
+        verify(
+          () => service.readHwbChip(alertMessage: any(named: 'alertMessage')),
+        ).called(1);
+        expect(fakeRepo.scanDeviceCallCount, 1);
+      },
+    );
+
+    testWidgets(
+      'Con keyring y sin override, el escaneo del guardián offline lee la '
+      'tarjeta con el servicio de la fábrica',
+      (tester) async {
+        await reachOfflineGate(
+          tester,
+          triage: makeTriage(minor: true, guardianDeviceUid: 'HWB-GUARDIAN-01'),
+        );
+
+        final _MockPayloadService service = _MockPayloadService();
+        when(
+          () => service.readHwbChip(alertMessage: any(named: 'alertMessage')),
+        ).thenAnswer(
+          (_) async => const HwbChipReadResult(
+            uid: 'HWB-GUARDIAN-01',
+            kind: HwbChipKind.guardian,
+            guardianRecord: <String, dynamic>{'patientId': 'p-guardian-01'},
+          ),
+        );
+        ReadNfcScreen.overrideReadHwbChip = null;
+        ReadNfcScreen.payloadServiceFactory = (_) => service;
+
+        await tester.tap(find.byIcon(Icons.wifi));
+        await tester.pumpAndSettle();
+
+        verify(
+          () => service.readHwbChip(alertMessage: any(named: 'alertMessage')),
+        ).called(1);
+        expect(find.byIcon(Icons.wifi), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Acceso de emergencia con usuario autenticado registra su id y su '
+      'organización',
+      (tester) async {
+        final UserSession session = UserSession.fromEmail(
+          'capture.test@example.com',
+        );
+        fakeAuth.mockUser = session;
+
+        await reachOfflineGate(tester, triage: makeTriage(minor: true));
+
+        await tester.tap(find.text('Acceso de emergencia'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Continuar'));
+        await tester.pumpAndSettle();
+
+        verify(
+          () => mockDb.logEmergencyAccess(
+            patientUid: 'HWB-PATIENT-GATE',
+            patientName: 'Ana Gómez',
+            userId: session.id,
+            ownerUserId: session.id,
+            organizationId: session.organizationId,
+          ),
+        ).called(1);
+      },
+    );
+
+    testWidgets(
+      'Guardián enviado sin UID de paciente registrado muestra el aviso de '
+      'volver al paso 1',
+      (tester) async {
+        fakeRepo.throw403ForGuardian = true;
+        NfcService.overrideReadDeviceUid = () async => '';
+
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: const ReadNfcScreen(),
+            repo: fakeRepo,
+            authRepo: fakeAuth,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.wifi));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'HWB-GUARDIAN-01');
+        await tester.tap(find.byType(OutlinedButton));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(
+            'No se ha registrado el UID del paciente. Vuelva al paso 1.',
+          ),
+          findsOneWidget,
+        );
+        expect(fakeRepo.lastCapturedGuardianUid, isNull);
       },
     );
   });

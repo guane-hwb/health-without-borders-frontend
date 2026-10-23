@@ -35,11 +35,6 @@ class MockPatientRepository extends Mock implements PatientRepository {}
 
 class MockReachability extends Mock implements Reachability {}
 
-/// A [MockSyncEngine] subclass that keeps a *real* backing field for
-/// [SyncEngine.onRecordSynced] instead of routing it through mocktail's
-/// `noSuchMethod`. This lets tests actually invoke the callback that the
-/// screen assigns internally (mocktail mocks do not persist plain
-/// property assignments unless explicitly stubbed with `when()`).
 class SpySyncEngine extends MockSyncEngine {
   void Function(String patientId, bool success, String? error)? _onRecordSynced;
 
@@ -175,6 +170,28 @@ void main() {
           const MethodChannel('dev.fluttercommunity.plus/connectivity'),
           null,
         );
+  });
+
+  group('SyncQueueScreen – Constructor con Key explicito', () {
+    testWidgets('se instancia correctamente usando una Key personalizada', (
+      tester,
+    ) async {
+      when(
+        () => db.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => []);
+
+      await tester.pumpWidget(
+        buildTestApp(
+          child: const SyncQueueScreen(key: Key('sync_queue_key')),
+          db: db,
+          syncEngine: syncEngine,
+          reachability: reachability,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('sync_queue_key')), findsOneWidget);
+    });
   });
 
   group('SyncQueueScreen – avisos de sincronización', () {
