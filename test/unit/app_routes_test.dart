@@ -280,7 +280,7 @@ void main() {
     });
 
     testWidgets(
-      'Permite acceso a /nfc/read si el usuario puede leer pacientes',
+      'Permite acceso a /nfc/read si el usuario puede escanear dispositivos',
       (tester) async {
         final session = _createSession(UserRole.doctor);
         when(() => mockAuthRepository.currentUser).thenReturn(session);
@@ -516,20 +516,21 @@ void main() {
 
   group('AppRoutes /nfc/read — permisos por rol', () {
     final deniedRoles = UserRole.values
-        .where((UserRole r) => !r.canReadPatients && !r.canScanNfc)
+        .where((UserRole r) => !r.canScanNfc)
         .toList();
-    final scanOnlyRoles = UserRole.values
-        .where((UserRole r) => !r.canReadPatients && r.canScanNfc)
+    final scanRoles = UserRole.values
+        .where((UserRole r) => r.canScanNfc)
         .toList();
 
-    test('existe al menos un rol sin permiso de lectura ni escaneo NFC', () {
-      expect(deniedRoles, isNotEmpty);
+    test('solo doctor y enfermería leen dispositivos; org_admin no', () {
+      expect(scanRoles, <UserRole>[UserRole.doctor, UserRole.nurse]);
+      expect(deniedRoles, contains(UserRole.orgAdmin));
     });
 
     for (final UserRole role in deniedRoles) {
       testWidgets(
         'Muestra Acceso Restringido en /nfc/read para el rol ${role.name} '
-        '(sin canReadPatients ni canScanNfc)',
+        '(sin canScanNfc)',
         (tester) async {
           final session = _createSession(role);
           when(() => mockAuthRepository.currentUser).thenReturn(session);
@@ -548,7 +549,7 @@ void main() {
       );
     }
 
-    for (final UserRole role in scanOnlyRoles) {
+    for (final UserRole role in scanRoles) {
       testWidgets('Permite /nfc/read al rol ${role.name} por canScanNfc', (
         tester,
       ) async {
