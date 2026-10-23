@@ -67,7 +67,11 @@ abstract class AppRoutes {
         return const ChangePasswordScreen();
 
       case readNfc:
-        if (role.canReadPatients || role.canScanNfc) {
+        // Reading a device decrypts it offline with the NFC keyring and opens
+        // the offline emergency path, which only doctor and nurse may use (the
+        // backend's /emergency-access refuses org_admin, so it would never be
+        // logged). org_admin reads records online, through the device-loss flow.
+        if (role.canScanNfc) {
           return const ReadNfcScreen();
         }
         return _forbiddenScreen();
