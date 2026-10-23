@@ -435,6 +435,113 @@ void main() {
       expect(capturedBody.containsKey('guardian_name'), isFalse);
     });
 
+    test('includes access_reason in body when accessReason is provided '
+        'and non-empty', () async {
+      when(
+        () => apiClient.postJson(
+          path: '/api/v1/patients/search',
+          headers: any(named: 'headers'),
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer((_) async => <String, dynamic>{'id': 'patient-013'});
+
+      await repository.searchPatient(
+        documentNumber: documentNumber,
+        birthDate: birthDate,
+        firstName: firstName,
+        lastName: lastName,
+        accessReason: 'emergency',
+      );
+
+      final capturedBody =
+          verify(
+                () => apiClient.postJson(
+                  path: '/api/v1/patients/search',
+                  headers: any(named: 'headers'),
+                  body: captureAny(named: 'body'),
+                ),
+              ).captured.single
+              as Map<String, dynamic>;
+
+      expect(capturedBody['access_reason'], 'emergency');
+      expect(capturedBody['document_number'], documentNumber);
+      expect(capturedBody.containsKey('guardian_name'), isFalse);
+    });
+
+    test('sends guardian_name and access_reason together when both are '
+        'provided', () async {
+      when(
+        () => apiClient.postJson(
+          path: '/api/v1/patients/search',
+          headers: any(named: 'headers'),
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer((_) async => <String, dynamic>{'id': 'patient-014'});
+
+      await repository.searchPatient(
+        documentNumber: documentNumber,
+        birthDate: birthDate,
+        firstName: firstName,
+        lastName: lastName,
+        guardianName: 'Maria Gomez',
+        accessReason: 'lost_wristband',
+      );
+
+      final capturedBody =
+          verify(
+                () => apiClient.postJson(
+                  path: '/api/v1/patients/search',
+                  headers: any(named: 'headers'),
+                  body: captureAny(named: 'body'),
+                ),
+              ).captured.single
+              as Map<String, dynamic>;
+
+      expect(capturedBody['guardian_name'], 'Maria Gomez');
+      expect(capturedBody['access_reason'], 'lost_wristband');
+    });
+
+    test('omits access_reason when accessReason is null or an empty '
+        'string', () async {
+      when(
+        () => apiClient.postJson(
+          path: '/api/v1/patients/search',
+          headers: any(named: 'headers'),
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer((_) async => <String, dynamic>{'id': 'patient-015'});
+
+      await repository.searchPatient(
+        documentNumber: documentNumber,
+        birthDate: birthDate,
+        firstName: firstName,
+        lastName: lastName,
+      );
+      await repository.searchPatient(
+        documentNumber: documentNumber,
+        birthDate: birthDate,
+        firstName: firstName,
+        lastName: lastName,
+        accessReason: '',
+      );
+
+      final List<dynamic> bodies = verify(
+        () => apiClient.postJson(
+          path: '/api/v1/patients/search',
+          headers: any(named: 'headers'),
+          body: captureAny(named: 'body'),
+        ),
+      ).captured;
+
+      expect(bodies, hasLength(2));
+      for (final dynamic body in bodies) {
+        expect(
+          (body as Map<String, dynamic>).containsKey('access_reason'),
+          isFalse,
+        );
+      }
+    });
+
     test('propagates ApiException on 404 (no match found)', () async {
       when(
         () => apiClient.postJson(

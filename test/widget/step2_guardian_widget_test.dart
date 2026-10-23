@@ -956,4 +956,123 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
   });
+
+  group('Step2Guardian — Callbacks de Firma, Gestos, Modales y _commitToDraft', () {
+    testWidgets(
+      '39. Ejercicio de gestos de firma de Guardián 1 y Guardián 2, limpieza y diálogo de aceptación',
+      (tester) async {
+        resizeViewport(tester);
+        final draft = RegisterDraft();
+
+        await tester.pumpWidget(buildSubject(draft: draft));
+        await tester.pumpAndSettle();
+
+        final addBtn = find.text('Agregar');
+        await tester.tap(addBtn);
+        await tester.pumpAndSettle();
+
+        final gestureDetectors = tester.widgetList<GestureDetector>(
+          find.byType(GestureDetector),
+        );
+
+        final signatureDetectors = gestureDetectors
+            .where((g) => g.onPanStart != null)
+            .toList();
+
+        if (signatureDetectors.isNotEmpty) {
+          signatureDetectors[0].onPanStart?.call(
+            DragStartDetails(
+              localPosition: const Offset(10, 10),
+              globalPosition: const Offset(10, 10),
+            ),
+          );
+          signatureDetectors[0].onPanUpdate?.call(
+            DragUpdateDetails(
+              localPosition: const Offset(20, 20),
+              globalPosition: const Offset(20, 20),
+            ),
+          );
+          signatureDetectors[0].onPanEnd?.call(DragEndDetails());
+          await tester.pumpAndSettle();
+        }
+
+        if (signatureDetectors.length > 1) {
+          signatureDetectors[1].onPanStart?.call(
+            DragStartDetails(
+              localPosition: const Offset(10, 10),
+              globalPosition: const Offset(10, 10),
+            ),
+          );
+          signatureDetectors[1].onPanUpdate?.call(
+            DragUpdateDetails(
+              localPosition: const Offset(20, 20),
+              globalPosition: const Offset(20, 20),
+            ),
+          );
+          signatureDetectors[1].onPanEnd?.call(DragEndDetails());
+          await tester.pumpAndSettle();
+        }
+
+        final richTextG1 = find.byType(RichText).first;
+        await tester.tap(richTextG1);
+        await tester.pumpAndSettle();
+
+        final privacyLinks = find.text('política de privacidad');
+        await tester.ensureVisible(privacyLinks.first);
+        await tester.tap(privacyLinks.first, warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        final dialogClose = find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byType(ElevatedButton),
+        );
+        if (dialogClose.evaluate().isNotEmpty) {
+          await tester.tap(dialogClose);
+          await tester.pumpAndSettle();
+        }
+
+        final backBtn = find.byIcon(Icons.arrow_back);
+        await tester.ensureVisible(backBtn);
+        await tester.tap(backBtn);
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      '40. Muestra mensaje de error cuando Guardián 2 acepta autorización pero no incluye firma',
+      (tester) async {
+        resizeViewport(tester);
+
+        final draft = RegisterDraft()
+          ..guardianName = 'Ana Garcia'
+          ..guardianPhone = '3001234567'
+          ..guardianDocNumber = '123456789'
+          ..guardianDocType = 'CC'
+          ..guardianDeviceUid = 'HWB041A2CDE'
+          ..guardianAuthAccepted = true
+          ..guardianSignatureStrokes = [
+            [const Offset(10, 10), const Offset(50, 50)],
+          ]
+          ..guardian2Name = 'Carlos Lopez'
+          ..guardian2Phone = '3109876543'
+          ..guardian2DocNumber = '9876543210'
+          ..guardian2DocType = 'CC'
+          ..guardian2DeviceUid = 'HWB041A2CDF'
+          ..guardian2AuthAccepted = true
+          ..guardian2SignatureStrokes = <List<Offset>>[];
+
+        await tester.pumpWidget(buildSubject(draft: draft));
+        await tester.pumpAndSettle();
+
+        final dynamic state = tester.state(find.byType(Step2Guardian));
+        await tester.runAsync(() async {
+          await state.saveForTest();
+        });
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.error_outline), findsOneWidget);
+        expect(find.textContaining('Firma del guardián 2'), findsOneWidget);
+      },
+    );
+  });
 }

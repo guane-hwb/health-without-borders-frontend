@@ -542,6 +542,68 @@ void main() {
     });
   });
 
+  // ── Widget: persistencia con usuario autenticado ──────────────────────────
+
+  group('Persistencia con usuario autenticado', () {
+    testWidgets(
+      'guardar propaga ownerUserId y organizationId del usuario actual',
+      (tester) async {
+        final scope = _defaultScope();
+        final session = UserSession.fromEmail('capture.test@example.com');
+        final auth = scope.authRepository as _MockAuthRepository;
+        when(() => auth.currentUser).thenReturn(session);
+
+        when(
+          () => scope.localDatabase.savePatient(
+            any(),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+          ),
+        ).thenAnswer((_) async {});
+        when(
+          () => scope.localDatabase.markChipsDirty(
+            any(),
+            guardian: any(named: 'guardian'),
+          ),
+        ).thenAnswer((_) async {});
+        when(
+          () => scope.syncEngine.syncAll(),
+        ).thenAnswer((_) async => _MockSyncResult());
+
+        await tester.pumpWidget(
+          _buildApp(patient: _fakePatient(), scope: scope),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          textFieldWithHint(_hintVaccineName).first,
+          'BCG',
+        );
+        await tester.enterText(textFieldWithHint(_hintCvxCode).first, '19');
+        await tester.enterText(textFieldWithHint(_hintAdminBy), 'Dr. López');
+        await tester.enterText(
+          textFieldWithHint(_hintAdminAt),
+          'Centro de Salud',
+        );
+        await tester.pump();
+
+        await _tapGuardar(tester);
+        await tester.pumpAndSettle();
+
+        final captured = verify(
+          () => scope.localDatabase.savePatient(
+            captureAny(),
+            ownerUserId: captureAny(named: 'ownerUserId'),
+            organizationId: captureAny(named: 'organizationId'),
+          ),
+        ).captured;
+
+        expect(captured[1], session.id);
+        expect(captured[2], session.organizationId);
+      },
+    );
+  });
+
   // ── Widget: returnToProfile path & Múltiples Vacunas ──────────────────────
 
   group(

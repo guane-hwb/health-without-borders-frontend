@@ -85,6 +85,10 @@ List<String> validateGuardianForm({
     if (signatureStrokes2.isNotEmpty) {
       if (!auth2Accepted) missing.add(auth2Label);
     }
+
+    if (auth2Accepted && signatureStrokes2.isEmpty) {
+      missing.add(isEs ? 'Firma del guardián 2' : 'Guardian 2 signature');
+    }
   }
 
   return missing;
@@ -373,6 +377,44 @@ void main() {
       );
       expect(missing, isNot(contains('Autorización guardián 2')));
     });
+
+    test(
+      '38. Guardián 2 con autorización pero sin firma → error Firma del guardián 2',
+      () {
+        final missingEs = validateGuardianForm(
+          requiredForMinor: false,
+          name: '',
+          phone: '',
+          uid: '',
+          docNumber: '',
+          signatureStrokes: [],
+          authAccepted: false,
+          hasGuardian2: true,
+          name2: 'Carlos López',
+          signatureStrokes2: [],
+          auth2Accepted: true,
+          isEs: true,
+        );
+
+        final missingEn = validateGuardianForm(
+          requiredForMinor: false,
+          name: '',
+          phone: '',
+          uid: '',
+          docNumber: '',
+          signatureStrokes: [],
+          authAccepted: false,
+          hasGuardian2: true,
+          name2: 'Carlos López',
+          signatureStrokes2: [],
+          auth2Accepted: true,
+          isEs: false,
+        );
+
+        expect(missingEs, contains('Firma del guardián 2'));
+        expect(missingEn, contains('Guardian 2 signature'));
+      },
+    );
   });
 
   group('_signatureToBase64 – lógica de retorno null', () {
@@ -415,6 +457,7 @@ void main() {
       draft.guardian2Name = null;
       draft.guardian2Phone = null;
       draft.guardian2DeviceUid = null;
+      draft.guardian2DocType = null;
       draft.guardian2DocNumber = null;
       draft.guardian2Relationship = null;
       draft.guardian2AuthAccepted = null;

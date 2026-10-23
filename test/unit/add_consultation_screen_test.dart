@@ -128,7 +128,9 @@ AppScope _defaultScope({
 AppScope _scopeWithSave() {
   final db = _MockLocalDatabase();
   final sync = _MockSyncEngine();
-  when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenAnswer((_) async {});
+  when(
+    () => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async {});
   when(
     () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
   ).thenAnswer((_) async {});
@@ -654,7 +656,9 @@ void main() {
     ) async {
       final db = _MockLocalDatabase();
       final sync = _MockSyncEngine();
-      when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenThrow(Exception('sin espacio'));
+      when(
+        () => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
+      ).thenThrow(Exception('sin espacio'));
       when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
 
       await tester.pumpWidget(
@@ -871,7 +875,9 @@ void main() {
 
         final db = _MockLocalDatabase();
         final sync = _MockSyncEngine();
-        when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenAnswer((_) async {});
+        when(
+          () => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async {});
         when(
           () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
         ).thenAnswer((_) async {});
@@ -901,7 +907,12 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
 
         final verifyRecord =
-            verify(() => db.savePatient(captureAny(), ownerUserId: any(named: 'ownerUserId'))).captured.first
+            verify(
+                  () => db.savePatient(
+                    captureAny(),
+                    ownerUserId: any(named: 'ownerUserId'),
+                  ),
+                ).captured.first
                 as PatientFullRecord;
         final clinicalEval =
             verifyRecord.medicalHistory.first.clinicalEvaluation;
@@ -919,6 +930,61 @@ void main() {
     );
   });
 
+  group('Persistencia con usuario autenticado', () {
+    testWidgets(
+      'Guardar propaga ownerUserId y organizationId del usuario actual a savePatient',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final db = _MockLocalDatabase();
+        final sync = _MockSyncEngine();
+        when(
+          () => db.savePatient(
+            any(),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+          ),
+        ).thenAnswer((_) async {});
+        when(
+          () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
+        ).thenAnswer((_) async {});
+        when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
+
+        final scope = _defaultScope(db: db, sync: sync);
+        final session = UserSession.fromEmail('capture.test@example.com');
+        final auth = scope.authRepository as _MockAuthRepository;
+        when(() => auth.currentUser).thenReturn(session);
+
+        await tester.pumpWidget(
+          _buildApp(patient: _fakePatient(), scope: scope),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+
+        await tester.enterText(textFieldWithHint(_hintHistory), 'Cefalea');
+        await tester.pump();
+
+        await _tapGuardar(tester);
+        await tester.pump(const Duration(milliseconds: 500));
+
+        final captured = verify(
+          () => db.savePatient(
+            captureAny(),
+            ownerUserId: captureAny(named: 'ownerUserId'),
+            organizationId: captureAny(named: 'organizationId'),
+          ),
+        ).captured;
+
+        expect(captured[1], session.id);
+        expect(captured[2], session.organizationId);
+      },
+    );
+  });
+
   group('Manejo dinámico de prescripciones', () {
     testWidgets(
       'Agregar y remover prescripciones actualiza el listado y mapea MedicationRequestItem',
@@ -932,7 +998,9 @@ void main() {
 
         final db = _MockLocalDatabase();
         final sync = _MockSyncEngine();
-        when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenAnswer((_) async {});
+        when(
+          () => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async {});
         when(
           () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
         ).thenAnswer((_) async {});
@@ -990,7 +1058,12 @@ void main() {
         await tester.pumpAndSettle();
 
         final capturedRecord =
-            verify(() => db.savePatient(captureAny(), ownerUserId: any(named: 'ownerUserId'))).captured.first
+            verify(
+                  () => db.savePatient(
+                    captureAny(),
+                    ownerUserId: any(named: 'ownerUserId'),
+                  ),
+                ).captured.first
                 as PatientFullRecord;
         final prescriptions = capturedRecord.medicalHistory.first.prescriptions;
 
@@ -1081,7 +1154,9 @@ void main() {
 
         final db = _MockLocalDatabase();
         final sync = _MockSyncEngine();
-        when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenAnswer((_) async {});
+        when(
+          () => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async {});
         when(
           () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
         ).thenAnswer((_) async {});
@@ -1110,7 +1185,12 @@ void main() {
         await tester.pumpAndSettle();
 
         final capturedRecord =
-            verify(() => db.savePatient(captureAny(), ownerUserId: any(named: 'ownerUserId'))).captured.first
+            verify(
+                  () => db.savePatient(
+                    captureAny(),
+                    ownerUserId: any(named: 'ownerUserId'),
+                  ),
+                ).captured.first
                 as PatientFullRecord;
         final encounter = capturedRecord.medicalHistory.first;
 
@@ -1515,7 +1595,9 @@ void main() {
 
         final db = _MockLocalDatabase();
         final sync = _MockSyncEngine();
-        when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenAnswer((_) async {});
+        when(
+          () => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async {});
         when(
           () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
         ).thenAnswer((_) async {});
@@ -1549,7 +1631,12 @@ void main() {
         await tester.pumpAndSettle();
 
         final capturedRecord =
-            verify(() => db.savePatient(captureAny(), ownerUserId: any(named: 'ownerUserId'))).captured.first
+            verify(
+                  () => db.savePatient(
+                    captureAny(),
+                    ownerUserId: any(named: 'ownerUserId'),
+                  ),
+                ).captured.first
                 as PatientFullRecord;
         final encounter = capturedRecord.medicalHistory.first;
 
@@ -1738,7 +1825,9 @@ void main() {
 
         final db = _MockLocalDatabase();
         final sync = _MockSyncEngine();
-        when(() => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId'))).thenAnswer((_) async {});
+        when(
+          () => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async {});
         when(
           () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
         ).thenAnswer((_) async {});
@@ -1781,7 +1870,12 @@ void main() {
         await tester.pumpAndSettle();
 
         final capturedRecord =
-            verify(() => db.savePatient(captureAny(), ownerUserId: any(named: 'ownerUserId'))).captured.first
+            verify(
+                  () => db.savePatient(
+                    captureAny(),
+                    ownerUserId: any(named: 'ownerUserId'),
+                  ),
+                ).captured.first
                 as PatientFullRecord;
         final encounter = capturedRecord.medicalHistory.first;
 
@@ -1860,4 +1954,3 @@ void main() {
     );
   });
 }
-

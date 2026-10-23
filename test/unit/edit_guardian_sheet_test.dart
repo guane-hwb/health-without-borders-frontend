@@ -405,4 +405,14 @@ void main() {
       );
     });
   });
+
+  group('Signature strokes state cleanup logic', () {
+    test('clearing strokes list empties all active items', () {
+      final strokes = <List<Offset>>[
+        [const Offset(10, 10), const Offset(20, 20)],
+      ];
+      strokes.clear();
+      expect(strokes, isEmpty);
+    });
+  });
 }

@@ -6,6 +6,7 @@ import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_service.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/steps/step3_patient_data.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/register_draft.dart';
+import 'package:health_without_borders_frontend/src/shared/country_display.dart';
 
 Widget _wrap(Widget child, {String locale = 'es'}) {
   return MaterialApp(
@@ -238,7 +239,6 @@ void main() {
         tester.view.physicalSize = const Size(800, 2000);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
 
         final draft = RegisterDraft();
         await tester.pumpWidget(
@@ -464,6 +464,7 @@ void main() {
           }
         }
 
+        // Selección en Dropdown de Nacionalidad (ejecuta el callback de onChanged faltante)
         final natDropdown = find.ancestor(
           of: find.textContaining('Colombiana'),
           matching: find.byType(InkWell),
@@ -478,6 +479,7 @@ void main() {
             await tester.tap(venOption.first);
             await tester.pumpAndSettle();
             expect(draft.nationalityCode, 'VEN');
+            expect(draft.nationalityName, isNotNull);
           }
         }
 
@@ -633,5 +635,90 @@ void main() {
         expect(draft.ethnicCommunity, 'Wayúu');
       },
     );
+  });
+
+  group('Step3PatientData — onChanged del dropdown de Nacionalidad', () {
+    // Abre el dropdown de nacionalidad (mostrando [fromName]) y elige la
+    // opción [toName]. Sin guardas `if`: si no se encuentra algo, el test falla.
+    Future<void> pickNationality(
+      WidgetTester tester, {
+      required String fromName,
+      required String toName,
+    }) async {
+      final trigger = find.text(fromName).first;
+      await tester.ensureVisible(trigger);
+      await tester.pumpAndSettle();
+      await tester.tap(trigger);
+      await tester.pumpAndSettle();
+
+      final option = find.widgetWithText(MenuItemButton, toName);
+      expect(option, findsOneWidget);
+      await tester.ensureVisible(option);
+      await tester.pumpAndSettle();
+      await tester.tap(option);
+      await tester.pumpAndSettle();
+    }
+
+    for (final locale in ['es', 'en']) {
+      testWidgets('seleccionar otra nacionalidad actualiza nationalityCode, '
+          'nationalityName y la etiqueta mostrada ($locale)', (tester) async {
+        tester.view.physicalSize = const Size(800, 3500);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+
+        final isEs = locale == 'es';
+        final initialCode = kSupportedNationalityCodes.first;
+        final targetCode = kSupportedNationalityCodes.firstWhere(
+          (c) => c != initialCode,
+        );
+        final initialName = countryDisplay(initialCode).name(isEs: isEs);
+        final targetName = countryDisplay(targetCode).name(isEs: isEs);
+
+        final draft = RegisterDraft()..nationalityCode = initialCode;
+        await tester.pumpWidget(
+          _wrap(
+            Step3PatientData(draft: draft, onBack: () {}, onContinue: () {}),
+            locale: locale,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await pickNationality(
+          tester,
+          fromName: initialName,
+          toName: targetName,
+        );
+
+        expect(draft.nationalityCode, targetCode);
+        expect(draft.nationalityName, targetName);
+        expect(find.text(targetName), findsWidgets);
+      });
+    }
+
+    testWidgets('cambiar la nacionalidad dos veces deja siempre el último '
+        'valor elegido (ida y vuelta)', (tester) async {
+      tester.view.physicalSize = const Size(800, 3500);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final codeA = kSupportedNationalityCodes.first;
+      final codeB = kSupportedNationalityCodes.firstWhere((c) => c != codeA);
+      final nameA = countryDisplay(codeA).name(isEs: true);
+      final nameB = countryDisplay(codeB).name(isEs: true);
+
+      final draft = RegisterDraft()..nationalityCode = codeA;
+      await tester.pumpWidget(
+        _wrap(Step3PatientData(draft: draft, onBack: () {}, onContinue: () {})),
+      );
+      await tester.pumpAndSettle();
+
+      await pickNationality(tester, fromName: nameA, toName: nameB);
+      expect(draft.nationalityCode, codeB);
+      expect(draft.nationalityName, nameB);
+
+      await pickNationality(tester, fromName: nameB, toName: nameA);
+      expect(draft.nationalityCode, codeA);
+      expect(draft.nationalityName, nameA);
+    });
   });
 }

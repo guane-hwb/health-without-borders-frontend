@@ -413,7 +413,7 @@ class AuthRepository implements TokenProvider {
 
     if (_cachedKeyring?.isNotEmpty == true) return _cachedKeyring;
 
-    if (kIsWeb) return _cachedKeyring;
+    if (_isWeb) return _cachedKeyring;
     try {
       final String? raw = await _secureStorage.read(key: _nfcKeyringKey);
       if (raw != null && raw.isNotEmpty) {
@@ -707,7 +707,7 @@ class AuthRepository implements TokenProvider {
   }
 
   Future<DateTime?> _readClockMark() async {
-    if (kIsWeb) return _cachedClockMark;
+    if (_isWeb) return _cachedClockMark;
     if (_cachedClockMark != null) return _cachedClockMark;
     try {
       final String? raw = await _secureStorage.read(key: _clockMarkKey);
