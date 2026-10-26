@@ -54,6 +54,41 @@ class _FakeSyncResult extends Fake implements SyncResult {}
 
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
 
+class _FakeNfcWriteResult extends Fake implements NfcWriteResult {}
+
+class _FakeLocalEntry extends Fake implements LocalPatientEntry {
+  _FakeLocalEntry({required this.patientId, required this.isSynced});
+
+  @override
+  final String patientId;
+
+  @override
+  final bool isSynced;
+}
+
+class _FakeNfcService extends Fake implements NfcPayloadService {
+  final List<Map<dynamic, dynamic>> triagePayloads = <Map<dynamic, dynamic>>[];
+  final List<String?> triageUids = <String?>[];
+  final List<String?> guardianUids = <String?>[];
+  final List<String?> guardianPatientIds = <String?>[];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    final Map<Symbol, dynamic> named = invocation.namedArguments;
+    if (invocation.memberName == #writeTriagePayload) {
+      triagePayloads.add(invocation.positionalArguments.first as Map);
+      triageUids.add(named[#expectedUid] as String?);
+      return Future<NfcWriteResult>.value(_FakeNfcWriteResult());
+    }
+    if (invocation.memberName == #writeGuardianRecord) {
+      guardianUids.add(named[#expectedUid] as String?);
+      guardianPatientIds.add(named[#patientId] as String?);
+      return Future<NfcWriteResult>.value(_FakeNfcWriteResult());
+    }
+    return super.noSuchMethod(invocation);
+  }
+}
+
 class _TestLocaleWrapper extends StatefulWidget {
   const _TestLocaleWrapper({required this.initialLocale, required this.child});
   final String initialLocale;
@@ -1071,6 +1106,199 @@ void main() {
 
       verify(() => auth.getNfcKeyring()).called(greaterThanOrEqualTo(1));
       expect(RegisterNfcScreen.overrideReadHwbChip, isNull);
+    });
+  });
+
+  group('RegisterNfcScreen — escritura real de chips al finalizar', () {
+    final validHexKey = List.filled(32, 'ab').join();
+
+    Future<void> finishSheet(WidgetTester tester) async {
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Empezar'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    late _FakeNfcService service;
+
+    setUp(() {
+      service = _FakeNfcService();
+      RegisterNfcScreen.overrideServiceBuilder = (_) => service;
+      when(
+        () => auth.getNfcKeyring(),
+      ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
+    });
+
+    tearDown(() {
+      RegisterNfcScreen.overrideServiceBuilder = null;
+    });
+
+    testWidgets('graba el dispositivo del paciente y limpia su marca', (
+      tester,
+    ) async {
+      await pumpScreen(tester);
+      await advanceToHub(tester);
+      final PatientFullRecord saved = tester
+          .widget<Step6Success>(find.byType(Step6Success))
+          .patient;
+
+      tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+      await tester.pump();
+      await tester.pump();
+      await finishSheet(tester);
+      await tester.pumpAndSettle();
+
+      expect(service.triageUids, <String?>[saved.deviceUid]);
+      expect(service.triagePayloads, hasLength(1));
+      expect(service.guardianUids, isEmpty);
+      verify(
+        () => db.clearChipsDirty(saved.patientId, patient: true),
+      ).called(1);
+      verify(() => sync.syncAll()).called(1);
+      expect(
+        tester.widget<Step6Success>(find.byType(Step6Success)).sealed,
+        isTrue,
+      );
+    });
+
+    testWidgets('graba también el dispositivo del guardián del paciente', (
+      tester,
+    ) async {
+      await pumpScreen(tester);
+      tester
+              .widget<Step3PatientData>(find.byType(Step3PatientData))
+              .draft
+              .guardianDeviceUid =
+          'AA:BB:CC:DD';
+      await advanceToHub(tester);
+      final PatientFullRecord saved = tester
+          .widget<Step6Success>(find.byType(Step6Success))
+          .patient;
+
+      tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+      await tester.pump();
+      await tester.pump();
+      await finishSheet(tester);
+      await finishSheet(tester);
+      await tester.pumpAndSettle();
+
+      expect(service.triageUids, hasLength(1));
+      expect(service.guardianUids, <String?>['AA:BB:CC:DD']);
+      expect(service.guardianPatientIds, <String?>[saved.patientId]);
+      verify(
+        () => db.clearChipsDirty(saved.patientId, guardian: true),
+      ).called(1);
+      expect(
+        tester.widget<Step6Success>(find.byType(Step6Success)).sealed,
+        isTrue,
+      );
+    });
+
+    testWidgets('con dos guardianes graba ambos dispositivos en orden', (
+      tester,
+    ) async {
+      await pumpScreen(tester);
+      final Step3PatientData step3 = tester.widget<Step3PatientData>(
+        find.byType(Step3PatientData),
+      );
+      step3.draft.guardianDeviceUid = 'AA:BB:CC:DD';
+      step3.draft.guardian2Name = 'Carlos Torres';
+      step3.draft.guardian2DeviceUid = 'EE:FF:00:11';
+      await advanceToHub(tester);
+
+      tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+      await tester.pump();
+      await tester.pump();
+      await finishSheet(tester);
+      await finishSheet(tester);
+      await finishSheet(tester);
+      await tester.pumpAndSettle();
+
+      expect(service.triageUids, hasLength(1));
+      expect(service.guardianUids, <String?>['AA:BB:CC:DD', 'EE:FF:00:11']);
+      verify(() => sync.syncAll()).called(1);
+      expect(
+        tester.widget<Step6Success>(find.byType(Step6Success)).sealed,
+        isTrue,
+      );
+    });
+  });
+
+  group('RegisterNfcScreen — _persistLocally con registro ya guardado', () {
+    Future<void> addConsultationAndReturn(WidgetTester tester) async {
+      tester
+          .widget<Step6Success>(find.byType(Step6Success))
+          .onAddConsultation();
+      await pumpFrames(tester);
+      Navigator.of(tester.element(find.byType(AddConsultationScreen))).pop(
+        MedicalHistoryItem(startDateTime: DateTime.now().toIso8601String()),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'conserva isSynced=true si el registro ya estaba sincronizado',
+      (tester) async {
+        await pumpScreen(tester);
+        await advanceToHub(tester);
+        final String patientId = tester
+            .widget<Step6Success>(find.byType(Step6Success))
+            .patient
+            .patientId;
+        when(
+          () => db.getAllRecords(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer(
+          (_) async => <LocalPatientEntry>[
+            _FakeLocalEntry(patientId: 'otro-paciente', isSynced: false),
+            _FakeLocalEntry(patientId: patientId, isSynced: true),
+          ],
+        );
+
+        await addConsultationAndReturn(tester);
+
+        verify(
+          () => db.savePatient(
+            any(),
+            ownerUserId: 'u1',
+            organizationId: 'org-1',
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+            isSynced: true,
+          ),
+        ).called(1);
+        expect(find.byType(Step6Success), findsOneWidget);
+      },
+    );
+
+    testWidgets('mantiene isSynced=false si el registro estaba pendiente', (
+      tester,
+    ) async {
+      await pumpScreen(tester);
+      await advanceToHub(tester);
+      final String patientId = tester
+          .widget<Step6Success>(find.byType(Step6Success))
+          .patient
+          .patientId;
+      when(
+        () => db.getAllRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer(
+        (_) async => <LocalPatientEntry>[
+          _FakeLocalEntry(patientId: patientId, isSynced: false),
+        ],
+      );
+
+      await addConsultationAndReturn(tester);
+
+      verify(
+        () => db.savePatient(
+          any(),
+          ownerUserId: 'u1',
+          organizationId: 'org-1',
+          retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          isSynced: false,
+        ),
+      ).called(2);
     });
   });
 }

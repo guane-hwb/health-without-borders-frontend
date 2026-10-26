@@ -1106,4 +1106,90 @@ void main() {
       },
     );
   });
+
+  group(
+    'EditGuardianSheet — Limpiar firma y toque en el texto de autorización',
+    () {
+      Future<void> openAuthSection(WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(
+              name: 'María García',
+              docNumber: '1234567890',
+              consent: fakeConsent,
+            ),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final formFields = find.byType(TextFormField);
+        await tester.enterText(formFields.at(0), 'Carlos Ruiz');
+        await tester.enterText(formFields.at(2), '9876543210');
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets(
+        'Limpiar firma borra los trazos y vuelve a mostrar "Firmar aquí"',
+        (tester) async {
+          await openAuthSection(tester);
+
+          final signatureDetector = tester
+              .widgetList<GestureDetector>(find.byType(GestureDetector))
+              .firstWhere((g) => g.onPanStart != null);
+
+          signatureDetector.onPanStart?.call(
+            DragStartDetails(
+              localPosition: const Offset(10, 10),
+              globalPosition: const Offset(10, 10),
+            ),
+          );
+          signatureDetector.onPanUpdate?.call(
+            DragUpdateDetails(
+              localPosition: const Offset(40, 40),
+              globalPosition: const Offset(40, 40),
+            ),
+          );
+          signatureDetector.onPanEnd?.call(DragEndDetails());
+          await tester.pumpAndSettle();
+
+          expect(find.text('Firmar aquí'), findsNothing);
+
+          final clearBtn = find.text('Limpiar firma');
+          await tester.ensureVisible(clearBtn);
+          await tester.tap(clearBtn);
+          await tester.pumpAndSettle();
+
+          expect(find.text('Firmar aquí'), findsOneWidget);
+        },
+      );
+
+      testWidgets('Tocar el texto de autorización conmuta el checkbox', (
+        tester,
+      ) async {
+        await openAuthSection(tester);
+
+        final authText = find.textContaining(
+          'El guardián reconoce haber leído',
+          findRichText: true,
+        );
+        await tester.ensureVisible(authText);
+        await tester.pumpAndSettle();
+
+        expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
+
+        await tester.tapAt(tester.getTopLeft(authText) + const Offset(8, 8));
+        await tester.pumpAndSettle();
+
+        expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+      });
+    },
+  );
 }

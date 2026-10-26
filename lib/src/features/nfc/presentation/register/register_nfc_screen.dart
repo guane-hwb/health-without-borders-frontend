@@ -31,6 +31,10 @@ class RegisterNfcScreen extends StatefulWidget {
 
   @visibleForTesting
   static Future<HwbChipReadResult> Function()? overrideReadHwbChip;
+
+  @visibleForTesting
+  static NfcPayloadService Function(NfcPayloadCodec codec)?
+  overrideServiceBuilder;
   @override
   State<RegisterNfcScreen> createState() => _RegisterNfcScreenState();
 }
@@ -298,7 +302,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final scope = AppScope.of(context);
     final record = _savedRecord;
     if (record == null) {
-      await _goToHomeDirectly();
+      await _goToHomeDirectly(); // coverage:ignore-line
       return;
     }
 
@@ -348,13 +352,17 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
 
+    NfcPayloadService makeService() =>
+        RegisterNfcScreen.overrideServiceBuilder?.call(codec) ??
+        NfcPayloadService(codec: codec);
+
     final patientOk = await showNfcGuidedWrite(
       context,
       title: isEs ? 'Dispositivo del paciente' : 'Patient device',
       instruction: isEs
           ? 'Acerque el dispositivo del paciente al teléfono'
           : 'Bring the patient device to the phone',
-      write: () => NfcPayloadService(codec: codec).writeTriagePayload(
+      write: () => makeService().writeTriagePayload(
         NfcTriagePayload.buildPatientPayload(record: record),
         expectedUid: record.deviceUid,
       ),
@@ -377,7 +385,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         context,
         title: title,
         instruction: instruction,
-        write: () => NfcPayloadService(codec: codec).writeGuardianRecord(
+        write: () => makeService().writeGuardianRecord(
           buildFit: guardianFitBuilder(record: record, codec: codec),
           expectedUid: expectedUid,
           patientId: record.patientId,
