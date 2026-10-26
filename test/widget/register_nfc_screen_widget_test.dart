@@ -3,7 +3,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show PlatformException;
+import 'package:flutter/services.dart'
+    show MissingPluginException, PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -1300,5 +1301,74 @@ void main() {
         ),
       ).called(2);
     });
+  });
+
+  group('RegisterNfcScreen — cobertura final', () {
+    final validHexKey = List.filled(32, 'ab').join();
+
+    tearDown(() {
+      RegisterNfcScreen.overrideServiceBuilder = null;
+    });
+
+    testWidgets(
+      '_finalize sin registro guardado vuelve a Home (antes coverage:ignore)',
+      (tester) async {
+        await pumpScreen(tester);
+        expect(find.byType(Step3PatientData), findsOneWidget);
+
+        final dynamic state = tester.state(find.byType(RegisterNfcScreen));
+        await state.finalizeForTest();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RegisterNfcScreen), findsNothing);
+        expect(find.byType(HomeScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'sin overrideServiceBuilder, makeService() construye NfcPayloadService real',
+      (tester) async {
+        RegisterNfcScreen.overrideServiceBuilder = null;
+        when(
+          () => auth.getNfcKeyring(),
+        ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
+
+        await pumpScreen(tester);
+        await advanceToHub(tester);
+
+        final originalOnError = FlutterError.onError;
+        FlutterError.onError = (FlutterErrorDetails details) {
+          if (details.exception is PlatformException ||
+              details.exception is MissingPluginException) {
+            return;
+          }
+          originalOnError?.call(details);
+        };
+
+        try {
+          tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+          await tester.pump();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.pump(const Duration(milliseconds: 300));
+
+          await tester.tap(find.text('Empezar'));
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 200)),
+          );
+          await tester.pump(const Duration(milliseconds: 800));
+
+          final nav = Navigator.of(tester.element(find.byType(Step6Success)));
+          nav.pop(false);
+          await tester.pumpAndSettle();
+        } finally {
+          FlutterError.onError = originalOnError;
+        }
+
+        verify(() => auth.getNfcKeyring()).called(greaterThanOrEqualTo(1));
+        expect(RegisterNfcScreen.overrideServiceBuilder, isNull);
+        expect(find.byType(Step6Success), findsOneWidget);
+      },
+    );
   });
 }

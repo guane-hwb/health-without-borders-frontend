@@ -298,11 +298,14 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     }
   }
 
+  @visibleForTesting
+  Future<void> finalizeForTest() => _finalize();
+
   Future<void> _finalize() async {
     final scope = AppScope.of(context);
     final record = _savedRecord;
     if (record == null) {
-      await _goToHomeDirectly(); // coverage:ignore-line
+      await _goToHomeDirectly();
       return;
     }
 
