@@ -1075,4 +1075,182 @@ void main() {
       },
     );
   });
+
+  group('Step2Guardian — Borrador completo, UID y firma del guardián 2', () {
+    RegisterDraft fullDraft() => RegisterDraft()
+      ..guardianName = 'Ana María García'
+      ..guardianPhone = '3158492041'
+      ..guardianDeviceUid = 'HWB041A2CDE'
+      ..guardianDocNumber = '52384912'
+      ..guardianDocType = 'CC'
+      ..guardianAuthAccepted = true
+      ..guardianSignatureStrokes = [
+        [const Offset(10, 10), const Offset(50, 50)],
+      ]
+      ..guardian2Name = 'Carlos López'
+      ..guardian2Phone = '3109876543'
+      ..guardian2DeviceUid = 'HWB041A2CDF'
+      ..guardian2DocNumber = '9876543210'
+      ..guardian2DocType = 'CC'
+      ..guardian2Relationship = '01'
+      ..guardian2Email = 'carlos@example.com'
+      ..guardian2AuthAccepted = true
+      ..guardian2SignatureStrokes = [
+        [const Offset(10, 10), const Offset(60, 60)],
+      ];
+
+    testWidgets(
+      'Atrás con ambos guardianes completos guarda todo el borrador',
+      (tester) async {
+        resizeViewport(tester);
+        bool backCalled = false;
+        final draft = fullDraft();
+
+        await tester.pumpWidget(
+          buildSubject(draft: draft, onBack: () => backCalled = true),
+        );
+        await tester.pumpAndSettle();
+
+        final backBtn = find.byIcon(Icons.arrow_back);
+        await tester.ensureVisible(backBtn);
+        await tester.tap(backBtn);
+        await tester.pumpAndSettle();
+
+        expect(backCalled, isTrue);
+        expect(draft.guardianDocNumber, '52384912');
+        expect(draft.guardian2Name, 'Carlos López');
+        expect(draft.guardian2Phone, '3109876543');
+        expect(draft.guardian2DeviceUid, 'HWB041A2CDF');
+        expect(draft.guardian2DocNumber, '9876543210');
+        expect(draft.guardian2Email, 'carlos@example.com');
+        expect(draft.guardian2AuthAccepted, isTrue);
+        expect(draft.guardian2SignatureStrokes, hasLength(1));
+      },
+    );
+
+    testWidgets(
+      'Continuar con ambos guardianes completos conserva el UID del guardián 2',
+      (tester) async {
+        resizeViewport(tester);
+        bool continueCalled = false;
+        final draft = fullDraft();
+
+        await tester.pumpWidget(
+          buildSubject(draft: draft, onContinue: () => continueCalled = true),
+        );
+        await tester.pumpAndSettle();
+
+        final dynamic state = tester.state(find.byType(Step2Guardian));
+        await tester.runAsync(() async {
+          await state.saveForTest();
+        });
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Campos requeridos'), findsNothing);
+        expect(continueCalled, isTrue);
+        expect(draft.guardian2DeviceUid, 'HWB041A2CDF');
+      },
+    );
+
+    testWidgets(
+      'Escribir en el campo de UID del guardián 1 actualiza el indicador',
+      (tester) async {
+        resizeViewport(tester);
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        final Finder fieldCheck = find.byWidgetPredicate(
+          (w) => w is Icon && w.icon == Icons.check_circle && w.size == 18,
+        );
+        expect(fieldCheck, findsNothing);
+
+        final uidField = find.byWidgetPredicate(
+          (w) => w is TextField && w.style?.fontFamily == 'monospace',
+        );
+        await tester.ensureVisible(uidField.first);
+        await tester.enterText(uidField.first, 'HWB-NUEVO-01');
+        await tester.pumpAndSettle();
+
+        expect(fieldCheck, findsOneWidget);
+        expect(find.textContaining('Dispositivo vinculado'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Limpiar firma del guardián 2 borra sus trazos y su firma del borrador',
+      (tester) async {
+        resizeViewport(tester);
+        final draft = RegisterDraft();
+
+        await tester.pumpWidget(buildSubject(draft: draft));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Agregar'));
+        await tester.pumpAndSettle();
+
+        final pads = tester
+            .widgetList<GestureDetector>(find.byType(GestureDetector))
+            .where((g) => g.onPanStart != null)
+            .toList();
+        expect(pads, hasLength(2));
+
+        pads[1].onPanStart?.call(
+          DragStartDetails(
+            localPosition: const Offset(10, 10),
+            globalPosition: const Offset(10, 10),
+          ),
+        );
+        pads[1].onPanUpdate?.call(
+          DragUpdateDetails(
+            localPosition: const Offset(40, 40),
+            globalPosition: const Offset(40, 40),
+          ),
+        );
+        pads[1].onPanEnd?.call(DragEndDetails());
+        await tester.pumpAndSettle();
+
+        expect(find.text('Firmar aquí'), findsOneWidget);
+
+        final clearBtn = find.text('Limpiar firma').last;
+        await tester.ensureVisible(clearBtn);
+        await tester.tap(clearBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Firmar aquí'), findsNWidgets(2));
+        expect(draft.guardian2SignatureStrokes, isEmpty);
+        expect(draft.guardian2SignatureBase64, isNull);
+      },
+    );
+
+    testWidgets(
+      'Tocar el texto de autorización del guardián 1 conmuta su checkbox',
+      (tester) async {
+        resizeViewport(tester);
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
+
+        final authText = find.textContaining(
+          'El guardián reconoce haber leído',
+          findRichText: true,
+        );
+        await tester.ensureVisible(authText.first);
+        await tester.pumpAndSettle();
+
+        expect(
+          tester.widget<Checkbox>(find.byType(Checkbox).first).value,
+          isFalse,
+        );
+
+        await tester.tapAt(
+          tester.getTopLeft(authText.first) + const Offset(8, 8),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          tester.widget<Checkbox>(find.byType(Checkbox).first).value,
+          isTrue,
+        );
+      },
+    );
+  });
 }
