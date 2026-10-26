@@ -13,7 +13,7 @@ Constraint from `docs/architecture/nfc-encryption.md`: every chip in the field i
 
 ## Decision
 1. **Version 1+ payloads are sealed with the chip UID and the record MIME type as extra AAD** (`chipBindingAad` in `nfc_payload_service.dart`). On read, the service tries that AAD first and then a plain decode, which is what keeps version 0 chips readable. A v1+ payload moved to another chip, or relabelled with another MIME type, fails authentication on both attempts.
-2. **Version 0 stays unbound.** The residual risk (cloning a v0 chip to another chip) remains until the deployment rotates to version 1, following the existing fleet rule: keep `NFC_CURRENT_KEY_VERSION` at `0` until every device runs a build that understands the ring and the binding.
+2. **Version 0 stays unbound.** The residual risk (cloning a v0 chip to another chip) remains until the deployment rotates to version 1, following the existing fleet rule: keep the current key version at `0` until every device runs a build that understands the ring and the binding. With the backend's ring in its database (KEK mode, as on the pilot) that means not calling `/patients/nfc-keys/rotate` and leaving `NFC_AUTO_ROTATE` off; `NFC_CURRENT_KEY_VERSION` applies only without a KEK.
 3. **Writing a bound payload needs the UID.** When `expectedUid` is given the payload is encoded before the tap (the tap is refused on any other chip). Otherwise it is encoded inside the tap, with the chip's real UID.
 
 ## Not decided here (needs product / backend input)
