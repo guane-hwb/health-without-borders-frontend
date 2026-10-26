@@ -23,8 +23,11 @@ class HomeScreen extends StatelessWidget {
 
   static bool get _isWeb => debugIsWebOverride ?? kIsWeb;
 
+  @visibleForTesting
+  static DateTime Function()? debugNowOverride;
+
   static String _greeting(AppStrings s) {
-    final hour = DateTime.now().hour;
+    final hour = (debugNowOverride?.call() ?? DateTime.now()).hour;
     if (hour < 12) return s.goodMorning;
     if (hour < 18) return s.goodAfternoon;
     return s.goodEvening;

@@ -1621,4 +1621,40 @@ void main() {
       });
     });
   });
+
+  group('HomeScreen — saludo según la hora (_greeting)', () {
+    tearDown(() => HomeScreen.debugNowOverride = null);
+
+    const cases = <(int, int)>[
+      (0, 0),
+      (11, 0),
+      (12, 1),
+      (17, 1),
+      (18, 2),
+      (23, 2),
+    ];
+
+    for (final (hour, slot) in cases) {
+      for (final locale in ['es', 'en']) {
+        testWidgets('a las $hour h el header saluda con la franja $slot '
+            '($locale)', (tester) async {
+          HomeScreen.debugNowOverride = () => DateTime(2025, 6, 15, hour, 30);
+
+          await tester.pumpWidget(
+            _wrapHome(user: _session(UserRole.doctor), locale: locale),
+          );
+          await tester.pumpAndSettle();
+
+          final s = AppStrings.of(tester.element(find.byType(HomeScreen)));
+          final expected = [s.goodMorning, s.goodAfternoon, s.goodEvening];
+
+          expect(find.text('${expected[slot]},'), findsOneWidget);
+          for (var i = 0; i < expected.length; i++) {
+            if (i == slot) continue;
+            expect(find.text('${expected[i]},'), findsNothing);
+          }
+        });
+      }
+    }
+  });
 }
