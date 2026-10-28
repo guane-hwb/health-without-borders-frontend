@@ -1,0 +1,36 @@
+// test/unit/normalize_typed_nfc_uid_test.dart
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_session_types.dart';
+
+void main() {
+  group('normalizeTypedNfcUid', () {
+    test(
+      'espacios y minúsculas -> conserva minúsculas e inserta dos puntos',
+      () {
+        expect(normalizeTypedNfcUid('04 1a 2c de'), '04:1a:2c:de');
+      },
+    );
+
+    test('ya normalizado con mayúsculas y minúsculas mixtas se conserva', () {
+      expect(
+        normalizeTypedNfcUid('06:C9:22:96:ee:56:6E'),
+        '06:C9:22:96:ee:56:6E',
+      );
+    });
+
+    test('recorta espacios alrededor', () {
+      expect(normalizeTypedNfcUid('  04:1a:2c:de \n'), '04:1a:2c:de');
+    });
+
+    test('vacío o solo espacios -> vacío', () {
+      expect(normalizeTypedNfcUid(''), '');
+      expect(normalizeTypedNfcUid('   '), '');
+    });
+
+    test('etiquetas no hexadecimales no se deforman', () {
+      expect(normalizeTypedNfcUid('HWB-ADULTO-88'), 'HWB-ADULTO-88');
+      expect(normalizeTypedNfcUid(' HWB-GUARDIAN-01 '), 'HWB-GUARDIAN-01');
+    });
+  });
+}

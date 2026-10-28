@@ -1,10 +1,12 @@
 // test/widget/login_widget_test.dart
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
@@ -17,7 +19,6 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
-import 'package:health_without_borders_frontend/src/features/auth/presentation/foreign_data_reconciliation_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
@@ -402,6 +403,44 @@ void main() {
       expect(find.text('Organization is inactive.'), findsNothing);
     });
 
+    for (final (String name, ApiException error, String message)
+        in <(String, ApiException, String)>[
+          (
+            'login_paused con Retry-After',
+            ApiException(
+              'Too many failed sign-in attempts for this account. Try again '
+              'in 120 seconds.',
+              statusCode: 429,
+              code: 'login_paused',
+              retryAfter: const Duration(seconds: 120),
+            ),
+            'Demasiados intentos. Intente de nuevo en 2 minutos.',
+          ),
+          (
+            'límite por IP sin code',
+            ApiException('Request failed (HTTP 429).', statusCode: 429),
+            'Demasiados intentos. Espere unos minutos e intente de nuevo.',
+          ),
+        ]) {
+      testWidgets('un 429 ($name) dice cuánto esperar', (tester) async {
+        mockAuthRepo.loginHandler =
+            ({required String email, required String password}) async {
+              throw error;
+            };
+
+        await tester.pumpWidget(buildSubject());
+        await tester.enterText(
+          find.byType(TextFormField).first,
+          'usuario@test.com',
+        );
+        await tester.enterText(find.byType(TextFormField).last, 'password123');
+        await tester.tap(find.byType(ElevatedButton));
+        await tester.pumpAndSettle();
+
+        expect(find.text(message), findsOneWidget);
+      });
+    }
+
     testWidgets('muestra SnackBar generico para errores inesperados', (
       tester,
     ) async {
@@ -535,32 +574,6 @@ void main() {
     });
 
     testWidgets(
-      'navega a ForeignDataReconciliationScreen al lanzar ForeignPendingDataException',
-      (tester) async {
-        mockAuthRepo.loginHandler =
-            ({required String email, required String password}) async {
-              throw ForeignPendingDataException(
-                previousOwnerUserId: 'previo-123',
-                newUserId: 'nuevo-456',
-                pendingPatients: 2,
-                pendingEmergencyLogs: 1,
-              );
-            };
-
-        await tester.pumpWidget(buildSubject());
-        await tester.enterText(
-          find.byType(TextFormField).first,
-          'usuario@test.com',
-        );
-        await tester.enterText(find.byType(TextFormField).last, 'password123');
-        await tester.tap(find.byType(ElevatedButton));
-        await tester.pumpAndSettle();
-
-        expect(find.byType(ForeignDataReconciliationScreen), findsOneWidget);
-      },
-    );
-
-    testWidgets(
       'muestra SnackBar de conexión requerida al capturar un error genérico de SocketException',
       (tester) async {
         mockAuthRepo.loginHandler =
@@ -625,5 +638,83 @@ void main() {
         expect(checkbox.value, isFalse);
       },
     );
+  });
+
+  group('LoginScreen — errores de red tipados (catch dedicados)', () {
+    final errors = <(String, Object Function())>[
+      ('SocketException', () => const SocketException('sin red')),
+      ('TimeoutException', () => TimeoutException('tiempo agotado')),
+      ('http.ClientException', () => http.ClientException('conexión caída')),
+    ];
+
+    Future<void> submit(WidgetTester tester) async {
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
+      await tester.enterText(find.byType(TextFormField).last, 'password123');
+      await tester.tap(find.byType(ElevatedButton));
+    }
+
+    for (final (name, build) in errors) {
+      testWidgets(
+        '$name muestra el aviso de conexión requerida y reactiva el botón',
+        (tester) async {
+          mockAuthRepo.loginHandler =
+              ({required String email, required String password}) async {
+                throw build();
+              };
+
+          await tester.pumpWidget(buildSubject());
+          await submit(tester);
+          await tester.pumpAndSettle();
+
+          final s = AppStrings.forTesting('es');
+          expect(find.byType(SnackBar), findsOneWidget);
+          expect(find.text(s.loginNetworkRequired), findsOneWidget);
+          expect(find.text(s.loginFailed), findsNothing);
+          final btn = tester.widget<ElevatedButton>(
+            find.byType(ElevatedButton),
+          );
+          expect(btn.onPressed, isNotNull);
+        },
+      );
+
+      testWidgets('$name muestra el aviso de conexión en inglés', (
+        tester,
+      ) async {
+        mockAuthRepo.loginHandler =
+            ({required String email, required String password}) async {
+              throw build();
+            };
+
+        await tester.pumpWidget(buildSubject(locale: 'en'));
+        await submit(tester);
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('en');
+        expect(find.text(s.loginNetworkRequired), findsOneWidget);
+      });
+
+      testWidgets(
+        '$name con la pantalla desmontada no muestra aviso ni lanza errores',
+        (tester) async {
+          final completer = Completer<UserSession>();
+          mockAuthRepo.loginHandler =
+              ({required String email, required String password}) =>
+                  completer.future;
+
+          await tester.pumpWidget(buildSubject());
+          await submit(tester);
+          await tester.pump();
+
+          await tester.pumpWidget(const SizedBox());
+          completer.completeError(build());
+          await tester.pump();
+
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
   });
 }

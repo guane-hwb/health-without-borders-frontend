@@ -1,6 +1,7 @@
 // lib/src/features/nfc/data/patient_repository.dart
 
 import '../../../core/network/api_client.dart';
+import '../../../core/nfc/retired_device_hash.dart';
 import '../../auth/data/auth_repository.dart';
 import '../domain/patient_record.dart';
 
@@ -13,6 +14,14 @@ class PatientRepository {
 
   final ApiClient _apiClient;
   final AuthRepository _authRepository;
+
+  /// The server codes diagnoses with the LLM and writes to the FHIR Store
+  /// inside the /sync request: p95 25.6 s and up to 68 s in production.
+  ///
+  /// A timeout does not mean nothing was saved. The retry is safe (visits and
+  /// vaccinations merge by their ids) and may come back with
+  /// `stale_payload_base_version` when the first attempt was saved.
+  static const Duration syncTimeout = Duration(seconds: 90);
 
   Future<Map<String, String>> _authHeaders() async {
     final String token = await _authRepository.getAccessToken();
@@ -42,32 +51,33 @@ class PatientRepository {
       path: '/api/v1/patients/sync',
       body: body,
       headers: await _authHeaders(),
-      timeout: const Duration(seconds: 10),
+      timeout: syncTimeout,
     );
     return PatientSyncResponse.fromJson(data);
   }
 
-  // ── GET /api/v1/patients/scan/{device_uid} ──────────────────────────────
+  // ── POST /api/v1/patients/scan ──────────────────────────────────────────
   /// Retrieves a patient by scanning their NFC device.
   ///
-  /// If the patient is a minor (<18), the backend returns 403 with
-  /// "Guardian bracelet scan required for minors."  In that case, the
-  /// caller should prompt for the guardian's NFC scan and call this
-  /// method again with [guardianDeviceUid] (sent as the X-Guardian-Device-UID header).
+  /// Both UIDs travel in the body: in the URL, the patient device UID (PHI)
+  /// ended up in Cloud Run's request logs.
+  ///
+  /// A minor (<18) answers 403 `guardian_required`: the caller asks for the
+  /// guardian device and calls again with [guardianDeviceUid]. A stored
+  /// record the server can no longer read answers 500
+  /// `stored_record_invalid`; trying again does not help.
   Future<PatientFullRecord> scanDevice(
     String deviceUid, {
     String? guardianDeviceUid,
   }) async {
-    final Map<String, String> headers = await _authHeaders();
-    if (guardianDeviceUid != null && guardianDeviceUid.isNotEmpty) {
-      headers['X-Guardian-Device-UID'] = guardianDeviceUid.trim();
-    }
-
-    final String safeDeviceUid = Uri.encodeComponent(deviceUid.trim());
-
-    final Map<String, dynamic> data = await _apiClient.getJson(
-      path: '/api/v1/patients/scan/$safeDeviceUid',
-      headers: headers,
+    final String guardian = guardianDeviceUid?.trim() ?? '';
+    final Map<String, dynamic> data = await _apiClient.postJson(
+      path: '/api/v1/patients/scan',
+      headers: await _authHeaders(),
+      body: <String, dynamic>{
+        'device_uid': deviceUid.trim(),
+        'guardian_device_uid': guardian.isEmpty ? null : guardian,
+      },
     );
     return PatientFullRecord.fromJson(data);
   }
@@ -81,6 +91,7 @@ class PatientRepository {
     required String firstName,
     required String lastName,
     String? guardianName,
+    String? accessReason,
   }) async {
     final Map<String, dynamic> searchBody = <String, dynamic>{
       'document_number': documentNumber,
@@ -90,6 +101,9 @@ class PatientRepository {
     };
     if (guardianName != null && guardianName.isNotEmpty) {
       searchBody['guardian_name'] = guardianName;
+    }
+    if (accessReason != null && accessReason.isNotEmpty) {
+      searchBody['access_reason'] = accessReason;
     }
 
     final Map<String, dynamic> data = await _apiClient.postJson(
@@ -104,9 +118,22 @@ class PatientRepository {
   /// Envía la bitácora de accesos break-glass registrados offline.
   Future<void> reportEmergencyAccess(List<Map<String, Object?>> entries) async {
     if (entries.isEmpty) return;
+
+    final List<Map<String, dynamic>> sanitizedEntries = entries
+        .map(
+          (Map<String, Object?> e) => <String, dynamic>{
+            'client_event_id': e['client_event_id'],
+            'patient_uid': e['patient_uid'],
+            'user_id': e['user_id'],
+            'reason': e['reason'],
+            'occurred_at': e['occurred_at'],
+          },
+        )
+        .toList();
+
     await _apiClient.postJson(
       path: '/api/v1/patients/emergency-access',
-      body: <String, dynamic>{'entries': entries},
+      body: <String, dynamic>{'entries': sanitizedEntries},
       headers: await _authHeaders(),
     );
   }
@@ -152,4 +179,41 @@ class PatientRepository {
       headers: await _authHeaders(),
     );
   }
+
+  // ── GET /api/v1/patients/retired-devices ────────────────────────────────
+  /// Retired patient and guardian devices, as hashes (see
+  /// [retiredDeviceHash]), retired after [since]; all of them without it.
+  ///
+  /// Pass the returned [RetiredDeviceList.serverTime] as [since] next time.
+  Future<RetiredDeviceList> fetchRetiredDevices({String? since}) async {
+    final Map<String, dynamic> data = await _apiClient.getJson(
+      path: '/api/v1/patients/retired-devices',
+      headers: await _authHeaders(),
+      queryParams: since == null || since.isEmpty
+          ? null
+          : <String, String>{'since': since},
+    );
+    return RetiredDeviceList.fromJson(data);
+  }
+}
+
+/// A page of `GET /patients/retired-devices`.
+class RetiredDeviceList {
+  const RetiredDeviceList({required this.uidHashes, required this.serverTime});
+
+  /// Only well-formed hashes are kept.
+  factory RetiredDeviceList.fromJson(Map<String, dynamic> json) {
+    final Object? raw = json['uid_hashes'];
+    final Object? time = json['server_time'];
+    if (raw is! List || time is! String || time.isEmpty) {
+      throw const FormatException('Lista de dispositivos retirados inválida');
+    }
+    return RetiredDeviceList(
+      uidHashes: raw.whereType<String>().where(isRetiredDeviceHash).toList(),
+      serverTime: time,
+    );
+  }
+
+  final List<String> uidHashes;
+  final String serverTime;
 }

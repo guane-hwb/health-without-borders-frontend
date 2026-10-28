@@ -20,6 +20,48 @@ enum SyncOneResult { success, failure, busy, notFound }
 
 enum _SyncOutcome { success, failure, networkFailure, abortBatch }
 
+class SyncResult {
+  const SyncResult({
+    required this.allSuccessful,
+    required this.remainingRetryable,
+    required this.remainingBlocked,
+  });
+
+  final bool allSuccessful;
+  final int remainingRetryable;
+  final int remainingBlocked;
+
+  bool get isFullyClean => remainingRetryable == 0 && remainingBlocked == 0;
+  bool get hasBlockedOnly => remainingRetryable == 0 && remainingBlocked > 0;
+}
+
+/// What the server answered for a record it saved.
+class RecordSyncResult {
+  const RecordSyncResult({
+    required this.patientId,
+    required this.sent,
+    this.recordVersion,
+    this.conflicts = const <String>[],
+    this.serverRecord,
+  });
+
+  final String patientId;
+
+  /// The copy this device sent.
+  final PatientFullRecord sent;
+
+  /// The server's version of the record after this sync.
+  final int? recordVersion;
+
+  /// Parts the server kept as it had them (see SyncConflictCode).
+  final List<String> conflicts;
+
+  /// The merged record, when the server sends it back with [conflicts].
+  final PatientFullRecord? serverRecord;
+
+  bool get hasConflicts => conflicts.isNotEmpty;
+}
+
 /// Motor de sincronización en segundo plano que envía registros locales al backend.
 class SyncEngine {
   SyncEngine({
@@ -56,7 +98,7 @@ class SyncEngine {
     Duration(minutes: 30),
   ];
 
-  Future<bool>? _activeSyncAllFuture;
+  Future<SyncResult>? _activeSyncAllFuture;
   Completer<void>? _syncOneCompletion;
   bool get _syncOneRunning => _syncOneCompletion != null;
   Duration? _pendingServerRetryAfter;
@@ -76,10 +118,11 @@ class SyncEngine {
       final blocked = await _localDb.getBlockedCount(
         ownerUserId: _currentUserId,
       );
+      final quarantinedEntries = await _localDb.getWebQuarantinedEntries();
 
       pendingCount.value = retryable;
-      blockedCount.value = blocked;
-      totalCount.value = retryable + blocked;
+      blockedCount.value = blocked + quarantinedEntries.length;
+      totalCount.value = retryable + blocked + quarantinedEntries.length;
     } catch (e, stack) {
       AppLogger.e(
         'Error al refrescar conteo de pendientes',
@@ -91,6 +134,14 @@ class SyncEngine {
 
   void Function(int unsyncedCount)? onSyncStatusChanged;
   void Function(String patientId, bool success, String? error)? onRecordSynced;
+
+  final StreamController<RecordSyncResult> _savedRecords =
+      StreamController<RecordSyncResult>.broadcast();
+
+  /// Every record the server saves, with the version it now has. A screen
+  /// holding that record adopts the version, so its next edit is not taken
+  /// for an old copy.
+  Stream<RecordSyncResult> get savedRecords => _savedRecords.stream;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -124,6 +175,11 @@ class SyncEngine {
     _retryTimer = null;
     _connectivitySub?.cancel();
     _connectivitySub = null;
+  }
+
+  void dispose() {
+    stop();
+    _savedRecords.close();
   }
 
   void _scheduleRetry() {
@@ -162,7 +218,7 @@ class SyncEngine {
 
   // ── Sync logic ────────────────────────────────────────────────────────────
 
-  Future<bool> syncAll() {
+  Future<SyncResult> syncAll() {
     if (_activeSyncAllFuture != null) {
       AppLogger.d(
         'syncAll en ejecución: uniendo llamada al ciclo en curso (single-flight).',
@@ -170,11 +226,11 @@ class SyncEngine {
       return _activeSyncAllFuture!;
     }
 
-    final completer = Completer<bool>();
+    final completer = Completer<SyncResult>();
     _activeSyncAllFuture = completer.future;
 
     final Completer<void>? syncOneInFlight = _syncOneCompletion;
-    final Future<bool> Function() startCycle = _executeSyncAll;
+    final Future<SyncResult> Function() startCycle = _executeSyncAll;
 
     if (syncOneInFlight != null) {
       AppLogger.d('syncAll en espera: syncOne en ejecución.');
@@ -205,23 +261,39 @@ class SyncEngine {
     return _activeSyncAllFuture!;
   }
 
-  Future<bool> _executeSyncAll() async {
+  Future<SyncResult> _executeSyncAll() async {
     if (_currentUserId == null) {
       AppLogger.d('syncAll omitido: no hay sesión activa.');
-      return false;
+      return const SyncResult(
+        allSuccessful: false,
+        remainingRetryable: 0,
+        remainingBlocked: 0,
+      );
     }
 
     await refreshPendingCount();
     await _syncEmergencyLogs();
     await _syncNfcKeyVersions();
 
-    bool allSuccessful = true;
+    bool cycleBatchSuccessful = true;
 
     try {
       if (_reachability != null && !await _reachability.probe()) {
         AppLogger.d('Backend inalcanzable. Se omite el lote.');
-        return false;
+        final retryable = await _localDb.getRetryablePendingCount(
+          ownerUserId: _currentUserId,
+        );
+        final blocked = await _localDb.getBlockedCount(
+          ownerUserId: _currentUserId,
+        );
+        return SyncResult(
+          allSuccessful: false,
+          remainingRetryable: retryable,
+          remainingBlocked: blocked,
+        );
       }
+
+      await _syncRetiredDevices();
 
       final List<LocalPatientEntry> allUnsynced = await _localDb
           .getUnsyncedRecords(ownerUserId: _currentUserId);
@@ -239,12 +311,12 @@ class SyncEngine {
       for (final entry in pending) {
         final outcome = await _syncOne(entry);
         if (outcome == _SyncOutcome.abortBatch) {
-          allSuccessful = false;
+          cycleBatchSuccessful = false;
           AppLogger.e('Lote abortado por sesión caducada.');
           break;
         }
         if (outcome == _SyncOutcome.networkFailure) {
-          allSuccessful = false;
+          cycleBatchSuccessful = false;
           consecutiveNetworkFailures++;
           if (consecutiveNetworkFailures >= maxConsecutiveNetworkFailures) {
             AppLogger.e(
@@ -256,19 +328,39 @@ class SyncEngine {
         }
         consecutiveNetworkFailures = 0;
         if (outcome != _SyncOutcome.success) {
-          allSuccessful = false;
+          cycleBatchSuccessful = false;
         }
       }
 
-      final remaining = await _localDb.getRetryablePendingCount(
+      final remainingRetryable = await _localDb.getRetryablePendingCount(
         ownerUserId: _currentUserId,
       );
-      onSyncStatusChanged?.call(remaining);
+      final remainingBlocked = await _localDb.getBlockedCount(
+        ownerUserId: _currentUserId,
+      );
 
-      return allSuccessful && remaining == 0;
+      onSyncStatusChanged?.call(remainingRetryable + remainingBlocked);
+
+      final bool overallSuccess = cycleBatchSuccessful && remainingBlocked == 0;
+
+      return SyncResult(
+        allSuccessful: overallSuccess,
+        remainingRetryable: remainingRetryable,
+        remainingBlocked: remainingBlocked,
+      );
     } catch (e, stack) {
       AppLogger.e('Error crítico durante syncAll', error: e, stackTrace: stack);
-      return false;
+      final retryable = await _localDb.getRetryablePendingCount(
+        ownerUserId: _currentUserId,
+      );
+      final blocked = await _localDb.getBlockedCount(
+        ownerUserId: _currentUserId,
+      );
+      return SyncResult(
+        allSuccessful: false,
+        remainingRetryable: retryable,
+        remainingBlocked: blocked,
+      );
     } finally {
       await refreshPendingCount();
       _scheduleRetry();
@@ -303,11 +395,10 @@ class SyncEngine {
           response.fhirStatus!.isEmpty ||
           response.fhirStatus == 'success';
 
-      if (response.status == 'success' && fhirOk) {
+      final bool saved = response.status == 'success';
+      if (saved && fhirOk) {
         AppLogger.d('Registro sincronizado exitosamente: ${entry.patientId}');
         if (response.conflicts.isNotEmpty) {
-          // The server kept its own value for these parts of the record (e.g.
-          // it refused to re-link a retired device); the rest was synced.
           AppLogger.d(
             'Sync de ${entry.patientId} aceptado con conflictos: '
             '${response.conflicts.join(', ')}',
@@ -320,9 +411,15 @@ class SyncEngine {
           recordJson: entry.recordJson,
           revision: entry.revision,
         );
+        await _announceSaved(entry, record, response, stillPending: false);
         onRecordSynced?.call(entry.patientId, true, null);
         return _SyncOutcome.success;
       } else {
+        // Only the FHIR delivery failed: the server did save the record, and
+        // the row stays pending so the retry re-sends the bundles.
+        if (saved) {
+          await _announceSaved(entry, record, response, stillPending: true);
+        }
         final String errorMsg = !fhirOk
             ? 'Envío FHIR fallido: ${response.fhirStatus}'
             : 'Sync returned status: ${response.status}';
@@ -347,9 +444,6 @@ class SyncEngine {
         return _SyncOutcome.abortBatch;
       }
 
-      // Deactivated account or organization: the session is being ended (see
-      // ApiClient.onAccountInactive). Nothing is wrong with the record, so it
-      // stays pending instead of being marked as failed.
       if (ApiErrorCode.isAccountInactive(e.code)) {
         onRecordSynced?.call(entry.patientId, false, e.code);
         return _SyncOutcome.abortBatch;
@@ -362,8 +456,6 @@ class SyncEngine {
               e.statusCode! >= 500 &&
               e.statusCode! <= 599);
 
-      // A known code is stored as-is and translated when shown (see
-      // ApiErrorCode.describe), so the queue never has to parse server text.
       final String safeMsg = (ApiErrorCode.describe(e.code, isEs: true) != null)
           ? e.code!
           : (e.statusCode == 409 && e.message.isNotEmpty)
@@ -398,8 +490,7 @@ class SyncEngine {
         stackTrace: stack,
       );
 
-      final bool isSocketException =
-          e is SocketException || e.toString().contains('SocketException');
+      final bool isSocketException = e is SocketException;
       final bool isTimeout = e is TimeoutException;
 
       final bool isNetworkError =
@@ -425,6 +516,67 @@ class SyncEngine {
     }
   }
 
+  /// The server saved [sent]: whoever holds the record learns the version it
+  /// now has. When the server kept part of its own copy, the chips hold what
+  /// it did not take, so they need rewriting, and the user is told until they
+  /// dismiss it.
+  ///
+  /// [stillPending]: the row stays queued (only FHIR failed). Its retry
+  /// carries exactly what was saved, so it moves onto the new version instead
+  /// of reading as an old copy. Not after a conflict: the server merged, and
+  /// the row must not overwrite that merge.
+  Future<void> _announceSaved(
+    LocalPatientEntry entry,
+    PatientFullRecord sent,
+    PatientSyncResponse response, {
+    required bool stillPending,
+  }) async {
+    final List<String> conflicts = response.conflicts;
+    final int? version = response.recordVersion;
+    try {
+      if (stillPending && conflicts.isEmpty && version != null) {
+        await _localDb.rebasePending(
+          entry.patientId,
+          revision: entry.revision,
+          recordVersion: version,
+        );
+      }
+      if (conflicts.isNotEmpty) {
+        AppLogger.d(
+          'Sync de ${entry.patientId} aceptado con conflictos: '
+          '${conflicts.join(', ')}',
+        );
+        await _localDb.markChipsDirty(
+          entry.patientId,
+          patient: true,
+          guardian: true,
+        );
+        await _localDb.addSyncNotice(
+          patientId: entry.patientId,
+          patientName: entry.patientName,
+          codes: conflicts,
+          ownerUserId: entry.ownerUserId ?? _currentUserId,
+        );
+      }
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error registrando el resultado del sync de ${entry.patientId}',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+    if (_savedRecords.isClosed) return;
+    _savedRecords.add(
+      RecordSyncResult(
+        patientId: entry.patientId,
+        sent: sent,
+        recordVersion: version,
+        conflicts: conflicts,
+        serverRecord: response.record,
+      ),
+    );
+  }
+
   // ── Manual controls ───────────────────────────────────────────────────────
 
   Future<SyncOneResult> syncOne(String patientId) async {
@@ -434,6 +586,7 @@ class SyncEngine {
     final Completer<void> completion = Completer<void>();
     _syncOneCompletion = completion;
 
+    _SyncOutcome? outcome;
     try {
       final entries = await _localDb.getUnsyncedRecords(
         ownerUserId: _currentUserId,
@@ -441,7 +594,7 @@ class SyncEngine {
       final match = entries.where((e) => e.patientId == patientId);
       if (match.isEmpty) return SyncOneResult.notFound;
 
-      final outcome = await _syncOne(match.first);
+      outcome = await _syncOne(match.first);
       if (outcome == _SyncOutcome.success) {
         return SyncOneResult.success;
       } else {
@@ -451,13 +604,39 @@ class SyncEngine {
       _syncOneCompletion = null;
       completion.complete();
       await refreshPendingCount();
+      // A transient failure (5xx, 408, 429, network) is retried as in a
+      // cycle, not before the server's Retry-After. A timer a cycle already
+      // set is kept.
+      if (outcome == _SyncOutcome.networkFailure &&
+          _retryTimer?.isActive != true) {
+        _scheduleRetry();
+      }
     }
   }
 
-  /// Ships pending NFC key version sightings.
-  ///
-  /// Best-effort like the audit log: a failure here delays a rotation decision,
-  /// never a clinical action, so it must not abort the batch.
+  /// Downloads the devices retired since the last list, so the reader can
+  /// refuse them offline. Best effort: a failure keeps the previous list and
+  /// the next cycle tries again from the same `since`.
+  Future<void> _syncRetiredDevices() async {
+    try {
+      final String? since = await _localDb.retiredDevicesSyncedAt();
+      final RetiredDeviceList list = await _patientRepo.fetchRetiredDevices(
+        since: since,
+      );
+      await _localDb.addRetiredDeviceHashes(
+        list.uidHashes,
+        serverTime: list.serverTime,
+      );
+      AppLogger.d('Dispositivos retirados recibidos: ${list.uidHashes.length}');
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error descargando la lista de dispositivos retirados',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
   Future<void> _syncNfcKeyVersions() async {
     try {
       final pending = await _localDb.pendingNfcKeyVersions();

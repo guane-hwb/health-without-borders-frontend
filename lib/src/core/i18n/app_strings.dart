@@ -718,8 +718,7 @@ class AppStrings {
     'wristbandReady': 'lista — nueva',
     'nfcNotAvailable': 'NFC no disponible. Use entrada manual.',
     'manualUidHint': 'UID manual (testing)',
-    'validWristbands':
-        'dispositivo NFCs válidas: NTAG213/215 con prefijo HWB- *',
+    'validWristbands': 'Dispositivos NFC válidos: NTAG213/215/216 *',
     'patientData': 'Datos del paciente',
     'registrationComplete': 'Registro completo',
     'patientRegistered': 'Paciente registrado',
@@ -944,9 +943,9 @@ class AppStrings {
     'patientWristbandReady': 'dispositivo NFC del paciente leída',
     'nfcNotAvailableHint': 'NFC no disponible. Use el campo manual debajo.',
     'manualPatientUidLabel': 'UID manual del paciente (testing)',
-    'manualPatientUidHint': 'Ej. HWB-04:1A:2C:DE',
+    'manualPatientUidHint': 'Ej. 04:1A:2C:DE:3F:40:80',
     'manualGuardianUidLabel': 'UID manual del guardián (testing)',
-    'manualGuardianUidHint': 'Ej. HWB-04:8E:7F:11',
+    'manualGuardianUidHint': 'Ej. 04:8E:7F:11:22:33:44',
     'useManualUid': 'Usar UID manual',
     // Search v2
     'searchPatientTitle': 'Buscar paciente',
@@ -1298,7 +1297,7 @@ class AppStrings {
     'wristbandReady': 'ready — new',
     'nfcNotAvailable': 'NFC not available. Use manual entry.',
     'manualUidHint': 'Manual UID (testing)',
-    'validWristbands': 'Valid wristbands: NTAG213/215 with HWB- prefix *',
+    'validWristbands': 'Valid device: NTAG213/215/216 *',
     'patientData': 'Patient data',
     'registrationComplete': 'Registration complete',
     'patientRegistered': 'Patient registered',
@@ -1526,9 +1525,9 @@ class AppStrings {
     'patientWristbandReady': 'Patient device ready',
     'nfcNotAvailableHint': 'NFC unavailable. Use manual entry below.',
     'manualPatientUidLabel': 'Manual patient UID (testing)',
-    'manualPatientUidHint': 'E.g. HWB-04:1A:2C:DE',
+    'manualPatientUidHint': 'E.g. 04:1A:2C:DE:3F:40:80',
     'manualGuardianUidLabel': 'Manual guardian UID (testing)',
-    'manualGuardianUidHint': 'E.g. HWB-04:8E:7F:11',
+    'manualGuardianUidHint': 'E.g. 04:8E:7F:11:22:33:44',
     'useManualUid': 'Use manual UID',
 
     // Search v2

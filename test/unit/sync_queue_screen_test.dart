@@ -14,6 +14,8 @@ class MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class MockSyncEngine extends Mock implements SyncEngine {}
 
+class MockSyncResult extends Mock implements SyncResult {}
+
 // =============================================================================
 // Helpers
 // =============================================================================
@@ -337,7 +339,9 @@ void main() {
     test(
       'completes asynchronous task lifecycle without reporting standard error anomalies',
       () async {
-        when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
+        when(
+          () => syncEngine.syncAll(),
+        ).thenAnswer((_) async => MockSyncResult());
 
         await expectLater(syncEngine.syncAll(), completes);
       },
@@ -346,7 +350,9 @@ void main() {
     test(
       'invokes engine routine layer exactly once per explicit programmatic call tracking',
       () async {
-        when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
+        when(
+          () => syncEngine.syncAll(),
+        ).thenAnswer((_) async => MockSyncResult());
 
         await syncEngine.syncAll();
 
@@ -426,7 +432,9 @@ void main() {
         when(
           () => db.getUnsyncedRecords(),
         ).thenAnswer((_) async => [makeEntry()]);
-        when(() => syncEngine.syncAll()).thenAnswer((_) async => true);
+        when(
+          () => syncEngine.syncAll(),
+        ).thenAnswer((_) async => MockSyncResult());
 
         final before = await db.getUnsyncedRecords();
         expect(before, hasLength(1));
@@ -504,5 +512,50 @@ void main() {
         verifyNever(() => db.deleteRecord(any()));
       },
     );
+  });
+
+  group('SyncResult – clasificación que usa la pantalla de cola', () {
+    test('solo bloqueados: hasBlockedOnly y no isFullyClean', () {
+      const result = SyncResult(
+        allSuccessful: false,
+        remainingRetryable: 0,
+        remainingBlocked: 2,
+      );
+      expect(result.hasBlockedOnly, isTrue);
+      expect(result.isFullyClean, isFalse);
+    });
+
+    test('con reintentables pendientes no es "solo bloqueados"', () {
+      const result = SyncResult(
+        allSuccessful: false,
+        remainingRetryable: 1,
+        remainingBlocked: 2,
+      );
+      expect(result.hasBlockedOnly, isFalse);
+      expect(result.isFullyClean, isFalse);
+    });
+
+    test('sin pendientes ni bloqueados está completamente limpio', () {
+      const result = SyncResult(
+        allSuccessful: true,
+        remainingRetryable: 0,
+        remainingBlocked: 0,
+      );
+      expect(result.isFullyClean, isTrue);
+      expect(result.hasBlockedOnly, isFalse);
+    });
+  });
+
+  group('Conteo de pendientes de otro usuario', () {
+    int foreign(int totalAllUnsynced, int own) =>
+        (totalAllUnsynced - own).clamp(0, totalAllUnsynced);
+
+    test('resta los propios del total del dispositivo', () {
+      expect(foreign(5, 2), equals(3));
+    });
+
+    test('nunca es negativo', () {
+      expect(foreign(1, 4), equals(0));
+    });
   });
 }

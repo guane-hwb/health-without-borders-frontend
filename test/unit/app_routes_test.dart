@@ -17,6 +17,7 @@ import 'package:health_without_borders_frontend/src/features/admin/presentation/
 import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
+import 'package:health_without_borders_frontend/src/features/auth/presentation/change_password_screen.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
 import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
@@ -64,7 +65,21 @@ Widget buildTestableApp({
   when(() => syncEngine.pendingCount).thenReturn(ValueNotifier<int>(0));
   when(() => syncEngine.blockedCount).thenReturn(ValueNotifier<int>(0));
   when(() => syncEngine.refreshPendingCount()).thenAnswer((_) async {});
-  when(() => localDb.getUnsyncedRecords()).thenAnswer((_) async => []);
+
+  when(
+    () => localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => <LocalPatientEntry>[]);
+  when(
+    () => localDb.getUnsyncedRecords(),
+  ).thenAnswer((_) async => <LocalPatientEntry>[]);
+  when(() => localDb.getWebQuarantinedEntries()).thenAnswer((_) async => []);
+  when(() => localDb.getUnsyncedCount()).thenAnswer((_) async => 0);
+  when(
+    () => localDb.getSyncNotices(ownerUserId: any(named: 'ownerUserId')),
+  ).thenAnswer((_) async => <SyncNotice>[]);
+  when(
+    () => syncEngine.savedRecords,
+  ).thenAnswer((_) => const Stream<RecordSyncResult>.empty());
 
   return AppLocale(
     locale: 'es',
@@ -96,6 +111,58 @@ void main() {
   });
 
   group('AppRoutes Guard Tests', () {
+    for (final String route in <String>[
+      AppRoutes.home,
+      AppRoutes.manageUsers,
+      AppRoutes.readNfc,
+      AppRoutes.changePassword,
+    ]) {
+      testWidgets('con contraseña asignada por un administrador, $route lleva '
+          'al cambio obligatorio', (tester) async {
+        final session = _createSession(
+          UserRole.orgAdmin,
+        ).copyWith(mustChangePassword: true);
+        when(() => mockAuthRepository.currentUser).thenReturn(session);
+        when(
+          () => mockAuthRepository.sessionNotifier,
+        ).thenReturn(ValueNotifier<UserSession?>(session));
+
+        await tester.pumpWidget(
+          buildTestableApp(
+            authRepository: mockAuthRepository,
+            initialRoute: route,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final screen = tester.widget<ChangePasswordScreen>(
+          find.byType(ChangePasswordScreen),
+        );
+        expect(screen.mandatory, isTrue);
+      });
+    }
+
+    testWidgets('/account/password abre el cambio voluntario', (tester) async {
+      final session = _createSession(UserRole.nurse);
+      when(() => mockAuthRepository.currentUser).thenReturn(session);
+      when(
+        () => mockAuthRepository.sessionNotifier,
+      ).thenReturn(ValueNotifier<UserSession?>(session));
+
+      await tester.pumpWidget(
+        buildTestableApp(
+          authRepository: mockAuthRepository,
+          initialRoute: AppRoutes.changePassword,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final screen = tester.widget<ChangePasswordScreen>(
+        find.byType(ChangePasswordScreen).last,
+      );
+      expect(screen.mandatory, isFalse);
+    });
+
     testWidgets('Redirige a LoginScreen cuando la sesión no está iniciada', (
       tester,
     ) async {
@@ -213,7 +280,7 @@ void main() {
     });
 
     testWidgets(
-      'Permite acceso a /nfc/read si el usuario puede leer pacientes',
+      'Permite acceso a /nfc/read si el usuario puede escanear dispositivos',
       (tester) async {
         final session = _createSession(UserRole.doctor);
         when(() => mockAuthRepository.currentUser).thenReturn(session);
@@ -449,20 +516,21 @@ void main() {
 
   group('AppRoutes /nfc/read — permisos por rol', () {
     final deniedRoles = UserRole.values
-        .where((UserRole r) => !r.canReadPatients && !r.canScanNfc)
+        .where((UserRole r) => !r.canScanNfc)
         .toList();
-    final scanOnlyRoles = UserRole.values
-        .where((UserRole r) => !r.canReadPatients && r.canScanNfc)
+    final scanRoles = UserRole.values
+        .where((UserRole r) => r.canScanNfc)
         .toList();
 
-    test('existe al menos un rol sin permiso de lectura ni escaneo NFC', () {
-      expect(deniedRoles, isNotEmpty);
+    test('solo doctor y enfermería leen dispositivos; org_admin no', () {
+      expect(scanRoles, <UserRole>[UserRole.doctor, UserRole.nurse]);
+      expect(deniedRoles, contains(UserRole.orgAdmin));
     });
 
     for (final UserRole role in deniedRoles) {
       testWidgets(
         'Muestra Acceso Restringido en /nfc/read para el rol ${role.name} '
-        '(sin canReadPatients ni canScanNfc)',
+        '(sin canScanNfc)',
         (tester) async {
           final session = _createSession(role);
           when(() => mockAuthRepository.currentUser).thenReturn(session);
@@ -481,7 +549,7 @@ void main() {
       );
     }
 
-    for (final UserRole role in scanOnlyRoles) {
+    for (final UserRole role in scanRoles) {
       testWidgets('Permite /nfc/read al rol ${role.name} por canScanNfc', (
         tester,
       ) async {

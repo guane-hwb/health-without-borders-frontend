@@ -315,7 +315,6 @@ void main() {
     });
 
     test('«Otra / desconocida» se ofrece como UNK y nunca como OTHER', () {
-      // OTHER no cabe en la columna VARCHAR(3) del backend: el alta fallaba.
       expect(kSupportedNationalityCodes, contains(kUnknownNationalityCode));
       expect(kSupportedNationalityCodes, isNot(contains('OTHER')));
     });
@@ -363,13 +362,15 @@ void main() {
   group('Step3PatientData — Pruebas de formateo y campos auxiliares', () {
     test('Formateo de peso entero en el controlador de texto', () {
       double? weight = 70.0;
-        final text =
-          weight % 1 == 0 ? weight.toInt().toString() : weight.toString();
+      final text = weight % 1 == 0
+          ? weight.toInt().toString()
+          : weight.toString();
       expect(text, '70');
 
       weight = 70.5;
-        final textDecimal =
-          weight % 1 == 0 ? weight.toInt().toString() : weight.toString();
+      final textDecimal = weight % 1 == 0
+          ? weight.toInt().toString()
+          : weight.toString();
       expect(textDecimal, '70.5');
     });
 
@@ -384,6 +385,51 @@ void main() {
             : 'Invalid nationality (ISO 3166-1 code required)';
         expect(msg, contains('ISO 3166-1'));
       }
+    });
+  });
+
+  group('Nacionalidad — lógica del onChanged del dropdown', () {
+    // Réplica pura del callback de _StyledDropdown<String> (nacionalidad):
+    // if (v != null) { d.nationalityCode = v; d.nationalityName = nat[v]; }
+    void applyNationality(RegisterDraft d, Map<String, String> nat, String? v) {
+      if (v != null) {
+        d.nationalityCode = v;
+        d.nationalityName = nat[v];
+      }
+    }
+
+    for (final isEs in [true, false]) {
+      final lang = isEs ? 'es' : 'en';
+
+      test('cada código soportado asigna code y name coherentes ($lang)', () {
+        final nat = <String, String>{
+          for (final code in kSupportedNationalityCodes)
+            code: countryDisplay(code).name(isEs: isEs),
+        };
+        for (final code in kSupportedNationalityCodes) {
+          final d = RegisterDraft();
+          applyNationality(d, nat, code);
+          expect(d.nationalityCode, code);
+          expect(d.nationalityName, nat[code]);
+          expect(d.nationalityName, isNotEmpty);
+        }
+      });
+    }
+
+    test('un valor null no modifica nationalityCode ni nationalityName', () {
+      final nat = <String, String>{
+        for (final code in kSupportedNationalityCodes)
+          code: countryDisplay(code).name(isEs: true),
+      };
+      final d = RegisterDraft();
+      applyNationality(d, nat, kSupportedNationalityCodes.first);
+      final codeBefore = d.nationalityCode;
+      final nameBefore = d.nationalityName;
+
+      applyNationality(d, nat, null);
+
+      expect(d.nationalityCode, codeBefore);
+      expect(d.nationalityName, nameBefore);
     });
   });
 }

@@ -1,7 +1,7 @@
 // lib/src/features/home/presentation/home_screen.dart
 
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 
 import '../../../core/di/app_scope.dart';
@@ -12,19 +12,29 @@ import '../../../shared/widgets/hwb_logo.dart';
 import '../../../shared/widgets/locale_switcher.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../../auth/domain/user_session.dart';
+import '../../auth/presentation/change_password_screen.dart';
 import '../../../core/sync/sync_engine.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
+  @visibleForTesting
+  static bool? debugIsWebOverride;
+
+  static bool get _isWeb => debugIsWebOverride ?? kIsWeb;
+
+  @visibleForTesting
+  static DateTime Function()? debugNowOverride;
+
   static String _greeting(AppStrings s) {
-    final hour = DateTime.now().hour;
+    final hour = (debugNowOverride?.call() ?? DateTime.now()).hour;
     if (hour < 12) return s.goodMorning;
     if (hour < 18) return s.goodAfternoon;
     return s.goodEvening;
   }
 
-  Future<void> _logout(BuildContext context) async {
+  /// Asks before signing out, warning about records still pending.
+  static Future<void> confirmLogout(BuildContext context) async {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
     final scope = AppScope.of(context);
@@ -33,7 +43,7 @@ class HomeScreen extends StatelessWidget {
 
     if (!dialogContext.mounted) return;
 
-    if (kIsWeb) {
+    if (_isWeb) {
       try {
         await scope.syncEngine.syncAll().timeout(const Duration(seconds: 20));
       } catch (_) {}
@@ -41,9 +51,16 @@ class HomeScreen extends StatelessWidget {
 
     int pendingPatients = 0;
     int pendingLogs = 0;
+    // On a phone another user's pending rows stay after this logout and wait
+    // for them; on the web the logout erases everything, so all of it counts.
+    final String? owner = _isWeb ? null : scope.currentUser?.id;
     try {
-      pendingPatients = await scope.localDatabase.getUnsyncedCount();
-      pendingLogs = await scope.localDatabase.getUnsyncedEmergencyLogCount();
+      pendingPatients = await scope.localDatabase.getUnsyncedCount(
+        ownerUserId: owner,
+      );
+      pendingLogs = await scope.localDatabase.getUnsyncedEmergencyLogCount(
+        ownerUserId: owner,
+      );
     } catch (_) {}
 
     if (!dialogContext.mounted) return;
@@ -69,7 +86,7 @@ class HomeScreen extends StatelessWidget {
                   border: Border.all(color: const Color(0xFFFFEEBA)),
                 ),
                 child: Text(
-                  kIsWeb
+                  _isWeb
                       ? (isEs
                             ? 'Atención: $totalPending registro(s) no se pudieron sincronizar. Al cerrar sesión se ELIMINARÁN de este navegador y no se podrán recuperar.'
                             : 'Warning: $totalPending record(s) could not be synced. Signing out will DELETE them from this browser and they cannot be recovered.')
@@ -183,6 +200,9 @@ class HomeScreen extends StatelessWidget {
       });
       return const SizedBox.shrink();
     }
+    if (user.mustChangePassword) {
+      return const ChangePasswordScreen(mandatory: true);
+    }
 
     return Scaffold(
       backgroundColor: AppColors.backgroundLight,
@@ -241,7 +261,7 @@ class HomeScreen extends StatelessWidget {
           onTap: () => Navigator.of(context).pushNamed(AppRoutes.brigadeStats),
         ),
         const SizedBox(height: 28),
-        _LogoutButton(onTap: () => unawaited(_logout(context))),
+        _AccountButtons(onLogout: () => unawaited(confirmLogout(context))),
       ],
     );
   }
@@ -279,7 +299,7 @@ class HomeScreen extends StatelessWidget {
               Navigator.of(context).pushNamed(AppRoutes.brigadeStatsOrg),
         ),
         const SizedBox(height: 28),
-        _LogoutButton(onTap: () => unawaited(_logout(context))),
+        _AccountButtons(onLogout: () => unawaited(confirmLogout(context))),
       ],
     );
   }
@@ -327,7 +347,7 @@ class HomeScreen extends StatelessWidget {
           },
         ),
         const SizedBox(height: 28),
-        _LogoutButton(onTap: () => unawaited(_logout(context))),
+        _AccountButtons(onLogout: () => unawaited(confirmLogout(context))),
       ],
     );
   }
@@ -576,6 +596,7 @@ class _SyncCard extends StatefulWidget {
 class _SyncCardState extends State<_SyncCard> {
   int _pendingCount = 0;
   int _blockedCount = 0;
+  int _noticeCount = 0;
   bool _initialized = false;
   SyncEngine? _engineRef;
 
@@ -636,15 +657,26 @@ class _SyncCardState extends State<_SyncCard> {
     int pending = scope.syncEngine.pendingCount.value;
     int blocked = scope.syncEngine.blockedCount.value;
 
+    int notices = _noticeCount;
+
     try {
-      pending = await scope.localDatabase.getRetryablePendingCount();
-      blocked = await scope.localDatabase.getBlockedCount();
+      final String? owner = scope.authRepository.currentUser?.id;
+      pending = await scope.localDatabase.getRetryablePendingCount(
+        ownerUserId: owner,
+      );
+      blocked = await scope.localDatabase.getBlockedCount(ownerUserId: owner);
+    } catch (_) {}
+    try {
+      notices = (await scope.localDatabase.getSyncNotices(
+        ownerUserId: scope.authRepository.currentUser?.id,
+      )).length;
     } catch (_) {}
 
     if (mounted) {
       setState(() {
         _pendingCount = pending;
         _blockedCount = blocked;
+        _noticeCount = notices;
       });
     }
   }
@@ -654,12 +686,17 @@ class _SyncCardState extends State<_SyncCard> {
     final scope = AppScope.of(context);
     final s = AppStrings.of(context);
 
-    final String subtitle = switch ((_pendingCount, _blockedCount)) {
+    final String queue = switch ((_pendingCount, _blockedCount)) {
       (0, 0) => s.actionPendingSyncEmpty,
       (0, _) => '$_blockedCount requieren intervención',
       (_, 0) => s.actionPendingSyncCount(_pendingCount),
       _ =>
         '${s.actionPendingSyncCount(_pendingCount)} · $_blockedCount requieren intervención',
+    };
+    final String subtitle = switch (_noticeCount) {
+      0 => queue,
+      1 => '$queue · ${s.isEs ? '1 aviso' : '1 notice'}',
+      _ => '$queue · $_noticeCount ${s.isEs ? 'avisos' : 'notices'}',
     };
 
     final hasTotalPending = _pendingCount > 0 || _blockedCount > 0;
@@ -776,25 +813,43 @@ class _SyncCardState extends State<_SyncCard> {
   }
 }
 
-class _LogoutButton extends StatelessWidget {
-  const _LogoutButton({required this.onTap});
-  final VoidCallback onTap;
+class _AccountButtons extends StatelessWidget {
+  const _AccountButtons({required this.onLogout});
+  final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: TextButton.icon(
-        onPressed: onTap,
-        icon: const Icon(
-          Icons.logout_rounded,
-          size: 16,
-          color: AppColors.textSecondary,
+    const TextStyle style = TextStyle(
+      color: AppColors.textSecondary,
+      fontSize: 13,
+    );
+    return Column(
+      children: [
+        TextButton.icon(
+          onPressed: () =>
+              Navigator.of(context).pushNamed(AppRoutes.changePassword),
+          icon: const Icon(
+            Icons.lock_reset,
+            size: 16,
+            color: AppColors.textSecondary,
+          ),
+          label: Text(
+            AppStrings.of(context).isEs
+                ? 'Cambiar contraseña'
+                : 'Change password',
+            style: style,
+          ),
         ),
-        label: Text(
-          AppStrings.of(context).logout,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        TextButton.icon(
+          onPressed: onLogout,
+          icon: const Icon(
+            Icons.logout_rounded,
+            size: 16,
+            color: AppColors.textSecondary,
+          ),
+          label: Text(AppStrings.of(context).logout, style: style),
         ),
-      ),
+      ],
     );
   }
 }

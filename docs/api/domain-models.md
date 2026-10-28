@@ -8,7 +8,7 @@ Regulatory reference: Resolutions 866/2021 and 1888/2025 of the Colombian Minist
 
 ## `PatientFullRecord`
 
-Root model. This is the body of `POST /api/v1/patients/sync` and the response of `GET /api/v1/patients/scan/{device_uid}`.
+Root model. This is the body of `POST /api/v1/patients/sync` and the response of `POST /api/v1/patients/scan` (body: `device_uid`, `guardian_device_uid`; the UIDs never go in the URL, which ends up in request logs).
 
 ```dart
 class PatientFullRecord {

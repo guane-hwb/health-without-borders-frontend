@@ -15,9 +15,11 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart'
     show getApplicationSupportDirectory;
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
+import '../nfc/retired_device_hash.dart';
 import '../utils/app_logger.dart';
 import '../utils/clinical_time.dart';
 import 'web_storage.dart' as web_storage;
@@ -157,15 +159,9 @@ class LocalDatabase {
           accessibility: KeychainAccessibility.first_unlock_this_device,
         ),
         aOptions: AndroidOptions(),
-        // Web: la llave vive en sessionStorage, no en localStorage junto al
-        // texto cifrado de IndexedDB. Al cerrar la pestaña la cola queda
-        // ilegible y se borra al arrancar sin sesión (AuthRepository).
         webOptions: WebOptions(useSessionStorage: true),
       );
 
-  /// iOS/macOS: almacén anterior a la migración al llavero solo-dispositivo.
-  /// Web: apunta al almacén persistente (localStorage) de versiones previas,
-  /// solo para borrar las llaves que dejaron allí.
   static const FlutterSecureStorage _defaultLegacySecureStorage =
       FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: false));
 
@@ -191,11 +187,14 @@ class LocalDatabase {
   ];
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 10;
+  static const int _dbVersion = 12;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
   static const String _keyVersionTable = 'nfc_key_version_observations';
+  static const String _syncNoticeTable = 'sync_notices';
+  static const String _retiredDeviceTable = 'retired_devices';
+  static const String _retiredCursorTable = 'retired_devices_cursor';
   static const String _dbKeyStorageName = 'hwb_sqlite_aes_key';
   static const String _auditKeyStorageName = 'hwb_sqlite_audit_aes_key';
 
@@ -207,6 +206,9 @@ class LocalDatabase {
   static const String _webChipPrefix = 'hwb_web_chip::';
   static const String _webKeyVersionPrefix = 'hwb_web_keyver::';
   static const String _webLogPrefix = 'hwb_web_emlog::';
+  static const String _webNoticePrefix = 'hwb_web_notice::';
+  static const String _webRetiredPrefix = 'hwb_web_retired::';
+  static const String _webRetiredCursorKey = 'hwb_web_retired_cursor';
 
   final FlutterSecureStorage _secureStorage;
   Database? _db;
@@ -289,10 +291,58 @@ class LocalDatabase {
           stackTrace: stack,
         );
       }
+      try {
+        await _migrateWebPlaintextPatients();
+      } catch (e, stack) {
+        AppLogger.e(
+          'Error recifrando filas web heredadas en claro',
+          error: e,
+          stackTrace: stack,
+        );
+      }
     } finally {
       _webMigrationChecked = true;
       _webMigrationCompleter = null;
       completer.complete();
+    }
+  }
+
+  Future<void> _migrateWebPlaintextPatients() async {
+    final List<MapEntry<String, String>> entries = await _webList(
+      _webPatientPrefix,
+    );
+    int migrated = 0;
+    int failed = 0;
+    for (final MapEntry<String, String> e in entries) {
+      if (e.key.contains('::quarantine::')) continue;
+      try {
+        final Object? decoded = jsonDecode(e.value);
+        if (decoded is! Map) continue;
+        final Map<String, dynamic> row = Map<String, dynamic>.from(decoded);
+        final Object? plain = row['record_json'];
+        if (plain is! String ||
+            !plain.startsWith('{') ||
+            !plain.endsWith('}')) {
+          continue;
+        }
+        row['record_json'] = await _encryptPayload(plain);
+        final String? current = await _webGet(e.key);
+        if (current != e.value) continue;
+        await _webSet(e.key, jsonEncode(row));
+        migrated++;
+      } catch (err, stack) {
+        failed++;
+        AppLogger.e(
+          'No se pudo recifrar una fila web heredada (${e.key})',
+          error: err,
+          stackTrace: stack,
+        );
+      }
+    }
+    if (migrated > 0 || failed > 0) {
+      AppLogger.d(
+        'Migración web de filas en claro: $migrated recifradas, $failed con error.',
+      );
     }
   }
 
@@ -856,8 +906,6 @@ class LocalDatabase {
       }
     }
     if (_isWeb) {
-      // Builds anteriores guardaron las llaves en localStorage: no deben
-      // sobrevivir al cierre de sesión.
       for (final String name in <String>[
         _dbKeyStorageName,
         _auditKeyStorageName,
@@ -963,8 +1011,15 @@ class LocalDatabase {
   }
 
   Future<Database> _initDb() async {
+    if (!_isWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux)) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
+
     final String dbPath = await _resolveDbPath();
-    return openDatabase(
+    final Database opened = await openDatabase(
       dbPath,
       version: _dbVersion,
       onDowngrade: (Database db, int oldVersion, int newVersion) async {
@@ -996,6 +1051,8 @@ class LocalDatabase {
         await _createChipStatusTable(db);
         await _createEmergencyLogTable(db);
         await _createKeyVersionTable(db);
+        await _createSyncNoticeTable(db);
+        await _createRetiredDeviceTables(db);
       },
       onUpgrade: (Database db, int oldVersion, int newVersion) async {
         if (oldVersion < 2) {
@@ -1061,8 +1118,64 @@ class LocalDatabase {
         if (oldVersion < 10) {
           await _createKeyVersionTable(db);
         }
+        if (oldVersion < 11) {
+          await _createSyncNoticeTable(db);
+        }
+        if (oldVersion < 12) {
+          await _createRetiredDeviceTables(db);
+        }
       },
     );
+    await _migratePlaintextRows(opened);
+    return opened;
+  }
+
+  Future<void> _migratePlaintextRows(Database db) async {
+    try {
+      final List<Map<String, Object?>> rows = await db.query(
+        _table,
+        columns: <String>['patient_id', 'record_json'],
+        where: "record_json LIKE '{%'",
+      );
+      if (rows.isEmpty) return;
+
+      int migrated = 0;
+      int failed = 0;
+      for (final Map<String, Object?> row in rows) {
+        final String? patientId = row['patient_id'] as String?;
+        final String? plain = row['record_json'] as String?;
+        if (patientId == null || plain == null || !plain.endsWith('}')) {
+          continue;
+        }
+        try {
+          final String encrypted = await _encryptPayload(plain);
+          final int updated = await db.update(
+            _table,
+            <String, Object?>{'record_json': encrypted},
+            where: 'patient_id = ? AND record_json = ?',
+            whereArgs: <Object>[patientId, plain],
+          );
+          if (updated > 0) migrated++;
+        } catch (e, stack) {
+          failed++;
+          AppLogger.e(
+            'No se pudo recifrar una fila heredada ($patientId)',
+            error: e,
+            stackTrace: stack,
+          );
+        }
+      }
+      AppLogger.d(
+        'Migración de filas heredadas en claro: $migrated recifradas, '
+        '$failed con error.',
+      );
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error migrando filas heredadas en claro',
+        error: e,
+        stackTrace: stack,
+      );
+    }
   }
 
   static Future<void> _addColumnIfMissing(
@@ -1103,6 +1216,32 @@ class LocalDatabase {
       'CREATE INDEX IF NOT EXISTS idx_keyver_synced '
       'ON $_keyVersionTable (is_synced)',
     );
+  }
+
+  static Future<void> _createSyncNoticeTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_syncNoticeTable (
+        patient_id    TEXT PRIMARY KEY,
+        patient_name  TEXT NOT NULL,
+        codes         TEXT NOT NULL,
+        owner_user_id TEXT,
+        created_at    TEXT NOT NULL
+      )
+    ''');
+  }
+
+  static Future<void> _createRetiredDeviceTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_retiredDeviceTable (
+        uid_hash TEXT PRIMARY KEY
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_retiredCursorTable (
+        id          INTEGER PRIMARY KEY CHECK (id = 1),
+        server_time TEXT NOT NULL
+      )
+    ''');
   }
 
   static Future<void> _createEmergencyLogTable(Database db) async {
@@ -1410,7 +1549,7 @@ class LocalDatabase {
 
   Future<void> savePatient(
     PatientFullRecord record, {
-    String? ownerUserId,
+    required String? ownerUserId,
     String? organizationId,
     String? retiredDeviceReason,
     bool isSynced = false,
@@ -1479,12 +1618,14 @@ class LocalDatabase {
     if (_isWeb) {
       await _withWebLock(() async {
         final previous = await _webGetPatient(record.patientId);
-        final effectiveOwner = ownerUserId ?? previous?['owner_user_id'];
-        if (effectiveOwner == null) {
+        final String? effectiveOwner =
+            ownerUserId ?? previous?['owner_user_id'] as String?;
+        if (effectiveOwner == null || effectiveOwner.trim().isEmpty) {
           AppLogger.e(
-            'savePatient(${record.patientId}) llamado sin ownerUserId: la fila '
-            'quedará sin propietario y no se sincronización ni se mostrará en '
-            'ninguna consulta filtrada por usuario hasta que se reconcilie.',
+            'savePatient(${record.patientId}) bloqueado: ownerUserId está vacío o es nulo',
+          );
+          throw ArgumentError(
+            'No se puede guardar un paciente sin un ownerUserId válido.',
           );
         }
         if (previous != null) {
@@ -1542,11 +1683,12 @@ class LocalDatabase {
         reason ??= existing.first['pending_retired_reason'] as String?;
       }
 
-      if (prevOwner == null) {
+      if (prevOwner == null || prevOwner.trim().isEmpty) {
         AppLogger.e(
-          'savePatient(${record.patientId}) llamado sin ownerUserId: la fila '
-          'quedará sin propietario y no se sincronizará ni se mostrará en '
-          'ninguna consulta filtrada por usuario hasta que se reconcilie.',
+          'savePatient(${record.patientId}) bloqueado: ownerUserId está vacío o es nulo',
+        );
+        throw ArgumentError(
+          'No se puede guardar un paciente sin un ownerUserId válido.',
         );
       }
 
@@ -1901,6 +2043,56 @@ class LocalDatabase {
     }
   }
 
+  /// Moves a pending row the server already saved onto the version it was
+  /// saved as, so its retry is not taken for an old copy.
+  ///
+  /// Only while the row still holds [revision], that is, exactly what was
+  /// sent: a later edit keeps its own base.
+  Future<void> rebasePending(
+    String patientId, {
+    required int revision,
+    required int recordVersion,
+  }) async {
+    Future<String> withVersion(String cipher) async {
+      final Map<String, dynamic> record =
+          jsonDecode(await _decryptPayload(cipher)) as Map<String, dynamic>;
+      record['baseVersion'] = recordVersion;
+      return _encryptPayload(jsonEncode(record));
+    }
+
+    if (_isWeb) {
+      await _withWebLock(() async {
+        final current = await _webGetPatient(patientId);
+        if (current == null ||
+            ((current['revision'] as int?) ?? 0) != revision) {
+          return;
+        }
+        await _webPutPatient(patientId, <String, dynamic>{
+          ...current,
+          'record_json': await withVersion(current['record_json'] as String),
+        });
+      });
+      return;
+    }
+    final db = await _database;
+    final rows = await db!.query(
+      _table,
+      columns: <String>['record_json'],
+      where: 'patient_id = ? AND revision = ?',
+      whereArgs: <Object>[patientId, revision],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    await db.update(
+      _table,
+      <String, Object?>{
+        'record_json': await withVersion(rows.first['record_json'] as String),
+      },
+      where: 'patient_id = ? AND revision = ?',
+      whereArgs: <Object>[patientId, revision],
+    );
+  }
+
   Future<void> deleteRecord(String patientId) async {
     if (_isWeb) {
       await _withWebLock(() async {
@@ -1996,13 +2188,254 @@ class LocalDatabase {
     );
   }
 
+  // ── Sync notices ──────────────────────────────────────────────────────────
+
+  /// Keeps what the server did not apply on a sync it accepted, until the
+  /// user dismisses it. One notice per patient: a later sync adds its codes.
+  ///
+  /// The sync itself already succeeded, so a failure here is only logged.
+  Future<void> addSyncNotice({
+    required String patientId,
+    required String patientName,
+    required List<String> codes,
+    String? ownerUserId,
+  }) async {
+    if (patientId.isEmpty || codes.isEmpty) return;
+
+    Map<String, Object?> row(Map<String, Object?>? previous) =>
+        <String, Object?>{
+          'patient_id': patientId,
+          'patient_name': _maskName(patientName),
+          'codes': jsonEncode(
+            <String>{
+              ...SyncNotice.decodeCodes(previous?['codes']),
+              ...codes,
+            }.toList(),
+          ),
+          'owner_user_id': ownerUserId ?? previous?['owner_user_id'],
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+        };
+
+    try {
+      final db = await _database;
+      if (db == null) {
+        await _withWebLock(() async {
+          final String key = '$_webNoticePrefix$patientId';
+          final Map<String, dynamic>? previous = await _webReadJsonRecord(key);
+          await _webSet(key, jsonEncode(row(previous)));
+        });
+        return;
+      }
+      await db.transaction((txn) async {
+        final previous = await txn.query(
+          _syncNoticeTable,
+          where: 'patient_id = ?',
+          whereArgs: <String>[patientId],
+          limit: 1,
+        );
+        await txn.insert(
+          _syncNoticeTable,
+          row(previous.isEmpty ? null : previous.first),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      });
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo guardar el aviso de sincronización',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  /// Notices not dismissed yet, newest first.
+  Future<List<SyncNotice>> getSyncNotices({String? ownerUserId}) async {
+    try {
+      final db = await _database;
+      final List<Map<String, Object?>> rows;
+      if (db == null) {
+        await _ensureWebMigrated();
+        rows = <Map<String, Object?>>[];
+        for (final e in await _webList(_webNoticePrefix)) {
+          if (e.key.contains('::quarantine::')) continue;
+          try {
+            rows.add(Map<String, Object?>.from(jsonDecode(e.value) as Map));
+          } catch (_) {}
+        }
+      } else {
+        rows = await db.query(_syncNoticeTable);
+      }
+      return rows
+          .where(
+            (Map<String, Object?> r) =>
+                ownerUserId == null ||
+                r['owner_user_id'] == null ||
+                r['owner_user_id'] == ownerUserId,
+          )
+          .map(SyncNotice.fromRow)
+          .toList()
+        ..sort(
+          (SyncNotice a, SyncNotice b) => b.createdAt.compareTo(a.createdAt),
+        );
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudieron leer los avisos de sincronización',
+        error: e,
+        stackTrace: stack,
+      );
+      return const <SyncNotice>[];
+    }
+  }
+
+  Future<void> dismissSyncNotice(String patientId) async {
+    try {
+      final db = await _database;
+      if (db == null) {
+        await _withWebLock(() => _webRemove('$_webNoticePrefix$patientId'));
+        return;
+      }
+      await db.delete(
+        _syncNoticeTable,
+        where: 'patient_id = ?',
+        whereArgs: <String>[patientId],
+      );
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo descartar el aviso de sincronización',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  // ── Retired devices ───────────────────────────────────────────────────────
+  //
+  // Hashes of the patient and guardian devices the server retired (see
+  // retiredDeviceHash), so a retired device is refused offline too. They
+  // belong to no user: clearAll() keeps them.
+
+  /// Stores [hashes] from the server and, with them, the [serverTime] to send
+  /// back as `since` next time. Invalid entries are skipped.
+  Future<void> addRetiredDeviceHashes(
+    Iterable<String> hashes, {
+    String? serverTime,
+  }) async {
+    final List<String> valid = hashes.where(isRetiredDeviceHash).toList();
+    final db = await _database;
+    if (db == null) {
+      await _withWebLock(() async {
+        await _ensureWebMigrated();
+        for (final String hash in valid) {
+          await _webSet('$_webRetiredPrefix$hash', '1');
+        }
+        if (serverTime != null && serverTime.isNotEmpty) {
+          await _webSet(_webRetiredCursorKey, serverTime);
+        }
+      });
+      return;
+    }
+    await db.transaction((txn) async {
+      final Batch batch = txn.batch();
+      for (final String hash in valid) {
+        batch.insert(_retiredDeviceTable, <String, Object?>{
+          'uid_hash': hash,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      if (serverTime != null && serverTime.isNotEmpty) {
+        batch.insert(_retiredCursorTable, <String, Object?>{
+          'id': 1,
+          'server_time': serverTime,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
+  /// Records devices this phone knows were retired (a 410 from the server, a
+  /// reassignment made here) before the next sync brings them.
+  Future<void> markDevicesRetired(Iterable<String> uids) async {
+    try {
+      await addRetiredDeviceHashes(
+        uids.map(retiredDeviceHash).whereType<String>(),
+      );
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo guardar el dispositivo retirado',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  /// Whether [uid] is a retired device. On a storage error the answer is
+  /// false: care is not blocked by a local failure.
+  Future<bool> isDeviceRetired(String uid) async {
+    final String? hash = retiredDeviceHash(uid);
+    if (hash == null) return false;
+    try {
+      final db = await _database;
+      if (db == null) {
+        await _ensureWebMigrated();
+        return await _webGet('$_webRetiredPrefix$hash') != null;
+      }
+      final rows = await db.query(
+        _retiredDeviceTable,
+        where: 'uid_hash = ?',
+        whereArgs: <String>[hash],
+        limit: 1,
+      );
+      return rows.isNotEmpty;
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo consultar la lista de dispositivos retirados',
+        error: e,
+        stackTrace: stack,
+      );
+      return false;
+    }
+  }
+
+  /// `server_time` of the last list downloaded; null if it never was.
+  Future<String?> retiredDevicesSyncedAt() async {
+    try {
+      final db = await _database;
+      if (db == null) {
+        await _ensureWebMigrated();
+        return await _webGet(_webRetiredCursorKey);
+      }
+      final rows = await db.query(_retiredCursorTable, limit: 1);
+      return rows.isEmpty ? null : rows.first['server_time'] as String?;
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo leer la fecha de la lista de dispositivos retirados',
+        error: e,
+        stackTrace: stack,
+      );
+      return null;
+    }
+  }
+
   Future<void> clearAll() async {
     if (_isWeb) {
       await _withWebLock(() async {
         await _webDeleteByPrefix(_webPatientPrefix);
         await _webDeleteByPrefix(_webChipPrefix);
+        await _webDeleteByPrefix(_webNoticePrefix);
         await _webRemove(_webStoreKey);
         await _webRemove(_webChipKey);
+
+        final allKeyVersions = await _webAllKeyVersionRows();
+        for (final row in allKeyVersions) {
+          final isSynced =
+              row['is_synced'] == 1 ||
+              row['is_synced'] == '1' ||
+              (row['is_synced'] as num?)?.toInt() == 1;
+          if (!isSynced) continue;
+          final uid = row['device_uid'] as String?;
+          if (uid != null && uid.isNotEmpty) {
+            await _webRemove('$_webKeyVersionPrefix$uid');
+          }
+        }
 
         final allLogs = await _webAllLogRows();
         for (final row in allLogs) {
@@ -2022,8 +2455,48 @@ class LocalDatabase {
     final db = await _database;
     await db!.delete(_table);
     await db.delete(_chipStatusTable);
+    await db.delete(_syncNoticeTable);
     await db.delete(_emergencyLogTable, where: 'is_synced = 1');
+    await db.delete(_keyVersionTable, where: 'is_synced = 1');
   }
+}
+
+/// What the server kept as it had it on a sync it accepted, waiting for the
+/// user to read it (see [LocalDatabase.addSyncNotice]).
+class SyncNotice {
+  const SyncNotice({
+    required this.patientId,
+    required this.patientName,
+    required this.codes,
+    required this.createdAt,
+  });
+
+  factory SyncNotice.fromRow(Map<String, Object?> row) => SyncNotice(
+    patientId: row['patient_id'] as String,
+    patientName: (row['patient_name'] as String?) ?? '',
+    codes: decodeCodes(row['codes']),
+    createdAt: (row['created_at'] as String?) ?? '',
+  );
+
+  static List<String> decodeCodes(Object? raw) {
+    if (raw is! String || raw.isEmpty) return const <String>[];
+    try {
+      return (jsonDecode(raw) as List<dynamic>)
+          .map((dynamic c) => c.toString())
+          .toList();
+    } catch (_) {
+      return const <String>[];
+    }
+  }
+
+  final String patientId;
+
+  /// Masked as in the sync queue: first name and an initial.
+  final String patientName;
+
+  /// The `conflicts` codes, see SyncConflictCode.
+  final List<String> codes;
+  final String createdAt;
 }
 
 // ── Data classes ──────────────────────────────────────────────────────────

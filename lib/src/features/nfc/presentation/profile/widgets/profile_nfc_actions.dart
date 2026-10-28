@@ -15,6 +15,13 @@ import '../../../domain/patient_record.dart';
 import '../../nfc_guided_write.dart';
 import 'reassign_device_dialog.dart';
 
+/// Builds the [NfcPayloadService] that talks to the chip.
+///
+/// Production leaves it null and gets the real NFC radio; tests pass a fake so
+/// the guided flows can be driven end to end without hardware.
+typedef NfcPayloadServiceBuilder =
+    NfcPayloadService Function(NfcPayloadCodec codec);
+
 /// Ejecuta el flujo guiado de actualización de chips NFC (paciente y guardianes).
 Future<bool> executeUpdateNfcChips({
   required BuildContext context,
@@ -22,6 +29,7 @@ Future<bool> executeUpdateNfcChips({
   required NfcKeyring keyring,
   required bool patientChipDirty,
   required bool guardianChipDirty,
+  NfcPayloadServiceBuilder? serviceBuilder,
 }) async {
   final isEs = AppStrings.of(context).isEs;
   final messenger = ScaffoldMessenger.of(context);
@@ -46,6 +54,9 @@ Future<bool> executeUpdateNfcChips({
     return false;
   }
 
+  NfcPayloadService makeService() =>
+      serviceBuilder?.call(codec) ?? NfcPayloadService(codec: codec);
+
   if (patientChipDirty) {
     final ok = await showNfcGuidedWrite(
       context,
@@ -53,7 +64,7 @@ Future<bool> executeUpdateNfcChips({
       instruction: isEs
           ? 'Acerque el dispositivo del paciente al teléfono'
           : 'Bring the patient device to the phone',
-      write: () => NfcPayloadService(codec: codec).writeTriagePayload(
+      write: () => makeService().writeTriagePayload(
         NfcTriagePayload.buildPatientPayload(record: record),
         expectedUid: record.deviceUid,
       ),
@@ -79,11 +90,11 @@ Future<bool> executeUpdateNfcChips({
         title: title,
         instruction: instruction,
         write: () async {
-          final result = await NfcPayloadService(codec: codec)
-              .writeGuardianRecord(
-                buildFit: guardianFitBuilder(record: record, codec: codec),
-                expectedUid: expectedUid,
-              );
+          final result = await makeService().writeGuardianRecord(
+            buildFit: guardianFitBuilder(record: record, codec: codec),
+            expectedUid: expectedUid,
+            patientId: record.patientId,
+          );
           fit = result.fit;
         },
       );
@@ -135,7 +146,51 @@ Future<bool> executeUpdateNfcChips({
   return true;
 }
 
+/// UIDs a reassignment took out of use: each device of [before] whose slot
+/// in [after] holds another one. The server retires them on the next sync.
+List<String> devicesReplacedByReassign({
+  required PatientFullRecord before,
+  required PatientFullRecord after,
+}) {
+  final List<(String?, String?)> slots = <(String?, String?)>[
+    (before.deviceUid, after.deviceUid),
+    (before.guardianInfo.deviceUid, after.guardianInfo.deviceUid),
+    (before.guardian2Info?.deviceUid, after.guardian2Info?.deviceUid),
+  ];
+  return <String>[
+    for (final (String? old, String? now) in slots)
+      if ((old ?? '').trim().isNotEmpty && old!.trim() != (now ?? '').trim())
+        old.trim(),
+  ];
+}
+
 /// Ejecuta el proceso de reasignación de un dispositivo individual.
+/// Which other devices of the patient still describe the old binding after
+/// the reassignments in [done], in the order they were written.
+///
+/// The patient device's triage lists the guardian devices (`gUid`/`g2Uid`),
+/// which is what lets a guardian device open a minor's record offline. Each
+/// guardian device's copy names the patient device and both guardian devices.
+/// A device written before a later change to one of those, or not written at
+/// all, still names the old one.
+({bool patient, bool guardian}) devicesStaleAfterReassign({
+  required List<ReassignTarget> done,
+  required bool hasGuardianDevice,
+  required bool hasTwoGuardianDevices,
+}) {
+  final int lastGuardianChange = done.lastIndexWhere(
+    (ReassignTarget t) => t != ReassignTarget.patient,
+  );
+  final int lastPatientWrite = done.lastIndexOf(ReassignTarget.patient);
+  final bool guardianChanged = lastGuardianChange >= 0;
+  return (
+    patient: guardianChanged && lastPatientWrite < lastGuardianChange,
+    guardian:
+        hasGuardianDevice &&
+        (lastPatientWrite >= 0 || (guardianChanged && hasTwoGuardianDevices)),
+  );
+}
+
 Future<PatientFullRecord?> executeReassignOne({
   required BuildContext context,
   required ReassignTarget target,
@@ -143,7 +198,11 @@ Future<PatientFullRecord?> executeReassignOne({
   required NfcPayloadCodec codec,
   required bool isEs,
   required void Function(String message, {bool error}) showSnack,
+  NfcPayloadServiceBuilder? serviceBuilder,
 }) async {
+  NfcPayloadService makeService() =>
+      serviceBuilder?.call(codec) ?? NfcPayloadService(codec: codec);
+
   final hasTwo = (record.guardian2Info?.deviceUid ?? '').trim().isNotEmpty;
   String title;
   switch (target) {
@@ -169,7 +228,7 @@ Future<PatientFullRecord?> executeReassignOne({
         ? 'Acerque el dispositivo NUEVO (en blanco) para verificarlo'
         : 'Bring the NEW (blank) device close to verify it',
     read: () async {
-      final result = await NfcPayloadService(codec: codec).readHwbChip();
+      final result = await makeService().readHwbChip();
       newUid = result.uid;
       kind = result.kind;
     },
@@ -232,7 +291,7 @@ Future<PatientFullRecord?> executeReassignOne({
         ? 'Acerque el MISMO dispositivo nuevo para grabarlo'
         : 'Bring the SAME new device close to write it',
     write: () async {
-      final service = NfcPayloadService(codec: codec);
+      final service = makeService();
       if (target == ReassignTarget.patient) {
         await service.writeTriagePayload(
           NfcTriagePayload.buildPatientPayload(record: updated),
@@ -242,6 +301,7 @@ Future<PatientFullRecord?> executeReassignOne({
         await service.writeGuardianRecord(
           buildFit: guardianFitBuilder(record: updated, codec: codec),
           expectedUid: normalizedNew,
+          patientId: updated.patientId,
         );
       }
     },

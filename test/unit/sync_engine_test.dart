@@ -73,6 +73,8 @@ void main() {
     when(() => entry.syncErrorCode).thenReturn(syncErrorCode);
     when(() => entry.revision).thenReturn(revision);
     when(() => entry.retiredDeviceReason).thenReturn(null);
+    when(() => entry.patientName).thenReturn('Ana G.');
+    when(() => entry.ownerUserId).thenReturn(null);
     return entry;
   }
 
@@ -80,12 +82,17 @@ void main() {
     String status, {
     String? message,
     String? fhirStatus = 'success',
+    int? recordVersion,
+    List<String> conflicts = const <String>[],
+    PatientFullRecord? record,
   }) {
     final response = MockPatientSyncResponse();
     when(() => response.status).thenReturn(status);
     when(() => response.message).thenReturn(message ?? '');
     when(() => response.fhirStatus).thenReturn(fhirStatus);
-    when(() => response.conflicts).thenReturn(const <String>[]);
+    when(() => response.conflicts).thenReturn(conflicts);
+    when(() => response.recordVersion).thenReturn(recordVersion);
+    when(() => response.record).thenReturn(record);
     return response;
   }
 
@@ -122,6 +129,7 @@ void main() {
     when(
       () => localDb.getBlockedCount(ownerUserId: any(named: 'ownerUserId')),
     ).thenAnswer((_) async => 0);
+    when(() => localDb.getWebQuarantinedEntries()).thenAnswer((_) async => []);
     when(
       () => localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
     ).thenAnswer((_) async => []);
@@ -131,6 +139,21 @@ void main() {
       ),
     ).thenAnswer((_) async => []);
     when(() => localDb.pendingNfcKeyVersions()).thenAnswer((_) async => []);
+    when(() => localDb.retiredDevicesSyncedAt()).thenAnswer((_) async => null);
+    when(
+      () => localDb.addRetiredDeviceHashes(
+        any(),
+        serverTime: any(named: 'serverTime'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      () => patientRepo.fetchRetiredDevices(since: any(named: 'since')),
+    ).thenAnswer(
+      (_) async => const RetiredDeviceList(
+        uidHashes: <String>[],
+        serverTime: '2026-10-19T09:00:00Z',
+      ),
+    );
     when(
       () => localDb.markNfcKeyVersionsSynced(any()),
     ).thenAnswer((_) async {});
@@ -151,6 +174,28 @@ void main() {
         any(),
         statusCode: any(named: 'statusCode'),
         revision: any(named: 'revision'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      () => localDb.markChipsDirty(
+        any(),
+        patient: any(named: 'patient'),
+        guardian: any(named: 'guardian'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      () => localDb.addSyncNotice(
+        patientId: any(named: 'patientId'),
+        patientName: any(named: 'patientName'),
+        codes: any(named: 'codes'),
+        ownerUserId: any(named: 'ownerUserId'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      () => localDb.rebasePending(
+        any(),
+        revision: any(named: 'revision'),
+        recordVersion: any(named: 'recordVersion'),
       ),
     ).thenAnswer((_) async {});
 
@@ -507,9 +552,9 @@ void main() {
           ApiException('Inactive user', statusCode: 403, code: 'user_inactive'),
         );
 
-        final ok = await engine.syncAll();
+        final result = await engine.syncAll();
 
-        expect(ok, isFalse);
+        expect(result.allSuccessful, isFalse);
         verify(() => patientRepo.syncPatient(any())).called(1);
         verifyNever(
           () => localDb.markSyncError(
@@ -698,6 +743,190 @@ void main() {
         expect(success, false);
       },
     );
+  });
+
+  group('resultado de un sync guardado (versión y conflicts)', () {
+    Future<List<RecordSyncResult>> syncCollecting(
+      LocalPatientEntry entry,
+      PatientSyncResponse response,
+    ) async {
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [entry]);
+      when(
+        () => patientRepo.syncPatient(any()),
+      ).thenAnswer((_) async => response);
+      final events = <RecordSyncResult>[];
+      final sub = engine.savedRecords.listen(events.add);
+      await engine.syncAll();
+      await Future<void>.delayed(Duration.zero);
+      await sub.cancel();
+      return events;
+    }
+
+    test('anuncia lo enviado con la versión nueva del servidor', () async {
+      final record = MockPatientFullRecord();
+      final events = await syncCollecting(
+        buildEntry('A', record: record, revision: 2),
+        buildResponse('success', recordVersion: 5),
+      );
+
+      expect(events, hasLength(1));
+      expect(events.single.patientId, 'A');
+      expect(events.single.sent, same(record));
+      expect(events.single.recordVersion, 5);
+      expect(events.single.hasConflicts, isFalse);
+      expect(events.single.serverRecord, isNull);
+      verifyNever(
+        () => localDb.addSyncNotice(
+          patientId: any(named: 'patientId'),
+          patientName: any(named: 'patientName'),
+          codes: any(named: 'codes'),
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      );
+      verifyNever(
+        () => localDb.rebasePending(
+          any(),
+          revision: any(named: 'revision'),
+          recordVersion: any(named: 'recordVersion'),
+        ),
+      );
+    });
+
+    test('con conflicts guarda el aviso, marca ambos chips y anuncia el '
+        'registro del servidor', () async {
+      final server = MockPatientFullRecord();
+      final events = await syncCollecting(
+        buildEntry('A', record: MockPatientFullRecord()),
+        buildResponse(
+          'success',
+          recordVersion: 6,
+          conflicts: const <String>[
+            'stale_payload_base_version',
+            'visit_edit_not_applied:enc-1',
+          ],
+          record: server,
+        ),
+      );
+
+      verify(
+        () => localDb.markChipsDirty('A', patient: true, guardian: true),
+      ).called(1);
+      verify(
+        () => localDb.addSyncNotice(
+          patientId: 'A',
+          patientName: 'Ana G.',
+          codes: const <String>[
+            'stale_payload_base_version',
+            'visit_edit_not_applied:enc-1',
+          ],
+          ownerUserId: 'user-test-123',
+        ),
+      ).called(1);
+      verify(
+        () => localDb.markSynced(
+          'A',
+          createdAt: any(named: 'createdAt'),
+          recordJson: any(named: 'recordJson'),
+          revision: any(named: 'revision'),
+        ),
+      ).called(1);
+      expect(events.single.conflicts, hasLength(2));
+      expect(events.single.serverRecord, same(server));
+    });
+
+    test(
+      'si no se puede guardar el aviso, el sync sigue siendo un éxito',
+      () async {
+        when(
+          () => localDb.addSyncNotice(
+            patientId: any(named: 'patientId'),
+            patientName: any(named: 'patientName'),
+            codes: any(named: 'codes'),
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenThrow(Exception('disco lleno'));
+        bool? success;
+        engine.onRecordSynced = (id, ok, err) => success = ok;
+
+        final events = await syncCollecting(
+          buildEntry('A', record: MockPatientFullRecord()),
+          buildResponse(
+            'success',
+            recordVersion: 6,
+            conflicts: const <String>['stale_payload_base_version'],
+          ),
+        );
+
+        expect(success, isTrue);
+        expect(events, hasLength(1));
+      },
+    );
+
+    test(
+      'si solo falla FHIR, la fila pendiente pasa a la versión guardada',
+      () async {
+        final events = await syncCollecting(
+          buildEntry('A', record: MockPatientFullRecord(), revision: 3),
+          buildResponse('success', fhirStatus: 'error', recordVersion: 5),
+        );
+
+        verify(
+          () => localDb.rebasePending('A', revision: 3, recordVersion: 5),
+        ).called(1);
+        verify(
+          () => localDb.markSyncError(
+            'A',
+            'Envío FHIR fallido: error',
+            statusCode: null,
+            revision: 3,
+          ),
+        ).called(1);
+        expect(events.single.recordVersion, 5);
+      },
+    );
+
+    test('si falla FHIR con conflicts, la fila conserva su versión: no '
+        'debe pisar la fusión del servidor', () async {
+      await syncCollecting(
+        buildEntry('A', record: MockPatientFullRecord(), revision: 3),
+        buildResponse(
+          'success',
+          fhirStatus: 'error',
+          recordVersion: 5,
+          conflicts: const <String>['stale_payload_base_version'],
+        ),
+      );
+
+      verifyNever(
+        () => localDb.rebasePending(
+          any(),
+          revision: any(named: 'revision'),
+          recordVersion: any(named: 'recordVersion'),
+        ),
+      );
+      verify(
+        () => localDb.markChipsDirty('A', patient: true, guardian: true),
+      ).called(1);
+    });
+
+    test('un status distinto de success no anuncia nada', () async {
+      final events = await syncCollecting(
+        buildEntry('A', record: MockPatientFullRecord()),
+        buildResponse('error', recordVersion: 5),
+      );
+
+      expect(events, isEmpty);
+    });
+
+    test('dispose cierra el stream', () async {
+      final done = Completer<void>();
+      engine.savedRecords.listen(null, onDone: done.complete);
+      engine.dispose();
+      await done.future;
+    });
   });
 
   group('syncOne', () {
@@ -1096,6 +1325,213 @@ void main() {
     });
   });
 
+  group('lista de dispositivos retirados', () {
+    final String hash = 'b' * 64;
+
+    test('la primera vez pide la lista completa y la guarda con su '
+        'server_time', () async {
+      when(
+        () => patientRepo.fetchRetiredDevices(since: any(named: 'since')),
+      ).thenAnswer(
+        (_) async => RetiredDeviceList(
+          uidHashes: <String>[hash],
+          serverTime: '2026-10-19T10:00:00Z',
+        ),
+      );
+
+      await engine.syncAll();
+
+      verify(() => patientRepo.fetchRetiredDevices(since: null)).called(1);
+      verify(
+        () => localDb.addRetiredDeviceHashes(<String>[
+          hash,
+        ], serverTime: '2026-10-19T10:00:00Z'),
+      ).called(1);
+    });
+
+    test('después pide solo lo nuevo desde el último server_time', () async {
+      when(
+        () => localDb.retiredDevicesSyncedAt(),
+      ).thenAnswer((_) async => '2026-10-19T10:00:00Z');
+
+      await engine.syncAll();
+
+      verify(
+        () => patientRepo.fetchRetiredDevices(since: '2026-10-19T10:00:00Z'),
+      ).called(1);
+    });
+
+    test('un fallo no aborta el lote ni guarda nada', () async {
+      when(
+        () => patientRepo.fetchRetiredDevices(since: any(named: 'since')),
+      ).thenThrow(Exception('sin red'));
+
+      await expectLater(engine.syncAll(), completes);
+      verifyNever(
+        () => localDb.addRetiredDeviceHashes(
+          any(),
+          serverTime: any(named: 'serverTime'),
+        ),
+      );
+      verify(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).called(1);
+    });
+
+    test('con el backend inalcanzable no la pide', () async {
+      final reachability = MockReachability();
+      when(() => reachability.probe()).thenAnswer((_) async => false);
+      final offline = SyncEngine(
+        patientRepository: patientRepo,
+        authRepository: authRepo,
+        localDatabase: localDb,
+        reachability: reachability,
+      );
+
+      await offline.syncAll();
+
+      verifyNever(
+        () => patientRepo.fetchRetiredDevices(since: any(named: 'since')),
+      );
+      offline.stop();
+    });
+  });
+
+  group('503 sync_in_progress (temporal)', () {
+    MockApiException syncInProgress() {
+      final e = buildApiException(
+        503,
+        'This patient is being saved by another request; retry in a few '
+        'seconds.',
+      );
+      when(() => e.code).thenReturn('sync_in_progress');
+      when(() => e.retryAfter).thenReturn(const Duration(seconds: 5));
+      return e;
+    }
+
+    test('no es un código permanente', () {
+      expect(kPermanentSyncErrorCodes, isNot(contains(503)));
+      expect(kPermanentSyncErrorCodes.where((int c) => c >= 500), isEmpty);
+    });
+
+    test('se guarda con su code y se reintenta tras el Retry-After, no '
+        'antes', () {
+      fakeAsync((async) {
+        final shortEngine = SyncEngine(
+          patientRepository: patientRepo,
+          authRepository: authRepo,
+          localDatabase: localDb,
+          retryBackoff: const [Duration(seconds: 1)],
+        );
+        final entry = buildEntry('A', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entry]);
+        when(
+          () => localDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 1);
+        final MockApiException error = syncInProgress();
+        when(() => patientRepo.syncPatient(any())).thenThrow(error);
+
+        shortEngine.syncAll();
+        async.elapse(Duration.zero);
+
+        verify(
+          () => localDb.markSyncError(
+            'A',
+            'sync_in_progress',
+            statusCode: 503,
+            revision: 0,
+          ),
+        ).called(1);
+        clearInteractions(patientRepo);
+
+        async.elapse(const Duration(seconds: 4));
+        verifyNever(() => patientRepo.syncPatient(any()));
+
+        async.elapse(const Duration(seconds: 2));
+        verify(() => patientRepo.syncPatient(any())).called(1);
+
+        shortEngine.stop();
+      });
+    });
+
+    test('"Sincronizar ahora" también programa el reintento', () {
+      fakeAsync((async) {
+        final shortEngine = SyncEngine(
+          patientRepository: patientRepo,
+          authRepository: authRepo,
+          localDatabase: localDb,
+          retryBackoff: const [Duration(seconds: 1)],
+        );
+        final entry = buildEntry('A', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entry]);
+        when(
+          () => localDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 1);
+        final MockApiException error = syncInProgress();
+        when(() => patientRepo.syncPatient(any())).thenThrow(error);
+
+        SyncOneResult? result;
+        shortEngine.syncOne('A').then((r) => result = r);
+        async.elapse(Duration.zero);
+        expect(result, SyncOneResult.failure);
+        clearInteractions(patientRepo);
+
+        async.elapse(const Duration(seconds: 4));
+        verifyNever(() => patientRepo.syncPatient(any()));
+        async.elapse(const Duration(seconds: 2));
+        verify(() => patientRepo.syncPatient(any())).called(1);
+
+        shortEngine.stop();
+      });
+    });
+
+    test('"Sincronizar ahora" con un error permanente no reintenta solo', () {
+      fakeAsync((async) {
+        final shortEngine = SyncEngine(
+          patientRepository: patientRepo,
+          authRepository: authRepo,
+          localDatabase: localDb,
+          retryBackoff: const [Duration(seconds: 1)],
+        );
+        final entry = buildEntry('A', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entry]);
+        when(
+          () => localDb.getRetryablePendingCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => 1);
+        final MockApiException duplicate = buildApiException(409, 'duplicate');
+        when(() => patientRepo.syncPatient(any())).thenThrow(duplicate);
+
+        shortEngine.syncOne('A');
+        async.elapse(Duration.zero);
+        clearInteractions(patientRepo);
+
+        async.elapse(const Duration(minutes: 5));
+        verifyNever(() => patientRepo.syncPatient(any()));
+
+        shortEngine.stop();
+      });
+    });
+  });
+
   group('_scheduleRetry y syncOne en vuelo dentro de syncAll', () {
     test('respeta el Retry-After del servidor cuando hint > backoff', () {
       fakeAsync((async) {
@@ -1167,7 +1603,7 @@ void main() {
 
         final results = await Future.wait([syncOneFuture, syncAllFuture]);
         expect(results[0], equals(SyncOneResult.success));
-        expect(results[1], isTrue);
+        expect((results[1] as SyncResult).allSuccessful, isTrue);
       },
     );
 
@@ -1187,13 +1623,13 @@ void main() {
 
   group('_executeSyncAll condiciones límite y alcance de red', () {
     test(
-      'syncAll se omite y retorna false si no hay usuario autenticado',
+      'syncAll se omite y retorna allSuccessful = false si no hay usuario autenticado',
       () async {
         when(() => authRepo.currentUser).thenReturn(null);
 
         final result = await engine.syncAll();
 
-        expect(result, isFalse);
+        expect(result.allSuccessful, isFalse);
         verifyNever(
           () => localDb.getUnsyncedRecords(
             ownerUserId: any(named: 'ownerUserId'),
@@ -1217,7 +1653,7 @@ void main() {
 
         final result = await reachEngine.syncAll();
 
-        expect(result, isFalse);
+        expect(result.allSuccessful, isFalse);
         verifyNever(
           () => localDb.getUnsyncedRecords(
             ownerUserId: any(named: 'ownerUserId'),
@@ -1228,7 +1664,7 @@ void main() {
     );
 
     test(
-      'syncAll atrapa excepciones críticas dentro del bloque try y retorna false',
+      'syncAll atrapa excepciones críticas dentro del bloque try y retorna allSuccessful = false',
       () async {
         when(
           () => localDb.getUnsyncedRecords(
@@ -1238,7 +1674,7 @@ void main() {
 
         final result = await engine.syncAll();
 
-        expect(result, isFalse);
+        expect(result.allSuccessful, isFalse);
       },
     );
   });
@@ -1497,7 +1933,8 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       when(() => authRepo.currentUser).thenReturn(testUser);
-      await expectLater(engine.syncAll(), completion(isTrue));
+      final result = await engine.syncAll();
+      expect(result.allSuccessful, isTrue);
     });
 
     test(
@@ -1536,5 +1973,47 @@ void main() {
         await syncAllExpectation;
       },
     );
+  });
+
+  group('_scheduleRetry — sesión cerrada durante el ciclo', () {
+    test('si la sesión se cierra a mitad de ciclo no programa reintento aunque '
+        'queden pendientes', () async {
+      var loggedOut = false;
+      when(
+        () => authRepo.currentUser,
+      ).thenAnswer((_) => loggedOut ? null : testUser);
+
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async {
+        loggedOut = true;
+        return <LocalPatientEntry>[];
+      });
+      when(
+        () => localDb.getRetryablePendingCount(
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async => 1);
+
+      final SyncEngine loggedOutEngine = SyncEngine(
+        patientRepository: patientRepo,
+        authRepository: authRepo,
+        localDatabase: localDb,
+        retryBackoff: const <Duration>[Duration(milliseconds: 10)],
+      );
+
+      await loggedOutEngine.syncAll();
+      expect(loggedOutEngine.pendingCount.value, 1);
+
+      clearInteractions(localDb);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      verifyNever(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      );
+      loggedOutEngine.stop();
+    });
   });
 }

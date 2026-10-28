@@ -47,6 +47,8 @@ class _MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class _MockSyncEngine extends Mock implements SyncEngine {}
 
+class _MockSyncResult extends Mock implements SyncResult {}
+
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
 
 class _MockReachability extends Mock implements Reachability {}
@@ -133,7 +135,7 @@ AppScope _defaultScope() {
   final db = _MockLocalDatabase();
   final sync = _MockSyncEngine();
 
-  when(() => sync.syncAll()).thenAnswer((_) async => true);
+  when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
 
   final resolvedReach = _MockReachability();
   when(() => resolvedReach.probe()).thenAnswer((_) async => true);
@@ -225,7 +227,7 @@ void main() {
     testWidgets('shows NFC icon and scan instructions', (tester) async {
       await tester.pumpWidget(_buildApp());
 
-      find.byIcon(Icons.nfc_rounded);
+      expect(find.byIcon(Icons.nfc_rounded), findsOneWidget);
       expect(find.text('Escanear paciente'), findsOneWidget);
       expect(find.textContaining('Acerque el dispositivo NFC'), findsOneWidget);
     });
@@ -455,7 +457,10 @@ void main() {
   group('Success step', () {
     Future<void> fillAndSave(WidgetTester tester, AppScope scope) async {
       when(
-        () => scope.localDatabase.savePatient(any()),
+        () => scope.localDatabase.savePatient(
+          any(),
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
       ).thenAnswer((_) async {});
       when(
         () => scope.localDatabase.markChipsDirty(
@@ -463,7 +468,9 @@ void main() {
           guardian: any(named: 'guardian'),
         ),
       ).thenAnswer((_) async {});
-      when(() => scope.syncEngine.syncAll()).thenAnswer((_) async => true);
+      when(
+        () => scope.syncEngine.syncAll(),
+      ).thenAnswer((_) async => _MockSyncResult());
 
       await tester.pumpWidget(_buildApp(patient: _fakePatient(), scope: scope));
       await tester.pumpAndSettle();
@@ -507,7 +514,10 @@ void main() {
     testWidgets('save failure shows error snackbar', (tester) async {
       final scope = _defaultScope();
       when(
-        () => scope.localDatabase.savePatient(any()),
+        () => scope.localDatabase.savePatient(
+          any(),
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
       ).thenThrow(Exception('disk full'));
 
       await tester.pumpWidget(_buildApp(patient: _fakePatient(), scope: scope));
@@ -530,6 +540,68 @@ void main() {
         findsOneWidget,
       );
     });
+  });
+
+  // ── Widget: persistencia con usuario autenticado ──────────────────────────
+
+  group('Persistencia con usuario autenticado', () {
+    testWidgets(
+      'guardar propaga ownerUserId y organizationId del usuario actual',
+      (tester) async {
+        final scope = _defaultScope();
+        final session = UserSession.fromEmail('capture.test@example.com');
+        final auth = scope.authRepository as _MockAuthRepository;
+        when(() => auth.currentUser).thenReturn(session);
+
+        when(
+          () => scope.localDatabase.savePatient(
+            any(),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+          ),
+        ).thenAnswer((_) async {});
+        when(
+          () => scope.localDatabase.markChipsDirty(
+            any(),
+            guardian: any(named: 'guardian'),
+          ),
+        ).thenAnswer((_) async {});
+        when(
+          () => scope.syncEngine.syncAll(),
+        ).thenAnswer((_) async => _MockSyncResult());
+
+        await tester.pumpWidget(
+          _buildApp(patient: _fakePatient(), scope: scope),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          textFieldWithHint(_hintVaccineName).first,
+          'BCG',
+        );
+        await tester.enterText(textFieldWithHint(_hintCvxCode).first, '19');
+        await tester.enterText(textFieldWithHint(_hintAdminBy), 'Dr. López');
+        await tester.enterText(
+          textFieldWithHint(_hintAdminAt),
+          'Centro de Salud',
+        );
+        await tester.pump();
+
+        await _tapGuardar(tester);
+        await tester.pumpAndSettle();
+
+        final captured = verify(
+          () => scope.localDatabase.savePatient(
+            captureAny(),
+            ownerUserId: captureAny(named: 'ownerUserId'),
+            organizationId: captureAny(named: 'organizationId'),
+          ),
+        ).captured;
+
+        expect(captured[1], session.id);
+        expect(captured[2], session.organizationId);
+      },
+    );
   });
 
   // ── Widget: returnToProfile path & Múltiples Vacunas ──────────────────────
@@ -881,7 +953,10 @@ void main() {
 
         final scope = _defaultScope();
         when(
-          () => scope.localDatabase.savePatient(any()),
+          () => scope.localDatabase.savePatient(
+            any(),
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
         ).thenAnswer((_) async {});
         when(
           () => scope.localDatabase.markChipsDirty(
@@ -892,7 +967,9 @@ void main() {
         when(
           () => scope.syncEngine.refreshPendingCount(),
         ).thenAnswer((_) async => 0);
-        when(() => scope.syncEngine.syncAll()).thenAnswer((_) async => true);
+        when(
+          () => scope.syncEngine.syncAll(),
+        ).thenAnswer((_) async => _MockSyncResult());
 
         await tester.pumpWidget(
           _buildApp(patient: _fakePatient(), scope: scope),
@@ -951,7 +1028,10 @@ void main() {
 
       final scope = _defaultScope();
       when(
-        () => scope.localDatabase.savePatient(any()),
+        () => scope.localDatabase.savePatient(
+          any(),
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
       ).thenAnswer((_) async {});
       when(
         () => scope.localDatabase.markChipsDirty(
@@ -962,7 +1042,9 @@ void main() {
       when(
         () => scope.syncEngine.refreshPendingCount(),
       ).thenAnswer((_) async => 0);
-      when(() => scope.syncEngine.syncAll()).thenAnswer((_) async => true);
+      when(
+        () => scope.syncEngine.syncAll(),
+      ).thenAnswer((_) async => _MockSyncResult());
 
       await tester.pumpWidget(_buildApp(patient: _fakePatient(), scope: scope));
       await tester.pumpAndSettle();
@@ -983,6 +1065,67 @@ void main() {
       expect(backBtn, findsOneWidget);
       await tester.tap(backBtn);
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('guarda la vacuna sobre la versión que leyó del servidor', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final scope = _defaultScope();
+      when(
+        () => scope.localDatabase.savePatient(
+          any(),
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async {});
+      when(
+        () => scope.localDatabase.markChipsDirty(
+          any(),
+          guardian: any(named: 'guardian'),
+        ),
+      ).thenAnswer((_) async {});
+      when(
+        () => scope.syncEngine.refreshPendingCount(),
+      ).thenAnswer((_) async => 0);
+      when(
+        () => scope.syncEngine.syncAll(),
+      ).thenAnswer((_) async => _MockSyncResult());
+
+      await tester.pumpWidget(
+        _buildApp(
+          patient: _fakePatient().copyWith(recordVersion: 6),
+          scope: scope,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(textFieldWithHint(_hintVaccineName).first, 'BCG');
+      await tester.enterText(textFieldWithHint(_hintCvxCode).first, '19');
+      await tester.enterText(textFieldWithHint(_hintAdminBy), 'Dr. Ruiz');
+      await tester.enterText(
+        textFieldWithHint(_hintAdminAt),
+        'Clínica Central',
+      );
+      await tester.pump();
+      await _tapGuardar(tester);
+      await tester.pumpAndSettle();
+
+      final saved =
+          verify(
+                () => scope.localDatabase.savePatient(
+                  captureAny(),
+                  ownerUserId: any(named: 'ownerUserId'),
+                ),
+              ).captured.single
+              as PatientFullRecord;
+      expect(saved.recordVersion, 6);
+      expect(saved.vaccinationRecord, hasLength(1));
     });
 
     testWidgets('Header ejecuta la navegación de regreso', (tester) async {

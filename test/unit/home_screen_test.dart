@@ -287,4 +287,25 @@ void main() {
       expect(_greetingForHour(23), equals('evening'));
     });
   });
+
+  group('HomeScreen._greeting — reloj inyectable (debugNowOverride)', () {
+    int hourFrom(DateTime Function()? override, DateTime real) =>
+        (override?.call() ?? real).hour;
+
+    test('sin override usa la hora real', () {
+      expect(hourFrom(null, DateTime(2025, 1, 1, 9)), equals(9));
+    });
+
+    test('con override ignora la hora real', () {
+      expect(
+        hourFrom(() => DateTime(2025, 1, 1, 20), DateTime(2025, 1, 1, 9)),
+        equals(20),
+      );
+    });
+
+    test('la hora inyectada de la noche cae en la franja evening', () {
+      final hour = hourFrom(() => DateTime(2025, 1, 1, 21), DateTime.now());
+      expect(_greetingForHour(hour), equals('evening'));
+    });
+  });
 }

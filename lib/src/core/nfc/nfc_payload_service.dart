@@ -6,7 +6,9 @@ import 'dart:typed_data';
 import 'package:nfc_manager/ndef_record.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
+import 'nfc_guardian_alias.dart';
 import 'nfc_guardian_payload.dart';
+import 'nfc_keyring.dart' show kLegacyNfcKeyVersion;
 import 'nfc_payload_codec.dart';
 import 'nfc_session_manager.dart';
 import 'nfc_triage_payload.dart';
@@ -48,6 +50,12 @@ GuardianFitBuilder guardianFitBuilder({
 /// MIME type used for HWB NFC payloads.
 const String kHwbNdefMimeType = 'application/vnd.hwb.triage';
 
+Uint8List chipBindingAad(String uid, String mimeType) {
+  return Uint8List.fromList(
+    utf8.encode('hwb-chip-binding|v1|${normalizeNfcUid(uid)}|$mimeType'),
+  );
+}
+
 /// MIME type for the guardian card's bounded full-record payload.
 /// A distinct type lets the reader tell a patient device apart from a
 /// guardian card and pick the right reconstructor.
@@ -63,6 +71,24 @@ class NfcPayloadService {
 
   final NfcPayloadCodec codec;
   final NfcTagSource _tagSource;
+
+  bool get _bindsToChip {
+    final int? version = codec.writeKeyVersion;
+    return version != null && version != kLegacyNfcKeyVersion;
+  }
+
+  Future<NfcDecodeResult?> _decodeFromChip(
+    Uint8List payload,
+    String uid,
+    String mimeType,
+  ) async {
+    final NfcDecodeResult? bound = await codec.decodeDetailed(
+      payload,
+      extraAad: chipBindingAad(uid, mimeType),
+    );
+    if (bound != null) return bound;
+    return codec.decodeDetailed(payload);
+  }
 
   Future<NfcWriteResult> writeTriagePayload(
     Map<String, dynamic> triagePayload, {
@@ -115,9 +141,15 @@ class NfcPayloadService {
   /// estimator already bound; it receives the usable payload budget and returns
   /// the trimmed fit. The resulting [GuardianPayloadFit] rides back on
   /// [NfcWriteResult.fit] so the UI can report any history that was dropped.
+  ///
+  /// Each minor has a guardian device of their own: it holds one copy, and
+  /// offline it opens that copy. With [patientId], a chip that holds another
+  /// patient's copy, or is a patient device, is refused with
+  /// [NfcDeviceInUseException] before anything is written.
   Future<NfcWriteResult> writeGuardianRecord({
     required GuardianFitBuilder buildFit,
     String? expectedUid,
+    String? patientId,
     Duration timeout = NfcSessionManager.defaultTimeout,
     NfcCancelToken? cancel,
     String? alertMessage,
@@ -143,6 +175,9 @@ class NfcPayloadService {
         if (!ndef.isWritable) {
           throw NfcWriteException('Chip is read-only or locked');
         }
+        if (patientId != null) {
+          await _refuseAnotherPatientsDevice(tag, uid, patientId);
+        }
 
         // The MIME record overhead (header + the 28-char type string) comes out
         // of maxSize, so the payload budget is maxSize minus that overhead.
@@ -153,7 +188,12 @@ class NfcPayloadService {
         final payloadBudget = ndef.maxSize - overhead;
 
         final fit = buildFit(payloadBudget);
-        final encrypted = await codec.encode(fit.payload);
+        final encrypted = await codec.encode(
+          fit.payload,
+          extraAad: _bindsToChip
+              ? chipBindingAad(uid, kHwbGuardianMimeType)
+              : null,
+        );
         final message = NdefMessage(
           records: [buildMimeRecord(kHwbGuardianMimeType, encrypted)],
         );
@@ -198,12 +238,21 @@ class NfcPayloadService {
     NfcCancelToken? cancel,
     String? alertMessage,
   }) async {
-    // Encode and frame before asking for the tap: CBOR + DEFLATE + AES-GCM off
-    // the critical path keeps the chip in the field for as little as possible.
-    final encrypted = await codec.encode(payload);
-    final message = NdefMessage(
-      records: [buildMimeRecord(mimeType, encrypted)],
-    );
+    final bool bind = _bindsToChip;
+    Uint8List? preEncrypted;
+    NdefMessage? preMessage;
+
+    if (!bind || (expectedUid != null && expectedUid.isNotEmpty)) {
+      try {
+        preEncrypted = await codec.encode(
+          payload,
+          extraAad: bind ? chipBindingAad(expectedUid!, mimeType) : null,
+        );
+        preMessage = NdefMessage(
+          records: [buildMimeRecord(mimeType, preEncrypted)],
+        );
+      } catch (_) {}
+    }
 
     return _tagSource.withTag<NfcWriteResult>(
       (HwbTag tag) async {
@@ -212,8 +261,8 @@ class NfcPayloadService {
           throw NfcWriteException('Could not read chip UID');
         }
 
-        // Safeguard: never seal one person's data onto a different chip.
         if (expectedUid != null &&
+            expectedUid.isNotEmpty &&
             normalizeNfcUid(uid) != normalizeNfcUid(expectedUid)) {
           throw NfcUidMismatchException(expected: expectedUid, actual: uid);
         }
@@ -230,11 +279,17 @@ class NfcPayloadService {
           throw NfcWriteException('Chip is read-only or locked');
         }
 
-        // Measure the whole NDEF message, not the bare payload. `maxSize` is the
-        // budget for the message, and the MIME record's header plus its 28-byte
-        // type string come out of that budget too. Comparing the payload alone
-        // let a payload that was a few dozen bytes under the limit pass this
-        // check and then fail inside write().
+        final Uint8List encrypted =
+            preEncrypted ??
+            await codec.encode(
+              payload,
+              extraAad: bind ? chipBindingAad(uid, mimeType) : null,
+            );
+
+        final NdefMessage message =
+            preMessage ??
+            NdefMessage(records: [buildMimeRecord(mimeType, encrypted)]);
+
         final needed = message.byteLength;
         if (needed > ndef.maxSize) {
           throw NfcPayloadTooLargeException(
@@ -277,7 +332,7 @@ class NfcPayloadService {
           return NfcReadResult(uid: uid, triage: null);
         }
 
-        final decoded = await codec.decodeDetailed(payload);
+        final decoded = await _decodeFromChip(payload, uid, kHwbNdefMimeType);
         return NfcReadResult(
           uid: uid,
           triage: decoded != null
@@ -310,7 +365,11 @@ class NfcPayloadService {
 
         final guardianPayload = _findRecord(tag, kHwbGuardianMimeType);
         if (guardianPayload != null) {
-          final decoded = await codec.decodeDetailed(guardianPayload);
+          final decoded = await _decodeFromChip(
+            guardianPayload,
+            uid,
+            kHwbGuardianMimeType,
+          );
           return HwbChipReadResult(
             uid: uid,
             kind: decoded != null ? HwbChipKind.guardian : HwbChipKind.none,
@@ -322,7 +381,11 @@ class NfcPayloadService {
 
         final triagePayload = _findRecord(tag, kHwbNdefMimeType);
         if (triagePayload != null) {
-          final decoded = await codec.decodeDetailed(triagePayload);
+          final decoded = await _decodeFromChip(
+            triagePayload,
+            uid,
+            kHwbNdefMimeType,
+          );
           final triage = decoded != null
               ? NfcTriagePayload.fromPayload(decoded.data)
               : null;
@@ -344,6 +407,39 @@ class NfcPayloadService {
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
+
+  /// Throws [NfcDeviceInUseException] when [tag] is a patient device, or a
+  /// guardian device holding the copy of a patient other than [patientId].
+  /// A blank chip, this patient's own copy, or data no key in the ring can
+  /// open (nothing to compare) is let through.
+  Future<void> _refuseAnotherPatientsDevice(
+    HwbTag tag,
+    String uid,
+    String patientId,
+  ) async {
+    final Uint8List? copy = _findRecord(tag, kHwbGuardianMimeType);
+    if (copy != null) {
+      final decoded = await _decodeFromChip(copy, uid, kHwbGuardianMimeType);
+      final String? owner = decoded == null
+          ? null
+          : guardianCopyPatientId(decoded.data);
+      if (owner != null && owner.isNotEmpty && owner != patientId) {
+        throw NfcDeviceInUseException(patientDevice: false);
+      }
+      return;
+    }
+    final Uint8List? triage = _findRecord(tag, kHwbNdefMimeType);
+    if (triage != null &&
+        await _decodeFromChip(triage, uid, kHwbNdefMimeType) != null) {
+      throw NfcDeviceInUseException(patientDevice: true);
+    }
+  }
+
+  /// The `patientId` of a decoded guardian copy, aliased or not.
+  static String? guardianCopyPatientId(Map<String, dynamic> decoded) {
+    final Object? id = unaliasGuardianPayload(decoded)['patientId'];
+    return id is String ? id : null;
+  }
 
   /// Builds the single MIME record HWB writes.
   ///
@@ -452,10 +548,6 @@ class HwbChipReadResult {
 }
 
 // ── Exceptions ──────────────────────────────────────────────────────────────
-//
-// NfcNotAvailableException is re-exported from nfc_session_types.dart above; it
-// used to be declared here *and* in nfc_service_mobile.dart as two unrelated
-// classes with the same name, which any file importing both could not name.
 
 class NfcWriteException implements Exception {
   NfcWriteException(this.message);
@@ -487,10 +579,15 @@ class NfcPayloadTooLargeException implements Exception {
   int get overflowBytes => messageBytes - chipCapacity;
 
   @override
-  String toString() =>
-      'NDEF message needs $messageBytes bytes ($payloadBytes of payload plus '
-      '${messageBytes - payloadBytes} of record overhead) but the chip holds '
-      '$chipCapacity — $overflowBytes over.';
+  String toString() {
+    final bool isNtag213 = chipCapacity <= 180;
+    final String hint = isNtag213
+        ? ' (NTAG213 detected: please use NTAG215/216 wristbands).'
+        : '.';
+    return 'NDEF message needs $messageBytes bytes ($payloadBytes of payload plus '
+        '${messageBytes - payloadBytes} of record overhead) but the chip holds '
+        '$chipCapacity — $overflowBytes over$hint';
+  }
 }
 
 /// Thrown when the tapped chip's UID does not match the expected UID, to avoid
@@ -502,6 +599,21 @@ class NfcUidMismatchException implements Exception {
   @override
   String toString() =>
       'Scanned chip UID ($actual) does not match expected UID ($expected).';
+}
+
+/// Thrown when a chip about to become a guardian device already belongs to
+/// another patient: a patient device, or the guardian device of another minor.
+/// Every minor needs a guardian device of their own.
+class NfcDeviceInUseException implements Exception {
+  NfcDeviceInUseException({required this.patientDevice});
+
+  /// True for a patient device; false for another minor's guardian device.
+  final bool patientDevice;
+
+  @override
+  String toString() => patientDevice
+      ? 'The chip is a patient device.'
+      : "The chip holds another patient's guardian copy.";
 }
 
 class NfcReadException implements Exception {

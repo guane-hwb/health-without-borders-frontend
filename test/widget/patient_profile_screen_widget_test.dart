@@ -36,6 +36,7 @@ import 'package:health_without_borders_frontend/src/features/nfc/presentation/pr
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/profile_banners.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/profile_header.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/reassign_device_dialog.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/sync_conflict_banner.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
@@ -185,6 +186,9 @@ class _FaultyLocalDatabase extends LocalDatabase {
         webRemove: (key) async {
           store.remove(key);
         },
+        webList: (prefix) async => store.entries
+            .where((e) => e.key.startsWith(prefix))
+            .toList(growable: false),
       );
 
   final Map<String, String> _memoryStore;
@@ -271,10 +275,10 @@ class _FakeSyncEngine extends SyncEngine {
   int callCount = 0;
 
   @override
-  Future<bool> syncAll() async {
+  Future<SyncResult> syncAll() async {
     callCount++;
     if (shouldThrow) throw Exception('Error de sincronización simulado');
-    return true;
+    return _FakeSyncResult(true);
   }
 
   @override
@@ -284,24 +288,89 @@ class _FakeSyncEngine extends SyncEngine {
   void stop() {}
 }
 
-class _DelayedFakeSyncEngine extends _FakeSyncEngine {
-  Completer<bool>? _pending;
+class _FakeSyncResult implements SyncResult {
+  _FakeSyncResult(this.success);
+
+  final bool success;
 
   @override
-  Future<bool> syncAll() {
+  dynamic noSuchMethod(Invocation invocation) => success;
+}
+
+class _DelayedFakeSyncEngine extends _FakeSyncEngine {
+  Completer<SyncResult>? _pending;
+
+  @override
+  Future<SyncResult> syncAll() {
     callCount++;
-    _pending = Completer<bool>();
+    _pending = Completer<SyncResult>();
     return _pending!.future;
   }
 
   void complete({bool success = true}) {
-    _pending?.complete(success);
+    _pending?.complete(_FakeSyncResult(success));
     _pending = null;
   }
 
   void fail() {
     _pending?.completeError(Exception('Error de sincronización simulado'));
     _pending = null;
+  }
+}
+
+/// Lets a test announce what the server answered for a record, as
+/// [SyncEngine.savedRecords] does after a sync.
+class _AnnouncingSyncEngine extends _FakeSyncEngine {
+  final StreamController<RecordSyncResult> results =
+      StreamController<RecordSyncResult>.broadcast();
+
+  /// Announced from inside syncAll, before it returns (as the real engine).
+  RecordSyncResult? Function()? onSyncAll;
+
+  Completer<void>? gate;
+
+  @override
+  Stream<RecordSyncResult> get savedRecords => results.stream;
+
+  @override
+  Future<SyncResult> syncAll() async {
+    callCount++;
+    await gate?.future;
+    final RecordSyncResult? result = onSyncAll?.call();
+    if (result != null) {
+      results.add(result);
+      await Future<void>.microtask(() {});
+    }
+    return _FakeSyncResult(true);
+  }
+}
+
+/// A sync outcome whose two flags the profile reads can be set independently
+/// ([_FakeSyncResult] answers every flag with the same value).
+class _SyncOutcome implements SyncResult {
+  _SyncOutcome({required this.clean, required this.blockedOnly});
+
+  final bool clean;
+  final bool blockedOnly;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #isFullyClean) return clean;
+    if (invocation.memberName == #hasBlockedOnly) return blockedOnly;
+    return false;
+  }
+}
+
+class _OutcomeSyncEngine extends _FakeSyncEngine {
+  _OutcomeSyncEngine({required this.clean, required this.blockedOnly});
+
+  final bool clean;
+  final bool blockedOnly;
+
+  @override
+  Future<SyncResult> syncAll() async {
+    callCount++;
+    return _SyncOutcome(clean: clean, blockedOnly: blockedOnly);
   }
 }
 
@@ -527,6 +596,18 @@ Future<void> _pumpScreen(
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 100));
+}
+
+/// Lets a reassignment started in [WidgetTester.runAsync] finish: the fake
+/// web store's lock moves on only when the test pumps.
+Future<void> _settleReassign(WidgetTester tester) async {
+  for (var i = 0; i < 3; i++) {
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+  }
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -1721,6 +1802,10 @@ void main() {
           summary.onReassignDevice!();
           await Future<void>.delayed(const Duration(milliseconds: 200));
         });
+        await _settleReassign(tester);
+        // The guardian device still names the old patient device.
+        expect(find.text('Actualizar los otros dispositivos'), findsOneWidget);
+        await tester.tap(find.text('Más tarde'));
         await tester.pumpAndSettle();
 
         expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
@@ -2968,5 +3053,586 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  });
+  group('Versión del registro y conflicts tras un sync', () {
+    Map<String, dynamic> stored(_FaultyLocalDatabase db) =>
+        jsonDecode(db._memoryStore['patient_pid-001']!) as Map<String, dynamic>;
+
+    /// The copy the engine would send: what the profile last saved.
+    PatientFullRecord sentFrom(_FaultyLocalDatabase db) =>
+        PatientFullRecord.fromJson(stored(db));
+
+    Future<void> addAllergy(WidgetTester tester, String allergen) async {
+      tester
+          .widget<ProfileTabSummary>(find.byType(ProfileTabSummary))
+          .onOpenAllergies();
+      await tester.pumpAndSettle();
+      tester
+          .widget<AllergiesManageSheet>(find.byType(AllergiesManageSheet))
+          .onAdd();
+      await tester.pumpAndSettle();
+      tester
+          .widget<AddAllergySheet>(find.byType(AddAllergySheet))
+          .onAdd(AllergyInfo(category: '02', allergen: allergen));
+      Navigator.of(tester.element(find.byType(AddAllergySheet))).pop();
+      await tester.pumpAndSettle();
+    }
+
+    Future<_Fakes> pump(
+      WidgetTester tester,
+      _AnnouncingSyncEngine engine, {
+      PatientFullRecord? patient,
+      bool offline = false,
+      _FaultyLocalDatabase? db,
+    }) async {
+      late _Fakes fakes;
+      await _pumpScreen(
+        tester,
+        patient ?? _record().copyWith(recordVersion: 4),
+        syncEng: engine,
+        offline: offline,
+        localDatabase: db,
+        onFakesReady: (f) => fakes = f,
+      );
+      await tester.pumpAndSettle();
+      return fakes;
+    }
+
+    testWidgets('la edición siguiente se envía sobre la versión que devolvió '
+        'el sync', (tester) async {
+      final engine = _AnnouncingSyncEngine();
+      final fakes = await pump(tester, engine);
+      engine.onSyncAll = () => RecordSyncResult(
+        patientId: 'pid-001',
+        sent: sentFrom(fakes.db),
+        recordVersion: 5,
+      );
+
+      await addAllergy(tester, 'Maní');
+      expect(stored(fakes.db)['baseVersion'], 4);
+
+      await addAllergy(tester, 'Polen');
+      expect(stored(fakes.db)['baseVersion'], 5);
+    });
+
+    testWidgets('una edición hecha mientras el sync estaba en vuelo se '
+        'vuelve a guardar sobre la versión nueva', (tester) async {
+      final engine = _AnnouncingSyncEngine();
+      final fakes = await pump(tester, engine);
+
+      // El sync queda realmente en vuelo: no termina (ni resetea el borrador
+      // como "sincronizado") hasta que se libere la compuerta.
+      engine.gate = Completer<void>();
+
+      await addAllergy(tester, 'Maní');
+      final PatientFullRecord inFlight = sentFrom(fakes.db);
+      await addAllergy(tester, 'Polen');
+      expect(stored(fakes.db)['baseVersion'], 4);
+
+      // Emitir el resultado del sync en vuelo y permitir el procesamiento de la microtarea
+      engine.results.add(
+        RecordSyncResult(
+          patientId: 'pid-001',
+          sent: inFlight,
+          recordVersion: 5,
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(stored(fakes.db)['baseVersion'], 5);
+      expect(stored(fakes.db)['allergies'], hasLength(2));
+
+      engine.gate!.complete();
+      await tester.pumpAndSettle();
+      await engine.results.close();
+    });
+
+    testWidgets('un resultado de otro paciente no cambia nada', (tester) async {
+      final engine = _AnnouncingSyncEngine();
+      final fakes = await pump(tester, engine);
+      await addAllergy(tester, 'Maní');
+      final int savesBefore = fakes.db.savePatientCallCount;
+
+      engine.results.add(
+        RecordSyncResult(
+          patientId: 'otro',
+          sent: _record().copyWith(patientId: 'otro'),
+          recordVersion: 9,
+          conflicts: const <String>['stale_payload_base_version'],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(fakes.db.savePatientCallCount, savesBefore);
+      expect(find.byType(SyncConflictBanner), findsOneWidget);
+      expect(
+        find.text('El servidor no aplicó todos los cambios'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('con conflicts y registro del servidor, muestra ese registro '
+        'y pide actualizar los chips', (tester) async {
+      final engine = _AnnouncingSyncEngine();
+      final db = _FaultyLocalDatabase();
+      await db.markChipsDirty('pid-001', patient: true, guardian: true);
+      final fakes = await pump(tester, engine, db: db);
+      final PatientFullRecord sent = PatientFullRecord.fromJson(
+        _record().copyWith(recordVersion: 4).toJson(),
+      );
+      await fakes.db.addSyncNotice(
+        patientId: 'pid-001',
+        patientName: 'Juan Pérez',
+        codes: const <String>['stale_payload_base_version'],
+      );
+
+      engine.results.add(
+        RecordSyncResult(
+          patientId: 'pid-001',
+          sent: sent,
+          recordVersion: 7,
+          conflicts: const <String>['stale_payload_base_version'],
+          serverRecord: _record(
+            allergies: [AllergyInfo(category: '01', allergen: 'Penicilina')],
+          ).copyWith(recordVersion: 7),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Penicilina'), findsWidgets);
+      expect(
+        find.text('El servidor no aplicó todos los cambios'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Lo que ve es la versión del servidor'),
+        findsOneWidget,
+      );
+      expect(find.byType(NfcStaleBanner), findsOneWidget);
+
+      await addAllergy(tester, 'Maní');
+      expect(stored(fakes.db)['baseVersion'], 7);
+    });
+
+    testWidgets('con conflicts sin registro del servidor, pide escanear de '
+        'nuevo y no ofrece grabar los chips con la copia vieja', (
+      tester,
+    ) async {
+      final engine = _AnnouncingSyncEngine();
+      final db = _FaultyLocalDatabase();
+      await db.markChipsDirty('pid-001', patient: true, guardian: true);
+      final fakes = await pump(tester, engine, db: db);
+      expect(find.byType(NfcStaleBanner), findsOneWidget);
+      await fakes.db.addSyncNotice(
+        patientId: 'pid-001',
+        patientName: 'Juan Pérez',
+        codes: const <String>['visit_edit_not_applied:enc-1'],
+      );
+
+      engine.results.add(
+        RecordSyncResult(
+          patientId: 'pid-001',
+          sent: PatientFullRecord.fromJson(
+            _record().copyWith(recordVersion: 4).toJson(),
+          ),
+          recordVersion: 7,
+          conflicts: const <String>['visit_edit_not_applied:enc-1'],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('La corrección de una consulta ya registrada NO'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Escanee de nuevo el dispositivo del paciente'),
+        findsOneWidget,
+      );
+      expect(find.byType(NfcStaleBanner), findsNothing);
+
+      // The copy keeps its old base: what is edited next is merged.
+      await addAllergy(tester, 'Maní');
+      expect(stored(fakes.db)['baseVersion'], 4);
+    });
+
+    testWidgets('Entendido descarta el aviso también en la cola', (
+      tester,
+    ) async {
+      final db = _FaultyLocalDatabase();
+      await db.addSyncNotice(
+        patientId: 'pid-001',
+        patientName: 'Juan Pérez',
+        codes: const <String>['stale_payload_retired_device_uid'],
+      );
+      await _pumpScreen(
+        tester,
+        _record(),
+        localDatabase: db,
+        syncEng: _AnnouncingSyncEngine(),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('dispositivo ya retirado'), findsOneWidget);
+
+      await tester.tap(find.text('Entendido'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('dispositivo ya retirado'), findsNothing);
+      expect(await db.getSyncNotices(), isEmpty);
+    });
+
+    testWidgets('un sync manual con conflicts no muestra "cambios guardados"', (
+      tester,
+    ) async {
+      final engine = _AnnouncingSyncEngine();
+      final fakes = await pump(tester, engine);
+
+      final messenger = ScaffoldMessenger.of(
+        tester.element(find.byType(PatientProfileScreen)),
+      );
+      messenger.clearSnackBars();
+      await tester.pumpAndSettle();
+
+      engine.onSyncAll = () => RecordSyncResult(
+        patientId: 'pid-001',
+        sent: sentFrom(fakes.db),
+        recordVersion: 7,
+        conflicts: const <String>['stale_payload_base_version'],
+      );
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('un sync manual sin conflicts sí muestra "cambios guardados"', (
+      tester,
+    ) async {
+      final engine = _AnnouncingSyncEngine();
+      final fakes = await pump(tester, engine);
+      engine.onSyncAll = () => RecordSyncResult(
+        patientId: 'pid-001',
+        sent: sentFrom(fakes.db),
+        recordVersion: 5,
+      );
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(stored(fakes.db)['baseVersion'], 4);
+      await addAllergy(tester, 'Maní');
+      expect(stored(fakes.db)['baseVersion'], 5);
+    });
+
+    testWidgets('tras reasignar, el borrador es el registro reasignado: su '
+        'sync no lo re-guarda con el dispositivo viejo', (tester) async {
+      final engine = _AnnouncingSyncEngine();
+      late _Fakes fakes;
+      await _pumpScreen(
+        tester,
+        _record().copyWith(recordVersion: 4),
+        allowReassign: true,
+        syncEng: engine,
+        onFakesReady: (f) => fakes = f,
+      );
+      PatientProfileScreen.showReassignDeviceDialogImpl =
+          (context, {required isEs, required hasG1, required hasG2}) async =>
+              const ReassignSelection(
+                targets: [ReassignTarget.patient],
+                reason: 'lost',
+              );
+      PatientProfileScreen.executeReassignOneImpl =
+          ({
+            required context,
+            required target,
+            required record,
+            required codec,
+            required isEs,
+            required showSnack,
+          }) async => record.copyWith(deviceUid: 'dev-NEW');
+      engine.onSyncAll = () => RecordSyncResult(
+        patientId: 'pid-001',
+        sent: sentFrom(fakes.db),
+        recordVersion: 5,
+      );
+
+      await tester.runAsync(() async {
+        tester
+            .widget<ProfileTabSummary>(find.byType(ProfileTabSummary))
+            .onReassignDevice!();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await _settleReassign(tester);
+      await tester.tap(find.text('Más tarde'));
+      await tester.pumpAndSettle();
+      final int savesAfterReassign = fakes.db.savePatientCallCount;
+      expect(stored(fakes.db)['device_uid'], 'dev-NEW');
+
+      await addAllergy(tester, 'Maní');
+
+      expect(fakes.db.savePatientCallCount, greaterThan(savesAfterReassign));
+      expect(stored(fakes.db)['device_uid'], 'dev-NEW');
+      expect(stored(fakes.db)['baseVersion'], 5);
+    });
+  });
+  group('Reasignar deja marcados los otros dispositivos del paciente', () {
+    Future<_Fakes> reassign(
+      WidgetTester tester, {
+      required List<ReassignTarget> targets,
+      PatientFullRecord? patient,
+      List<Map<String, bool>>? writes,
+    }) async {
+      late _Fakes fakes;
+      await _pumpScreen(
+        tester,
+        patient ?? _record(),
+        allowReassign: true,
+        onFakesReady: (f) => fakes = f,
+      );
+      PatientProfileScreen.showReassignDeviceDialogImpl =
+          (context, {required isEs, required hasG1, required hasG2}) async =>
+              ReassignSelection(targets: targets, reason: 'lost');
+      PatientProfileScreen.executeReassignOneImpl =
+          ({
+            required context,
+            required target,
+            required record,
+            required codec,
+            required isEs,
+            required showSnack,
+          }) async => switch (target) {
+            ReassignTarget.patient => record.copyWith(deviceUid: 'dev-NEW'),
+            ReassignTarget.guardian1 => record.copyWith(
+              guardianInfo: record.guardianInfo.copyWith(deviceUid: 'gdev-NEW'),
+            ),
+            ReassignTarget.guardian2 => record,
+          };
+      PatientProfileScreen.executeUpdateNfcChipsImpl =
+          ({
+            required context,
+            required record,
+            required keyring,
+            required patientChipDirty,
+            required guardianChipDirty,
+          }) async {
+            writes?.add(<String, bool>{
+              'patient': patientChipDirty,
+              'guardian': guardianChipDirty,
+            });
+            return true;
+          };
+
+      await tester.runAsync(() async {
+        tester
+            .widget<ProfileTabSummary>(find.byType(ProfileTabSummary))
+            .onReassignDevice!();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await _settleReassign(tester);
+      return fakes;
+    }
+
+    testWidgets('cambiar el dispositivo del guardián ofrece grabar ya el del '
+        'paciente, que lo nombra', (tester) async {
+      final writes = <Map<String, bool>>[];
+      final fakes = await reassign(
+        tester,
+        targets: [ReassignTarget.guardian1],
+        writes: writes,
+      );
+
+      expect(find.text('Actualizar los otros dispositivos'), findsOneWidget);
+      await tester.tap(find.text('Grabar ahora'));
+      await _settleReassign(tester);
+
+      expect(writes, [
+        {'patient': true, 'guardian': false},
+      ]);
+      expect(await fakes.db.getChipStatus('pid-001'), isNull);
+      expect(find.byType(NfcStaleBanner), findsNothing);
+      // The old guardian device is refused offline from now on.
+      expect(await fakes.db.isDeviceRetired('gdev-001'), isTrue);
+      expect(await fakes.db.isDeviceRetired('gdev-NEW'), isFalse);
+    });
+
+    testWidgets('cambiar el dispositivo del paciente deja marcados los del '
+        'guardián; "Más tarde" los deja en el aviso', (tester) async {
+      final writes = <Map<String, bool>>[];
+      final fakes = await reassign(
+        tester,
+        targets: [ReassignTarget.patient],
+        writes: writes,
+      );
+
+      await tester.tap(find.text('Más tarde'));
+      await _settleReassign(tester);
+
+      expect(writes, isEmpty);
+      final status = await fakes.db.getChipStatus('pid-001');
+      expect(status?.patientChipDirty, isFalse);
+      expect(status?.guardianChipDirty, isTrue);
+      expect(find.byType(NfcStaleBanner), findsOneWidget);
+      expect(await fakes.db.isDeviceRetired('dev-001'), isTrue);
+    });
+
+    testWidgets('sin otros dispositivos que lo nombren, no pregunta nada', (
+      tester,
+    ) async {
+      await reassign(
+        tester,
+        targets: [ReassignTarget.patient],
+        patient: _record(
+          guardian: GuardianInfo(
+            name: 'Guardia 1',
+            relationship: '01',
+            phone: '123',
+          ),
+        ),
+      );
+
+      expect(find.text('Actualizar los otros dispositivos'), findsNothing);
+      expect(find.byType(NfcStaleBanner), findsNothing);
+    });
+  });
+
+  group('Cobertura 100% — rol sin permiso y resultados de sync', () {
+    final List<UserRole> blockedRoles = UserRole.values
+        .where((UserRole r) => !r.canSyncPatient)
+        .toList();
+
+    test('hay al menos un rol sin permiso para sincronizar dispositivos', () {
+      expect(
+        blockedRoles,
+        isNotEmpty,
+        reason:
+            'si todos los roles pueden sincronizar, la rama es inalcanzable',
+      );
+    });
+
+    testWidgets('reasignar con un rol sin permiso avisa y no abre el diálogo', (
+      tester,
+    ) async {
+      for (final UserRole role in blockedRoles) {
+        var dialogCalls = 0;
+        await _pumpScreen(tester, _record(), allowReassign: true, role: role);
+        PatientProfileScreen.showReassignDeviceDialogImpl =
+            (context, {required isEs, required hasG1, required hasG2}) async {
+              dialogCalls++;
+              return null;
+            };
+
+        tester
+            .widget<ProfileTabSummary>(find.byType(ProfileTabSummary))
+            .onReassignDevice!();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Tu rol no permite reasignar o sincronizar dispositivos.'),
+          findsOneWidget,
+          reason: 'rol $role',
+        );
+        expect(dialogCalls, 0, reason: 'rol $role');
+
+        await tester.pumpWidget(const SizedBox());
+      }
+    });
+
+    testWidgets('el aviso de rol sin permiso también sale en inglés', (
+      tester,
+    ) async {
+      await _pumpScreen(
+        tester,
+        _record(),
+        allowReassign: true,
+        role: blockedRoles.first,
+        locale: 'en',
+      );
+
+      tester
+          .widget<ProfileTabSummary>(find.byType(ProfileTabSummary))
+          .onReassignDevice!();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Your role is not authorized to reassign or sync devices.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sync con registro retenido por conflicto permanente (ES)', (
+      tester,
+    ) async {
+      final engine = _OutcomeSyncEngine(clean: false, blockedOnly: true);
+      await _pumpScreen(tester, _record(), syncEng: engine);
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(engine.callCount, 1);
+      expect(
+        find.text(
+          'El registro quedó retenido con conflicto permanente (ej. 409). '
+          'Revise la cola de sincronización.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Fallo al sincronizar.'), findsNothing);
+    });
+
+    testWidgets('sync con registro retenido por conflicto permanente (EN)', (
+      tester,
+    ) async {
+      final engine = _OutcomeSyncEngine(clean: false, blockedOnly: true);
+      await _pumpScreen(tester, _record(), syncEng: engine, locale: 'en');
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Record blocked due to permanent error (e.g. 409). '
+          'Check the sync queue.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sync incompleto avisa que se reintentará (ES)', (
+      tester,
+    ) async {
+      final engine = _OutcomeSyncEngine(clean: false, blockedOnly: false);
+      await _pumpScreen(tester, _record(), syncEng: engine);
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(engine.callCount, 1);
+      expect(
+        find.text(
+          'No se pudo completar la sincronización. '
+          'Se reintentará automáticamente.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sync incompleto avisa que se reintentará (EN)', (
+      tester,
+    ) async {
+      final engine = _OutcomeSyncEngine(clean: false, blockedOnly: false);
+      await _pumpScreen(tester, _record(), syncEng: engine, locale: 'en');
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Sync incomplete. It will retry automatically.'),
+        findsOneWidget,
+      );
+    });
   });
 }

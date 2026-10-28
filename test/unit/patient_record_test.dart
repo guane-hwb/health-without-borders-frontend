@@ -1,5 +1,7 @@
 // test/unit/patient_record_test.dart
 
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
@@ -142,7 +144,7 @@ void main() {
       'firstLastName': 'García',
       'firstName': 'Ana',
       'dob': '2019-05-05',
-      'nationalityCode': ?nationalityCode,
+      'nationalityCode': nationalityCode,
       'biologicalSex': 'F',
       'address': <String, dynamic>{'city': 'Cúcuta', 'state': 'N. Santander'},
     };
@@ -360,6 +362,33 @@ void main() {
       expect(json.containsKey('height'), isTrue);
     });
 
+    test('toJson envía la comunidad étnica con un solo nombre', () {
+      final json = PatientInfo(
+        identification: _buildId(),
+        firstLastName: 'García',
+        firstName: 'Ana',
+        dob: '2000-01-15',
+        biologicalSex: 'F',
+        ethnicCommunity: 'Wayúu',
+        address: _buildAddress(),
+      ).toJson();
+      expect(json['ethnicCommunity'], 'Wayúu');
+      expect(json.containsKey('ethnic_community'), isFalse);
+    });
+
+    test('fromJson lee ethnicCommunity de /scan', () {
+      final info = PatientInfo.fromJson(<String, dynamic>{
+        'identification': {'documentType': 'CC', 'documentNumber': '1'},
+        'firstLastName': 'García',
+        'firstName': 'Ana',
+        'dob': '2000-01-15',
+        'biologicalSex': 'F',
+        'ethnicCommunity': 'Wayúu',
+        'address': {'city': 'Riohacha', 'state': 'La Guajira'},
+      });
+      expect(info.ethnicCommunity, 'Wayúu');
+    });
+
     test('toJson — campos opcionales ausentes no aparecen', () {
       final info = PatientInfo(
         identification: _buildId(),
@@ -419,6 +448,16 @@ void main() {
       final json = consent.toJson();
       expect(json.containsKey('email'), isFalse);
       expect(json.containsKey('signatureBase64'), isFalse);
+    });
+
+    test('policyVersion se envía y se lee de vuelta', () {
+      final json = GuardianConsent(
+        accepted: true,
+        acceptedAt: '2024-01-01',
+        policyVersion: 'v1.1',
+      ).toJson();
+      expect(json['policyVersion'], 'v1.1');
+      expect(GuardianConsent.fromJson(json).policyVersion, 'v1.1');
     });
   });
 
@@ -885,7 +924,7 @@ void main() {
       final ce = ClinicalEvaluation.fromJson(<String, dynamic>{
         'historyOfCurrentIllness': 'Fiebre 3 días',
         'generalPhysicalExamination': 'Normal',
-        'systemsExamination': 'Sin alteraciones',
+        'systemsExamination': 'Sin alterations',
         'treatmentPlanObservations': 'Reposo',
       });
       expect(ce.historyOfCurrentIllness, 'Fiebre 3 días');
@@ -1387,6 +1426,30 @@ void main() {
       expect(json.containsKey('guardian2Info'), isFalse);
       expect(json.containsKey('backgroundHistory'), isFalse);
     });
+
+    test('fromJson — lee recordVersion de /scan y /search', () {
+      final json = _buildMinimal().toJson()..['recordVersion'] = 7;
+      expect(PatientFullRecord.fromJson(json).recordVersion, 7);
+    });
+
+    test('toJson envía la versión como baseVersion y sin recordVersion', () {
+      final json = _buildMinimal().copyWith(recordVersion: 7).toJson();
+      expect(json['baseVersion'], 7);
+      expect(json.containsKey('recordVersion'), isFalse);
+      expect(_buildMinimal().toJson().containsKey('baseVersion'), isFalse);
+    });
+
+    test('la versión sobrevive a toJson/fromJson (cola local y dispositivo '
+        'del guardián guardan toJson)', () {
+      final stored = jsonDecode(
+        jsonEncode(_buildMinimal().copyWith(recordVersion: 7).toJson()),
+      );
+      final restored = PatientFullRecord.fromJson(
+        stored as Map<String, dynamic>,
+      );
+      expect(restored.recordVersion, 7);
+      expect(restored.toJson()['baseVersion'], 7);
+    });
   });
 
   // =========================================================================
@@ -1440,6 +1503,28 @@ void main() {
         'stale_payload_retired_device_uid',
         'guardians_not_changed_by_tag_resolved_sync',
       ]);
+    });
+
+    test('fromJson — lee record_version y el registro fusionado', () {
+      final r = PatientSyncResponse.fromJson(<String, dynamic>{
+        'status': 'success',
+        'internal_id': 'int-001',
+        'message': 'ok',
+        'record_version': 8,
+        'conflicts': <String>['stale_payload_base_version'],
+        'record': _buildMinimal().toJson()..['recordVersion'] = 8,
+      });
+      expect(r.recordVersion, 8);
+      expect(r.record?.patientId, 'pid-001');
+      expect(r.record?.recordVersion, 8);
+    });
+
+    test('fromJson — sin registro fusionado, record es null', () {
+      final r = PatientSyncResponse.fromJson(<String, dynamic>{
+        'status': 'success',
+        'record_version': 8,
+      });
+      expect(r.record, isNull);
     });
   });
 
@@ -1805,9 +1890,20 @@ void main() {
         documentNumber: '123',
         name: 'Dr. Smith',
       );
-      final copy = prac.copyWith(firstName: 'John');
+      final copy = prac.copyWith(
+        firstName: 'John',
+        secondName: 'Edward',
+        firstLastName: 'Smith',
+        secondLastName: 'Doe',
+      );
 
       expect(copy.firstName, 'John');
+      expect(copy.secondName, 'Edward');
+      expect(copy.firstLastName, 'Smith');
+      expect(copy.secondLastName, 'Doe');
+
+      final copyNoArgs = prac.copyWith();
+      expect(copyNoArgs.firstName, prac.firstName);
 
       final prac2 = PractitionerInfo(
         documentType: 'CC',
@@ -1822,9 +1918,16 @@ void main() {
   group('ProviderInfo — copyWith, operator ==, hashCode', () {
     test('copyWith, operator == y hashCode', () {
       final prov = ProviderInfo(repsCode: 'REP1', name: 'Hospital');
-      final copy = prov.copyWith(nitNumber: '900123');
+      final copy = prov.copyWith(
+        nitNumber: '900123',
+        locationSeatCode: 'SEAT01',
+      );
 
       expect(copy.nitNumber, '900123');
+      expect(copy.locationSeatCode, 'SEAT01');
+
+      final copyNoArgs = prov.copyWith();
+      expect(copyNoArgs.nitNumber, prov.nitNumber);
 
       final prov2 = ProviderInfo(repsCode: 'REP1', name: 'Hospital');
       expect(prov, equals(prov2));
@@ -1913,6 +2016,81 @@ void main() {
         expect(serialized['prescriptions'], isA<List<dynamic>>());
       },
     );
+
+    test('copyWith sobreescribe todos los parametros opcionales', () {
+      final original = MedicalHistoryItem(startDateTime: '2026-09-18T10:00:00');
+
+      final copy = original.copyWith(
+        encounterIdentifier: 'enc-123',
+        type: 'Emergency',
+        startDateTime: '2026-09-18T11:00:00',
+        endDateTime: '2026-09-18T12:00:00',
+        careModality: '02',
+        serviceGroup: '02',
+        careEnvironment: '01',
+        entryRoute: '02',
+        externalCause: '02',
+        provider: ProviderInfo(repsCode: 'REP2', name: 'Clínica 2'),
+        practitioner: PractitionerInfo(
+          documentType: 'CC',
+          documentNumber: '456',
+          name: 'Dra. Ana',
+        ),
+        location: 'Piso 2',
+        physician: 'Dra. Ana',
+        clinicalEvaluation: ClinicalEvaluation(
+          historyOfCurrentIllness: 'Dolor',
+        ),
+        diagnosis: [DiagnosisItem(icd10Code: 'K219', description: 'Reflujo')],
+        diagnosisType: '02',
+        dischargeDisposition: '02',
+        riskFactors: [RiskFactor(type: '02', name: 'Sedentarismo')],
+        incapacity: IncapacityInfo(scope: '01', days: 2),
+        payer: PayerInfo(code: 'EPS2', name: 'Compensar'),
+        externalCauseDisplay: 'Enfermedad general',
+        healthcareServiceCode: '102',
+        healthcareServiceDisplay: 'Urgencias',
+        cupsCode: '890201',
+        cupsDisplay: 'Consulta de urgencias',
+        occupation: '01',
+        occupationDescription: 'Docente',
+        prescriptions: [
+          MedicationRequestItem(medicationName: 'Omeprazol', dosage: '20mg'),
+        ],
+      );
+
+      expect(copy.encounterIdentifier, 'enc-123');
+      expect(copy.type, 'Emergency');
+      expect(copy.startDateTime, '2026-09-18T11:00:00');
+      expect(copy.endDateTime, '2026-09-18T12:00:00');
+      expect(copy.careModality, '02');
+      expect(copy.serviceGroup, '02');
+      expect(copy.careEnvironment, '01');
+      expect(copy.entryRoute, '02');
+      expect(copy.externalCause, '02');
+      expect(copy.provider?.repsCode, 'REP2');
+      expect(copy.practitioner?.documentNumber, '456');
+      expect(copy.location, 'Piso 2');
+      expect(copy.physician, 'Dra. Ana');
+      expect(copy.clinicalEvaluation.historyOfCurrentIllness, 'Dolor');
+      expect(copy.diagnosis.first.icd10Code, 'K219');
+      expect(copy.diagnosisType, '02');
+      expect(copy.dischargeDisposition, '02');
+      expect(copy.riskFactors.first.name, 'Sedentarismo');
+      expect(copy.incapacity?.days, 2);
+      expect(copy.payer?.code, 'EPS2');
+      expect(copy.externalCauseDisplay, 'Enfermedad general');
+      expect(copy.healthcareServiceCode, '102');
+      expect(copy.healthcareServiceDisplay, 'Urgencias');
+      expect(copy.cupsCode, '890201');
+      expect(copy.cupsDisplay, 'Consulta de urgencias');
+      expect(copy.occupation, '01');
+      expect(copy.occupationDescription, 'Docente');
+      expect(copy.prescriptions.first.medicationName, 'Omeprazol');
+
+      final copyNoArgs = original.copyWith();
+      expect(copyNoArgs.startDateTime, original.startDateTime);
+    });
   });
 
   group('PatientFullRecord — copyWith, operator == y hashCode', () {

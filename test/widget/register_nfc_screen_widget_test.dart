@@ -3,6 +3,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'
+    show MissingPluginException, PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -10,6 +12,9 @@ import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_service.dart'
+    show NfcService;
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
@@ -46,7 +51,44 @@ class MockStatsRepository extends Mock implements StatsRepository {}
 
 class MockNfcKeyring extends Mock implements NfcKeyring {}
 
+class _FakeSyncResult extends Fake implements SyncResult {}
+
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
+
+class _FakeNfcWriteResult extends Fake implements NfcWriteResult {}
+
+class _FakeLocalEntry extends Fake implements LocalPatientEntry {
+  _FakeLocalEntry({required this.patientId, required this.isSynced});
+
+  @override
+  final String patientId;
+
+  @override
+  final bool isSynced;
+}
+
+class _FakeNfcService extends Fake implements NfcPayloadService {
+  final List<Map<dynamic, dynamic>> triagePayloads = <Map<dynamic, dynamic>>[];
+  final List<String?> triageUids = <String?>[];
+  final List<String?> guardianUids = <String?>[];
+  final List<String?> guardianPatientIds = <String?>[];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    final Map<Symbol, dynamic> named = invocation.namedArguments;
+    if (invocation.memberName == #writeTriagePayload) {
+      triagePayloads.add(invocation.positionalArguments.first as Map);
+      triageUids.add(named[#expectedUid] as String?);
+      return Future<NfcWriteResult>.value(_FakeNfcWriteResult());
+    }
+    if (invocation.memberName == #writeGuardianRecord) {
+      guardianUids.add(named[#expectedUid] as String?);
+      guardianPatientIds.add(named[#patientId] as String?);
+      return Future<NfcWriteResult>.value(_FakeNfcWriteResult());
+    }
+    return super.noSuchMethod(invocation);
+  }
+}
 
 class _TestLocaleWrapper extends StatefulWidget {
   const _TestLocaleWrapper({required this.initialLocale, required this.child});
@@ -150,7 +192,7 @@ void main() {
         guardian: any(named: 'guardian'),
       ),
     ).thenAnswer((_) async {});
-    when(() => sync.syncAll()).thenAnswer((_) async => true);
+    when(() => sync.syncAll()).thenAnswer((_) async => _FakeSyncResult());
     when(() => sync.pendingCount).thenReturn(ValueNotifier<int>(0));
     when(() => sync.blockedCount).thenReturn(ValueNotifier<int>(0));
     when(() => sync.refreshPendingCount()).thenAnswer((_) async {});
@@ -308,6 +350,62 @@ void main() {
         expect(find.text('1/4'), findsNothing);
       },
     );
+  });
+
+  group('RegisterNfcScreen — un dispositivo del guardián por menor', () {
+    const String inUse =
+        'Este dispositivo ya pertenece a otro paciente. Cada menor necesita '
+        'su propio dispositivo del guardián: use uno en blanco.';
+
+    tearDown(() {
+      RegisterNfcScreen.overrideReadHwbChip = null;
+      NfcService.overrideReadDeviceUid = null;
+    });
+
+    Future<String?> readFromStep2(WidgetTester tester) async {
+      await pumpScreen(tester);
+      await goToStep1(tester);
+      final step2 = tester.widget<Step2Guardian>(find.byType(Step2Guardian));
+      String? uid;
+      await tester.runAsync(() async => uid = await step2.readDevice!());
+      await tester.pump();
+      return uid;
+    }
+
+    testWidgets('acepta un dispositivo en blanco', (tester) async {
+      when(() => auth.getNfcKeyring()).thenAnswer(
+        (_) async => NfcKeyring.single(List.filled(32, 'ab').join()),
+      );
+      RegisterNfcScreen.overrideReadHwbChip = () async =>
+          const HwbChipReadResult(uid: '04:AA:BB', kind: HwbChipKind.none);
+
+      expect(await readFromStep2(tester), '04:AA:BB');
+      expect(find.text(inUse), findsNothing);
+    });
+
+    for (final HwbChipKind kind in <HwbChipKind>[
+      HwbChipKind.guardian,
+      HwbChipKind.triage,
+    ]) {
+      testWidgets('rechaza un dispositivo que ya es de un paciente ($kind)', (
+        tester,
+      ) async {
+        when(() => auth.getNfcKeyring()).thenAnswer(
+          (_) async => NfcKeyring.single(List.filled(32, 'ab').join()),
+        );
+        RegisterNfcScreen.overrideReadHwbChip = () async =>
+            HwbChipReadResult(uid: '04:CC:DD', kind: kind);
+
+        expect(await readFromStep2(tester), isNull);
+        expect(find.text(inUse), findsOneWidget);
+      });
+    }
+
+    testWidgets('sin llave NFC solo lee el UID', (tester) async {
+      NfcService.overrideReadDeviceUid = () async => '04:EE:FF';
+
+      expect(await readFromStep2(tester), '04:EE:FF');
+    });
   });
 
   group('RegisterNfcScreen — _isMinor', () {
@@ -907,6 +1005,369 @@ void main() {
           find.text('No se pudo actualizar el registro en este dispositivo.'),
           findsOneWidget,
         );
+      },
+    );
+  });
+
+  group('RegisterNfcScreen — Cobertura adicional (_stepBack, _persistLocally, '
+      'lector real de chip)', () {
+    tearDown(() {
+      RegisterNfcScreen.overrideReadHwbChip = null;
+      NfcService.overrideReadDeviceUid = null;
+    });
+
+    testWidgets(
+      '_stepBack en el paso 0 con formulario vacío vuelve a Home sin diálogo',
+      (tester) async {
+        await pumpScreen(tester);
+        expect(find.byType(Step3PatientData), findsOneWidget);
+
+        tester.widget<Step3PatientData>(find.byType(Step3PatientData)).onBack();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsNothing);
+        expect(find.byType(RegisterNfcScreen), findsNothing);
+        expect(find.byType(HomeScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '_stepBack en el paso 0 con datos pide confirmar y al descartar vuelve '
+      'a Home',
+      (tester) async {
+        await pumpScreen(tester);
+        final step3 = tester.widget<Step3PatientData>(
+          find.byType(Step3PatientData),
+        );
+        step3.draft.firstName = 'Juan';
+
+        step3.onBack();
+        await tester.pumpAndSettle();
+        expect(find.text('¿Descartar registro?'), findsOneWidget);
+
+        await tester.tap(find.text('Descartar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RegisterNfcScreen), findsNothing);
+        expect(find.byType(HomeScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '_persistLocally restaura la sesión cuando currentUser es nulo',
+      (tester) async {
+        await pumpScreen(tester);
+        await advanceToHub(tester);
+
+        tester
+            .widget<Step6Success>(find.byType(Step6Success))
+            .onAddConsultation();
+        await pumpFrames(tester);
+        expect(find.byType(AddConsultationScreen), findsOneWidget);
+
+        when(() => auth.currentUser).thenReturn(null);
+
+        Navigator.of(tester.element(find.byType(AddConsultationScreen))).pop(
+          MedicalHistoryItem(startDateTime: DateTime.now().toIso8601String()),
+        );
+        await tester.pumpAndSettle();
+
+        verify(() => auth.restoreSession()).called(greaterThanOrEqualTo(1));
+        verify(() => db.getAllRecords(ownerUserId: 'u1')).called(1);
+        expect(find.byType(Step6Success), findsOneWidget);
+      },
+    );
+
+    testWidgets('con llave NFC y sin override, _readNewGuardianDevice usa '
+        'NfcPayloadService.readHwbChip', (tester) async {
+      when(() => auth.getNfcKeyring()).thenAnswer(
+        (_) async => NfcKeyring.single(List.filled(32, 'ab').join()),
+      );
+      RegisterNfcScreen.overrideReadHwbChip = null;
+
+      await pumpScreen(tester);
+      await goToStep1(tester);
+      final step2 = tester.widget<Step2Guardian>(find.byType(Step2Guardian));
+
+      final originalOnError = FlutterError.onError;
+      FlutterError.onError = (FlutterErrorDetails details) {
+        if (details.exception is PlatformException) return;
+        originalOnError?.call(details);
+      };
+      try {
+        await tester.runAsync(() async {
+          try {
+            await step2.readDevice!().timeout(const Duration(seconds: 3));
+          } catch (_) {}
+        });
+        await tester.pump();
+      } finally {
+        FlutterError.onError = originalOnError;
+      }
+
+      verify(() => auth.getNfcKeyring()).called(greaterThanOrEqualTo(1));
+      expect(RegisterNfcScreen.overrideReadHwbChip, isNull);
+    });
+  });
+
+  group('RegisterNfcScreen — escritura real de chips al finalizar', () {
+    final validHexKey = List.filled(32, 'ab').join();
+
+    Future<void> finishSheet(WidgetTester tester) async {
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Empezar'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    late _FakeNfcService service;
+
+    setUp(() {
+      service = _FakeNfcService();
+      RegisterNfcScreen.overrideServiceBuilder = (_) => service;
+      when(
+        () => auth.getNfcKeyring(),
+      ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
+    });
+
+    tearDown(() {
+      RegisterNfcScreen.overrideServiceBuilder = null;
+    });
+
+    testWidgets('graba el dispositivo del paciente y limpia su marca', (
+      tester,
+    ) async {
+      await pumpScreen(tester);
+      await advanceToHub(tester);
+      final PatientFullRecord saved = tester
+          .widget<Step6Success>(find.byType(Step6Success))
+          .patient;
+
+      tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+      await tester.pump();
+      await tester.pump();
+      await finishSheet(tester);
+      await tester.pumpAndSettle();
+
+      expect(service.triageUids, <String?>[saved.deviceUid]);
+      expect(service.triagePayloads, hasLength(1));
+      expect(service.guardianUids, isEmpty);
+      verify(
+        () => db.clearChipsDirty(saved.patientId, patient: true),
+      ).called(1);
+      verify(() => sync.syncAll()).called(1);
+      expect(
+        tester.widget<Step6Success>(find.byType(Step6Success)).sealed,
+        isTrue,
+      );
+    });
+
+    testWidgets('graba también el dispositivo del guardián del paciente', (
+      tester,
+    ) async {
+      await pumpScreen(tester);
+      tester
+              .widget<Step3PatientData>(find.byType(Step3PatientData))
+              .draft
+              .guardianDeviceUid =
+          'AA:BB:CC:DD';
+      await advanceToHub(tester);
+      final PatientFullRecord saved = tester
+          .widget<Step6Success>(find.byType(Step6Success))
+          .patient;
+
+      tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+      await tester.pump();
+      await tester.pump();
+      await finishSheet(tester);
+      await finishSheet(tester);
+      await tester.pumpAndSettle();
+
+      expect(service.triageUids, hasLength(1));
+      expect(service.guardianUids, <String?>['AA:BB:CC:DD']);
+      expect(service.guardianPatientIds, <String?>[saved.patientId]);
+      verify(
+        () => db.clearChipsDirty(saved.patientId, guardian: true),
+      ).called(1);
+      expect(
+        tester.widget<Step6Success>(find.byType(Step6Success)).sealed,
+        isTrue,
+      );
+    });
+
+    testWidgets('con dos guardianes graba ambos dispositivos en orden', (
+      tester,
+    ) async {
+      await pumpScreen(tester);
+      final Step3PatientData step3 = tester.widget<Step3PatientData>(
+        find.byType(Step3PatientData),
+      );
+      step3.draft.guardianDeviceUid = 'AA:BB:CC:DD';
+      step3.draft.guardian2Name = 'Carlos Torres';
+      step3.draft.guardian2DeviceUid = 'EE:FF:00:11';
+      await advanceToHub(tester);
+
+      tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+      await tester.pump();
+      await tester.pump();
+      await finishSheet(tester);
+      await finishSheet(tester);
+      await finishSheet(tester);
+      await tester.pumpAndSettle();
+
+      expect(service.triageUids, hasLength(1));
+      expect(service.guardianUids, <String?>['AA:BB:CC:DD', 'EE:FF:00:11']);
+      verify(() => sync.syncAll()).called(1);
+      expect(
+        tester.widget<Step6Success>(find.byType(Step6Success)).sealed,
+        isTrue,
+      );
+    });
+  });
+
+  group('RegisterNfcScreen — _persistLocally con registro ya guardado', () {
+    Future<void> addConsultationAndReturn(WidgetTester tester) async {
+      tester
+          .widget<Step6Success>(find.byType(Step6Success))
+          .onAddConsultation();
+      await pumpFrames(tester);
+      Navigator.of(tester.element(find.byType(AddConsultationScreen))).pop(
+        MedicalHistoryItem(startDateTime: DateTime.now().toIso8601String()),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'conserva isSynced=true si el registro ya estaba sincronizado',
+      (tester) async {
+        await pumpScreen(tester);
+        await advanceToHub(tester);
+        final String patientId = tester
+            .widget<Step6Success>(find.byType(Step6Success))
+            .patient
+            .patientId;
+        when(
+          () => db.getAllRecords(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer(
+          (_) async => <LocalPatientEntry>[
+            _FakeLocalEntry(patientId: 'otro-paciente', isSynced: false),
+            _FakeLocalEntry(patientId: patientId, isSynced: true),
+          ],
+        );
+
+        await addConsultationAndReturn(tester);
+
+        verify(
+          () => db.savePatient(
+            any(),
+            ownerUserId: 'u1',
+            organizationId: 'org-1',
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+            isSynced: true,
+          ),
+        ).called(1);
+        expect(find.byType(Step6Success), findsOneWidget);
+      },
+    );
+
+    testWidgets('mantiene isSynced=false si el registro estaba pendiente', (
+      tester,
+    ) async {
+      await pumpScreen(tester);
+      await advanceToHub(tester);
+      final String patientId = tester
+          .widget<Step6Success>(find.byType(Step6Success))
+          .patient
+          .patientId;
+      when(
+        () => db.getAllRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer(
+        (_) async => <LocalPatientEntry>[
+          _FakeLocalEntry(patientId: patientId, isSynced: false),
+        ],
+      );
+
+      await addConsultationAndReturn(tester);
+
+      verify(
+        () => db.savePatient(
+          any(),
+          ownerUserId: 'u1',
+          organizationId: 'org-1',
+          retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          isSynced: false,
+        ),
+      ).called(2);
+    });
+  });
+
+  group('RegisterNfcScreen — cobertura final', () {
+    final validHexKey = List.filled(32, 'ab').join();
+
+    tearDown(() {
+      RegisterNfcScreen.overrideServiceBuilder = null;
+    });
+
+    testWidgets(
+      '_finalize sin registro guardado vuelve a Home (antes coverage:ignore)',
+      (tester) async {
+        await pumpScreen(tester);
+        expect(find.byType(Step3PatientData), findsOneWidget);
+
+        final dynamic state = tester.state(find.byType(RegisterNfcScreen));
+        await state.finalizeForTest();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RegisterNfcScreen), findsNothing);
+        expect(find.byType(HomeScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'sin overrideServiceBuilder, makeService() construye NfcPayloadService real',
+      (tester) async {
+        RegisterNfcScreen.overrideServiceBuilder = null;
+        when(
+          () => auth.getNfcKeyring(),
+        ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
+
+        await pumpScreen(tester);
+        await advanceToHub(tester);
+
+        final originalOnError = FlutterError.onError;
+        FlutterError.onError = (FlutterErrorDetails details) {
+          if (details.exception is PlatformException ||
+              details.exception is MissingPluginException) {
+            return;
+          }
+          originalOnError?.call(details);
+        };
+
+        try {
+          tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+          await tester.pump();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.pump(const Duration(milliseconds: 300));
+
+          await tester.tap(find.text('Empezar'));
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 200)),
+          );
+          await tester.pump(const Duration(milliseconds: 800));
+
+          final nav = Navigator.of(tester.element(find.byType(Step6Success)));
+          nav.pop(false);
+          await tester.pumpAndSettle();
+        } finally {
+          FlutterError.onError = originalOnError;
+        }
+
+        verify(() => auth.getNfcKeyring()).called(greaterThanOrEqualTo(1));
+        expect(RegisterNfcScreen.overrideServiceBuilder, isNull);
+        expect(find.byType(Step6Success), findsOneWidget);
       },
     );
   });

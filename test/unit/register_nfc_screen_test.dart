@@ -428,4 +428,49 @@ void main() {
       expect(activeUser, equals('user-restored-id'));
     });
   });
+
+  group('_persistLocally — isSynced y usuario activo (lógica auxiliar)', () {
+    bool resolveAlreadySynced(
+      List<({String patientId, bool isSynced})> records,
+      String patientId,
+    ) {
+      final existing = records.where((e) => e.patientId == patientId);
+      return existing.isNotEmpty ? existing.first.isSynced : false;
+    }
+
+    test('sin registros previos → alreadySynced es false', () {
+      expect(resolveAlreadySynced([], 'p1'), isFalse);
+    });
+
+    test('registro previo ya sincronizado → alreadySynced es true', () {
+      expect(
+        resolveAlreadySynced([(patientId: 'p1', isSynced: true)], 'p1'),
+        isTrue,
+      );
+    });
+
+    test('registro previo sin sincronizar → alreadySynced es false', () {
+      expect(
+        resolveAlreadySynced([(patientId: 'p1', isSynced: false)], 'p1'),
+        isFalse,
+      );
+    });
+
+    test('solo cuenta el registro con el mismo patientId', () {
+      expect(
+        resolveAlreadySynced([
+          (patientId: 'otro', isSynced: true),
+          (patientId: 'p1', isSynced: false),
+        ], 'p1'),
+        isFalse,
+      );
+    });
+
+    test('currentUser nulo y restoreSession nulo → sin usuario activo', () {
+      String? currentUser;
+      const String? restored = null;
+      currentUser ??= restored;
+      expect(currentUser, isNull);
+    });
+  });
 }

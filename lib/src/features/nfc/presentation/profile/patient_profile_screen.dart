@@ -11,6 +11,7 @@ import '../../../../core/nfc/nfc_keyring.dart';
 import '../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../core/nfc/nfc_triage_payload.dart';
 import '../../../../core/storage/local_database.dart';
+import '../../../../core/sync/sync_engine.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../../design/tokens/app_colors.dart';
 import '../../../../shared/widgets/screen_bottom_handle.dart';
@@ -19,16 +20,7 @@ import '../../domain/patient_record.dart';
 import '../add_consultation_screen.dart';
 import '../add_vaccine_screen.dart';
 import 'patient_profile_helpers.dart';
-import 'sheets/add_allergy_sheet.dart';
-import 'sheets/add_chronic_condition_sheet.dart';
-import 'sheets/add_family_history_sheet.dart';
-import 'sheets/add_medication_sheet.dart';
-import 'sheets/allergies_manage_sheet.dart';
-import 'sheets/background_manage_sheet.dart';
-import 'sheets/edit_address_sheet.dart';
-import 'sheets/edit_chronic_personal_sheet.dart';
-import 'sheets/edit_guardian_sheet.dart';
-import 'sheets/edit_vital_signs_sheet.dart';
+import 'patient_profile_sheets.dart';
 import 'state/patient_draft_controller.dart';
 import 'tabs/profile_tab_consultations.dart';
 import 'tabs/profile_tab_summary.dart';
@@ -38,6 +30,7 @@ import 'widgets/profile_header.dart';
 import 'widgets/profile_nfc_actions.dart';
 import 'widgets/profile_tabs_bar.dart';
 import 'widgets/reassign_device_dialog.dart';
+import 'widgets/sync_conflict_banner.dart';
 
 /// Canonical patient profile screen.
 class PatientProfileScreen extends StatefulWidget {
@@ -114,6 +107,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   bool _lastSaveFailed = false;
   late StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
+  StreamSubscription<RecordSyncResult>? _savedRecordsSub;
+  SyncResultEffect? _conflictEffect;
+
+  bool _conflictsDuringSync = false;
 
   @override
   void initState() {
@@ -132,6 +129,9 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (!_chipStatusLoaded) {
       _chipStatusLoaded = true;
       _loadChipStatus(AppScope.of(context).localDatabase);
+      _savedRecordsSub = AppScope.of(
+        context,
+      ).syncEngine.savedRecords.listen(_onRecordSaved);
     }
   }
 
@@ -139,6 +139,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   void dispose() {
     _tabController.dispose();
     _connectivitySubscription.cancel();
+    _savedRecordsSub?.cancel();
     _draftController.removeListener(_onDraftChanged);
     _draftController.dispose();
     super.dispose();
@@ -146,6 +147,20 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
   void _onDraftChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onRecordSaved(RecordSyncResult result) {
+    if (!mounted) return;
+    final effect = _draftController.applySyncResult(result);
+    final scope = AppScope.of(context);
+    if (result.hasConflicts && effect != SyncResultEffect.ignored) {
+      _conflictsDuringSync = true;
+      setState(() => _conflictEffect = effect);
+      unawaited(_loadChipStatus(scope.localDatabase));
+    } else if (effect == SyncResultEffect.resaveDraft && !widget.readOnly) {
+      final user = scope.authRepository.currentUser;
+      unawaited(resavePendingDraft(scope.localDatabase, user, _draft));
+    }
   }
 
   Future<void> _checkInitialConnectivity() async {
@@ -252,8 +267,6 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
       await _loadChipStatus(scope.localDatabase);
     } finally {
-      // Without this the button stays disabled until the screen is rebuilt if
-      // anything above throws.
       if (mounted) setState(() => _isUpdatingChips = false);
     }
   }
@@ -317,8 +330,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
     setState(() => _isUpdatingChips = true);
     var record = _draft;
-    var patientDone = false;
-    var guardianDone = false;
+    final List<ReassignTarget> done = <ReassignTarget>[];
 
     for (final target in selection.targets) {
       final updated = await PatientProfileScreen.executeReassignOneImpl(
@@ -332,22 +344,23 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       if (!mounted) return;
       if (updated == null) break;
       record = updated;
-      if (target == ReassignTarget.patient) {
-        patientDone = true;
-      } else {
-        guardianDone = true;
-      }
+      done.add(target);
     }
 
     if (!mounted) return;
+    final bool patientDone = done.contains(ReassignTarget.patient);
+    final bool guardianDone = done.any((t) => t != ReassignTarget.patient);
     if (!patientDone && !guardianDone) {
       setState(() => _isUpdatingChips = false);
       return;
     }
 
     try {
+      final currentUser = scope.authRepository.currentUser;
       await scope.localDatabase.savePatient(
         record,
+        ownerUserId: currentUser?.id,
+        organizationId: currentUser?.organizationId,
         retiredDeviceReason: selection.reason,
       );
       await scope.localDatabase.clearChipsDirty(
@@ -355,9 +368,26 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         patient: patientDone,
         guardian: guardianDone,
       );
+      // The devices that were not written still name the old one.
+      final g1 = (record.guardianInfo.deviceUid ?? '').trim().isNotEmpty;
+      final g2 = (record.guardian2Info?.deviceUid ?? '').trim().isNotEmpty;
+      final stale = devicesStaleAfterReassign(
+        done: done,
+        hasGuardianDevice: g1 || g2,
+        hasTwoGuardianDevices: g1 && g2,
+      );
+      await scope.localDatabase.markChipsDirty(
+        record.patientId,
+        patient: stale.patient,
+        guardian: stale.guardian,
+      );
+      // Refused offline from now on, before the server's list brings them.
+      await scope.localDatabase.markDevicesRetired(
+        devicesReplacedByReassign(before: _draft, after: record),
+      );
       if (!mounted) return;
       setState(() {
-        _draftController.markSynced();
+        _draftController.reset(record);
         _isUpdatingChips = false;
       });
       await _loadChipStatus(scope.localDatabase);
@@ -367,6 +397,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       _showReassignSnack(
         isEs ? 'Dispositivo reasignado.' : 'Device reassigned.',
       );
+      if ((stale.patient || stale.guardian) &&
+          await confirmRewriteOtherDevices(context, isEs: isEs)) {
+        await _updateNfcChips();
+      }
     } catch (e, stack) {
       AppLogger.e('Fallo al reasignar', error: e, stackTrace: stack);
       if (!mounted) return;
@@ -546,21 +580,49 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
       );
 
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
-      final bool ok = await scope.syncEngine.syncAll();
+      _conflictsDuringSync = false;
+      final syncResult = await scope.syncEngine.syncAll();
       if (!mounted) return;
-      if (ok) _draftController.markSynced();
+      final bool hadConflicts = _conflictsDuringSync;
+
+      if (syncResult.isFullyClean) {
+        _draftController.reset(_draft);
+      }
       setState(() => _isSyncing = false);
+
       if (!silent) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              ok
-                  ? AppStrings.of(context).savedChangesMsg
-                  : (isEs ? 'Fallo al sincronizar.' : 'Sync failed.'),
+        if (syncResult.isFullyClean) {
+          if (!hadConflicts) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(AppStrings.of(context).savedChangesMsg),
+                backgroundColor: AppColors.success,
+              ),
+            );
+          }
+        } else if (syncResult.hasBlockedOnly) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isEs
+                    ? 'El registro quedó retenido con conflicto permanente (ej. 409). Revise la cola de sincronización.'
+                    : 'Record blocked due to permanent error (e.g. 409). Check the sync queue.',
+              ),
+              backgroundColor: Colors.orange.shade800,
             ),
-            backgroundColor: ok ? AppColors.success : AppColors.error,
-          ),
-        );
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isEs
+                    ? 'No se pudo completar la sincronización. Se reintentará automáticamente.'
+                    : 'Sync incomplete. It will retry automatically.',
+              ),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -607,167 +669,28 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (result != null && result.isNotEmpty) _addVaccines(result);
   }
 
-  Future<void> _openVitalSignsSheet() async {
-    if (widget.readOnly) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => EditVitalSignsSheet(
-        weight: _draft.patientInfo.weight,
-        height: _draft.patientInfo.height,
-        bloodType: _draft.patientInfo.bloodType,
-        previousWeight: _original.patientInfo.weight,
-        previousHeight: _original.patientInfo.height,
-        onConfirm: _updateVitalSigns,
-      ),
-    );
-  }
-
-  Future<void> _openAddressSheet() async {
-    if (widget.readOnly) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => EditAddressSheet(
-        address: _draft.patientInfo.address,
-        onConfirm: _updateAddress,
-      ),
-    );
-  }
-
-  Future<void> _openGuardianSheet(int guardianIndex) async {
-    if (widget.readOnly) return;
-    final GuardianInfo? current = guardianIndex == 1
-        ? _draft.guardianInfo
-        : _draft.guardian2Info;
-    if (current == null) return;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      enableDrag: false,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => EditGuardianSheet(
-        guardian: current,
-        guardianIndex: guardianIndex,
-        onConfirm: (updated) {
-          _draftController.updateGuardian(guardianIndex, updated);
-          unawaited(_saveAndPendingSync());
-        },
-      ),
-    );
-  }
-
-  Future<void> _openEditPersonalSheet() async {
-    if (widget.readOnly) return;
-    final bg = _draft.backgroundHistory ?? BackgroundHistory();
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => EditChronicPersonalSheet(
-        title: AppStrings.of(context).personalHistoryTitle,
-        currentValue: bg.personalHistory,
-        onConfirm: (text) => _updateBackground(personalHistory: text),
-      ),
-    );
-  }
-
-  Future<void> _openAddChronicConditionSheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AddChronicConditionSheet(onAdd: _addChronicCondition),
-    );
-  }
-
-  Future<void> _openAddMedicationSheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AddMedicationSheet(onAdd: _addMedication),
-    );
-  }
-
-  Future<void> _openAddFamilyHistorySheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AddFamilyHistorySheet(onAdd: _addFamilyHistory),
-    );
-  }
-
-  Future<void> _openAddAllergySheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AddAllergySheet(onAdd: _addAllergy),
-    );
-  }
-
   void _openAllergiesSheet() {
     if (widget.readOnly) return;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AllergiesManageSheet(
-        allergies: _draft.allergies,
-        onAdd: () async {
-          Navigator.of(context).pop();
-          await _openAddAllergySheet();
-        },
-        onRemove: (i) {
-          _removeAllergy(i);
-          Navigator.of(context).pop();
-        },
-      ),
+    PatientProfileSheets.openAllergiesSheet(
+      context,
+      draft: _draft,
+      onRemove: _removeAllergy,
+      onAddAllergy: _addAllergy,
     );
   }
 
   void _openBackgroundSheet() {
     if (widget.readOnly) return;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => BackgroundManageSheet(
-        draft: _draft,
-        onAddChronic: () {
-          Navigator.of(context).pop();
-          _openAddChronicConditionSheet();
-        },
-        onRemoveChronic: (i) {
-          _removeChronicCondition(i);
-          Navigator.of(context).pop();
-        },
-        onEditPersonal: () {
-          Navigator.of(context).pop();
-          _openEditPersonalSheet();
-        },
-        onAddFamily: () {
-          Navigator.of(context).pop();
-          _openAddFamilyHistorySheet();
-        },
-        onRemoveFamily: (i) {
-          _removeFamilyHistory(i);
-          Navigator.of(context).pop();
-        },
-        onAddMedication: () {
-          Navigator.of(context).pop();
-          _openAddMedicationSheet();
-        },
-        onRemoveMedication: (i) {
-          _removeMedication(i);
-          Navigator.of(context).pop();
-        },
-      ),
+    PatientProfileSheets.openBackgroundSheet(
+      context,
+      draft: _draft,
+      onAddChronic: _addChronicCondition,
+      onRemoveChronic: _removeChronicCondition,
+      onEditPersonal: (text) => _updateBackground(personalHistory: text),
+      onAddFamily: _addFamilyHistory,
+      onRemoveFamily: _removeFamilyHistory,
+      onAddMedication: _addMedication,
+      onRemoveMedication: _removeMedication,
     );
   }
 
@@ -798,10 +721,21 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                 if (widget.emergency) const EmergencyBanner(),
                 if (!_hasInternet || widget.offline)
                   OfflineBanner(isDynamicDisconnect: !_hasInternet),
-                if (!widget.readOnly && (_chipStatus?.anyDirty ?? false))
+                if (!widget.readOnly &&
+                    (_chipStatus?.anyDirty ?? false) &&
+                    _conflictEffect != SyncResultEffect.conflictsKept)
                   NfcStaleBanner(
                     isUpdating: _isUpdatingChips,
                     onUpdate: _updateNfcChips,
+                  ),
+                if (_draft.patientId.isNotEmpty)
+                  SyncConflictBanner(
+                    patientId: _draft.patientId,
+                    serverCopyShown:
+                        _conflictEffect == SyncResultEffect.replacedByServer ||
+                        (_conflictEffect == null &&
+                            !widget.offline &&
+                            !widget.readOnly),
                   ),
                 Expanded(
                   child: TabBarView(
@@ -814,9 +748,29 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
                             !widget.readOnly &&
                             (_currentRole.canAddConsultation ||
                                 _currentRole.canAddVaccine),
-                        onEditVitalSigns: _openVitalSignsSheet,
-                        onEditAddress: _openAddressSheet,
-                        onEditGuardian: _openGuardianSheet,
+                        onEditVitalSigns: () =>
+                            PatientProfileSheets.openVitalSignsSheet(
+                              context,
+                              draft: _draft,
+                              original: _original,
+                              onConfirm: _updateVitalSigns,
+                            ),
+                        onEditAddress: () =>
+                            PatientProfileSheets.openAddressSheet(
+                              context,
+                              address: _draft.patientInfo.address,
+                              onConfirm: _updateAddress,
+                            ),
+                        onEditGuardian: (i) =>
+                            PatientProfileSheets.openGuardianSheet(
+                              context,
+                              draft: _draft,
+                              guardianIndex: i,
+                              onConfirm: (updated) {
+                                _draftController.updateGuardian(i, updated);
+                                unawaited(_saveAndPendingSync());
+                              },
+                            ),
                         onOpenAllergies: _openAllergiesSheet,
                         onOpenBackground: _openBackgroundSheet,
                         onReassignDevice:

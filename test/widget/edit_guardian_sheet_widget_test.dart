@@ -948,4 +948,248 @@ void main() {
       },
     );
   });
+
+  group('EditGuardianSheet — Cobertura 100% (Firma, Checkbox y Errores)', () {
+    testWidgets(
+      'Ejecuta gestos de firma (onPanStart, onPanUpdate, onPanEnd) y _clearSignature',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(
+              name: 'María García',
+              docNumber: '1234567890',
+              consent: fakeConsent,
+            ),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final formFields = find.byType(TextFormField);
+        await tester.enterText(formFields.at(0), 'Carlos Ruiz');
+        await tester.enterText(formFields.at(2), '9876543210');
+        await tester.pumpAndSettle();
+
+        final signaturePad = find.byType(CustomPaint).last;
+        await tester.ensureVisible(signaturePad);
+
+        final TestGesture gesture = await tester.startGesture(
+          tester.getCenter(signaturePad),
+        );
+        await tester.pump();
+
+        await gesture.moveBy(const Offset(30, 0));
+        await tester.pump();
+
+        await gesture.moveBy(const Offset(0, 30));
+        await tester.pump();
+
+        await gesture.up();
+        await tester.pumpAndSettle();
+
+        final clearBtn = find.text('Limpiar firma');
+        await tester.ensureVisible(clearBtn);
+        await tester.tap(clearBtn);
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'Tocar el texto contenedor del Checkbox (_AuthCheckbox) conmuta la aceptación',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(
+              name: 'María García',
+              docNumber: '1234567890',
+              consent: fakeConsent,
+            ),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final formFields = find.byType(TextFormField);
+        await tester.enterText(formFields.at(0), 'Carlos Ruiz');
+        await tester.enterText(formFields.at(2), '9876543210');
+        await tester.pumpAndSettle();
+
+        final checkboxFinder = find.byType(Checkbox);
+        await tester.ensureVisible(checkboxFinder);
+
+        Checkbox checkboxWidget = tester.widget<Checkbox>(checkboxFinder);
+        expect(checkboxWidget.value, isFalse);
+
+        await tester.tap(checkboxFinder);
+        await tester.pumpAndSettle();
+
+        checkboxWidget = tester.widget<Checkbox>(checkboxFinder);
+        expect(checkboxWidget.value, isTrue);
+      },
+    );
+
+    testWidgets(
+      'Muestra el mensaje de error cuando falta la Autorización de política de privacidad',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(
+              name: 'María García',
+              docNumber: '1234567890',
+              consent: fakeConsent,
+            ),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final formFields = find.byType(TextFormField);
+        await tester.enterText(formFields.at(0), 'Carlos Ruiz');
+        await tester.enterText(formFields.at(2), '9876543210');
+        await tester.pumpAndSettle();
+
+        final gestureDetectors = tester.widgetList<GestureDetector>(
+          find.byType(GestureDetector),
+        );
+        final signatureDetector = gestureDetectors.firstWhere(
+          (g) => g.onPanStart != null,
+        );
+
+        const offsetInitial = Offset(10, 10);
+        const offsetMove = Offset(20, 20);
+
+        signatureDetector.onPanStart?.call(
+          DragStartDetails(
+            localPosition: offsetInitial,
+            globalPosition: offsetInitial,
+          ),
+        );
+        signatureDetector.onPanUpdate?.call(
+          DragUpdateDetails(
+            localPosition: offsetMove,
+            globalPosition: offsetMove,
+          ),
+        );
+        signatureDetector.onPanEnd?.call(DragEndDetails());
+        await tester.pumpAndSettle();
+
+        final confirmBtn = find.text(sEs.confirmChanges);
+        await tester.ensureVisible(confirmBtn);
+        await tester.tap(confirmBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('Autorización de política de privacidad'),
+          findsOneWidget,
+        );
+      },
+    );
+  });
+
+  group(
+    'EditGuardianSheet — Limpiar firma y toque en el texto de autorización',
+    () {
+      Future<void> openAuthSection(WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(
+              name: 'María García',
+              docNumber: '1234567890',
+              consent: fakeConsent,
+            ),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+            locale: 'es',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final formFields = find.byType(TextFormField);
+        await tester.enterText(formFields.at(0), 'Carlos Ruiz');
+        await tester.enterText(formFields.at(2), '9876543210');
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets(
+        'Limpiar firma borra los trazos y vuelve a mostrar "Firmar aquí"',
+        (tester) async {
+          await openAuthSection(tester);
+
+          final signatureDetector = tester
+              .widgetList<GestureDetector>(find.byType(GestureDetector))
+              .firstWhere((g) => g.onPanStart != null);
+
+          signatureDetector.onPanStart?.call(
+            DragStartDetails(
+              localPosition: const Offset(10, 10),
+              globalPosition: const Offset(10, 10),
+            ),
+          );
+          signatureDetector.onPanUpdate?.call(
+            DragUpdateDetails(
+              localPosition: const Offset(40, 40),
+              globalPosition: const Offset(40, 40),
+            ),
+          );
+          signatureDetector.onPanEnd?.call(DragEndDetails());
+          await tester.pumpAndSettle();
+
+          expect(find.text('Firmar aquí'), findsNothing);
+
+          final clearBtn = find.text('Limpiar firma');
+          await tester.ensureVisible(clearBtn);
+          await tester.tap(clearBtn);
+          await tester.pumpAndSettle();
+
+          expect(find.text('Firmar aquí'), findsOneWidget);
+        },
+      );
+
+      testWidgets('Tocar el texto de autorización conmuta el checkbox', (
+        tester,
+      ) async {
+        await openAuthSection(tester);
+
+        final authText = find.textContaining(
+          'El guardián reconoce haber leído',
+          findRichText: true,
+        );
+        await tester.ensureVisible(authText);
+        await tester.pumpAndSettle();
+
+        expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
+
+        await tester.tapAt(tester.getTopLeft(authText) + const Offset(8, 8));
+        await tester.pumpAndSettle();
+
+        expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+      });
+    },
+  );
 }

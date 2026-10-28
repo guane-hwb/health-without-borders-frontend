@@ -85,7 +85,9 @@ try {
 
 ## Timeout
 
-All requests have a **20-second** timeout. After this time, `http.Client` throws a `TimeoutException` that repositories must catch.
+All requests have a **20-second** timeout by default. After this time, `http.Client` throws a `TimeoutException` that repositories must catch.
+
+`POST /api/v1/patients/sync` uses **90 seconds** (`PatientRepository.syncTimeout`): the server codes diagnoses with the LLM and writes to the FHIR Store inside the request (p95 25.6 s, up to 68 s in production). A timeout does not mean the record was not saved; the sync engine retries, which is safe, and the retry may come back with `stale_payload_base_version`.
 
 ## HTTP Client Injection (testing)
 

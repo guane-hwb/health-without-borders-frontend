@@ -6,13 +6,16 @@ import 'dart:typed_data';
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show TargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride, kIsWeb;
+import 'package:flutter/services.dart' show MethodCall, MethodChannel;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:health_without_borders_frontend/src/core/nfc/retired_device_hash.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 
@@ -875,7 +878,15 @@ void main() {
       test(
         'registros legados sin owner_user_id siguen siendo visibles',
         () async {
-          await localDb.savePatient(_buildRecord(patientId: 'p-legacy'));
+          final raw = await rawConnection();
+          await raw.insert('local_patients', <String, Object?>{
+            'patient_id': 'p-legacy',
+            'device_uid': 'dev-legacy',
+            'patient_name': 'Legacy',
+            'record_json': '{}',
+            'is_synced': 0,
+            'created_at': DateTime.now().toIso8601String(),
+          });
 
           final forAnyUser = await localDb.getAllRecords();
 
@@ -1668,6 +1679,11 @@ void main() {
         )).map((r) => r['name'] as String).toSet();
         expect(tables, contains('nfc_chip_status'));
         expect(tables, contains('emergency_access_log'));
+        expect(tables, contains('sync_notices'));
+        expect(
+          tables,
+          containsAll(<String>['retired_devices', 'retired_devices_cursor']),
+        );
 
         final emergencyColumns = (await raw.rawQuery(
           'PRAGMA table_info(emergency_access_log)',
@@ -1773,6 +1789,17 @@ void main() {
         expect(await localDb.getBlockedCount(ownerUserId: 'u1'), equals(1));
       },
     );
+
+    test('un 503 sync_in_progress sigue pendiente, no bloqueado', () async {
+      await localDb.savePatient(
+        _buildRecord(patientId: 'p-503'),
+        ownerUserId: 'u1',
+      );
+      await localDb.markSyncError('p-503', 'sync_in_progress', statusCode: 503);
+
+      expect(await localDb.getRetryablePendingCount(ownerUserId: 'u1'), 1);
+      expect(await localDb.getBlockedCount(ownerUserId: 'u1'), 0);
+    });
 
     test(
       'getRetryablePendingCount y getBlockedCount filtran por ownerUserId',
@@ -2722,42 +2749,20 @@ void main() {
     );
 
     test(
-      'getOrphanedPendingCount cuenta pacientes huérfanos en Nativo y Web',
+      'savePatient rechaza guardar sin ownerUserId y getOrphanedPendingCount reporta 0',
       () async {
         final dbNative = LocalDatabase.instance;
         await dbNative.clearAll();
-        await dbNative.savePatient(
-          _buildRecord(patientId: 'p-orph-1'),
-          ownerUserId: null,
-        );
-        await dbNative.savePatient(
-          _buildRecord(patientId: 'p-orph-2'),
-          ownerUserId: 'owner-1',
+
+        expect(
+          () => dbNative.savePatient(
+            _buildRecord(patientId: 'p-orph-1'),
+            ownerUserId: null,
+          ),
+          throwsA(isA<ArgumentError>()),
         );
 
-        expect(await dbNative.getOrphanedPendingCount(), equals(1));
-
-        final webBackend = <String, String>{};
-        final dbWeb = LocalDatabase.forTesting(
-          secureStorage: mockStorage,
-          forceWeb: true,
-          webGet: (k) async => webBackend[k],
-          webSet: (k, v) async => webBackend[k] = v,
-          webList: (prefix) async => webBackend.entries
-              .where((e) => e.key.startsWith(prefix))
-              .toList(),
-        );
-
-        await dbWeb.savePatient(
-          _buildRecord(patientId: 'w-orph-1'),
-          ownerUserId: null,
-        );
-        await dbWeb.savePatient(
-          _buildRecord(patientId: 'w-orph-2'),
-          ownerUserId: 'owner-1',
-        );
-
-        expect(await dbWeb.getOrphanedPendingCount(), equals(1));
+        expect(await dbNative.getOrphanedPendingCount(), equals(0));
       },
     );
 
@@ -3496,32 +3501,6 @@ void main() {
     });
 
     test(
-      'si falla el traslado de la base, sigue en la ruta heredada sin perder datos',
-      () async {
-        await seedLegacyInstall('m-11');
-        final File staging = File('${protectedDbPath()}.migrating');
-        if (staging.existsSync()) await staging.delete();
-
-        for (final db in openedDbs) {
-          await db.closeForTesting();
-        }
-
-        await Directory(
-          '${protectedDbPath()}.migrating',
-        ).create(recursive: true);
-
-        final LocalDatabase db = iosDb();
-        final List<LocalPatientEntry> all = await db.getAllRecords(
-          ownerUserId: 'u1',
-        );
-
-        expect(all.map((LocalPatientEntry e) => e.patientId), <String>['m-11']);
-        expect(File(legacyDbPath()).existsSync(), isTrue);
-        expect(File(protectedDbPath()).existsSync(), isFalse);
-      },
-    );
-
-    test(
       'en otras plataformas no toca el almacén heredado ni cambia la ruta',
       () async {
         final LocalDatabase db = LocalDatabase.forTesting(
@@ -3545,4 +3524,1056 @@ void main() {
       },
     );
   });
+
+  // ── Versión del registro y avisos de sincronización ──────────────────────
+  //
+  // Los mismos casos en SQLite y en Web: cada plataforma tiene su camino.
+  for (final bool web in <bool>[false, true]) {
+    group('Versión y avisos de sync (${web ? 'web' : 'nativo'})', () {
+      late LocalDatabase localDb;
+      late Map<String, String> webBackend;
+
+      setUp(() async {
+        webBackend = <String, String>{};
+        if (web) {
+          localDb = LocalDatabase.forTesting(
+            secureStorage: mockStorage,
+            forceWeb: true,
+            webGet: (key) async => webBackend[key],
+            webSet: (key, value) async => webBackend[key] = value,
+            webRemove: (key) async => webBackend.remove(key),
+            webClearAll: () async => webBackend.clear(),
+            webList: (prefix) async => webBackend.entries
+                .where((e) => e.key.startsWith(prefix))
+                .toList(growable: false),
+            webDeleteByPrefix: (prefix) async =>
+                webBackend.removeWhere((k, _) => k.startsWith(prefix)),
+          );
+        } else {
+          localDb = LocalDatabase.instance;
+          await localDb.clearAll();
+        }
+      });
+
+      Future<LocalPatientEntry> pending(String patientId) async =>
+          (await localDb.getUnsyncedRecords()).singleWhere(
+            (LocalPatientEntry e) => e.patientId == patientId,
+          );
+
+      test(
+        'la versión vuelve de la cola y se envía como baseVersion',
+        () async {
+          await localDb.savePatient(
+            _buildRecord(patientId: 'v-1').copyWith(recordVersion: 4),
+            ownerUserId: 'u1',
+          );
+
+          final record = (await pending('v-1')).toPatientRecord()!;
+          expect(record.recordVersion, 4);
+          expect(record.toJson()['baseVersion'], 4);
+        },
+      );
+
+      test('rebasePending cambia la versión de la fila que se envió', () async {
+        await localDb.savePatient(
+          _buildRecord(patientId: 'v-2').copyWith(recordVersion: 4),
+          ownerUserId: 'u1',
+        );
+        final sent = await pending('v-2');
+
+        await localDb.rebasePending(
+          'v-2',
+          revision: sent.revision,
+          recordVersion: 5,
+        );
+
+        final after = await pending('v-2');
+        expect(after.toPatientRecord()!.recordVersion, 5);
+        expect(after.revision, sent.revision);
+      });
+
+      test('rebasePending no toca una edición posterior', () async {
+        await localDb.savePatient(
+          _buildRecord(patientId: 'v-3').copyWith(recordVersion: 4),
+          ownerUserId: 'u1',
+        );
+        final sent = await pending('v-3');
+        await localDb.savePatient(
+          _buildRecord(
+            patientId: 'v-3',
+            firstName: 'Lucía',
+          ).copyWith(recordVersion: 4),
+          ownerUserId: 'u1',
+        );
+
+        await localDb.rebasePending(
+          'v-3',
+          revision: sent.revision,
+          recordVersion: 5,
+        );
+
+        final after = (await pending('v-3')).toPatientRecord()!;
+        expect(after.recordVersion, 4);
+        expect(after.patientInfo.firstName, 'Lucía');
+      });
+
+      test('rebasePending sin fila no hace nada', () async {
+        await localDb.rebasePending('nadie', revision: 0, recordVersion: 5);
+        expect(await localDb.getUnsyncedRecords(), isEmpty);
+      });
+
+      test('addSyncNotice une los códigos del paciente y enmascara el '
+          'nombre', () async {
+        await localDb.addSyncNotice(
+          patientId: 'n-1',
+          patientName: 'Ana María García',
+          codes: const <String>['stale_payload_base_version'],
+          ownerUserId: 'u1',
+        );
+        await localDb.addSyncNotice(
+          patientId: 'n-1',
+          patientName: 'Ana María García',
+          codes: const <String>[
+            'stale_payload_base_version',
+            'visit_edit_not_applied:enc-1',
+          ],
+        );
+
+        final notices = await localDb.getSyncNotices(ownerUserId: 'u1');
+        expect(notices, hasLength(1));
+        expect(notices.single.patientId, 'n-1');
+        expect(notices.single.patientName, 'Ana M.');
+        expect(notices.single.codes, <String>[
+          'stale_payload_base_version',
+          'visit_edit_not_applied:enc-1',
+        ]);
+      });
+
+      test('sin códigos o sin paciente no guarda aviso', () async {
+        await localDb.addSyncNotice(
+          patientId: 'n-2',
+          patientName: 'Ana',
+          codes: const <String>[],
+        );
+        await localDb.addSyncNotice(
+          patientId: '',
+          patientName: 'Ana',
+          codes: const <String>['stale_payload_base_version'],
+        );
+        expect(await localDb.getSyncNotices(), isEmpty);
+      });
+
+      test('getSyncNotices filtra por dueño y ordena del más nuevo al más '
+          'viejo', () async {
+        await localDb.addSyncNotice(
+          patientId: 'n-old',
+          patientName: 'Ana',
+          codes: const <String>['stale_payload_base_version'],
+          ownerUserId: 'u1',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        await localDb.addSyncNotice(
+          patientId: 'n-new',
+          patientName: 'Luis',
+          codes: const <String>['stale_payload_base_version'],
+          ownerUserId: 'u1',
+        );
+        await localDb.addSyncNotice(
+          patientId: 'n-other',
+          patientName: 'Eva',
+          codes: const <String>['stale_payload_base_version'],
+          ownerUserId: 'u2',
+        );
+
+        final mine = await localDb.getSyncNotices(ownerUserId: 'u1');
+        expect(mine.map((SyncNotice n) => n.patientId), <String>[
+          'n-new',
+          'n-old',
+        ]);
+        expect(await localDb.getSyncNotices(), hasLength(3));
+      });
+
+      test('dismissSyncNotice y clearAll borran los avisos', () async {
+        for (final String id in <String>['n-a', 'n-b']) {
+          await localDb.addSyncNotice(
+            patientId: id,
+            patientName: 'Ana',
+            codes: const <String>['stale_payload_base_version'],
+          );
+        }
+
+        await localDb.dismissSyncNotice('n-a');
+        expect(
+          (await localDb.getSyncNotices()).map((SyncNotice n) => n.patientId),
+          <String>['n-b'],
+        );
+
+        await localDb.clearAll();
+        expect(await localDb.getSyncNotices(), isEmpty);
+      });
+    });
+  }
+
+  for (final bool web in <bool>[false, true]) {
+    group('Dispositivos retirados (${web ? 'web' : 'nativo'})', () {
+      late LocalDatabase localDb;
+
+      setUp(() async {
+        final Map<String, String> webBackend = <String, String>{};
+        localDb = web
+            ? LocalDatabase.forTesting(
+                secureStorage: mockStorage,
+                forceWeb: true,
+                webGet: (key) async => webBackend[key],
+                webSet: (key, value) async => webBackend[key] = value,
+                webRemove: (key) async => webBackend.remove(key),
+                webClearAll: () async => webBackend.clear(),
+                webList: (prefix) async => webBackend.entries
+                    .where((e) => e.key.startsWith(prefix))
+                    .toList(growable: false),
+                webDeleteByPrefix: (prefix) async =>
+                    webBackend.removeWhere((k, _) => k.startsWith(prefix)),
+              )
+            : LocalDatabase.instance;
+      });
+
+      test('sin lista descargada no hay retirados ni fecha', () async {
+        expect(await localDb.isDeviceRetired('04:A1:B2'), isFalse);
+        expect(await localDb.retiredDevicesSyncedAt(), isNull);
+      });
+
+      test('guarda los hashes del servidor y su server_time; ignora los '
+          'inválidos', () async {
+        await localDb.addRetiredDeviceHashes(<String>[
+          retiredDeviceHash('04A1B2C3D4E5F6')!,
+          'no-es-un-hash',
+        ], serverTime: '2026-10-19T10:00:00Z');
+
+        // El mismo dispositivo escrito de otra forma.
+        expect(await localDb.isDeviceRetired('04:a1:b2:c3:d4:e5:f6'), isTrue);
+        expect(await localDb.isDeviceRetired('04:99'), isFalse);
+        expect(await localDb.isDeviceRetired('XYZ'), isFalse);
+        expect(await localDb.retiredDevicesSyncedAt(), '2026-10-19T10:00:00Z');
+
+        // Repetidos (el solape del servidor) no fallan; la fecha avanza.
+        await localDb.addRetiredDeviceHashes(<String>[
+          retiredDeviceHash('04A1B2C3D4E5F6')!,
+        ], serverTime: '2026-10-19T11:00:00Z');
+        expect(await localDb.retiredDevicesSyncedAt(), '2026-10-19T11:00:00Z');
+      });
+
+      test('markDevicesRetired los agrega sin mover la fecha, y clearAll no '
+          'los borra', () async {
+        await localDb.markDevicesRetired(<String>['53:8C:2E:91', 'XYZ']);
+
+        expect(await localDb.isDeviceRetired('538c2e91'), isTrue);
+        expect(await localDb.retiredDevicesSyncedAt(), isNull);
+
+        await localDb.clearAll();
+        expect(await localDb.isDeviceRetired('53:8C:2E:91'), isTrue);
+      });
+    });
+  }
+
+  group('Dispositivos retirados — errores de almacenamiento (web)', () {
+    LocalDatabase failing() => LocalDatabase.forTesting(
+      secureStorage: mockStorage,
+      forceWeb: true,
+      webGet: (key) async => throw StateError('get'),
+      webSet: (key, value) async => throw StateError('set'),
+      webList: (prefix) async => const <MapEntry<String, String>>[],
+    );
+
+    test('consultar responde false y la fecha es null', () async {
+      final db = failing();
+      expect(await db.isDeviceRetired('04:A1'), isFalse);
+      expect(await db.retiredDevicesSyncedAt(), isNull);
+    });
+
+    test('markDevicesRetired no lanza; addRetiredDeviceHashes sí', () async {
+      final db = failing();
+      await expectLater(db.markDevicesRetired(<String>['04:A1']), completes);
+      await expectLater(
+        db.addRetiredDeviceHashes(<String>[retiredDeviceHash('04A1')!]),
+        throwsStateError,
+      );
+    });
+  });
+
+  // ── Cobertura al 100 % de local_database.dart ─────────────────────────────
+  //
+  // Los grupos siguientes cubren únicamente líneas que los grupos anteriores
+  // no alcanzaban (marcadas por Codecov): valores por defecto de directorio y
+  // exclusión de copias, rutas de error de la migración de llaves y del
+  // traslado de la base en iOS/macOS, recifrado de filas heredadas, fallos de
+  // descifrado, contadores sin owner y rutas Web (owner obligatorio, huérfanos,
+  // versiones de llave en clearAll, errores de migración).
+
+  group('Cobertura adicional — iOS/macOS: llavero, carpeta y traslado', () {
+    late MockSecureStorage legacyStorage;
+    final Map<String, String> legacyMemory = <String, String>{};
+    late Directory tmpRoot;
+    late Directory legacyDir;
+    late Directory protectedRoot;
+    final List<String> excluded = <String>[];
+    final List<LocalDatabase> openedDbs = <LocalDatabase>[];
+
+    void stubStorage(MockSecureStorage mock, Map<String, String> memory) {
+      when(() => mock.read(key: any(named: 'key'))).thenAnswer(
+        (invocation) async => memory[invocation.namedArguments[#key] as String],
+      );
+      when(
+        () => mock.write(
+          key: any(named: 'key'),
+          value: any(named: 'value'),
+        ),
+      ).thenAnswer((invocation) async {
+        memory[invocation.namedArguments[#key] as String] =
+            invocation.namedArguments[#value] as String;
+      });
+      when(() => mock.delete(key: any(named: 'key'))).thenAnswer((
+        invocation,
+      ) async {
+        memory.remove(invocation.namedArguments[#key] as String);
+      });
+    }
+
+    String legacyDbPath() => p.join(legacyDir.path, 'hwb_patients.db');
+    String protectedDbPath() =>
+        p.join(protectedRoot.path, 'hwb_db', 'hwb_patients.db');
+
+    LocalDatabase iosDb({Future<String> Function()? protectedDirectory}) {
+      final db = LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        legacySecureStorage: legacyStorage,
+        platformOverride: TargetPlatform.iOS,
+        legacyDatabasesDirectory: () async => legacyDir.path,
+        protectedDirectory:
+            protectedDirectory ?? () async => protectedRoot.path,
+        excludeFromBackup: (String path) async => excluded.add(path),
+      );
+      openedDbs.add(db);
+      return db;
+    }
+
+    Future<void> seedLegacyInstall(String patientId) async {
+      final LocalDatabase old = LocalDatabase.forTesting(
+        secureStorage: legacyStorage,
+        legacyDatabasesDirectory: () async => legacyDir.path,
+      );
+      openedDbs.add(old);
+      await old.savePatient(
+        _buildRecord(patientId: patientId),
+        ownerUserId: 'u1',
+      );
+      expect(File(legacyDbPath()).existsSync(), isTrue);
+      for (final LocalDatabase db in openedDbs) {
+        await db.closeForTesting();
+      }
+    }
+
+    setUp(() async {
+      legacyMemory.clear();
+      excluded.clear();
+      openedDbs.clear();
+      legacyStorage = MockSecureStorage();
+      stubStorage(legacyStorage, legacyMemory);
+      tmpRoot = await Directory.systemTemp.createTemp('hwb_cov_test_');
+      legacyDir = await Directory(
+        p.join(tmpRoot.path, 'Documents'),
+      ).create(recursive: true);
+      protectedRoot = await Directory(
+        p.join(tmpRoot.path, 'Library', 'Application Support'),
+      ).create(recursive: true);
+    });
+
+    tearDown(() async {
+      for (final LocalDatabase db in openedDbs) {
+        await db.closeForTesting();
+      }
+      await LocalDatabase.instance.closeForTesting();
+      if (await tmpRoot.exists()) {
+        try {
+          await tmpRoot.delete(recursive: true);
+        } catch (_) {}
+      }
+    });
+
+    test(
+      'sin inyecciones usa los canales de path_provider y de exclusión de copias',
+      () async {
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        const MethodChannel pathChannel = MethodChannel(
+          'plugins.flutter.io/path_provider',
+        );
+        const MethodChannel backupChannel = MethodChannel(
+          'hwb/backup_exclusion',
+        );
+        final List<MethodCall> backupCalls = <MethodCall>[];
+
+        messenger.setMockMethodCallHandler(pathChannel, (
+          MethodCall call,
+        ) async {
+          if (call.method == 'getApplicationSupportDirectory') {
+            return protectedRoot.path;
+          }
+          return null;
+        });
+        messenger.setMockMethodCallHandler(backupChannel, (
+          MethodCall call,
+        ) async {
+          backupCalls.add(call);
+          return null;
+        });
+        addTearDown(() {
+          messenger.setMockMethodCallHandler(pathChannel, null);
+          messenger.setMockMethodCallHandler(backupChannel, null);
+        });
+
+        final LocalDatabase db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          legacySecureStorage: legacyStorage,
+          platformOverride: TargetPlatform.iOS,
+          legacyDatabasesDirectory: () async => legacyDir.path,
+        );
+        openedDbs.add(db);
+
+        await db.savePatient(
+          _buildRecord(patientId: 'cov-1'),
+          ownerUserId: 'u1',
+        );
+
+        expect(backupCalls, hasLength(1));
+        expect(backupCalls.single.method, equals('excludeFromBackup'));
+        final Map<Object?, Object?> args =
+            backupCalls.single.arguments as Map<Object?, Object?>;
+        expect(args['path'] as String, endsWith('hwb_db'));
+        expect(
+          (await db.getAllRecords(ownerUserId: 'u1')).single.patientId,
+          equals('cov-1'),
+        );
+      },
+    );
+
+    test(
+      'si la verificación de la llave migrada no coincide, sigue usando la heredada',
+      () async {
+        final String legacyKey = _validKeyBase64();
+        legacyMemory[_kDbKeyStorageName] = legacyKey;
+        // La escritura "tiene éxito" pero no persiste: la lectura de control
+        // devuelve null y no coincide con la llave heredada.
+        when(
+          () => mockStorage.write(
+            key: any(named: 'key'),
+            value: any(named: 'value'),
+          ),
+        ).thenAnswer((_) async {});
+
+        final LocalDatabase db = iosDb();
+        await db.savePatient(
+          _buildRecord(patientId: 'cov-2'),
+          ownerUserId: 'u1',
+        );
+
+        expect(legacyMemory[_kDbKeyStorageName], equals(legacyKey));
+        expect(inMemoryStorage.containsKey(_kDbKeyStorageName), isFalse);
+        expect(
+          (await db.getAllRecords(ownerUserId: 'u1')).single.patientId,
+          equals('cov-2'),
+        );
+      },
+    );
+
+    test(
+      'si no se puede borrar la llave heredada tras migrarla, la migración sigue siendo válida',
+      () async {
+        final String legacyKey = _validKeyBase64();
+        legacyMemory[_kDbKeyStorageName] = legacyKey;
+        when(
+          () => legacyStorage.delete(key: any(named: 'key')),
+        ).thenThrow(Exception('no se puede borrar la llave heredada'));
+
+        final LocalDatabase db = iosDb();
+        await db.savePatient(
+          _buildRecord(patientId: 'cov-3'),
+          ownerUserId: 'u1',
+        );
+
+        expect(inMemoryStorage[_kDbKeyStorageName], equals(legacyKey));
+        expect(legacyMemory[_kDbKeyStorageName], equals(legacyKey));
+        expect(
+          (await db.getAllRecords(ownerUserId: 'u1')).single.patientId,
+          equals('cov-3'),
+        );
+      },
+    );
+
+    test(
+      'si falla leer la copia heredada con la llave actual presente, conserva la actual',
+      () async {
+        final String current = _validKeyBase64();
+        inMemoryStorage[_kDbKeyStorageName] = current;
+        when(
+          () => legacyStorage.read(key: _kDbKeyStorageName),
+        ).thenThrow(Exception('lectura de la copia heredada falló'));
+
+        final LocalDatabase db = iosDb();
+        await db.savePatient(
+          _buildRecord(patientId: 'cov-4'),
+          ownerUserId: 'u1',
+        );
+
+        expect(inMemoryStorage[_kDbKeyStorageName], equals(current));
+        expect(
+          (await db.getAllRecords(ownerUserId: 'u1')).single.patientId,
+          equals('cov-4'),
+        );
+      },
+    );
+
+    test(
+      'destroyEncryptionKey no lanza si falla borrar la llave heredada (iOS)',
+      () async {
+        final LocalDatabase db = iosDb();
+        await db.savePatient(
+          _buildRecord(patientId: 'cov-5'),
+          ownerUserId: 'u1',
+        );
+        when(
+          () => legacyStorage.delete(key: any(named: 'key')),
+        ).thenThrow(Exception('llavero heredado no disponible'));
+
+        await expectLater(db.destroyEncryptionKey(), completes);
+
+        expect(inMemoryStorage.containsKey(_kDbKeyStorageName), isFalse);
+      },
+    );
+
+    test(
+      'si no se puede crear la carpeta protegida, usa la ruta heredada',
+      () async {
+        final File blocker = File(p.join(tmpRoot.path, 'bloqueo'));
+        await blocker.writeAsString('no soy una carpeta');
+
+        final LocalDatabase db = iosDb(
+          protectedDirectory: () async => blocker.path,
+        );
+        await db.savePatient(
+          _buildRecord(patientId: 'cov-6'),
+          ownerUserId: 'u1',
+        );
+
+        expect(File(legacyDbPath()).existsSync(), isTrue);
+        expect(excluded, isEmpty);
+        expect(
+          (await db.getAllRecords(ownerUserId: 'u1')).single.patientId,
+          equals('cov-6'),
+        );
+      },
+    );
+
+    test(
+      'si la copia de la base no coincide en tamaño, conserva la ruta heredada',
+      () async {
+        await seedLegacyInstall('cov-7');
+
+        final _MockFile staging = _MockFile();
+        when(() => staging.path).thenReturn('${protectedDbPath()}.migrating');
+        when(() => staging.exists()).thenAnswer((_) async => false);
+        when(() => staging.length()).thenAnswer((_) async => -1);
+
+        final _FileOverrides overrides = _FileOverrides(
+          (String path) => path.endsWith('.migrating') ? staging : null,
+        );
+
+        final LocalDatabase db = iosDb();
+        final List<LocalPatientEntry> all =
+            await IOOverrides.runWithIOOverrides(
+              () => db.getAllRecords(ownerUserId: 'u1'),
+              overrides,
+            );
+
+        expect(all.map((LocalPatientEntry e) => e.patientId), <String>[
+          'cov-7',
+        ]);
+        expect(File(legacyDbPath()).existsSync(), isTrue);
+        expect(File(protectedDbPath()).existsSync(), isFalse);
+      },
+    );
+
+    test(
+      'si no se puede borrar un archivo heredado tras el traslado, la base nueva igual queda lista',
+      () async {
+        await seedLegacyInstall('cov-8');
+
+        final _MockFile journal = _MockFile();
+        int existsCalls = 0;
+        // 1.ª consulta (copia de auxiliares): no existe. 2.ª (limpieza): existe.
+        when(() => journal.exists()).thenAnswer((_) async => existsCalls++ > 0);
+        when(
+          () => journal.delete(),
+        ).thenThrow(const FileSystemException('sin permisos para borrar'));
+
+        final _FileOverrides overrides = _FileOverrides(
+          (String path) => path == '${legacyDbPath()}-journal' ? journal : null,
+        );
+
+        final LocalDatabase db = iosDb();
+        final List<LocalPatientEntry> all =
+            await IOOverrides.runWithIOOverrides(
+              () => db.getAllRecords(ownerUserId: 'u1'),
+              overrides,
+            );
+
+        expect(all.map((LocalPatientEntry e) => e.patientId), <String>[
+          'cov-8',
+        ]);
+        expect(File(protectedDbPath()).existsSync(), isTrue);
+        expect(File(legacyDbPath()).existsSync(), isFalse);
+        verify(() => journal.delete()).called(1);
+      },
+    );
+  });
+
+  group('Cobertura adicional — inicialización y migraciones (nativo)', () {
+    Future<String> dbPath() async =>
+        p.join(await getDatabasesPath(), 'hwb_patients.db');
+
+    test(
+      'en Windows/Linux inicializa sqflite FFI antes de abrir la base',
+      () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+        try {
+          final LocalDatabase db = LocalDatabase.forTesting(
+            secureStorage: mockStorage,
+          );
+          LocalDatabase.setInstanceForTesting(db);
+
+          await db.savePatient(
+            _buildRecord(patientId: 'cov-win'),
+            ownerUserId: 'u1',
+          );
+
+          expect(
+            (await db.getAllRecords(ownerUserId: 'u1')).single.patientId,
+            equals('cov-win'),
+          );
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+
+    test(
+      'si no se puede recifrar una fila heredada en claro, la fila se conserva',
+      () async {
+        final String path = await dbPath();
+        await deleteDatabase(path);
+
+        final Database v1 = await openDatabase(
+          path,
+          version: 1,
+          onCreate: (Database db, int version) async {
+            await db.execute('''
+              CREATE TABLE local_patients (
+                patient_id    TEXT PRIMARY KEY,
+                device_uid    TEXT NOT NULL,
+                patient_name  TEXT NOT NULL,
+                record_json   TEXT NOT NULL,
+                is_synced     INTEGER NOT NULL DEFAULT 0,
+                sync_error    TEXT,
+                created_at    TEXT NOT NULL,
+                synced_at     TEXT
+              )
+            ''');
+          },
+        );
+        await v1.insert('local_patients', <String, Object?>{
+          'patient_id': 'mig-fail',
+          'device_uid': 'dev-mig',
+          'patient_name': 'Mig F.',
+          'record_json': '{"patientId":"mig-fail"}',
+          'is_synced': 0,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+        await v1.close();
+
+        // El llavero falla al leer la llave de la base: cifrar es imposible.
+        when(
+          () => mockStorage.read(key: _kDbKeyStorageName),
+        ).thenThrow(Exception('llavero bloqueado'));
+
+        final LocalDatabase db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+        );
+        LocalDatabase.setInstanceForTesting(db);
+
+        final List<LocalPatientEntry> all = await db.getAllRecords();
+        expect(all.map((LocalPatientEntry e) => e.patientId), <String>[
+          'mig-fail',
+        ]);
+
+        final Database raw = await openDatabase(path);
+        final List<Map<String, Object?>> rows = await raw.query(
+          'local_patients',
+          columns: <String>['record_json'],
+        );
+        expect(rows.single['record_json'], equals('{"patientId":"mig-fail"}'));
+      },
+    );
+
+    test(
+      'si falla la consulta de filas heredadas, la base se abre igualmente',
+      () async {
+        final String path = await dbPath();
+        await deleteDatabase(path);
+
+        // Versión actual (12) pero sin la columna record_json: no hay
+        // onCreate/onUpgrade y la consulta de migración falla.
+        final Database seed = await openDatabase(
+          path,
+          version: 12,
+          onCreate: (Database db, int version) async {
+            await db.execute(
+              'CREATE TABLE local_patients (patient_id TEXT PRIMARY KEY)',
+            );
+          },
+        );
+        await seed.insert('local_patients', <String, Object?>{
+          'patient_id': 'solo-id',
+        });
+        await seed.close();
+
+        final LocalDatabase db = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+        );
+        LocalDatabase.setInstanceForTesting(db);
+
+        await expectLater(db.deleteRecord('solo-id'), completes);
+
+        final Database raw = await openDatabase(path);
+        expect(await raw.query('local_patients'), isEmpty);
+      },
+    );
+  });
+
+  group('Cobertura adicional — lecturas y contadores nativos', () {
+    late LocalDatabase localDb;
+
+    setUp(() async {
+      localDb = LocalDatabase.instance;
+      await localDb.clearAll();
+    });
+
+    test(
+      'getAllRecords y getUnsyncedRecords omiten filas que no se pueden descifrar',
+      () async {
+        final Database raw = await rawConnection();
+        await raw.insert('local_patients', <String, Object?>{
+          'patient_id': 'bad-native',
+          'device_uid': 'dev-bad',
+          'patient_name': 'Bad N.',
+          'record_json': 'esto-no-es-base64!!',
+          'is_synced': 0,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+        await localDb.savePatient(
+          _buildRecord(patientId: 'good-native'),
+          ownerUserId: 'u1',
+        );
+
+        final List<LocalPatientEntry> all = await localDb.getAllRecords();
+        final List<LocalPatientEntry> unsynced = await localDb
+            .getUnsyncedRecords();
+
+        expect(all.map((LocalPatientEntry e) => e.patientId), <String>[
+          'good-native',
+        ]);
+        expect(unsynced.map((LocalPatientEntry e) => e.patientId), <String>[
+          'good-native',
+        ]);
+      },
+    );
+
+    test(
+      'getRetryablePendingCount y getBlockedCount sin owner cuentan todo',
+      () async {
+        await localDb.savePatient(
+          _buildRecord(patientId: 'cnt-ok'),
+          ownerUserId: 'u1',
+        );
+        await localDb.savePatient(
+          _buildRecord(patientId: 'cnt-409'),
+          ownerUserId: 'u2',
+        );
+        await localDb.markSyncError('cnt-409', 'conflicto', statusCode: 409);
+
+        expect(await localDb.getRetryablePendingCount(), equals(1));
+        expect(await localDb.getBlockedCount(), equals(1));
+      },
+    );
+
+    test('dismissSyncNotice captura el error si la tabla no existe', () async {
+      final Database raw = await rawConnection();
+      await raw.execute('DROP TABLE sync_notices');
+
+      await expectLater(localDb.dismissSyncNotice('cualquiera'), completes);
+    });
+
+    test(
+      'savePatient sin ownerUserId conserva el owner del registro previo (nativo)',
+      () async {
+        await localDb.savePatient(
+          _buildRecord(patientId: 'native-keep'),
+          ownerUserId: 'u1',
+        );
+
+        await localDb.savePatient(
+          _buildRecord(patientId: 'native-keep', firstName: 'Bea'),
+          ownerUserId: null,
+        );
+
+        final List<LocalPatientEntry> mine = await localDb.getAllRecords(
+          ownerUserId: 'u1',
+        );
+        expect(mine, hasLength(1));
+        expect(mine.single.patientId, equals('native-keep'));
+        expect(mine.single.revision, equals(1));
+        expect(
+          await localDb.getAllRecords(ownerUserId: 'u2'),
+          isEmpty,
+          reason: 'el owner sigue siendo u1, no quedó huérfano',
+        );
+      },
+    );
+
+    test('addSyncNotice captura el error si la tabla no existe', () async {
+      final Database raw = await rawConnection();
+      await raw.execute('DROP TABLE sync_notices');
+
+      await expectLater(
+        localDb.addSyncNotice(
+          patientId: 'p-sin-tabla',
+          patientName: 'Ana García',
+          codes: <String>['E1'],
+          ownerUserId: 'u1',
+        ),
+        completes,
+      );
+    });
+  });
+
+  group('Cobertura adicional — Web', () {
+    late Map<String, String> backend;
+
+    LocalDatabase webDb({
+      Future<void> Function(String key)? webRemove,
+      Future<List<MapEntry<String, String>>> Function(String prefix)? webList,
+    }) {
+      return LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        forceWeb: true,
+        webGet: (String key) async => backend[key],
+        webSet: (String key, String value) async => backend[key] = value,
+        webRemove: webRemove ?? ((String key) async => backend.remove(key)),
+        webClearAll: () async => backend.clear(),
+        webList:
+            webList ??
+            ((String prefix) async => backend.entries
+                .where((MapEntry<String, String> e) => e.key.startsWith(prefix))
+                .toList(growable: false)),
+        webDeleteByPrefix: (String prefix) async =>
+            backend.removeWhere((String k, String _) => k.startsWith(prefix)),
+      );
+    }
+
+    Map<String, Object?> webPatientRow(
+      String id, {
+      int isSynced = 0,
+      String? owner,
+      String recordJson = 'contenido-opaco',
+    }) => <String, Object?>{
+      'patient_id': id,
+      'device_uid': 'dev-$id',
+      'patient_name': 'Web P.',
+      'record_json': recordJson,
+      'is_synced': isSynced,
+      'sync_error': null,
+      'sync_error_code': null,
+      'created_at': '2026-01-01T00:00:00.000Z',
+      'synced_at': null,
+      'revision': 0,
+      'owner_user_id': owner,
+      'organization_id': null,
+      'pending_retired_reason': null,
+    };
+
+    setUp(() {
+      backend = <String, String>{};
+    });
+
+    test('savePatient sin ownerUserId ni registro previo se rechaza', () async {
+      final LocalDatabase db = webDb();
+
+      await expectLater(
+        db.savePatient(
+          _buildRecord(patientId: 'web-no-owner'),
+          ownerUserId: null,
+        ),
+        throwsArgumentError,
+      );
+      expect(backend.containsKey('hwb_web_patient::web-no-owner'), isFalse);
+    });
+
+    test(
+      'savePatient sin ownerUserId conserva el owner del registro previo',
+      () async {
+        final LocalDatabase db = webDb();
+        await db.savePatient(
+          _buildRecord(patientId: 'web-keep'),
+          ownerUserId: 'u1',
+        );
+
+        await db.savePatient(
+          _buildRecord(patientId: 'web-keep', firstName: 'Bea'),
+          ownerUserId: null,
+        );
+
+        final Map<String, dynamic> stored =
+            jsonDecode(backend['hwb_web_patient::web-keep']!)
+                as Map<String, dynamic>;
+        expect(stored['owner_user_id'], equals('u1'));
+        expect(stored['revision'], equals(1));
+      },
+    );
+
+    test(
+      'getAllRecords y getUnsyncedRecords omiten filas que no se pueden descifrar',
+      () async {
+        backend['hwb_web_patient::bad-web'] = jsonEncode(
+          webPatientRow(
+            'bad-web',
+            owner: 'u1',
+            recordJson: 'esto-no-es-base64!!',
+          ),
+        );
+        final LocalDatabase db = webDb();
+        await db.savePatient(
+          _buildRecord(patientId: 'good-web'),
+          ownerUserId: 'u1',
+        );
+
+        final List<LocalPatientEntry> all = await db.getAllRecords(
+          ownerUserId: 'u1',
+        );
+        final List<LocalPatientEntry> unsynced = await db.getUnsyncedRecords(
+          ownerUserId: 'u1',
+        );
+
+        expect(all.map((LocalPatientEntry e) => e.patientId), <String>[
+          'good-web',
+        ]);
+        expect(unsynced.map((LocalPatientEntry e) => e.patientId), <String>[
+          'good-web',
+        ]);
+      },
+    );
+
+    test('getOrphanedPendingCount cuenta solo pendientes sin owner', () async {
+      backend['hwb_web_patient::orf-1'] = jsonEncode(webPatientRow('orf-1'));
+      backend['hwb_web_patient::orf-2'] = jsonEncode(webPatientRow('orf-2'));
+      backend['hwb_web_patient::orf-synced'] = jsonEncode(
+        webPatientRow('orf-synced', isSynced: 1),
+      );
+      backend['hwb_web_patient::orf-owned'] = jsonEncode(
+        webPatientRow('orf-owned', owner: 'u1'),
+      );
+      final LocalDatabase db = webDb();
+
+      expect(await db.getOrphanedPendingCount(), equals(2));
+    });
+
+    test(
+      'si falla el recifrado de filas web en claro, la lectura continúa',
+      () async {
+        int listCalls = 0;
+        final LocalDatabase db = webDb(
+          webList: (String prefix) async {
+            if (listCalls++ == 0) {
+              throw Exception('IndexedDB no disponible durante la migración');
+            }
+            return const <MapEntry<String, String>>[];
+          },
+        );
+
+        final List<LocalPatientEntry> all = await db.getAllRecords();
+
+        expect(all, isEmpty);
+        expect(listCalls, greaterThanOrEqualTo(2));
+      },
+    );
+
+    test(
+      'clearAll elimina las versiones de llave NFC ya sincronizadas y conserva el resto',
+      () async {
+        backend.addAll(<String, String>{
+          'hwb_web_keyver::k-int': jsonEncode(<String, Object?>{
+            'device_uid': 'k-int',
+            'is_synced': 1,
+          }),
+          'hwb_web_keyver::k-str': jsonEncode(<String, Object?>{
+            'device_uid': 'k-str',
+            'is_synced': '1',
+          }),
+          'hwb_web_keyver::k-dbl': jsonEncode(<String, Object?>{
+            'device_uid': 'k-dbl',
+            'is_synced': 1.0,
+          }),
+          'hwb_web_keyver::k-pending': jsonEncode(<String, Object?>{
+            'device_uid': 'k-pending',
+            'is_synced': 0,
+          }),
+          'hwb_web_keyver::k-nouid': jsonEncode(<String, Object?>{
+            'is_synced': 1,
+          }),
+          'hwb_web_keyver::k-emptyuid': jsonEncode(<String, Object?>{
+            'device_uid': '',
+            'is_synced': 1,
+          }),
+        });
+        final LocalDatabase db = webDb();
+
+        await db.clearAll();
+
+        final Set<String> remaining = backend.keys
+            .where((String k) => k.startsWith('hwb_web_keyver::'))
+            .toSet();
+        expect(remaining, <String>{
+          'hwb_web_keyver::k-pending',
+          'hwb_web_keyver::k-nouid',
+          'hwb_web_keyver::k-emptyuid',
+        });
+      },
+    );
+
+    test('dismissSyncNotice captura el error si falla el borrado', () async {
+      final LocalDatabase db = webDb(
+        webRemove: (String key) async => throw StateError('remove falló'),
+      );
+
+      await expectLater(db.dismissSyncNotice('p-web'), completes);
+    });
+  });
+}
+
+class _MockFile extends Mock implements File {}
+
+final class _FileOverrides extends IOOverrides {
+  _FileOverrides(this._override);
+
+  final File? Function(String path) _override;
+
+  @override
+  File createFile(String path) => _override(path) ?? super.createFile(path);
 }

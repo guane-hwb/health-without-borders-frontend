@@ -373,10 +373,7 @@ class PatientInfo {
     'biologicalSex': biologicalSex,
     if (genderIdentity != null) 'genderIdentity': genderIdentity,
     if (ethnicity != null) 'ethnicity': ethnicity,
-    if (ethnicCommunity != null) ...<String, dynamic>{
-      'ethnicCommunity': ethnicCommunity,
-      'ethnic_community': ethnicCommunity,
-    },
+    if (ethnicCommunity != null) 'ethnicCommunity': ethnicCommunity,
     if (disabilityCategory != null) 'disabilityCategory': disabilityCategory,
     'address': address.toJson(),
     if (bloodType != null) 'bloodType': bloodType,
@@ -1910,9 +1907,13 @@ class PatientFullRecord {
               )
               .toList() ??
           <VaccinationRecordItem>[],
+      // toJson() writes the version as baseVersion, the name /sync expects,
+      // and that same map is what the local queue and the guardian device hold:
+      // reading it back under that name keeps a stored copy's version.
       recordVersion:
           (json['recordVersion'] as num?)?.toInt() ??
-          (json['record_version'] as num?)?.toInt(),
+          (json['record_version'] as num?)?.toInt() ??
+          (json['baseVersion'] as num?)?.toInt(),
     );
   }
 
@@ -2012,6 +2013,7 @@ class PatientSyncResponse {
     required this.message,
     this.conflicts = const <String>[],
     this.recordVersion,
+    this.record,
   });
 
   factory PatientSyncResponse.fromJson(Map<String, dynamic> json) {
@@ -2029,6 +2031,9 @@ class PatientSyncResponse {
       recordVersion:
           (json['record_version'] as num?)?.toInt() ??
           (json['recordVersion'] as num?)?.toInt(),
+      record: json['record'] is Map<String, dynamic>
+          ? PatientFullRecord.fromJson(json['record'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -2039,4 +2044,9 @@ class PatientSyncResponse {
   final String message;
   final List<String> conflicts;
   final int? recordVersion;
+
+  /// The record as the server stored it after merging, with its
+  /// recordVersion. Only sent when [conflicts] is not empty, and only by a
+  /// backend that supports it.
+  final PatientFullRecord? record;
 }

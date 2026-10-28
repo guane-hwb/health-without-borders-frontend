@@ -4,7 +4,11 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/i18n/app_strings.dart';
+import '../../../../core/storage/local_database.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../../../design/tokens/app_colors.dart';
+import '../../../auth/domain/user_session.dart';
+import '../../domain/patient_record.dart';
 
 DateTime? tryParsePatientDate(String dob) {
   try {
@@ -169,4 +173,65 @@ Future<bool> confirmProfileExit(
     ),
   );
   return confirmed ?? false;
+}
+
+// ── Sync ─────────────────────────────────────────────────────────────────
+/// Saves [draft] again so its pending copy names the version the draft just
+/// took: edited while a sync was in flight, it still names the old one and
+/// the server would take it for an old copy.
+Future<void> resavePendingDraft(
+  LocalDatabase db,
+  UserSession? user,
+  PatientFullRecord draft,
+) async {
+  try {
+    await db.savePatient(
+      draft,
+      ownerUserId: user?.id,
+      organizationId: user?.organizationId,
+    );
+  } catch (e, stack) {
+    AppLogger.e(
+      'No se pudo re-guardar la edición pendiente',
+      error: e,
+      stackTrace: stack,
+    );
+  }
+}
+
+// ── Reassignment ─────────────────────────────────────────────────────────
+/// Asks whether to write, right after a reassignment, the other devices of
+/// the patient that still name the old one. "Later" leaves them marked: the
+/// profile keeps showing that the NFC backup is out of date.
+Future<bool> confirmRewriteOtherDevices(
+  BuildContext context, {
+  required bool isEs,
+}) async {
+  final bool? now = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext ctx) => AlertDialog(
+      title: Text(
+        isEs ? 'Actualizar los otros dispositivos' : 'Update the other devices',
+      ),
+      content: Text(
+        isEs
+            ? 'Los otros dispositivos de este paciente todavía guardan el '
+                  'dispositivo anterior. Grábelos ahora para que funcionen sin '
+                  'conexión con el nuevo.'
+            : "This patient's other devices still hold the previous device. "
+                  'Write them now so they work offline with the new one.',
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: Text(isEs ? 'Más tarde' : 'Later'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: Text(isEs ? 'Grabar ahora' : 'Write now'),
+        ),
+      ],
+    ),
+  );
+  return now ?? false;
 }
