@@ -29,6 +29,13 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Verificar que pubspec.lock está al día con pubspec.yaml
+        run: |
+          if ! git diff --exit-code -- pubspec.lock; then
+            echo "::error::flutter pub get modificó pubspec.lock. Ejecútalo en local y sube el lockfile."
+            exit 1
+          fi
+
       - name: Create env files for CI
         run: |
           echo "API_BASE_URL=http://localhost:8000" > .env
