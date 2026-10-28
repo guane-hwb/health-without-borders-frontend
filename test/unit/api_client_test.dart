@@ -71,7 +71,7 @@ void main() {
           'detail': <String, dynamic>{
             'code': 'device_retired',
             'reason': 'lost',
-            'message': 'This bracelet has been retired.',
+            'message': 'This device has been retired.',
           },
         }, 410),
       );
@@ -149,7 +149,7 @@ void main() {
       final reported = <String>[];
       final api = buildClient(
         (_) async => _json(<String, dynamic>{
-          'detail': 'Guardian bracelet scan required for minors.',
+          'detail': 'Guardian device scan required for minors.',
           'code': 'guardian_required',
         }, 403),
       )..onAccountInactive = reported.add;

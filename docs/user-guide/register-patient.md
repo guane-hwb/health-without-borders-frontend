@@ -1,6 +1,6 @@
 # Registering a New Patient
 
-This page explains how to create a new patient, assign the patient's NFC bracelet, and add one or two guardians.
+This page explains how to create a new patient, assign the patient's NFC device, and add one or two guardians.
 
 ---
 
@@ -15,7 +15,7 @@ This page explains how to create a new patient, assign the patient's NFC bracele
 
 Complete the fields in each section:
 
-- **Patient NFC device** — the identifier of the bracelet you will assign (you can also scan it in the next step).
+- **Patient NFC device** — the identifier of the device you will assign (you can also scan it in the next step).
 - **Identification** — document type, document number, first and last names (second name and second surname are optional).
 - **Demographic data** — date of birth and biological sex.
 - **Nationality** — choose from the list. If the nationality is not listed, select **"Other"**.
@@ -24,14 +24,14 @@ Required fields are marked with an asterisk (*). The **Continue** button advance
 
 ---
 
-## 3. Assign the patient bracelet
+## 3. Assign the patient device
 
-When prompted, the app shows the guided writing screen (**"Patient bracelet"**):
+When prompted, the app shows the guided writing screen (**"Patient device"**):
 
 1. Tap **Start**.
-2. Hold the patient's bracelet against the back of the phone until the app confirms the write.
+2. Hold the patient's device against the back of the phone until the app confirms the write.
 
-**Note:** You can tap **Skip** to finish the registration without writing the bracelet immediately. In that case the patient is saved locally and marked as **"Pending to write to the NFC device"**, so you can write the bracelet later.
+**Note:** You can tap **Skip** to finish the registration without writing the device immediately. In that case the patient is saved locally and marked as **"Pending to write to the NFC device"**, so you can write the device later.
 
 ---
 

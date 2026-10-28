@@ -1440,7 +1440,7 @@ void main() {
     });
 
     test('la versión sobrevive a toJson/fromJson (cola local y dispositivo '
-        'del guardián guardan toJson)', () {
+        'del cuidador guardan toJson)', () {
       final stored = jsonDecode(
         jsonEncode(_buildMinimal().copyWith(recordVersion: 7).toJson()),
       );

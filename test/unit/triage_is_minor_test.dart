@@ -57,8 +57,6 @@ void main() {
   });
 
   group('falla cerrado', () {
-    // Si no podemos probar que es adulto, exigimos el guardián. Cualquier otro
-    // default entregaría datos de un menor ante un dato corrupto.
     test('fecha vacía se trata como menor', () {
       expect(_triage('').isMinor, isTrue);
     });

@@ -390,7 +390,7 @@ class _NfcGuidedWriteSheetState extends State<_NfcGuidedWriteSheet>
       case _Failure.inUse:
         return isEs
             ? 'Este dispositivo ya pertenece a otro paciente. Cada menor '
-                  'necesita su propio dispositivo del guardián: use uno en '
+                  'necesita su propio dispositivo del cuidador: use uno en '
                   'blanco.'
             : 'This device already belongs to another patient. Each minor '
                   'needs their own guardian device: use a blank one.';

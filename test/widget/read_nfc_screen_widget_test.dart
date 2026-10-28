@@ -37,8 +37,7 @@ class FakePatientRepository implements PatientRepository {
   bool throwGuardianError = false;
 
   /// Body of the first 403 (no guardian card): text and backend `code`.
-  String guardianRequiredMessage =
-      'Guardian bracelet scan required for minors.';
+  String guardianRequiredMessage = 'Guardian device scan required for minors.';
   String? guardianRequiredCode;
 
   /// Backend `code` of the step-2 403 (card does not match).
@@ -624,7 +623,7 @@ void main() {
     });
 
     testWidgets(
-      'Guardián válido enviado manualmente: navega al perfil y el repo '
+      'Cuidador válido enviado manualmente: navega al perfil y el repo '
       'recibe el guardianDeviceUid correcto',
       (tester) async {
         fakeRepo.throw403ForGuardian = true;
@@ -647,7 +646,7 @@ void main() {
     );
 
     testWidgets(
-      'Guardián tecleado con espacios y minúsculas: el repo recibe el UID normalizado (04:1a:2c:de o 04:1A:2C:DE)',
+      'Cuidador tecleado con espacios y minúsculas: el repo recibe el UID normalizado (04:1a:2c:de o 04:1A:2C:DE)',
       (tester) async {
         fakeRepo.throw403ForGuardian = true;
         await tester.pumpWidget(
@@ -671,7 +670,7 @@ void main() {
       },
     );
 
-    testWidgets('Guardián inválido: muestra el error y permanece en Paso 2', (
+    testWidgets('Cuidador inválido: muestra el error y permanece en Paso 2', (
       tester,
     ) async {
       fakeRepo.throw403ForGuardian = true;
@@ -792,7 +791,7 @@ void main() {
       },
     );
 
-    testWidgets('UID manual de guardián vacío: no dispara el envío', (
+    testWidgets('UID manual de cuidador vacío: no dispara el envío', (
       tester,
     ) async {
       fakeRepo.throw403ForGuardian = true;
@@ -885,7 +884,7 @@ void main() {
     );
 
     testWidgets(
-      'Guardián: NfcNotAvailableException en Paso 2 muestra el hint y '
+      'Cuidador: NfcNotAvailableException en Paso 2 muestra el hint y '
       'permanece en Paso 2',
       (tester) async {
         fakeRepo.throw403ForGuardian = true;
@@ -913,7 +912,7 @@ void main() {
       },
     );
 
-    testWidgets('Guardián: NfcSessionException en Paso 2 muestra el mensaje', (
+    testWidgets('Cuidador: NfcSessionException en Paso 2 muestra el mensaje', (
       tester,
     ) async {
       fakeRepo.throw403ForGuardian = true;
@@ -937,7 +936,7 @@ void main() {
     });
 
     testWidgets(
-      'Guardián: escaneo NFC exitoso completa el UID y envía al repo',
+      'Cuidador: escaneo NFC exitoso completa el UID y envía al repo',
       (tester) async {
         fakeRepo.throw403ForGuardian = true;
         await tester.pumpWidget(
@@ -1142,7 +1141,7 @@ void main() {
     );
 
     testWidgets(
-      'Chip de guardián detectado durante el escaneo de paciente muestra '
+      'Chip de cuidador detectado durante el escaneo de paciente muestra '
       'el error y nunca llama al backend',
       (tester) async {
         fakeAuth.nfcKey = 'secret-key';
@@ -1164,7 +1163,7 @@ void main() {
         await tester.tap(find.byIcon(Icons.wifi));
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('dispositivo del guardián'), findsOneWidget);
+        expect(find.textContaining('dispositivo del cuidador'), findsOneWidget);
         expect(fakeRepo.scanDeviceCallCount, 0);
       },
     );
@@ -1197,7 +1196,7 @@ void main() {
     );
 
     testWidgets(
-      'Offline: triage de menor sin conexión abre el gate de guardián',
+      'Offline: triage de menor sin conexión abre el gate de cuidador',
       (tester) async {
         await reachOfflineGate(tester, triage: makeTriage(minor: true));
 
@@ -1217,7 +1216,7 @@ void main() {
       },
     );
 
-    testWidgets('Escaneo de guardián offline exitoso reconstruye el registro y '
+    testWidgets('Escaneo de cuidador offline exitoso reconstruye el registro y '
         'navega al perfil con el paciente correcto', (tester) async {
       final triage = makeTriage(
         minor: true,
@@ -1260,7 +1259,7 @@ void main() {
     });
 
     testWidgets(
-      'Sin keyring en el escaneo de guardián offline y sesión expirada '
+      'Sin keyring en el escaneo de cuidador offline y sesión expirada '
       'pide iniciar sesión de nuevo',
       (tester) async {
         await reachOfflineGate(tester, triage: makeTriage(minor: true));
@@ -1276,7 +1275,7 @@ void main() {
     );
 
     testWidgets(
-      'Sin keyring en el escaneo de guardián offline y sesión vigente '
+      'Sin keyring en el escaneo de cuidador offline y sesión vigente '
       'avisa que no hay llave NFC',
       (tester) async {
         await reachOfflineGate(tester, triage: makeTriage(minor: true));
@@ -1295,7 +1294,7 @@ void main() {
     );
 
     testWidgets(
-      'UID de guardián que no corresponde al paciente muestra el error',
+      'UID de cuidador que no corresponde al paciente muestra el error',
       (tester) async {
         final triage = makeTriage(
           minor: true,
@@ -1314,7 +1313,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.textContaining('no corresponde al guardián'),
+          find.textContaining('no corresponde al cuidador del paciente'),
           findsOneWidget,
         );
         expect(find.byType(PatientProfileScreen), findsNothing);
@@ -1354,7 +1353,7 @@ void main() {
     );
 
     testWidgets(
-      'NfcNotAvailableException durante el escaneo de guardián offline '
+      'NfcNotAvailableException durante el escaneo de cuidador offline '
       'muestra el aviso de hardware',
       (tester) async {
         await reachOfflineGate(tester, triage: makeTriage(minor: true));
@@ -1372,7 +1371,7 @@ void main() {
     );
 
     testWidgets(
-      'NfcSessionException durante el escaneo de guardián offline muestra '
+      'NfcSessionException durante el escaneo de cuidador offline muestra '
       'su propio mensaje',
       (tester) async {
         await reachOfflineGate(tester, triage: makeTriage(minor: true));
@@ -1390,7 +1389,7 @@ void main() {
     );
 
     testWidgets(
-      'Excepción genérica durante el escaneo de guardián offline muestra '
+      'Excepción genérica durante el escaneo de cuidador offline muestra '
       'el mensaje por defecto',
       (tester) async {
         await reachOfflineGate(tester, triage: makeTriage(minor: true));
@@ -1404,7 +1403,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.text('No se pudo leer el dispositivo del guardián.'),
+          find.text('No se pudo leer el dispositivo del cuidador.'),
           findsOneWidget,
         );
       },
@@ -1443,7 +1442,7 @@ void main() {
   // ══════════════════════════════════════════════════════════════════════════
   group('ReadNfcScreen — Cobertura 100% de líneas faltantes', () {
     testWidgets(
-      'Muestra el texto del guardián offline en inglés cuando locale es "en"',
+      'Muestra el texto del cuidador offline en inglés cuando locale es "en"',
       (tester) async {
         fakeAuth.nfcKey = 'secret-key';
         fakeRepo.throwNonApiError = true;
@@ -1643,7 +1642,7 @@ void main() {
     );
 
     testWidgets(
-      'Con keyring y sin override, el escaneo del guardián offline lee la '
+      'Con keyring y sin override, el escaneo del cuidador offline lee la '
       'tarjeta con el servicio de la fábrica',
       (tester) async {
         await reachOfflineGate(
@@ -1704,7 +1703,7 @@ void main() {
     );
 
     testWidgets(
-      'Guardián enviado sin UID de paciente registrado muestra el aviso de '
+      'Cuidador enviado sin UID de paciente registrado muestra el aviso de '
       'volver al paso 1',
       (tester) async {
         fakeRepo.throw403ForGuardian = true;
@@ -1737,9 +1736,9 @@ void main() {
     );
   });
 
-  group('Copia del dispositivo del guardián de otro menor', () {
+  group('Copia del dispositivo del cuidador de otro menor', () {
     const String notice =
-        'El dispositivo del guardián no tiene la información de este '
+        'El dispositivo del cuidador no tiene la información de este '
         'paciente (es de otro menor o está desactualizado). Se muestran '
         'solo los datos del dispositivo del paciente, sin editar.';
 
@@ -1834,7 +1833,7 @@ void main() {
       ).called(1);
     });
 
-    testWidgets('un 410 en el paso del guardián guarda el dispositivo del '
+    testWidgets('un 410 en el paso del cuidador guarda el dispositivo del '
         'paciente como retirado', (tester) async {
       fakeRepo.throw403ForGuardian = true;
       await tester.pumpWidget(
@@ -1876,7 +1875,7 @@ void main() {
     });
 
     testWidgets('sin conexión, el dispositivo retirado de un menor no abre la '
-        'puerta del guardián ni el acceso de emergencia', (tester) async {
+        'puerta del cuidador ni el acceso de emergencia', (tester) async {
       final db = MockLocalDatabase();
       final retired = <String>{'HWB-PATIENT-GATE'};
       await _reachOfflineGateWith(
@@ -1892,7 +1891,7 @@ void main() {
       expect(find.text('Acceso de emergencia'), findsNothing);
     });
 
-    testWidgets('sin conexión, un dispositivo del guardián retirado se '
+    testWidgets('sin conexión, un dispositivo del cuidador retirado se '
         'rechaza y la puerta sigue abierta para el nuevo', (tester) async {
       final db = MockLocalDatabase();
       final retired = <String>{'HWB-GUARDIAN-01'};

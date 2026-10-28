@@ -395,7 +395,7 @@ class ProfileTabSummary extends StatelessWidget {
                 draft.guardian2Info!.name.isNotEmpty)) ...[
           ProfileSectionHeader(
             icon: Icons.family_restroom,
-            title: isEs ? 'GUARDIANES' : 'GUARDIANS',
+            title: isEs ? 'CUIDADORES' : 'GUARDIANS',
             actionLabel: null,
             onAction: null,
           ),
@@ -414,7 +414,7 @@ class ProfileTabSummary extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isEs ? 'Guardián Principal' : 'Primary Guardian',
+                              isEs ? 'Cuidador Principal' : 'Primary Guardian',
                               style: const TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,

@@ -352,13 +352,13 @@ void main() {
       deviceUid: 'uid-abc',
     );
 
-    test('devuelve false cuando el guardián es idéntico', () {
+    test('devuelve false cuando el cuidador es idéntico', () {
       final record = _makeRecord(guardian: baseGuardian);
       final w = _makeWidget(draft: record, original: record);
       expect(w.testGuardianChanged, isFalse);
     });
 
-    test('devuelve true cuando el nombre del guardián cambia', () {
+    test('devuelve true cuando el nombre del cuidador cambia', () {
       final w = _makeWidget(
         draft: _makeRecord(
           guardian: GuardianInfo(

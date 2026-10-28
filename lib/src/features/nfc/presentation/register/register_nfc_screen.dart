@@ -411,14 +411,14 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       await writeGuardianCard(
         expectedUid: guardian1Uid,
         title: hasTwoGuardians
-            ? (isEs ? 'Dispositivo del guardián 1' : 'Guardian device 1')
-            : (isEs ? 'Dispositivo del guardián' : 'Guardian device'),
+            ? (isEs ? 'Dispositivo del cuidador 1' : 'Guardian device 1')
+            : (isEs ? 'Dispositivo del cuidador' : 'Guardian device'),
         instruction: hasTwoGuardians
             ? (isEs
-                  ? 'Acerque el dispositivo del guardián 1 al teléfono'
+                  ? 'Acerque el dispositivo del cuidador 1 al teléfono'
                   : 'Bring guardian device 1 to the phone')
             : (isEs
-                  ? 'Acerque el dispositivo del guardián al teléfono'
+                  ? 'Acerque el dispositivo del cuidador al teléfono'
                   : 'Bring the guardian device to the phone'),
       );
       if (!mounted) return;
@@ -427,9 +427,9 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     if (guardian2Uid.isNotEmpty) {
       await writeGuardianCard(
         expectedUid: guardian2Uid,
-        title: isEs ? 'Dispositivo del guardián 2' : 'Guardian device 2',
+        title: isEs ? 'Dispositivo del cuidador 2' : 'Guardian device 2',
         instruction: isEs
-            ? 'Acerque el dispositivo del guardián 2 al teléfono'
+            ? 'Acerque el dispositivo del cuidador 2 al teléfono'
             : 'Bring guardian device 2 to the phone',
       );
       if (!mounted) return;
@@ -462,7 +462,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         content: Text(
           isEs
               ? 'Este dispositivo ya pertenece a otro paciente. Cada menor '
-                    'necesita su propio dispositivo del guardián: use uno en '
+                    'necesita su propio dispositivo del cuidador: use uno en '
                     'blanco.'
               : 'This device already belongs to another patient. Each minor '
                     'needs their own guardian device: use a blank one.',

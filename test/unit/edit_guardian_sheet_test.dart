@@ -27,8 +27,8 @@ String relationshipLabel(AppStrings s, String code) {
 
 String dynamicTitle({required int guardianIndex, required bool isEs}) {
   return guardianIndex == 1
-      ? (isEs ? 'Editar Guardián Principal' : 'Edit Primary Guardian')
-      : (isEs ? 'Editar Guardián Secundario' : 'Edit Secondary Guardian');
+      ? (isEs ? 'Editar Cuidador Principal' : 'Edit Primary Guardian')
+      : (isEs ? 'Editar Cuidador Secundario' : 'Edit Secondary Guardian');
 }
 
 GuardianInfo buildConfirmPayload({
@@ -117,10 +117,10 @@ void main() {
   });
 
   group('dynamicTitle Parameter Boundary Verifications', () {
-    test('guardianIndex == 1 + ES → Editar Guardián Principal', () {
+    test('guardianIndex == 1 + ES → Editar Cuidador Principal', () {
       expect(
         dynamicTitle(guardianIndex: 1, isEs: true),
-        'Editar Guardián Principal',
+        'Editar Cuidador Principal',
       );
     });
 
@@ -131,10 +131,10 @@ void main() {
       );
     });
 
-    test('guardianIndex == 2 + ES → Editar Guardián Secundario', () {
+    test('guardianIndex == 2 + ES → Editar Cuidador Secundario', () {
       expect(
         dynamicTitle(guardianIndex: 2, isEs: true),
-        'Editar Guardián Secundario',
+        'Editar Cuidador Secundario',
       );
     });
 
@@ -148,7 +148,7 @@ void main() {
     test('guardianIndex == 0 + ES → Fallback to Secundario', () {
       expect(
         dynamicTitle(guardianIndex: 0, isEs: true),
-        'Editar Guardián Secundario',
+        'Editar Cuidador Secundario',
       );
     });
 

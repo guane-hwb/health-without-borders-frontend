@@ -259,7 +259,7 @@ class AppStrings {
   String get careModality => _get('careModality');
   String get dischargeDisposition => _get('dischargeDisposition');
 
-  // ── Loss of wristband ──────────────────────────────────────────────────
+  // ── Loss of device ──────────────────────────────────────────────────
   String get searchPatient => _get('searchPatient');
   String get searchRequiredFields => _get('searchRequiredFields');
   String get searchFieldsRequired => _get('searchFieldsRequired');
@@ -761,11 +761,11 @@ class AppStrings {
     'height': 'Estatura (cm)',
 
     // Guardian
-    'guardianSection': 'Guardián (menores de 18)',
-    'guardianName': 'Nombre del guardián *',
+    'guardianSection': 'Cuidador (menores de 18)',
+    'guardianName': 'Nombre del cuidador *',
     'relationship': 'Parentesco',
-    'guardianPhone': 'Teléfono del guardián *',
-    'guardianPin': 'PIN de 4 dígitos del guardián *',
+    'guardianPhone': 'Teléfono del cuidador *',
+    'guardianPin': 'PIN de 4 dígitos del cuidador *',
 
     // Read NFC
     'scanWristband': 'Acerque el dispositivo NFC',
@@ -773,16 +773,16 @@ class AppStrings {
     'scanning': 'Buscando señal NFC...',
     'scanSuccess': '¡Datos leídos correctamente!',
     'scanFailed': 'Lectura fallida',
-    'guardianRequired': 'Verificación de guardián requerida',
+    'guardianRequired': 'Verificación de cuidador requerida',
     'guardianRequiredSub':
-        'Este paciente es menor de edad. Escanee el dispositivo NFC del guardián para acceder al registro.',
-    'scanGuardianWristband': 'Escanear el dispositivo NFC del guardián',
+        'Este paciente es menor de edad. Escanee el dispositivo NFC del cuidador para acceder al registro.',
+    'scanGuardianWristband': 'Escanear el dispositivo NFC del cuidador',
     'continueToRead': 'Continuar a Leer NFC',
     'readyToScan': 'Listo para escanear',
 
     // Patient detail
     'patient': 'Paciente',
-    'guardian': 'Guardián',
+    'guardian': 'Cuidador',
     'medicalHistory': 'Historial médico',
     'medicalStaff': 'Personal médico',
     'consultations': 'Consultas',
@@ -846,7 +846,7 @@ class AppStrings {
     'careModality': 'Modalidad de atención',
     'dischargeDisposition': 'Condición al egreso',
 
-    // Loss of wristband
+    // Loss of device NFC
     'searchPatient': 'Buscar paciente',
     'searchRequiredFields': 'Los cuatro campos son requeridos para buscar.',
     'searchFieldsRequired':
@@ -936,15 +936,15 @@ class AppStrings {
     'adminBrigadeHistorySub': '{n} pacientes sincronizados',
     // Read NFC v2
     'readWristbandTitle': 'Leer dispositivo NFC',
-    'scanGuardianTitle': 'Leer dispositivo NFC del guardián',
+    'scanGuardianTitle': 'Leer dispositivo NFC del cuidador',
     'scanPatientHeadline': 'Acerque el dispositivo NFC',
     'scanPatientHint': 'Acerque el dispositivo NFC del paciente',
-    'scanGuardianHeadline': 'Acerque el dispositivo NFC del guardián',
+    'scanGuardianHeadline': 'Acerque el dispositivo NFC del cuidador',
     'patientWristbandReady': 'dispositivo NFC del paciente leída',
     'nfcNotAvailableHint': 'NFC no disponible. Use el campo manual debajo.',
     'manualPatientUidLabel': 'UID manual del paciente (testing)',
     'manualPatientUidHint': 'Ej. 04:1A:2C:DE:3F:40:80',
-    'manualGuardianUidLabel': 'UID manual del guardián (testing)',
+    'manualGuardianUidLabel': 'UID manual del cuidador (testing)',
     'manualGuardianUidHint': 'Ej. 04:8E:7F:11:22:33:44',
     'useManualUid': 'Usar UID manual',
     // Search v2
@@ -958,7 +958,7 @@ class AppStrings {
     'lastNameLabel': 'Apellido',
     'firstOrSecondLastName': 'Primer o segundo apellido',
     'dobLabel': 'Fecha de nacimiento',
-    'guardianNameOptionalLabel': 'Nombre del guardián (si es menor)',
+    'guardianNameOptionalLabel': 'Nombre del cuidador (si es menor)',
     'guardianHelper': 'Verificación adicional · coincidencia parcial permitida',
     'minThreeChars': 'Mínimo 3 caracteres',
     'searchPatientButton': 'Buscar paciente',
@@ -1018,13 +1018,13 @@ class AppStrings {
     'docTypePT': 'PPT',
     'docTypeMS': 'Menor s/ID',
     'docTypeAS': 'Adulto s/ID',
-    'editGuardianTitle': 'Editar guardián',
+    'editGuardianTitle': 'Editar cuidador',
     'guardianFullName': 'Nombre completo',
     'guardianFullNameHint': 'ej: Carmen Vargas Pinto',
     'guardianRelationship': 'Parentesco',
     'guardianPhoneLabel': 'Teléfono',
     'guardianPhoneHint': 'ej: +57 310 482 9914',
-    'guardianNfcDevice': 'Dispositivo NFC del guardán',
+    'guardianNfcDevice': 'Dispositivo NFC del cuidador',
     'guardianNfcUidHint': 'UID del dispositivo NFC',
     'guardianNfcUnavailable': 'NFC no disponible. Ingrese el UID manualmente.',
     'guardianNfcError': 'No se pudo leer el dispositivo. Inténtalo de nuevo.',
@@ -1424,7 +1424,7 @@ class AppStrings {
     'careModality': 'Care modality',
     'dischargeDisposition': 'Discharge disposition',
 
-    // Loss of wristband
+    // Loss of device
     'searchPatient': 'Search patient',
     'searchRequiredFields': 'All four fields are required to find the patient.',
     'searchFieldsRequired':

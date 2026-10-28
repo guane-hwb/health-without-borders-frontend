@@ -119,7 +119,7 @@ void main() {
   });
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Capacidad — el bug que dejó el dispositivo del guardián en blanco
+  // Capacidad — el bug que dejó el dispositivo del cuidador en blanco
   // ══════════════════════════════════════════════════════════════════════════
 
   group('capacidad', () {
@@ -190,7 +190,7 @@ void main() {
       );
     });
 
-    test('el payload del guardián paga más overhead que el de triage', () {
+    test('el payload del cuidador paga más overhead que el de triage', () {
       final triage = _messageOf(kHwbNdefMimeType, Uint8List(300)).byteLength;
       final guardian = _messageOf(
         kHwbGuardianMimeType,
@@ -371,7 +371,7 @@ void main() {
       expect(ndef.written, isNotNull);
     });
 
-    test('también aplica al dispositivo del guardián', () async {
+    test('también aplica al dispositivo del cuidador', () async {
       final service = _service(
         codec,
         HwbTag(
@@ -397,7 +397,7 @@ void main() {
       ).thenAnswer((_) async => Uint8List.fromList([9, 8, 7]));
     });
 
-    test('usa el MIME del guardián, no el de triage', () async {
+    test('usa el MIME del cuidador, no el de triage', () async {
       final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
       final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
       await service.writeGuardianPayload(<String, dynamic>{
@@ -576,7 +576,7 @@ void main() {
   // ══════════════════════════════════════════════════════════════════════════
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Un dispositivo del guardián por menor
+  // Un dispositivo del cuidador por menor
   // ══════════════════════════════════════════════════════════════════════════
 
   group('writeGuardianRecord con patientId', () {
@@ -839,7 +839,7 @@ void main() {
       expect(result.uid, kExpectedUid);
     });
 
-    test('guardian cuando el chip trae el registro del guardián', () async {
+    test('guardian cuando el chip trae el registro del cuidador', () async {
       final payload = Uint8List.fromList([5, 5]);
       when(
         () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
@@ -881,7 +881,7 @@ void main() {
       expect(result.guardianRecord, isNull);
     });
 
-    test('prefiere el registro del guardián si el chip trae los dos', () async {
+    test('prefiere el registro del cuidador si el chip trae los dos', () async {
       final guardianPayload = Uint8List.fromList([9]);
       when(
         () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
@@ -925,7 +925,7 @@ void main() {
       ).called(1);
     });
 
-    test('none cuando el guardián no se puede descifrar', () async {
+    test('none cuando el cuidador no se puede descifrar', () async {
       when(
         () => codec.decodeDetailed(any(), extraAad: any(named: 'extraAad')),
       ).thenAnswer((_) async => null);
@@ -1104,7 +1104,7 @@ void main() {
       expect(ndef.written!.records.single.payload, orderedEquals([1, 2, 3]));
     });
 
-    test('el guardián usa su propio MIME en el binding', () async {
+    test('el cuidador usa su propio MIME en el binding', () async {
       when(() => codec.writeKeyVersion).thenReturn(boundVersion);
       final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
       final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
