@@ -503,11 +503,12 @@ class AuthRepository implements TokenProvider {
       } catch (_) {}
       return;
     }
-    // On Android this storage is the same file LocalDatabase keeps its keys
-    // in: deleteAll() would also delete the keys of the pending records the
-    // device keeps on purpose, leaving them unreadable after a restart. Only
-    // the session's own keys go; hwb_last_user_id stays so the next login
-    // knows whose rows those are.
+    // LocalDatabase keeps its keys in its own namespace on Android (N14), but
+    // a device updated from an older build still has them here until the
+    // database first opens and moves them. deleteAll() would delete them, and
+    // the pending records the device keeps on purpose would be unreadable.
+    // Only the session's own keys go; hwb_last_user_id stays so the next
+    // login knows whose rows those are.
     for (final String key in _sessionKeys) {
       try {
         await _secureStorage.delete(key: key);

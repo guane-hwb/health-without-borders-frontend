@@ -30,7 +30,7 @@ dependencies:
   flutter_dotenv: ^6.0.0
 
   # ── Security ──
-  flutter_secure_storage: ^10.0.0
+  flutter_secure_storage: ^10.3.4
 
   # ── NFC ──
   nfc_manager: ^4.1.1

@@ -158,12 +158,29 @@ class LocalDatabase {
           accountName: _keychainService,
           accessibility: KeychainAccessibility.first_unlock_this_device,
         ),
-        aOptions: AndroidOptions(),
+        // Android: its own namespace (data file, KeyStore alias and wrapped
+        // key), apart from the session store. A deleteAll() on the session
+        // store, or the plugin wiping it after an error, cannot reach the
+        // keys of the local database (security review N14).
+        //
+        // resetOnError: false, because with the plugin default a failed read
+        // deletes the key and answers "nothing stored": the next step would
+        // generate a new key and leave every local record unreadable. A failed
+        // read must end in LocalKeyUnavailableException instead.
+        aOptions: AndroidOptions(
+          storageNamespace: _keychainService,
+          resetOnError: false,
+        ),
         webOptions: WebOptions(useSessionStorage: true),
       );
 
+  // Where the keys lived before: the plugin's default store (on Android, the
+  // one the session also uses). Read once to migrate, never written.
   static const FlutterSecureStorage _defaultLegacySecureStorage =
-      FlutterSecureStorage(webOptions: WebOptions(useSessionStorage: false));
+      FlutterSecureStorage(
+        aOptions: AndroidOptions(resetOnError: false),
+        webOptions: WebOptions(useSessionStorage: false),
+      );
 
   @visibleForTesting
   static FlutterSecureStorage get defaultSecureStorageForTesting =>
@@ -226,6 +243,14 @@ class LocalDatabase {
     final TargetPlatform platform = _platformOverride ?? defaultTargetPlatform;
     return platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
   }
+
+  bool get _isAndroid =>
+      !_isWeb &&
+      (_platformOverride ?? defaultTargetPlatform) == TargetPlatform.android;
+
+  /// Platforms whose keys moved out of the plugin's default store: iOS/macOS
+  /// to a device-only keychain item, Android to its own namespace.
+  bool get _keysHaveLegacyStore => _isApple || _isAndroid;
 
   bool _webMigrationChecked = false;
 
@@ -566,7 +591,7 @@ class LocalDatabase {
 
   Future<String?> _readKeyWithMigration(String name) async {
     final String? current = await _secureStorage.read(key: name);
-    if (!_isApple) return current;
+    if (!_keysHaveLegacyStore) return current;
 
     if (current != null && current.isNotEmpty) {
       await _dropRedundantLegacyKey(name, current);
@@ -898,7 +923,7 @@ class LocalDatabase {
     } catch (e) {
       AppLogger.e('Error borrando la clave de cifrado local: $e');
     }
-    if (_isApple) {
+    if (_keysHaveLegacyStore) {
       try {
         await _legacySecureStorage.delete(key: _dbKeyStorageName);
       } catch (e) {

@@ -83,6 +83,10 @@ void main() {
   });
 
   setUp(() async {
+    // On Android (the test default) the keys are first looked up in the
+    // plugin's default store, to migrate them (N14). Tests that pass no
+    // legacySecureStorage get the plugin's in-memory store, empty.
+    FlutterSecureStorage.setMockInitialValues(<String, String>{});
     inMemoryStorage.clear();
     mockStorage = MockSecureStorage();
     when(() => mockStorage.read(key: any(named: 'key'))).thenAnswer(
@@ -3506,7 +3510,7 @@ void main() {
         final LocalDatabase db = LocalDatabase.forTesting(
           secureStorage: mockStorage,
           legacySecureStorage: legacyStorage,
-          platformOverride: TargetPlatform.android,
+          platformOverride: TargetPlatform.linux,
           legacyDatabasesDirectory: () async => legacyDir.path,
           protectedDirectory: () async => protectedRoot.path,
           excludeFromBackup: (String path) async => excluded.add(path),
@@ -3523,6 +3527,207 @@ void main() {
         expect(Directory(protectedDir()).existsSync(), isFalse);
       },
     );
+  });
+
+  group('Android: llaves de la base en su propio espacio (N14)', () {
+    late MockSecureStorage legacyStorage;
+    final Map<String, String> legacyMemory = <String, String>{};
+    late Directory tmpRoot;
+    final List<LocalDatabase> openedDbs = <LocalDatabase>[];
+
+    void stubStorage(MockSecureStorage mock, Map<String, String> memory) {
+      when(() => mock.read(key: any(named: 'key'))).thenAnswer(
+        (invocation) async => memory[invocation.namedArguments[#key] as String],
+      );
+      when(
+        () => mock.write(
+          key: any(named: 'key'),
+          value: any(named: 'value'),
+        ),
+      ).thenAnswer((invocation) async {
+        memory[invocation.namedArguments[#key] as String] =
+            invocation.namedArguments[#value] as String;
+      });
+      when(() => mock.delete(key: any(named: 'key'))).thenAnswer((
+        invocation,
+      ) async {
+        memory.remove(invocation.namedArguments[#key] as String);
+      });
+    }
+
+    String dbPath() => p.join(tmpRoot.path, 'hwb_patients.db');
+
+    LocalDatabase androidDb() {
+      final db = LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        legacySecureStorage: legacyStorage,
+        platformOverride: TargetPlatform.android,
+        legacyDatabasesDirectory: () async => tmpRoot.path,
+      );
+      openedDbs.add(db);
+      return db;
+    }
+
+    setUp(() async {
+      legacyMemory.clear();
+      openedDbs.clear();
+      legacyStorage = MockSecureStorage();
+      stubStorage(legacyStorage, legacyMemory);
+      tmpRoot = await Directory.systemTemp.createTemp('hwb_android_test_');
+    });
+
+    tearDown(() async {
+      for (final db in openedDbs) {
+        await db.closeForTesting();
+      }
+      await LocalDatabase.instance.closeForTesting();
+      if (await tmpRoot.exists()) {
+        try {
+          await tmpRoot.delete(recursive: true);
+        } catch (_) {}
+      }
+    });
+
+    test(
+      'el almacén por defecto usa un espacio propio y no se borra solo ante un error',
+      () {
+        final Map<String, String> options = LocalDatabase
+            .defaultSecureStorageForTesting
+            .aOptions
+            .toMap();
+
+        expect(options['storageNamespace'], 'hwb_local_db');
+        expect(options['resetOnError'], 'false');
+      },
+    );
+
+    test(
+      'migra la llave del almacén de sesión sin regenerarla y borra esa copia',
+      () async {
+        final String legacyKey = _validKeyBase64();
+        legacyMemory[_kDbKeyStorageName] = legacyKey;
+
+        await androidDb().savePatient(
+          _buildRecord(patientId: 'a-1'),
+          ownerUserId: 'u1',
+        );
+
+        expect(inMemoryStorage[_kDbKeyStorageName], equals(legacyKey));
+        expect(legacyMemory.containsKey(_kDbKeyStorageName), isFalse);
+      },
+    );
+
+    test(
+      'una base creada antes del cambio sigue legible y en la misma ruta',
+      () async {
+        final LocalDatabase old = LocalDatabase.forTesting(
+          secureStorage: legacyStorage,
+          platformOverride: TargetPlatform.linux,
+          legacyDatabasesDirectory: () async => tmpRoot.path,
+        );
+        openedDbs.add(old);
+        await old.savePatient(
+          _buildRecord(patientId: 'a-2'),
+          ownerUserId: 'u1',
+        );
+        await old.closeForTesting();
+        final String legacyKey = legacyMemory[_kDbKeyStorageName]!;
+
+        final List<LocalPatientEntry> all = await androidDb().getAllRecords(
+          ownerUserId: 'u1',
+        );
+
+        expect(all.map((LocalPatientEntry e) => e.patientId), <String>['a-2']);
+        expect(inMemoryStorage[_kDbKeyStorageName], equals(legacyKey));
+        expect(legacyMemory.containsKey(_kDbKeyStorageName), isFalse);
+        expect(File(dbPath()).existsSync(), isTrue);
+      },
+    );
+
+    test(
+      'vaciar el almacén de sesión después de migrar no deja la base ilegible',
+      () async {
+        legacyMemory[_kDbKeyStorageName] = _validKeyBase64();
+        final LocalDatabase db = androidDb();
+        await db.savePatient(_buildRecord(patientId: 'a-3'), ownerUserId: 'u1');
+        await db.closeForTesting();
+
+        // What a deleteAll() on the session store, or the plugin resetting it
+        // after an error, would leave behind.
+        legacyMemory.clear();
+
+        final List<LocalPatientEntry> all = await androidDb().getAllRecords(
+          ownerUserId: 'u1',
+        );
+        expect(all.single.patientId, 'a-3');
+      },
+    );
+
+    test(
+      'sin llave previa genera una nueva solo en el espacio propio',
+      () async {
+        await androidDb().savePatient(
+          _buildRecord(patientId: 'a-4'),
+          ownerUserId: 'u1',
+        );
+
+        expect(inMemoryStorage.containsKey(_kDbKeyStorageName), isTrue);
+        expect(legacyMemory, isEmpty);
+      },
+    );
+
+    test(
+      'si no se puede escribir en el espacio propio, usa la llave de sesión y no la borra',
+      () async {
+        final String legacyKey = _validKeyBase64();
+        legacyMemory[_kDbKeyStorageName] = legacyKey;
+        when(
+          () => mockStorage.write(
+            key: any(named: 'key'),
+            value: any(named: 'value'),
+          ),
+        ).thenThrow(Exception('secure storage write failed'));
+
+        final LocalDatabase db = androidDb();
+        await db.savePatient(_buildRecord(patientId: 'a-5'), ownerUserId: 'u1');
+
+        expect(legacyMemory[_kDbKeyStorageName], equals(legacyKey));
+        expect(inMemoryStorage.containsKey(_kDbKeyStorageName), isFalse);
+        expect(
+          (await db.getAllRecords(ownerUserId: 'u1')).single.patientId,
+          'a-5',
+        );
+      },
+    );
+
+    test(
+      'si falla la lectura del almacén de sesión, no genera una llave nueva',
+      () async {
+        when(
+          () => legacyStorage.read(key: any(named: 'key')),
+        ).thenThrow(Exception('secure storage read failed'));
+
+        await expectLater(
+          androidDb().savePatient(
+            _buildRecord(patientId: 'a-6'),
+            ownerUserId: 'u1',
+          ),
+          throwsA(isA<LocalKeyUnavailableException>()),
+        );
+        expect(inMemoryStorage.containsKey(_kDbKeyStorageName), isFalse);
+      },
+    );
+
+    test('destroyEncryptionKey borra también la copia de sesión', () async {
+      final LocalDatabase db = androidDb();
+      await db.savePatient(_buildRecord(patientId: 'a-7'), ownerUserId: 'u1');
+      legacyMemory[_kDbKeyStorageName] = _validKeyBase64();
+
+      await db.destroyEncryptionKey();
+
+      expect(inMemoryStorage.containsKey(_kDbKeyStorageName), isFalse);
+      expect(legacyMemory.containsKey(_kDbKeyStorageName), isFalse);
+    });
   });
 
   // ── Versión del registro y avisos de sincronización ──────────────────────

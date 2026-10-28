@@ -134,10 +134,25 @@ until that user signs in again; the queue only shows how many there are.
 Signing in as someone else no longer blocks or offers to discard them.
 
 `AuthRepository.clearSession()` deletes only the session's keys on a phone. On
-Android `flutter_secure_storage` keeps every key in one file, the local
-database's AES keys included, so `deleteAll()` would leave the pending rows
-unreadable after a restart. On the web it still deletes everything, and logout
-wipes the local PHI.
+the web it still deletes everything, and logout wipes the local PHI.
+
+The local database's AES keys are not in the session's store:
+
+- **Android:** `LocalDatabase` uses its own `storageNamespace` (`hwb_local_db`),
+  with its own data file, KeyStore alias and wrapped key. A `deleteAll()` on the
+  session store, or the plugin wiping that store after an error, does not reach
+  them. A device updated from an older build still has them in the session
+  store; the first time the database opens it copies them over, checks the copy
+  and deletes the old one. That is why `clearSession()` still deletes key by key.
+  The namespace needs `flutter_secure_storage` 10.1 or later: 10.0 opened one
+  file per process, so a second store name was silently ignored.
+- **iOS/macOS:** a device-only keychain item under its own account.
+- **A failed read never generates a new key.** The database store sets
+  `resetOnError: false`. With the plugin default, a failed read deletes the key
+  and answers "nothing stored", so a new key would be generated and every local
+  record would become unreadable. The read now ends in
+  `LocalKeyUnavailableException`, and the records stay on the device for a later
+  attempt.
 
 ### Retired devices
 
