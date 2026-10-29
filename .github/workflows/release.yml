@@ -53,6 +53,16 @@ jobs:
           echo "number=$RUN_NUMBER" >> "$GITHUB_OUTPUT"
           echo "Versión: $NAME+$RUN_NUMBER"
 
+      # La app compilada en release no arranca si la URL no empieza por https://
+      # (AppEnv). Mejor que falle aquí que firmar y publicar un binario roto.
+      - name: Validate API_BASE_URL
+        run: |
+          if ! [[ "$API_BASE_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$ ]]; then
+            echo "::error::API_BASE_URL no es una URL https:// simple: '$API_BASE_URL'. Revise la variable de repositorio (sin corchetes, paréntesis ni espacios)."
+            exit 1
+          fi
+          echo "API_BASE_URL: $API_BASE_URL"
+
   # ── Compuerta de calidad: no se firma nada que no pase análisis y tests ──
   verify:
     name: Analyze & Test
@@ -324,7 +334,7 @@ jobs:
         run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@c95fe0f26b377c9e6121521041ab9107f31f584f # v2.2.1
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
           files: dist/*
           draft: false
