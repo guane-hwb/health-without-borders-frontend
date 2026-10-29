@@ -2202,7 +2202,7 @@ void main() {
       expect(pending.first['had_header'], 1);
     });
 
-    test('distingue dispositivo de guardián', () async {
+    test('distingue dispositivo de cuidador', () async {
       final db = LocalDatabase.instance;
 
       await db.recordNfcKeyVersion(

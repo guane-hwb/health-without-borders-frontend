@@ -287,7 +287,7 @@ void main() {
       expect(result.recordVersion, 12);
     });
 
-    test('propagates ApiException with "Guardian bracelet scan required '
+    test('propagates ApiException with "Guardian device scan required '
         'for minors." on 403', () async {
       when(
         () => apiClient.postJson(
@@ -298,7 +298,7 @@ void main() {
         ),
       ).thenThrow(
         ApiException(
-          'Guardian bracelet scan required for minors.',
+          'Guardian device scan required for minors.',
           statusCode: 403,
         ),
       );

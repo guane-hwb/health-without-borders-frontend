@@ -291,7 +291,7 @@ void main() {
     });
   });
 
-  group('PatientDraftController — Guardianes', () {
+  group('PatientDraftController — Cuidadores', () {
     test('updateGuardian actualiza guardianInfo cuando guardianIndex es 1', () {
       final updatedGuardian = GuardianInfo(
         name: 'Ana Gómez',

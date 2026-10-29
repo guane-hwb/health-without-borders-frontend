@@ -151,7 +151,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       setState(() {
         _scanning = false;
         _errorMessage = isEs
-            ? 'Estes es el dispositivo del guardián. Escanee primero el dispositivo del paciente.'
+            ? 'Estes es el dispositivo del cuidador. Escanee primero el dispositivo del paciente.'
             : 'This is the guardian device. Scan the patient device first.';
       });
       return;
@@ -248,7 +248,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
     final isEs = s.isEs;
     if (guardian) {
       return isEs
-          ? 'Acerque el dispositivo del guardián'
+          ? 'Acerque el dispositivo del cuidador'
           : 'Hold the guardian device near the phone';
     }
     return isEs
@@ -303,7 +303,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         setState(() {
           _scanning = false;
           _errorMessage = isEs
-              ? 'Ese dispositivo no corresponde al guardián de este paciente.'
+              ? 'Ese dispositivo no corresponde al cuidador de este paciente.'
               : 'That device does not belong to this patient\'s guardian.';
         });
         return;
@@ -314,7 +314,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         setState(() {
           _scanning = false;
           _errorMessage = isEs
-              ? 'El dispositivo del guardián está vacío o no se pudo leer.'
+              ? 'El dispositivo del cuidador está vacío o no se pudo leer.'
               : 'The guardian device is blank or could not be read.';
         });
         return;
@@ -339,7 +339,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
             duration: const Duration(seconds: 8),
             content: Text(
               isEs
-                  ? 'El dispositivo del guardián no tiene la información de '
+                  ? 'El dispositivo del cuidador no tiene la información de '
                         'este paciente (es de otro menor o está '
                         'desactualizado). Se muestran solo los datos del '
                         'dispositivo del paciente, sin editar.'
@@ -377,7 +377,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
       setState(() {
         _scanning = false;
         _errorMessage = isEs
-            ? 'No se pudo leer el dispositivo del guardián.'
+            ? 'No se pudo leer el dispositivo del cuidador.'
             : 'Could not read the guardian device.';
       });
     }
@@ -465,7 +465,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         title: Text(isEs ? 'Acceso de emergencia' : 'Emergency access'),
         content: Text(
           isEs
-              ? 'Va a ver datos de un menor sin la autorización del guardián. Este acceso queda registrado. ¿Continuar?'
+              ? 'Va a ver datos de un menor sin la autorización del cuidador. Este acceso queda registrado. ¿Continuar?'
               : 'You are about to view a minor\'s data without the guardian\'s authorisation. This access is logged. Continue?',
         ),
         actions: <Widget>[
@@ -774,7 +774,7 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
           const SizedBox(height: 8),
           Text(
             isEs
-                ? '$name es menor de edad. Se requiere el dispositivo del guardián para ver la historia completa.'
+                ? '$name es menor de edad. Se requiere el dispositivo del cuidador para ver la historia completa.'
                 : '$name is a minor. The guardian device is required to see the full record.',
             textAlign: TextAlign.center,
             style: TextStyle(

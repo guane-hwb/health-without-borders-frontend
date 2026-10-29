@@ -40,7 +40,7 @@ class PatientRepository {
     final Map<String, dynamic> body = Map<String, dynamic>.from(
       record.toJson(),
     );
-    // Transport-only signal for bracelet/guardian re-labeling. Injected here
+    // Transport-only signal for device/guardian re-labeling. Injected here
     // rather than in PatientFullRecord.toJson() so it never gets written to an
     // NFC tag (toJson also feeds the tag payload). The backend consumes it to
     // record the retirement reason and drops it from the stored record.

@@ -130,7 +130,7 @@ class PatientDraftController extends ChangeNotifier {
     _replacePatientInfo(_draft.patientInfo.copyWith(address: address));
   }
 
-  // ── Guardianes ───────────────────────────────────────────────────────────
+  // ── cuidadores ───────────────────────────────────────────────────────────
 
   void updateGuardian(int guardianIndex, GuardianInfo updatedGuardian) {
     _draft = _draft.copyWith(

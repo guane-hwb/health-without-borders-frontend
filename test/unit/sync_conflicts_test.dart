@@ -16,7 +16,7 @@ void main() {
       expect(lines, hasLength(3));
       expect(lines[0], contains('dispositivo ya retirado'));
       expect(lines[1], contains('ya había cambiado en el servidor'));
-      expect(lines[2], contains('Los guardianes no se cambiaron'));
+      expect(lines[2], contains('Los cuidadores no se cambiaron'));
     });
 
     test('las ediciones de consultas y vacunas se cuentan, no se listan', () {

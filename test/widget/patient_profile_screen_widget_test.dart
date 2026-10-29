@@ -834,7 +834,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('25. Modal de guardián 1 mediante callback', (tester) async {
+    testWidgets('25. Modal de cuidador 1 mediante callback', (tester) async {
       await _pumpScreen(tester, _record());
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
@@ -843,7 +843,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('26. Modal de guardián 2 mediante callback', (tester) async {
+    testWidgets('26. Modal de cuidador 2 mediante callback', (tester) async {
       await _pumpScreen(tester, _record());
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
@@ -980,7 +980,7 @@ void main() {
     });
 
     testWidgets(
-      '35. Intentar abrir guardián 2 cuando no existe no abre modal',
+      '35. Intentar abrir cuidador 2 cuando no existe no abre modal',
       (tester) async {
         await _pumpScreen(
           tester,
@@ -1038,7 +1038,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('39. Callback de guardián deshabilitado en readOnly', (
+    testWidgets('39. Callback de cuidador deshabilitado en readOnly', (
       tester,
     ) async {
       await _pumpScreen(tester, _record(), readOnly: true);
@@ -1177,7 +1177,7 @@ void main() {
       expect(find.byType(PatientProfileScreen), findsOneWidget);
     });
 
-    testWidgets('57. Renderizado con guardián secundario opcional', (
+    testWidgets('57. Renderizado con cuidador secundario opcional', (
       tester,
     ) async {
       await _pumpScreen(tester, _record());
@@ -1262,7 +1262,7 @@ void main() {
         },
       );
 
-      testWidgets('67. Probar guardián con índice 1', (tester) async {
+      testWidgets('67. Probar cuidador con índice 1', (tester) async {
         await _pumpScreen(tester, _record());
         final summary = tester.widget<ProfileTabSummary>(
           find.byType(ProfileTabSummary),
@@ -1271,7 +1271,7 @@ void main() {
         await tester.pumpAndSettle();
       });
 
-      testWidgets('68. Probar guardián con índice 2 cuando existe guardián 2', (
+      testWidgets('68. Probar cuidador con índice 2 cuando existe cuidador 2', (
         tester,
       ) async {
         await _pumpScreen(tester, _record());
@@ -1814,7 +1814,7 @@ void main() {
     );
 
     testWidgets(
-      '91. Reasignación exitosa de paciente + guardián 1 (dos objetivos)',
+      '91. Reasignación exitosa de paciente + cuidador 1 (dos objetivos)',
       (tester) async {
         final calledTargets = <ReassignTarget>[];
         await _pumpScreen(tester, _record(), allowReassign: true);
@@ -2269,7 +2269,7 @@ void main() {
       expect(find.textContaining('72.5'), findsWidgets);
     });
 
-    testWidgets('106. Confirmar guardián 1 actualiza el draft', (tester) async {
+    testWidgets('106. Confirmar cuidador 1 actualiza el draft', (tester) async {
       await _pumpScreen(tester, _record());
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
@@ -2280,7 +2280,7 @@ void main() {
           .widget<EditGuardianSheet>(find.byType(EditGuardianSheet))
           .onConfirm(
             GuardianInfo(
-              name: 'Nuevo Guardián',
+              name: 'Nuevo Cuidador',
               relationship: '02',
               phone: '3111111111',
             ),
@@ -2290,7 +2290,7 @@ void main() {
       expect(find.byType(ProfileTabSummary), findsOneWidget);
     });
 
-    testWidgets('107. Confirmar guardián 2 actualiza el draft', (tester) async {
+    testWidgets('107. Confirmar cuidador 2 actualiza el draft', (tester) async {
       await _pumpScreen(tester, _record());
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
@@ -2301,7 +2301,7 @@ void main() {
           .widget<EditGuardianSheet>(find.byType(EditGuardianSheet))
           .onConfirm(
             GuardianInfo(
-              name: 'Guardián Dos Nuevo',
+              name: 'Cuidador Dos Nuevo',
               relationship: '03',
               phone: '3222222222',
             ),
@@ -3436,7 +3436,7 @@ void main() {
       return fakes;
     }
 
-    testWidgets('cambiar el dispositivo del guardián ofrece grabar ya el del '
+    testWidgets('cambiar el dispositivo del cuidador ofrece grabar ya el del '
         'paciente, que lo nombra', (tester) async {
       final writes = <Map<String, bool>>[];
       final fakes = await reassign(
@@ -3460,7 +3460,7 @@ void main() {
     });
 
     testWidgets('cambiar el dispositivo del paciente deja marcados los del '
-        'guardián; "Más tarde" los deja en el aviso', (tester) async {
+        'cuidador; "Más tarde" los deja en el aviso', (tester) async {
       final writes = <Map<String, bool>>[];
       final fakes = await reassign(
         tester,

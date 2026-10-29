@@ -102,7 +102,7 @@ void main() {
       );
     });
 
-    testWidgets('muestra las 4 cards (NFC, Paciente, Guardián, Antecedentes)', (
+    testWidgets('muestra las 4 cards (NFC, Paciente, Cuidador, Antecedentes)', (
       tester,
     ) async {
       configureMobileScreenSize(tester);
@@ -223,8 +223,8 @@ void main() {
     });
   });
 
-  group('Card Guardián — sin guardián', () {
-    testWidgets('muestra "Sin guardián" cuando guardianName es null', (
+  group('Card Cuidador — sin cuidador', () {
+    testWidgets('muestra "Sin cuidador" cuando guardianName es null', (
       tester,
     ) async {
       configureMobileScreenSize(tester);
@@ -233,12 +233,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final noGuardianText = find.text('Sin guardián');
+      final noGuardianText = find.text('Sin cuidador');
       await tester.ensureVisible(noGuardianText);
       expect(noGuardianText, findsOneWidget);
     });
 
-    testWidgets('muestra "Sin guardián" cuando guardianName está vacío', (
+    testWidgets('muestra "Sin cuidador" cuando guardianName está vacío', (
       tester,
     ) async {
       configureMobileScreenSize(tester);
@@ -247,14 +247,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final noGuardianText = find.text('Sin guardián');
+      final noGuardianText = find.text('Sin cuidador');
       await tester.ensureVisible(noGuardianText);
       expect(noGuardianText, findsOneWidget);
     });
   });
 
-  group('Card Guardián — con guardián', () {
-    testWidgets('muestra el nombre del guardián', (tester) async {
+  group('Card Cuidador — con cuidador', () {
+    testWidgets('muestra el nombre del cuidador', (tester) async {
       configureMobileScreenSize(tester);
       await tester.pumpWidget(
         buildTestApp(
@@ -288,7 +288,7 @@ void main() {
       expect(relationshipText, findsOneWidget);
     });
 
-    testWidgets('muestra el teléfono del guardián', (tester) async {
+    testWidgets('muestra el teléfono del cuidador', (tester) async {
       configureMobileScreenSize(tester);
       await tester.pumpWidget(
         buildTestApp(
@@ -321,7 +321,7 @@ void main() {
       expect(notRegisteredText, findsOneWidget);
     });
 
-    testWidgets('muestra el UID del guardián cuando está registrado', (
+    testWidgets('muestra el UID del cuidador cuando está registrado', (
       tester,
     ) async {
       configureMobileScreenSize(tester);
@@ -615,7 +615,7 @@ void main() {
       expect(find.text('Female'), findsOneWidget);
     });
 
-    testWidgets('muestra "No guardian" cuando no hay guardián en inglés', (
+    testWidgets('muestra "No guardian" cuando no hay cuidador en inglés', (
       tester,
     ) async {
       configureMobileScreenSize(tester);
@@ -649,7 +649,7 @@ void main() {
 
   group('Step5Review — Cobertura 100% de líneas faltantes', () {
     testWidgets(
-      'Muestra el separador divisorio cuando el paciente tiene Guardián 1 y Guardián 2 registrados',
+      'Muestra el separador divisorio cuando el paciente tiene Cuidador 1 y Cuidador 2 registrados',
       (tester) async {
         configureMobileScreenSize(tester);
 
@@ -661,7 +661,7 @@ void main() {
         await tester.pumpWidget(buildTestApp(draft: draft));
         await tester.pumpAndSettle();
 
-        expect(find.text('Guardianes (2)'), findsOneWidget);
+        expect(find.text('Cuidadores (2)'), findsOneWidget);
         expect(find.text('Ana García'), findsOneWidget);
         expect(find.text('Carlos Torres'), findsOneWidget);
         expect(find.text('────────'), findsWidgets);

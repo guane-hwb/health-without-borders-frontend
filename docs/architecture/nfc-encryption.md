@@ -12,7 +12,7 @@ Read it before touching anything to do with keys in a deployed environment.
 
 ## What is on the chip
 
-Every HWB chip — a patient bracelet or a guardian card — carries its clinical
+Every HWB chip — a patient device or a guardian card — carries its clinical
 payload through this pipeline:
 
 ```

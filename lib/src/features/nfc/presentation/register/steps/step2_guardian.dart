@@ -315,7 +315,7 @@ class _Step2State extends State<Step2Guardian> {
         ? 'Autorización de política de privacidad'
         : 'Privacy policy authorization';
     final auth2Label = isEs
-        ? 'Autorización guardián 2'
+        ? 'Autorización cuidador 2'
         : 'Guardian 2 Authorization';
     final requiredFieldsLabel = isEs ? 'Campos requeridos' : 'Required fields';
 
@@ -331,7 +331,7 @@ class _Step2State extends State<Step2Guardian> {
         validateDocumentNumber(_docNumber.text) != null) {
       missing.add(
         isEs
-            ? 'Documento de guardián inválido (5 a 20 caracteres, sin símbolos)'
+            ? 'Documento de cuidador inválido (5 a 20 caracteres, sin símbolos)'
             : 'Invalid guardian document (5 to 20 characters, no symbols)',
       );
     }
@@ -352,18 +352,18 @@ class _Step2State extends State<Step2Guardian> {
       if (validateDocumentNumber(_docNumber2.text) != null) {
         missing.add(
           isEs
-              ? 'Documento de guardián 2 inválido'
+              ? 'Documento de cuidador 2 inválido'
               : 'Invalid guardian 2 document',
         );
       }
       if (validatePhone(_phone2.text) != null) {
         missing.add(
-          isEs ? 'Teléfono de guardián 2 inválido' : 'Invalid guardian 2 phone',
+          isEs ? 'Teléfono de cuidador 2 inválido' : 'Invalid guardian 2 phone',
         );
       }
       if (validateEmail(_email2.text) != null) {
         missing.add(
-          isEs ? 'Correo de guardián 2 inválido' : 'Invalid guardian 2 email',
+          isEs ? 'Correo de cuidador 2 inválido' : 'Invalid guardian 2 email',
         );
       }
 
@@ -371,7 +371,7 @@ class _Step2State extends State<Step2Guardian> {
         if (!_auth2Accepted) missing.add(auth2Label);
       }
       if (_auth2Accepted && _signatureStrokes2.isEmpty) {
-        missing.add(isEs ? 'Firma del guardián 2' : 'Guardian 2 signature');
+        missing.add(isEs ? 'Firma del cuidador 2' : 'Guardian 2 signature');
       }
     }
 
@@ -491,7 +491,7 @@ class _Step2State extends State<Step2Guardian> {
                   Expanded(
                     child: Text(
                       isEs
-                          ? 'Información del guardián'
+                          ? 'Información del cuidador'
                           : 'Guardian information',
                       style: const TextStyle(
                         fontSize: 16,
@@ -568,7 +568,7 @@ class _Step2State extends State<Step2Guardian> {
                           ),
                           const SizedBox(width: 10),
                           Text(
-                            isEs ? 'Editar guardián 1' : 'Edit guardian 1',
+                            isEs ? 'Editar cuidador 1' : 'Edit guardian 1',
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
@@ -1055,7 +1055,7 @@ class _AuthCheckbox extends StatelessWidget {
                 children: [
                   TextSpan(
                     text: isEs
-                        ? 'El guardián reconoce haber leído y autorizado el tratamiento de los datos del menor y la '
+                        ? 'El cuidador reconoce haber leído y autorizado el tratamiento de los datos del menor y la '
                         : 'The guardian acknowledges having read and authorized the processing of the minor\'s data and the ',
                   ),
                   WidgetSpan(
@@ -1272,7 +1272,7 @@ class _PrivacyPolicyDialog extends StatelessWidget {
                           body: '',
                           bullets: [
                             'Datos del menor: Nombres, apellidos, tipo y número de documento, fecha de nacimiento, sexo biológico, dirección y datos de salud (consultas, vacunas, alergias y diagnósticos).',
-                            'Datos del guardián: Nombre completo, parentesco, teléfono, dirección de correo electrónico, tipo y número de documento, e ID del dispositivo NFC.',
+                            'Datos del cuidador: Nombre completo, parentesco, teléfono, dirección de correo electrónico, tipo y número de documento, e ID del dispositivo NFC.',
                             'Datos biométricos: Firma manuscrita digitalizada como evidencia de autorización legal.',
                           ],
                         ),
@@ -1289,7 +1289,7 @@ class _PrivacyPolicyDialog extends StatelessWidget {
                         ),
                         _PolicySection(
                           title:
-                              '4. Derechos del Titular y del Guardián (Art. 8, Ley 1581/2012)',
+                              '4. Derechos del Titular y del cuidador (Art. 8, Ley 1581/2012)',
                           body:
                               'Como titular o representante legal del menor, usted tiene derecho a: conocer, actualizar y rectificar sus datos personales; solicitar prueba de la autorización otorgada; ser informado sobre el uso de sus datos; presentar quejas ante la Superintendencia de Industria y Comercio (SIC); revocar la autorización o solicitar la supresión de los datos salvo obligación legal o contractual.',
                         ),
@@ -1809,7 +1809,7 @@ class _Guardian2Section extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
-    final deleteTooltip = isEs ? 'Eliminar guardián 2' : 'Remove guardian 2';
+    final deleteTooltip = isEs ? 'Eliminar cuidador 2' : 'Remove guardian 2';
     final docTypes = {'CC': s.docTypeCC, 'CE': s.docTypeCE};
 
     final rels = {

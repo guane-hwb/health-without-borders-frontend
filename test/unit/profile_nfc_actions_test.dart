@@ -165,39 +165,39 @@ void main() {
       hasTwoGuardianDevices: twoGuardianDevices,
     );
 
-    test('nuevo dispositivo del paciente: quedan los de los guardianes', () {
+    test('nuevo dispositivo del paciente: quedan los de los cuidadores', () {
       expect(stale([ReassignTarget.patient]), (patient: false, guardian: true));
     });
 
-    test('nuevo dispositivo del paciente sin guardianes: nada queda', () {
+    test('nuevo dispositivo del paciente sin cuidadores: nada queda', () {
       expect(stale([ReassignTarget.patient], guardianDevice: false), (
         patient: false,
         guardian: false,
       ));
     });
 
-    test('nuevo dispositivo del único guardián: queda el del paciente', () {
+    test('nuevo dispositivo del único cuidador: queda el del paciente', () {
       expect(stale([ReassignTarget.guardian1]), (
         patient: true,
         guardian: false,
       ));
     });
 
-    test('con dos guardianes, también el del otro guardián', () {
+    test('con dos cuidadores, también el del otro cuidador', () {
       expect(stale([ReassignTarget.guardian2], twoGuardianDevices: true), (
         patient: true,
         guardian: true,
       ));
     });
 
-    test('el del paciente grabado después del guardián ya lo nombra', () {
+    test('el del paciente grabado después del cuidador ya lo nombra', () {
       expect(stale([ReassignTarget.guardian1, ReassignTarget.patient]), (
         patient: false,
         guardian: true,
       ));
     });
 
-    test('el del paciente grabado antes del guardián sigue desactualizado', () {
+    test('el del paciente grabado antes del cuidador sigue desactualizado', () {
       expect(stale([ReassignTarget.patient, ReassignTarget.guardian1]), (
         patient: true,
         guardian: true,

@@ -100,7 +100,7 @@ void main() {
       expect(find.byIcon(Icons.arrow_forward), findsOneWidget);
     });
 
-    testWidgets('5. Botón "Agregar" guardián 2 es visible al inicio', (
+    testWidgets('5. Botón "Agregar" cuidador 2 es visible al inicio', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -111,7 +111,7 @@ void main() {
   });
 
   group('Step2Guardian – carga desde draft (Tests 6 a 7)', () {
-    testWidgets('6. Campos guardián 1 se pre-llenan correctamente', (
+    testWidgets('6. Campos cuidador 1 se pre-llenan correctamente', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -130,7 +130,7 @@ void main() {
       expect(find.text('ana@example.com'), findsOneWidget);
     });
 
-    testWidgets('7. Muestra guardián 2 si guardian2Name tiene contenido', (
+    testWidgets('7. Muestra cuidador 2 si guardian2Name tiene contenido', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -181,8 +181,8 @@ void main() {
     });
   });
 
-  group('Guardián 2 – agregar y eliminar (Tests 10 a 11)', () {
-    testWidgets('10. Al tocar "Agregar" aparece la sección de guardián 2', (
+  group('Cuidador 2 – agregar y eliminar (Tests 10 a 11)', () {
+    testWidgets('10. Al tocar "Agregar" aparece la sección de cuidador 2', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -196,7 +196,7 @@ void main() {
       expect(find.byIcon(Icons.delete_outline), findsOneWidget);
     });
 
-    testWidgets('11. Al tocar eliminar, desaparece la sección de guardián 2', (
+    testWidgets('11. Al tocar eliminar, desaparece la sección de cuidador 2', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -450,8 +450,8 @@ void main() {
     });
   });
 
-  group('NFC y Cobertura Extendida de Guardián 1 y Guardián 2 (100% Cobertura)', () {
-    testWidgets('25. Escaneo NFC Exitoso para Guardián 1', (tester) async {
+  group('NFC y Cobertura Extendida de Cuidador 1 y Cuidador 2 (100% Cobertura)', () {
+    testWidgets('25. Escaneo NFC Exitoso para Cuidador 1', (tester) async {
       resizeViewport(tester);
       NfcService.overrideReadDeviceUid = () async => 'NFC-GUARD-001';
 
@@ -473,7 +473,7 @@ void main() {
     });
 
     testWidgets(
-      '26. Escaneo NFC lanza NfcNotAvailableException en Guardián 1',
+      '26. Escaneo NFC lanza NfcNotAvailableException en Cuidador 1',
       (tester) async {
         resizeViewport(tester);
         NfcService.overrideReadDeviceUid = () async =>
@@ -498,7 +498,7 @@ void main() {
       },
     );
 
-    testWidgets('27. Escaneo NFC lanza excepción genérica en Guardián 1', (
+    testWidgets('27. Escaneo NFC lanza excepción genérica en Cuidador 1', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -524,7 +524,7 @@ void main() {
     });
 
     testWidgets(
-      '28. Escaneo NFC Exitoso, Error No Disponible y Genérico en Guardián 2',
+      '28. Escaneo NFC Exitoso, Error No Disponible y Genérico en Cuidador 2',
       (tester) async {
         resizeViewport(tester);
         await tester.pumpWidget(buildSubject());
@@ -617,7 +617,7 @@ void main() {
     );
 
     testWidgets(
-      '30. Guardián 2 completo: firma biométrica, dropdowns, selección de chip y asignación a RegisterDraft',
+      '30. Cuidador 2 completo: firma biométrica, dropdowns, selección de chip y asignación a RegisterDraft',
       (tester) async {
         resizeViewport(tester);
 
@@ -738,13 +738,13 @@ void main() {
     });
 
     testWidgets(
-      '34. Cambio manual en input de texto NFC de Guardián 1 y Guardián 2 activa onChanged()',
+      '34. Cambio manual en input de texto NFC de Cuidador 1 y Cuidador 2 activa onChanged()',
       (tester) async {
         resizeViewport(tester);
         await tester.pumpWidget(buildSubject());
         await tester.pumpAndSettle();
 
-        // Guardián 1 NFC onChanged
+        // Cuidador 1 NFC onChanged
         final uidFieldG1 = tester
             .widgetList<TextField>(find.byType(TextField))
             .elementAt(2);
@@ -753,7 +753,7 @@ void main() {
 
         expect(find.textContaining('MANUAL-UID-01'), findsWidgets);
 
-        // Habilitar Guardián 2 y cambiar NFC manualmente
+        // Habilitar Cuidador 2 y cambiar NFC manualmente
         await tester.tap(find.text('Agregar'));
         await tester.pumpAndSettle();
 
@@ -768,7 +768,7 @@ void main() {
     );
 
     testWidgets(
-      '35. Cambio de parentesco mediante Chips en Guardián 1 dispara la función de actualización',
+      '35. Cambio de parentesco mediante Chips en Cuidador 1 dispara la función de actualización',
       (tester) async {
         resizeViewport(tester);
         final draft = RegisterDraft();
@@ -809,7 +809,7 @@ void main() {
     );
 
     testWidgets(
-      '37. Interacción completa con gestos de firma (panStart, panUpdate, panEnd) y checkbox de Guardián 1 y Guardián 2',
+      '37. Interacción completa con gestos de firma (panStart, panUpdate, panEnd) y checkbox de Cuidador 1 y Cuidador 2',
       (tester) async {
         resizeViewport(tester);
         await tester.pumpWidget(buildSubject());
@@ -895,14 +895,14 @@ void main() {
 
         expect(find.byIcon(Icons.error_outline), findsOneWidget);
         expect(
-          find.textContaining('Documento de guardián inválido'),
+          find.textContaining('Documento de cuidador inválido'),
           findsOneWidget,
         );
       },
     );
   });
 
-  group('Lectura del dispositivo del guardián con readDevice', () {
+  group('Lectura del dispositivo del cuidador con readDevice', () {
     Finder scanButton({required bool last}) {
       final f = find.descendant(
         of: find.byType(ElevatedButton),
@@ -911,7 +911,7 @@ void main() {
       return last ? f.last : f.first;
     }
 
-    testWidgets('usa el UID que devuelve, en los dos guardianes', (
+    testWidgets('usa el UID que devuelve, en los dos cuidadores', (
       tester,
     ) async {
       resizeViewport(tester);
@@ -959,7 +959,7 @@ void main() {
 
   group('Step2Guardian — Callbacks de Firma, Gestos, Modales y _commitToDraft', () {
     testWidgets(
-      '39. Ejercicio de gestos de firma de Guardián 1 y Guardián 2, limpieza y diálogo de aceptación',
+      '39. Ejercicio de gestos de firma de Cuidador 1 y Cuidador 2, limpieza y diálogo de aceptación',
       (tester) async {
         resizeViewport(tester);
         final draft = RegisterDraft();
@@ -1039,7 +1039,7 @@ void main() {
     );
 
     testWidgets(
-      '40. Muestra mensaje de error cuando Guardián 2 acepta autorización pero no incluye firma',
+      '40. Muestra mensaje de error cuando Cuidador 2 acepta autorización pero no incluye firma',
       (tester) async {
         resizeViewport(tester);
 
@@ -1071,12 +1071,12 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byIcon(Icons.error_outline), findsOneWidget);
-        expect(find.textContaining('Firma del guardián 2'), findsOneWidget);
+        expect(find.textContaining('Firma del cuidador 2'), findsOneWidget);
       },
     );
   });
 
-  group('Step2Guardian — Borrador completo, UID y firma del guardián 2', () {
+  group('Step2Guardian — Borrador completo, UID y firma del cuidador 2', () {
     RegisterDraft fullDraft() => RegisterDraft()
       ..guardianName = 'Ana María García'
       ..guardianPhone = '3158492041'
@@ -1100,7 +1100,7 @@ void main() {
       ];
 
     testWidgets(
-      'Atrás con ambos guardianes completos guarda todo el borrador',
+      'Atrás con ambos cuidadores completos guarda todo el borrador',
       (tester) async {
         resizeViewport(tester);
         bool backCalled = false;
@@ -1129,7 +1129,7 @@ void main() {
     );
 
     testWidgets(
-      'Continuar con ambos guardianes completos conserva el UID del guardián 2',
+      'Continuar con ambos cuidadores completos conserva el UID del cuidador 2',
       (tester) async {
         resizeViewport(tester);
         bool continueCalled = false;
@@ -1153,7 +1153,7 @@ void main() {
     );
 
     testWidgets(
-      'Escribir en el campo de UID del guardián 1 actualiza el indicador',
+      'Escribir en el campo de UID del cuidador 1 actualiza el indicador',
       (tester) async {
         resizeViewport(tester);
         await tester.pumpWidget(buildSubject());
@@ -1177,7 +1177,7 @@ void main() {
     );
 
     testWidgets(
-      'Limpiar firma del guardián 2 borra sus trazos y su firma del borrador',
+      'Limpiar firma del cuidador 2 borra sus trazos y su firma del borrador',
       (tester) async {
         resizeViewport(tester);
         final draft = RegisterDraft();
@@ -1223,14 +1223,14 @@ void main() {
     );
 
     testWidgets(
-      'Tocar el texto de autorización del guardián 1 conmuta su checkbox',
+      'Tocar el texto de autorización del cuidador 1 conmuta su checkbox',
       (tester) async {
         resizeViewport(tester);
         await tester.pumpWidget(buildSubject());
         await tester.pumpAndSettle();
 
         final authText = find.textContaining(
-          'El guardián reconoce haber leído',
+          'El cuidador reconoce haber leído',
           findRichText: true,
         );
         await tester.ensureVisible(authText.first);

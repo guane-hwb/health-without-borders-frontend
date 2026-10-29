@@ -198,14 +198,20 @@ Future<ReassignSelection?> showReassignDeviceDialog(
                         buildTargetCard(
                           target: ReassignTarget.guardian1,
                           title: hasG2
-                              ? (isEs ? 'Dispositivo guardián 1' : 'Guardian 1')
-                              : (isEs ? 'Dispositivo guardián' : 'Guardian'),
+                              ? (isEs
+                                    ? 'Dispositivo del cuidador 1'
+                                    : 'Guardian 1')
+                              : (isEs
+                                    ? 'Dispositivo del cuidador'
+                                    : 'Guardian'),
                           icon: Icons.contact_emergency_outlined,
                         ),
                       if (hasG2)
                         buildTargetCard(
                           target: ReassignTarget.guardian2,
-                          title: isEs ? 'Dispositivo guardián 2' : 'Guardian 2',
+                          title: isEs
+                              ? 'Dispositivo del cuidador 2'
+                              : 'Guardian 2',
                           icon: Icons.contact_emergency_outlined,
                         ),
                       const SizedBox(height: 16),

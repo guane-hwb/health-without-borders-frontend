@@ -260,10 +260,7 @@ class NfcPayloadCodec {
         ? Uint8List.fromList(<int>[_kMagic0, _kMagic1, version])
         : null;
 
-    final aadList = <int>[
-      if (header != null) ...header,
-      if (extraAad != null) ...extraAad,
-    ];
+    final aadList = <int>[...?header, ...?extraAad];
 
     final nonce = _secureRandom(_kNonceLength);
 
@@ -293,10 +290,7 @@ class NfcPayloadCodec {
       final Uint8List? key = _keys[version];
       if (key != null) {
         final headerAad = Uint8List.sublistView(packed, 0, _kHeaderLength);
-        final fullAad = Uint8List.fromList(<int>[
-          ...headerAad,
-          if (extraAad != null) ...extraAad,
-        ]);
+        final fullAad = Uint8List.fromList(<int>[...headerAad, ...?extraAad]);
         final result = await _decryptWith(
           key,
           Uint8List.sublistView(packed, _kHeaderLength),
