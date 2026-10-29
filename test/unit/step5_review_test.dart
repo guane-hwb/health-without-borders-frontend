@@ -320,20 +320,20 @@ void main() {
     });
   });
 
-  group('Condición sin guardián', () {
-    test('guardianName null se evalúa como sin guardián', () {
+  group('Condición sin cuidador', () {
+    test('guardianName null se evalúa como sin cuidador', () {
       final d = RegisterDraft();
       final noGuardian = d.guardianName == null || d.guardianName!.isEmpty;
       expect(noGuardian, isTrue);
     });
 
-    test('guardianName vacío se evalúa como sin guardián', () {
+    test('guardianName vacío se evalúa como sin cuidador', () {
       final d = RegisterDraft()..guardianName = '';
       final noGuardian = d.guardianName == null || d.guardianName!.isEmpty;
       expect(noGuardian, isTrue);
     });
 
-    test('guardianName con valor no se evalúa como sin guardián', () {
+    test('guardianName con valor no se evalúa como sin cuidador', () {
       final d = RegisterDraft()..guardianName = 'Roberto';
       final noGuardian = d.guardianName == null || d.guardianName!.isEmpty;
       expect(noGuardian, isFalse);
@@ -381,8 +381,8 @@ void main() {
       expect(s.patient, 'Paciente');
     });
 
-    test('guardian retorna texto correcto', () {
-      expect(s.guardian, 'Guardián');
+    test('cuidador retorna texto correcto', () {
+      expect(s.guardian, 'Cuidador');
     });
 
     test('backgroundHistory retorna texto correcto', () {
@@ -453,7 +453,7 @@ void main() {
       expect(s.patient, 'Patient');
     });
 
-    test('guardian retorna "Guardian"', () {
+    test('cuidador retorna "Guardian"', () {
       expect(s.guardian, 'Guardian');
     });
 
@@ -482,11 +482,11 @@ void main() {
     });
 
     test(
-      'Lógica del separador entre Guardián 1 y Guardián 2 cuando ambos están presentes',
+      'Lógica del separador entre Cuidador 1 y Cuidador 2 cuando ambos están presentes',
       () {
         final draft = RegisterDraft()
-          ..guardianName = 'Guardián Uno'
-          ..guardian2Name = 'Guardián Dos';
+          ..guardianName = 'Cuidador Uno'
+          ..guardian2Name = 'Cuidador Dos';
 
         final hasGuardian1 =
             draft.guardianName != null && draft.guardianName!.isNotEmpty;

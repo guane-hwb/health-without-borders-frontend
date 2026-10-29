@@ -313,7 +313,7 @@ void main() {
     });
   });
 
-  group('comunidad étnica en el dispositivo del guardián', () {
+  group('comunidad étnica en el dispositivo del cuidador', () {
     PatientFullRecord withCommunity() {
       final r = _record();
       return r.copyWith(

@@ -352,10 +352,10 @@ void main() {
     );
   });
 
-  group('RegisterNfcScreen — un dispositivo del guardián por menor', () {
+  group('RegisterNfcScreen — un dispositivo del cuidador por menor', () {
     const String inUse =
         'Este dispositivo ya pertenece a otro paciente. Cada menor necesita '
-        'su propio dispositivo del guardián: use uno en blanco.';
+        'su propio dispositivo del cuidador: use uno en blanco.';
 
     tearDown(() {
       RegisterNfcScreen.overrideReadHwbChip = null;
@@ -626,7 +626,7 @@ void main() {
       final validHexKey = List.filled(32, 'ab').join();
 
       testWidgets(
-        'sin dispositivo de guardián: solo intenta el dispositivo del paciente',
+        'sin dispositivo de cuidador: solo intenta el dispositivo del paciente',
         (tester) async {
           when(
             () => auth.getNfcKeyring(),
@@ -653,7 +653,7 @@ void main() {
       );
 
       testWidgets(
-        'con dispositivo de guardián registrada: también intenta con el dispositivo del guardián',
+        'con dispositivo de cuidador registrada: también intenta con el dispositivo del cuidador',
         (tester) async {
           when(
             () => auth.getNfcKeyring(),
@@ -1164,7 +1164,7 @@ void main() {
       );
     });
 
-    testWidgets('graba también el dispositivo del guardián del paciente', (
+    testWidgets('graba también el dispositivo del cuidador del paciente', (
       tester,
     ) async {
       await pumpScreen(tester);
@@ -1197,7 +1197,7 @@ void main() {
       );
     });
 
-    testWidgets('con dos guardianes graba ambos dispositivos en orden', (
+    testWidgets('con dos cuidadores graba ambos dispositivos en orden', (
       tester,
     ) async {
       await pumpScreen(tester);

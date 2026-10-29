@@ -256,8 +256,8 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     final docTypes = {'CC': s.docTypeCC, 'CE': s.docTypeCE};
 
     final dynamicTitle = widget.guardianIndex == 1
-        ? (isEs ? 'Editar Guardián Principal' : 'Edit Primary Guardian')
-        : (isEs ? 'Editar Guardián Secundario' : 'Edit Secondary Guardian');
+        ? (isEs ? 'Editar Cuidador Principal' : 'Edit Primary Guardian')
+        : (isEs ? 'Editar Cuidador Secundario' : 'Edit Secondary Guardian');
 
     return PopScope(
       canPop: !_hasUnsavedChanges,
@@ -329,7 +329,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
                         return isEs
-                            ? 'El nombre del guardián es obligatorio'
+                            ? 'El nombre del cuidador es obligatorio'
                             : 'Guardian name is required';
                       }
                       return null;
@@ -876,7 +876,7 @@ class _AuthCheckbox extends StatelessWidget {
                 children: [
                   TextSpan(
                     text: isEs
-                        ? 'El guardián reconoce haber leído y autorizado el tratamiento de los datos del menor y la '
+                        ? 'El cuidador reconoce haber leído y autorizado el tratamiento de los datos del menor y la '
                         : 'The guardian acknowledges having read and authorized the processing of the minor\'s data and the ',
                   ),
                   WidgetSpan(
@@ -1097,7 +1097,7 @@ class _PrivacyPolicyDialog extends StatelessWidget {
                           body: '',
                           bullets: [
                             'Información del menor: Nombre completo, número de identificación y condiciones médicas/de salud relevantes.',
-                            'Información del guardián: Nombre completo, relación con el menor, datos de contacto y dirección física.',
+                            'Información del cuidador: Nombre completo, relación con el menor, datos de contacto y dirección física.',
                             'Datos biométricos: Firma digital como prueba de autorización legal.',
                           ],
                         ),
@@ -1109,7 +1109,7 @@ class _PrivacyPolicyDialog extends StatelessWidget {
                         _PolicySection(
                           title: '4. Sus derechos (Derechos ARCO)',
                           body:
-                              'Como guardián, tiene derecho a acceder, rectificar, cancelar u oponerse al tratamiento de sus datos o los datos del menor en cualquier momento a través de nuestros canales de soporte.',
+                              'Como cuidador, tiene derecho a acceder, rectificar, cancelar u oponerse al tratamiento de sus datos o los datos del menor en cualquier momento a través de nuestros canales de soporte.',
                         ),
                         _PolicySection(
                           title: '5. Recibo de prueba de consentimiento',
@@ -1119,7 +1119,7 @@ class _PrivacyPolicyDialog extends StatelessWidget {
                         _PolicySection(
                           title: '6. Finalidad del tratamiento',
                           body:
-                              'Los datos se utilizarán exclusivamente para identificación médica, asistencia de emergencia y comunicación con el guardián legal del menor registrado en la plataforma.',
+                              'Los datos se utilizarán exclusivamente para identificación médica, asistencia de emergencia y comunicación con el cuidador legal del menor registrado en la plataforma.',
                         ),
                       ]
                     : const [

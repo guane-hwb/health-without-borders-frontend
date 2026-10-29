@@ -37,7 +37,7 @@ void main() {
       expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
       expect(
         find.text(
-          'Acceso de emergencia · sin autorización del guardián · registrado',
+          'Acceso de emergencia · sin autorización del cuidador · registrado',
         ),
         findsOneWidget,
       );

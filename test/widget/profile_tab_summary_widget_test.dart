@@ -952,9 +952,9 @@ void main() {
     });
   });
 
-  group('Edición de guardianes y badge de documento —', () {
+  group('Edición de cuidadores y badge de documento —', () {
     testWidgets(
-      'al hacer tap en editar guardián principal llama onEditGuardian(1)',
+      'al hacer tap en editar cuidador principal llama onEditGuardian(1)',
       (tester) async {
         tester.view.physicalSize = const Size(800, 3000);
         tester.view.devicePixelRatio = 1.0;
@@ -997,7 +997,7 @@ void main() {
     );
 
     testWidgets(
-      'al hacer tap en editar guardián secundario llama onEditGuardian(2)',
+      'al hacer tap en editar cuidador secundario llama onEditGuardian(2)',
       (tester) async {
         tester.view.physicalSize = const Size(800, 3000);
         tester.view.devicePixelRatio = 1.0;
@@ -1050,7 +1050,7 @@ void main() {
     );
 
     testWidgets(
-      'muestra badge con tipo y número de documento del guardián cuando está presente',
+      'muestra badge con tipo y número de documento del cuidador cuando está presente',
       (tester) async {
         tester.view.physicalSize = const Size(800, 3000);
         tester.view.devicePixelRatio = 1.0;

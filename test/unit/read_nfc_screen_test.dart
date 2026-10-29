@@ -107,7 +107,7 @@ void main() {
       final state = _FakeReadNfcState();
       state.handlePatientApiError(
         ApiException(
-          'Guardian bracelet scan required for minors.',
+          'Guardian device scan required for minors.',
           statusCode: 403,
         ),
         deviceUid: 'AA:BB:CC:DD',
@@ -160,7 +160,7 @@ void main() {
     test('A-07 detección de "guardian" es case-insensitive', () {
       final state = _FakeReadNfcState();
       state.handlePatientApiError(
-        ApiException('GUARDIAN BRACELET REQUIRED', statusCode: 403),
+        ApiException('GUARDIAN DEVICE REQUIRED', statusCode: 403),
         deviceUid: 'AA:BB:CC:DD',
       );
       expect(state.step2, isTrue);
@@ -202,7 +202,7 @@ void main() {
       final state = _FakeReadNfcState()..scanning = true;
       state.handlePatientApiError(
         ApiException(
-          'Guardian bracelet scan required for minors.',
+          'Guardian device scan required for minors.',
           statusCode: 403,
         ),
         deviceUid: 'AA:BB:CC:DD',
@@ -584,7 +584,7 @@ void main() {
 
     test('H-05 mensajes con "guardian" activan la lógica de paso 2', () {
       const messages = [
-        'Guardian bracelet scan required for minors.',
+        'Guardian device scan required for minors.',
         'guardian required',
         'GUARDIAN SCAN NEEDED',
         'Need guardian device',
@@ -639,7 +639,7 @@ void main() {
         final state = _FakeReadNfcState()..patientDeviceUid = 'AA:BB';
         state.handleGuardianApiError(
           ApiException(
-            'Ese dispositivo no corresponde al guardián de este paciente.',
+            'Ese dispositivo no corresponde al cuidador de este paciente.',
             statusCode: 400,
           ),
         );
@@ -653,7 +653,7 @@ void main() {
         final state = _FakeReadNfcState()..patientDeviceUid = 'AA:BB';
         state.handleGuardianApiError(
           ApiException(
-            'El dispositivo del guardián está vacío o no se pudo leer.',
+            'El dispositivo del cuidador está vacío o no se pudo leer.',
             statusCode: 400,
           ),
         );

@@ -12,6 +12,19 @@ final apiClient = ApiClient(baseUrl: AppEnv.apiBaseUrl);
 
 `baseUrl` is read from the environment variable `API_BASE_URL` defined in `.env`.
 
+## App version header
+
+Every request carries `X-App-Version` with the build, for example `1.2.3+45 (android)` (`lib/src/core/network/app_version.dart`). The backend logs it on login and refresh, so the team can see which build each device runs before an NFC key rotation (security review N5).
+
+Flutter does not expose `--build-name`/`--build-number` to Dart, so the build passes the version as a define. The release pipeline (`release.yml`) does it for every platform; a manual build must add it too, or it sends no header and the backend logs `app_version=none`:
+
+```bash
+flutter build apk --release --build-name=1.2.3 --build-number=45 \
+  --dart-define=HWB_APP_VERSION=1.2.3+45 --dart-define=ENV_FILE=.env.production
+```
+
+The platform suffix (`android`, `ios`, `web`) is added by the app. A value outside `MAJOR.MINOR.PATCH[+BUILD]` sends no header.
+
 ## Available Methods
 
 ### `postForm` — URL-encoded forms

@@ -66,7 +66,7 @@ void main() {
             locale: 'es',
           ),
         );
-        expect(find.text('Editar Guardián Principal'), findsOneWidget);
+        expect(find.text('Editar Cuidador Principal'), findsOneWidget);
       },
     );
 
@@ -81,7 +81,7 @@ void main() {
             locale: 'es',
           ),
         );
-        expect(find.text('Editar Guardián Secundario'), findsOneWidget);
+        expect(find.text('Editar Cuidador Secundario'), findsOneWidget);
       },
     );
 
@@ -453,12 +453,12 @@ void main() {
         await tester.tap(find.text('Abrir'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Editar Guardián Principal'), findsOneWidget);
+        expect(find.text('Editar Cuidador Principal'), findsOneWidget);
 
         await tester.tap(find.text(sEs.confirmChanges));
         await tester.pumpAndSettle();
 
-        expect(find.text('Editar Guardián Principal'), findsNothing);
+        expect(find.text('Editar Cuidador Principal'), findsNothing);
       },
     );
   });
@@ -735,7 +735,7 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(
-            find.text('El nombre del guardián es obligatorio'),
+            find.text('El nombre del cuidador es obligatorio'),
             findsOneWidget,
           );
           expect(find.text('El teléfono es obligatorio'), findsOneWidget);
@@ -1177,7 +1177,7 @@ void main() {
         await openAuthSection(tester);
 
         final authText = find.textContaining(
-          'El guardián reconoce haber leído',
+          'El cuidador reconoce haber leído',
           findRichText: true,
         );
         await tester.ensureVisible(authText);

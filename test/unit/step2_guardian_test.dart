@@ -31,7 +31,7 @@ List<String> validateGuardianForm({
   String documentNumberLabel = 'Número de documento',
   String confirmChanges = 'Confirmar cambios',
   String bioSigLabel = 'Firma biométrica',
-  String auth2Label = 'Autorización guardián 2',
+  String auth2Label = 'Autorización cuidador 2',
 }) {
   final missing = <String>[];
 
@@ -46,7 +46,7 @@ List<String> validateGuardianForm({
   if (validateDocumentNumber(docNumber) != null) {
     missing.add(
       isEs
-          ? 'Documento de guardián inválido'
+          ? 'Documento de cuidador inválido'
           : 'Invalid Guardian Document format',
     );
   }
@@ -67,18 +67,18 @@ List<String> validateGuardianForm({
     if (validateDocumentNumber(docNumber2) != null) {
       missing.add(
         isEs
-            ? 'Documento de Guardián 2 inválido'
+            ? 'Documento de Cuidador 2 inválido'
             : 'Invalid Guardian 2 Document',
       );
     }
     if (validatePhone(phone2) != null) {
       missing.add(
-        isEs ? 'Teléfono de Guardián 2 inválido' : 'Invalid Guardian 2 Phone',
+        isEs ? 'Teléfono de Cuidador 2 inválido' : 'Invalid Guardian 2 Phone',
       );
     }
     if (validateEmail(email2) != null) {
       missing.add(
-        isEs ? 'Correo de Guardián 2 inválido' : 'Invalid Guardian 2 Email',
+        isEs ? 'Correo de Cuidador 2 inválido' : 'Invalid Guardian 2 Email',
       );
     }
 
@@ -87,7 +87,7 @@ List<String> validateGuardianForm({
     }
 
     if (auth2Accepted && signatureStrokes2.isEmpty) {
-      missing.add(isEs ? 'Firma del guardián 2' : 'Guardian 2 signature');
+      missing.add(isEs ? 'Firma del cuidador 2' : 'Guardian 2 signature');
     }
   }
 
@@ -105,7 +105,7 @@ String? signatureNullWhenEmpty(List<List<Offset>> strokes) {
 
 void main() {
   group('RegisterDraft – inicialización de Step2Guardian', () {
-    test('1. Carga valores del guardián 1 correctamente', () {
+    test('1. Carga valores del cuidador 1 correctamente', () {
       final draft = RegisterDraft()
         ..guardianName = 'Ana García'
         ..guardianPhone = '3001234567'
@@ -124,7 +124,7 @@ void main() {
       expect(draft.guardianAuthAccepted, isTrue);
     });
 
-    test('2. Valores de guardián 1 son null por defecto', () {
+    test('2. Valores de cuidador 1 son null por defecto', () {
       final draft = RegisterDraft();
       expect(draft.guardianName, isNull);
       expect(draft.guardianPhone, isNull);
@@ -297,8 +297,8 @@ void main() {
     });
   });
 
-  group('Validación guardián 2', () {
-    test('13. Guardián 2 activo, con firma y sin autorización → error', () {
+  group('Validación cuidador 2', () {
+    test('13. Cuidador 2 activo, con firma y sin autorización → error', () {
       final missing = validateGuardianForm(
         requiredForMinor: false,
         name: '',
@@ -314,11 +314,11 @@ void main() {
         ],
         auth2Accepted: false,
       );
-      expect(missing, contains('Autorización guardián 2'));
+      expect(missing, contains('Autorización cuidador 2'));
     });
 
     test(
-      '14. Guardián 2 activo, con firma y con autorización → sin error G2',
+      '14. Cuidador 2 activo, con firma y con autorización → sin error G2',
       () {
         final missing = validateGuardianForm(
           requiredForMinor: false,
@@ -335,12 +335,12 @@ void main() {
           ],
           auth2Accepted: true,
         );
-        expect(missing, isNot(contains('Autorización guardián 2')));
+        expect(missing, isNot(contains('Autorización cuidador 2')));
       },
     );
 
     test(
-      '15. Guardián 2 activo pero name2 vacío → no se valida autorización G2',
+      '15. Cuidador 2 activo pero name2 vacío → no se valida autorización G2',
       () {
         final missing = validateGuardianForm(
           requiredForMinor: false,
@@ -357,11 +357,11 @@ void main() {
           ],
           auth2Accepted: false,
         );
-        expect(missing, isNot(contains('Autorización guardián 2')));
+        expect(missing, isNot(contains('Autorización cuidador 2')));
       },
     );
 
-    test('16. Guardián 2 sin firma → no requiere autorización G2', () {
+    test('16. Cuidador 2 sin firma → no requiere autorización G2', () {
       final missing = validateGuardianForm(
         requiredForMinor: false,
         name: '',
@@ -375,11 +375,11 @@ void main() {
         signatureStrokes2: [],
         auth2Accepted: false,
       );
-      expect(missing, isNot(contains('Autorización guardián 2')));
+      expect(missing, isNot(contains('Autorización cuidador 2')));
     });
 
     test(
-      '38. Guardián 2 con autorización pero sin firma → error Firma del guardián 2',
+      '38. Cuidador 2 con autorización pero sin firma → error Firma del cuidador 2',
       () {
         final missingEs = validateGuardianForm(
           requiredForMinor: false,
@@ -411,7 +411,7 @@ void main() {
           isEs: false,
         );
 
-        expect(missingEs, contains('Firma del guardián 2'));
+        expect(missingEs, contains('Firma del cuidador 2'));
         expect(missingEn, contains('Guardian 2 signature'));
       },
     );
@@ -550,7 +550,7 @@ void main() {
         signatureStrokes2: [],
         auth2Accepted: false,
       );
-      expect(missing, contains('Documento de guardián inválido'));
+      expect(missing, contains('Documento de cuidador inválido'));
     });
 
     test('30. Teléfono con letras rompe la validación', () {
@@ -589,7 +589,7 @@ void main() {
     });
 
     test(
-      '32. Guardián 2 con formatos Regex rotos agrega múltiples errores',
+      '32. Cuidador 2 con formatos Regex rotos agrega múltiples errores',
       () {
         final missing = validateGuardianForm(
           requiredForMinor: false,
@@ -607,9 +607,9 @@ void main() {
           phone2: 'letras',
           email2: 'no-email',
         );
-        expect(missing, contains('Documento de Guardián 2 inválido'));
-        expect(missing, contains('Teléfono de Guardián 2 inválido'));
-        expect(missing, contains('Correo de Guardián 2 inválido'));
+        expect(missing, contains('Documento de Cuidador 2 inválido'));
+        expect(missing, contains('Teléfono de Cuidador 2 inválido'));
+        expect(missing, contains('Correo de Cuidador 2 inválido'));
       },
     );
 
@@ -653,7 +653,7 @@ void main() {
     });
 
     test(
-      '35. Documento con puntos (PPT venezolano) es válido para ambos guardianes',
+      '35. Documento con puntos (PPT venezolano) es válido para ambos cuidadores',
       () {
         final missingG1 = validateGuardianForm(
           requiredForMinor: false,
@@ -669,13 +669,13 @@ void main() {
           auth2Accepted: false,
           docNumber2: 'PPT-7.654.321',
         );
-        expect(missingG1, isNot(contains('Documento de guardián inválido')));
-        expect(missingG1, isNot(contains('Documento de Guardián 2 inválido')));
+        expect(missingG1, isNot(contains('Documento de cuidador inválido')));
+        expect(missingG1, isNot(contains('Documento de Cuidador 2 inválido')));
       },
     );
 
     test(
-      '36. Guardián 2 con autorización pero sin firma agrega error de firma',
+      '36. Cuidador 2 con autorización pero sin firma agrega error de firma',
       () {
         final missing = validateGuardianForm(
           requiredForMinor: false,
@@ -689,14 +689,14 @@ void main() {
           name2: 'Carlos López',
           signatureStrokes2: [],
           auth2Accepted: false,
-          auth2Label: 'Firma del guardián 2',
+          auth2Label: 'Firma del cuidador 2',
         );
-        expect(missing, isNot(contains('Documento de Guardián 2 inválido')));
+        expect(missing, isNot(contains('Documento de Cuidador 2 inválido')));
       },
     );
 
     test(
-      '37. Guardián 2 con datos pero sin nombre no valida campos extendidos',
+      '37. Cuidador 2 con datos pero sin nombre no valida campos extendidos',
       () {
         final missing = validateGuardianForm(
           requiredForMinor: false,
@@ -712,7 +712,7 @@ void main() {
           auth2Accepted: false,
           docNumber2: '12',
         );
-        expect(missing, isNot(contains('Documento de Guardián 2 inválido')));
+        expect(missing, isNot(contains('Documento de Cuidador 2 inválido')));
       },
     );
   });

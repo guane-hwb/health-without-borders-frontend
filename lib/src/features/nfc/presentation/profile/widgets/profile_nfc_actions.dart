@@ -22,7 +22,7 @@ import 'reassign_device_dialog.dart';
 typedef NfcPayloadServiceBuilder =
     NfcPayloadService Function(NfcPayloadCodec codec);
 
-/// Ejecuta el flujo guiado de actualización de chips NFC (paciente y guardianes).
+/// Ejecuta el flujo guiado de actualización de chips NFC (paciente y cuidadores).
 Future<bool> executeUpdateNfcChips({
   required BuildContext context,
   required PatientFullRecord record,
@@ -115,14 +115,14 @@ Future<bool> executeUpdateNfcChips({
       final ok = await writeGuardianCard(
         expectedUid: guardian1Uid,
         title: hasTwoGuardians
-            ? (isEs ? 'Dispositivo del guardián 1' : 'Guardian device 1')
-            : (isEs ? 'Dispositivo del guardián' : 'Guardian device'),
+            ? (isEs ? 'Dispositivo del cuidador 1' : 'Guardian device 1')
+            : (isEs ? 'Dispositivo del cuidador' : 'Guardian device'),
         instruction: hasTwoGuardians
             ? (isEs
-                  ? 'Acerque el dispositivo del guardián 1 al teléfono'
+                  ? 'Acerque el dispositivo del cuidador 1 al teléfono'
                   : 'Bring guardian device 1 to the phone')
             : (isEs
-                  ? 'Acerque el dispositivo del guardián al teléfono'
+                  ? 'Acerque el dispositivo del cuidador al teléfono'
                   : 'Bring the guardian device to the phone'),
       );
       allWritten = allWritten && ok;
@@ -132,9 +132,9 @@ Future<bool> executeUpdateNfcChips({
       if (!context.mounted) return false;
       final ok = await writeGuardianCard(
         expectedUid: guardian2Uid,
-        title: isEs ? 'Dispositivo del guardián 2' : 'Guardian device 2',
+        title: isEs ? 'Dispositivo del cuidador 2' : 'Guardian device 2',
         instruction: isEs
-            ? 'Acerque el dispositivo del guardián 2 al teléfono'
+            ? 'Acerque el dispositivo del cuidador 2 al teléfono'
             : 'Bring guardian device 2 to the phone',
       );
       allWritten = allWritten && ok;
@@ -211,11 +211,11 @@ Future<PatientFullRecord?> executeReassignOne({
       break;
     case ReassignTarget.guardian1:
       title = hasTwo
-          ? (isEs ? 'Dispositivo del guardián 1' : 'Guardian device 1')
-          : (isEs ? 'Dispositivo del guardián' : 'Guardian device');
+          ? (isEs ? 'Dispositivo del cuidador 1' : 'Guardian device 1')
+          : (isEs ? 'Dispositivo del cuidador' : 'Guardian device');
       break;
     case ReassignTarget.guardian2:
-      title = isEs ? 'Dispositivo del guardián 2' : 'Guardian device 2';
+      title = isEs ? 'Dispositivo del cuidador 2' : 'Guardian device 2';
       break;
   }
 

@@ -53,7 +53,7 @@ abstract final class SyncConflictCode {
           isEs
               ? 'El registro ya había cambiado en el servidor (otra persona '
                     'lo actualizó o un envío anterior ya se había guardado). '
-                    'Se conservaron sus guardianes y se unieron alergias y '
+                    'Se conservaron sus cuidadores y se unieron alergias y '
                     'antecedentes: lo que se quitó aquí puede seguir en el '
                     'servidor. Las consultas y vacunas nuevas sí se guardaron.'
               : 'The record had already changed on the server (someone else '
@@ -64,15 +64,15 @@ abstract final class SyncConflictCode {
         staleRetiredDeviceUid =>
           isEs
               ? 'Esta copia tenía un dispositivo ya retirado, del paciente o '
-                    'del guardián. El servidor conservó los dispositivos y los '
-                    'guardianes actuales; el resto se guardó.'
+                    'del cuidador. El servidor conservó los dispositivos y los '
+                    'cuidadores actuales; el resto se guardó.'
               : 'This copy had a device that was already retired, a patient '
                     'or a guardian device. The server kept the current devices '
                     'and guardians; the rest was saved.',
         guardiansNotChanged =>
           isEs
               ? 'El dispositivo del paciente ya lo identificaba en otro '
-                    'registro. Los guardianes no se cambiaron; el resto se '
+                    'registro. Los cuidadores no se cambiaron; el resto se '
                     'guardó.'
               : 'The patient device already identified this patient in '
                     'another record. The guardians were not changed; the rest '
@@ -110,7 +110,7 @@ abstract final class SyncConflictCode {
     if (serverCopyShown) {
       return isEs
           ? 'Lo que ve es la versión del servidor: actualice el dispositivo '
-                'del paciente y el del guardián.'
+                'del paciente y el del cuidador.'
           : "What you see is the server's version: update the patient device "
                 'and the guardian device.';
     }

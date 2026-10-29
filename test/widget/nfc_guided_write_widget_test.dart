@@ -402,7 +402,7 @@ void main() {
           expect(
             find.textContaining(
               locale == 'es'
-                  ? 'Cada menor necesita su propio dispositivo del guardián'
+                  ? 'Cada menor necesita su propio dispositivo del cuidador'
                   : 'Each minor needs their own guardian device',
             ),
             findsOneWidget,

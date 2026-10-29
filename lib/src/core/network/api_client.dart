@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'api_error_codes.dart';
+import 'app_version.dart';
 
 class ApiException implements Exception {
   ApiException(
@@ -39,7 +40,9 @@ class ApiClient {
     required this.baseUrl,
     http.Client? client,
     @visibleForTesting bool? debugReleaseModeOverride,
-  }) : _client = client ?? http.Client() {
+    @visibleForTesting String? appVersionOverride,
+  }) : _client = client ?? http.Client(),
+       _appVersion = appVersionOverride ?? appVersionHeaderValue() {
     final bool isReleaseMode = debugReleaseModeOverride ?? kReleaseMode;
     if (isReleaseMode && baseUrl.startsWith('http://')) {
       throw ArgumentError(
@@ -50,6 +53,9 @@ class ApiClient {
 
   final String baseUrl;
   final http.Client _client;
+
+  /// Sent as `X-App-Version` on every request; null when the build has none.
+  final String? _appVersion;
 
   static const List<String> _publicRoutes = <String>[
     '/api/v1/login/access-token',
@@ -80,6 +86,8 @@ class ApiClient {
     final http.Request request = http.Request(method, uri)
       ..followRedirects = false
       ..headers.addAll(headers ?? const <String, String>{});
+    final String? appVersion = _appVersion;
+    if (appVersion != null) request.headers[appVersionHeaderName] = appVersion;
     if (body != null) request.body = body;
     final http.StreamedResponse streamed = await _client.send(request);
     return http.Response.fromStream(streamed);

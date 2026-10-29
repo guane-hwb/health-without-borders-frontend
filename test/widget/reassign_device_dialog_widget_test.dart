@@ -68,8 +68,8 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('Dispositivo del paciente'), findsOneWidget);
-        expect(find.text('Dispositivo guardián 1'), findsOneWidget);
-        expect(find.text('Dispositivo guardián 2'), findsOneWidget);
+        expect(find.text('Dispositivo del cuidador 1'), findsOneWidget);
+        expect(find.text('Dispositivo del cuidador 2'), findsOneWidget);
         expect(find.text('Motivo del reemplazo'), findsOneWidget);
         expect(find.text('Pérdida'), findsOneWidget);
         expect(find.text('Dañada'), findsOneWidget);
@@ -149,7 +149,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Select Guardian 2 card
-      await tester.tap(find.text('Dispositivo guardián 2'));
+      await tester.tap(find.text('Dispositivo del cuidador 2'));
       await tester.pumpAndSettle();
 
       // Change reason to Damaged ('Dañada')
@@ -215,7 +215,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Add Guardian 1
-        await tester.tap(find.text('Dispositivo guardián'));
+        await tester.tap(find.text('Dispositivo del cuidador'));
         await tester.pumpAndSettle();
 
         // Remove Patient

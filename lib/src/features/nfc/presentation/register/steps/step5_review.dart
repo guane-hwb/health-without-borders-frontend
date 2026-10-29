@@ -133,7 +133,7 @@ class _Step5State extends State<Step5Review> {
     final guardianRows = <MapEntry<String, String>>[];
 
     if (!hasGuardian1 && !hasGuardian2) {
-      guardianRows.add(_kv('—', isEs ? 'Sin guardián' : 'No guardian'));
+      guardianRows.add(_kv('—', isEs ? 'Sin cuidador' : 'No guardian'));
     } else {
       if (hasGuardian1) {
         final prefix = hasGuardian2 ? (isEs ? 'G1 ' : 'G1 ') : '';
@@ -226,7 +226,7 @@ class _Step5State extends State<Step5Review> {
               _Card(
                 icon: Icons.family_restroom,
                 title: hasGuardian2
-                    ? (isEs ? 'Guardianes (2)' : 'Guardians (2)')
+                    ? (isEs ? 'Cuidadores (2)' : 'Guardians (2)')
                     : s.guardian,
                 rows: guardianRows,
               ),

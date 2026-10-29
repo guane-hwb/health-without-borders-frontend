@@ -340,10 +340,10 @@ void main() {
         await tester.tap(find.text('Run Guardian Dual'));
         await tester.pump(const Duration(milliseconds: 300));
 
-        expect(find.text('Dispositivo del guardián 1'), findsOneWidget);
+        expect(find.text('Dispositivo del cuidador 1'), findsOneWidget);
 
         final BuildContext modalContext = tester.element(
-          find.text('Dispositivo del guardián 1'),
+          find.text('Dispositivo del cuidador 1'),
         );
         Navigator.of(modalContext).pop(false);
 
@@ -629,7 +629,7 @@ void main() {
         }
 
         final BuildContext modalContext = tester.element(
-          find.text('Dispositivo del guardián'),
+          find.text('Dispositivo del cuidador'),
         );
         Navigator.of(modalContext).pop(true);
 
@@ -683,7 +683,7 @@ void main() {
     );
 
     testWidgets(
-      'completa la reasignación con escritura exitosa para paciente, guardián 1 y guardián 2',
+      'completa la reasignación con escritura exitosa para paciente, cuidador 1 y cuidador 2',
       (tester) async {
         final record = _createRecord(
           patientUid: 'P-123',
@@ -873,7 +873,7 @@ void main() {
       expect(service.guardianUids, isEmpty);
     });
 
-    testWidgets('paciente y guardián con ficha completa: sin avisos', (
+    testWidgets('paciente y cuidador con ficha completa: sin avisos', (
       tester,
     ) async {
       final service = _FakeNfcService(guardianFit: completeFit);
@@ -888,7 +888,7 @@ void main() {
         onDone: (r) => result = r,
       );
       await finishSheet(tester); // paciente
-      await finishSheet(tester); // guardián
+      await finishSheet(tester); // cuidador
 
       expect(result, isTrue);
       expect(service.triageUids, <String?>['P-123']);
@@ -898,7 +898,7 @@ void main() {
     });
 
     testWidgets(
-      'avisa con un SnackBar cuando la ficha del guardián es parcial',
+      'avisa con un SnackBar cuando la ficha del cuidador es parcial',
       (tester) async {
         final service = _FakeNfcService(guardianFit: partialFit);
         bool? result;
@@ -921,7 +921,7 @@ void main() {
       },
     );
 
-    testWidgets('con dos guardianes graba ambos en orden y avisa del parcial', (
+    testWidgets('con dos cuidadores graba ambos en orden y avisa del parcial', (
       tester,
     ) async {
       final service = _FakeNfcService(guardianFit: partialFit);
@@ -934,14 +934,14 @@ void main() {
         guardianChipDirty: true,
         onDone: (r) => result = r,
       );
-      expect(find.text('Dispositivo del guardián 1'), findsOneWidget);
+      expect(find.text('Dispositivo del cuidador 1'), findsOneWidget);
       await finishSheet(tester);
 
       expect(
         find.text(partialCardNoticeMessage(partialFit, true)),
         findsOneWidget,
       );
-      expect(find.text('Dispositivo del guardián 2'), findsOneWidget);
+      expect(find.text('Dispositivo del cuidador 2'), findsOneWidget);
       await finishSheet(tester);
 
       expect(result, isTrue);
@@ -978,7 +978,7 @@ void main() {
       expect(service.guardianUids, isEmpty);
     });
 
-    testWidgets('omitir el segundo guardián devuelve false', (tester) async {
+    testWidgets('omitir el segundo cuidador devuelve false', (tester) async {
       final service = _FakeNfcService(guardianFit: completeFit);
       bool? result;
 
@@ -989,8 +989,8 @@ void main() {
         guardianChipDirty: true,
         onDone: (r) => result = r,
       );
-      await finishSheet(tester); // guardián 1
-      await skipSheet(tester); // guardián 2
+      await finishSheet(tester); // cuidador 1
+      await skipSheet(tester); // cuidador 2
 
       expect(result, isFalse);
       expect(service.guardianUids, <String?>['G1-123']);
@@ -1036,7 +1036,7 @@ void main() {
       expect(messages, isEmpty);
     });
 
-    testWidgets('reasigna el dispositivo del guardián 1', (tester) async {
+    testWidgets('reasigna el dispositivo del cuidador 1', (tester) async {
       final service = _FakeNfcService();
       bool done = false;
       PatientFullRecord? result;
@@ -1065,7 +1065,7 @@ void main() {
       expect(result?.guardian2Info?.deviceUid, 'G2-456');
     });
 
-    testWidgets('reasigna el dispositivo del guardián 2', (tester) async {
+    testWidgets('reasigna el dispositivo del cuidador 2', (tester) async {
       final service = _FakeNfcService();
       bool done = false;
       PatientFullRecord? result;
@@ -1091,7 +1091,7 @@ void main() {
       expect(result?.guardianInfo.deviceUid, 'G1-123');
     });
 
-    testWidgets('guardián 2 sin segundo guardián devuelve el registro igual', (
+    testWidgets('cuidador 2 sin segundo cuidador devuelve el registro igual', (
       tester,
     ) async {
       final service = _FakeNfcService();

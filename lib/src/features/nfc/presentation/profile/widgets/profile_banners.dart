@@ -27,7 +27,7 @@ class EmergencyBanner extends StatelessWidget {
           Expanded(
             child: Text(
               isEs
-                  ? 'Acceso de emergencia · sin autorización del guardián · registrado'
+                  ? 'Acceso de emergencia · sin autorización del cuidador · registrado'
                   : 'Emergency access · without guardian authorisation · logged',
               style: const TextStyle(
                 fontSize: 13,
