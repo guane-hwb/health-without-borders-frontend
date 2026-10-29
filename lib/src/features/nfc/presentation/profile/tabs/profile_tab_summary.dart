@@ -462,7 +462,7 @@ class ProfileTabSummary extends StatelessWidget {
                           children: [
                             Text(
                               isEs
-                                  ? 'Guardián Secundario'
+                                  ? 'Cuidador Secundario'
                                   : 'Secondary Guardian',
                               style: const TextStyle(
                                 fontSize: 11,
