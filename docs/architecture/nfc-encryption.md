@@ -121,9 +121,14 @@ ships pending observations and marks them reported only after the server
 confirms.
 
 This exists for one operational question: **can a key version be retired
-without leaving chips unreadable offline?** A chip carries no readable hint of
-its version, so measuring is the only way to know how far a rotation has
-drained.
+without leaving chips unreadable offline?** A version 0 chip carries no hint of
+its version at all (from version 1 on, the version byte is in the clear header),
+and either way only a device that reads the chip learns it, so measuring is the
+only way to know how far a rotation has drained.
+
+The UID stays on the phone. The backend stores an HMAC of it, not the UID, keeps
+each sighting for 730 days, and drops sightings of versions that do not exist
+(backend `docs/infrastructure/nfc-key-management.md`, "Telemetry storage").
 
 `observed_at` is stored and sent in **UTC**. A naive local timestamp is read by
 the server as UTC and shifts every sighting by the device's offset.
@@ -145,14 +150,21 @@ The build compatibility rule that matters, in both directions:
 | Current build, version 0 | ✅ | ✅ |
 | Current build, version 1+ | ❌ | ✅ |
 
-So while `NFC_CURRENT_KEY_VERSION` is `0`, builds are interchangeable in both
+So while the current version is `0`, builds are interchangeable in both
 directions and a partial rollout is safe.
 
 !!! warning "Before any rotation"
-    `NFC_CURRENT_KEY_VERSION` must stay at `0` until **every** device runs a
-    build that understands the ring. An older build takes the current key,
-    ignores the ring, and loses the ability to read everything written under
-    version 0. Confirm the fleet first; the backend runbook has the procedure.
+    The current version must stay at `0` until **every** device runs a build
+    that understands the ring. An older build takes the current key, ignores
+    the ring, and loses the ability to read everything written under version 0.
+    Confirm the fleet first; the backend runbook has the procedure.
+
+    Where the current version is set depends on the backend's mode. The pilot
+    keeps the ring in its database under a KEK: there the current version only
+    changes through `POST /api/v1/patients/nfc-keys/rotate` (or `/revoke` of the
+    current version) and automatic rotation (`NFC_AUTO_ROTATE`), and
+    `NFC_CURRENT_KEY_VERSION` is ignored. That variable only applies to a
+    deployment without a KEK, which serves the ring from its environment.
 
 As of the current build, no rotation has occurred: every chip in the field is
 version 0, headerless.

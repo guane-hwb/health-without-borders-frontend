@@ -1,6 +1,10 @@
 # User Guide
 
+<<<<<<< HEAD
 This guide is for the **healthcare staff** who use the Health Without Borders mobile app in the field — during medical brigades and at pilot sites. It explains, step by step, how to register patients, read and update their records with NFC/QR devices, and keep everything synchronized.
+=======
+This guide is for the **healthcare staff** who use the Health Without Borders mobile app in the field — during medical brigades and at pilot sites. It explains, step by step, how to register patients, read and update their records with the patient's and the guardian's NFC devices, and keep everything synchronized.
+>>>>>>> develop
 
 No technical knowledge is required. If you are looking for API, architecture, or deployment documentation, see the **Development** and **Infrastructure and Security** sections instead.
 
@@ -8,7 +12,7 @@ No technical knowledge is required. If you are looking for API, architecture, or
 
 ## What the app does
 
-Health Without Borders stores a patient's clinical record on an **NFC/QR device** and keeps a synchronized copy on the server. Because brigades often work without a stable internet connection, the app is **offline-first**: you can register patients and record care with no signal, and the app will synchronize automatically when a connection is available.
+Health Without Borders stores a patient's clinical record on the patient's **NFC device** (a chip the patient carries; a minor's guardian carries a second one) and keeps a synchronized copy on the server. Because brigades often work without a stable internet connection, the app is **offline-first**: you can register patients and record care with no signal, and the app will synchronize automatically when a connection is available.
 
 A single patient has **one shared record** across all participating organizations, so any authenticated professional can read and update it at the point of care.
 

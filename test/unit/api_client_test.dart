@@ -17,6 +17,39 @@ void main() {
     return ApiClient(baseUrl: baseUrl, client: MockClient(handler));
   }
 
+  // ── X-App-Version (N5) ───────────────────────────────────────────────────
+
+  group('X-App-Version', () {
+    test('se envía en cada petición cuando la build trae versión', () async {
+      final seen = <String?>[];
+      final api = ApiClient(
+        baseUrl: baseUrl,
+        appVersionOverride: '1.2.3+45 (android)',
+        client: MockClient((request) async {
+          seen.add(request.headers['X-App-Version']);
+          return _json(<String, dynamic>{'ok': true}, 200);
+        }),
+      );
+
+      await api.postForm(
+        path: '/api/v1/login/access-token',
+        form: const {'username': 'a', 'password': 'b'},
+      );
+      await api.getJson(path: '/api/v1/users/me');
+
+      expect(seen, <String?>['1.2.3+45 (android)', '1.2.3+45 (android)']);
+    });
+
+    test('no se envía si la build no trae versión', () async {
+      final api = buildClient((request) async {
+        expect(request.headers.containsKey('X-App-Version'), isFalse);
+        return _json(<String, dynamic>{'ok': true}, 200);
+      });
+
+      await api.getJson(path: '/api/v1/users/me');
+    });
+  });
+
   // ── ApiException ─────────────────────────────────────────────────────────
 
   group('ApiException', () {
