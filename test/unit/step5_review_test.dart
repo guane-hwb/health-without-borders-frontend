@@ -381,8 +381,8 @@ void main() {
       expect(s.patient, 'Paciente');
     });
 
-    test('guardian retorna texto correcto', () {
-      expect(s.guardian, 'cuidador');
+    test('cuidador retorna texto correcto', () {
+      expect(s.guardian, 'Cuidador');
     });
 
     test('backgroundHistory retorna texto correcto', () {
@@ -453,7 +453,7 @@ void main() {
       expect(s.patient, 'Patient');
     });
 
-    test('guardian retorna "Guardian"', () {
+    test('cuidador retorna "Guardian"', () {
       expect(s.guardian, 'Guardian');
     });
 

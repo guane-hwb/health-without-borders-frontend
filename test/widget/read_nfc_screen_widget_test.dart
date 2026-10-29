@@ -1313,7 +1313,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.textContaining('no corresponde al cuidador del paciente'),
+          find.textContaining('no corresponde al cuidador de este paciente'),
           findsOneWidget,
         );
         expect(find.byType(PatientProfileScreen), findsNothing);

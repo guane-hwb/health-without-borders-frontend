@@ -176,7 +176,7 @@ Widget _wrapHome({
         routes: {
           '/login': (_) => const LoginScreen(),
           '/nfc/loss-wristband': (_) =>
-              const Scaffold(body: Text('Loss Device Screen')),
+              const Scaffold(body: Text('Loss Wristband Screen')),
           '/account/password': (_) => const ChangePasswordScreen(),
         },
         home: const HomeScreen(),
