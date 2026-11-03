@@ -4762,6 +4762,25 @@ void main() {
       },
     );
 
+    test(
+      'destroyEncryptionKey en Web captura error si falla el borrado de claves heredadas',
+      () async {
+        final mockLegacy = MockSecureStorage();
+        when(
+          () => mockLegacy.delete(key: any(named: 'key')),
+        ).thenThrow(Exception('Error borrando clave heredada en web'));
+
+        final dbWeb = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          legacySecureStorage: mockLegacy,
+          forceWeb: true,
+          webClearAll: () async {},
+        );
+
+        await expectLater(dbWeb.destroyEncryptionKey(), completes);
+      },
+    );
+
     test('dismissSyncNotice captura el error si falla el borrado', () async {
       final LocalDatabase db = webDb(
         webRemove: (String key) async => throw StateError('remove falló'),
