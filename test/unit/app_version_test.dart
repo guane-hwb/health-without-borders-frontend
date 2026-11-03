@@ -61,5 +61,45 @@ void main() {
     test('una build de test no trae HWB_APP_VERSION', () {
       expect(appVersionHeaderValue(), isNull);
     });
+
+    test('usa defaultTargetPlatform cuando platform es null', () {
+      final String? result = appVersionHeaderValue(
+        version: '2.0.0+10',
+        isWeb: false,
+      );
+
+      final String expectedSuffix = switch (defaultTargetPlatform) {
+        TargetPlatform.android => ' (android)',
+        TargetPlatform.iOS => ' (ios)',
+        _ => '',
+      };
+
+      expect(result, '2.0.0+10$expectedSuffix');
+    });
+
+    test(
+      'cubre todas las demás variantes no móviles ni web para el caso comodín',
+      () {
+        for (final TargetPlatform otherPlatform in <TargetPlatform>[
+          TargetPlatform.macOS,
+          TargetPlatform.windows,
+          TargetPlatform.fuchsia,
+        ]) {
+          expect(
+            appVersionHeaderValue(
+              version: '3.1.2+99',
+              isWeb: false,
+              platform: otherPlatform,
+            ),
+            '3.1.2+99',
+            reason: otherPlatform.name,
+          );
+        }
+      },
+    );
+
+    test('nombre de cabecera exportado es X-App-Version', () {
+      expect(appVersionHeaderName, 'X-App-Version');
+    });
   });
 }
