@@ -186,14 +186,19 @@ jobs:
   # ── iOS (opcional: se activa con la variable de repositorio IOS_RELEASE_ENABLED=true) ──
   build-ios:
     name: Build iOS (IPA)
-    if: ${{ vars.IOS_RELEASE_ENABLED == 'true' }}
+    # NOTA: Se comenta temporalmente el 'if' para que compile en pruebas sin requerir la variable.
+    # Cuando tengan la cuenta oficial de Apple Developer, vuelvan a activar esta condicion:
+    # if: ${{ vars.IOS_RELEASE_ENABLED == 'true' }}
     needs: [prepare, verify]
     runs-on: macos-15
     env:
       BUILD_NAME: ${{ needs.prepare.outputs.name }}
       BUILD_NUMBER: ${{ needs.prepare.outputs.number }}
-      BUNDLE_ID: co.guane.healthWithoutBordersFrontend
-      EXPORT_METHOD: ${{ vars.IOS_EXPORT_METHOD || 'app-store-connect' }}
+      # ==============================================================================
+      # CONFIGURACION APP STORE (DESCOMENTAR CUANDO TENGAN CUENTA DE APPLE DEVELOPER)
+      # ==============================================================================
+      # BUNDLE_ID: co.guane.healthWithoutBordersFrontend
+      # EXPORT_METHOD: ${{ vars.IOS_EXPORT_METHOD || 'app-store-connect' }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -211,93 +216,115 @@ jobs:
           printf 'API_BASE_URL=%s\n' "$API_BASE_URL" > .env
           cp .env .env.production
 
-      - name: Import signing certificate and provisioning profile
-        env:
-          CERT_P12_BASE64: ${{ secrets.IOS_CERT_P12_BASE64 }}
-          CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
-          PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
-          KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
-          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
-        run: |
-          for v in CERT_P12_BASE64 CERT_PASSWORD PROFILE_BASE64 KEYCHAIN_PASSWORD TEAM_ID; do
-            if [ -z "${!v}" ]; then
-              echo "::error::Falta el secreto de iOS correspondiente a $v."
-              exit 1
-            fi
-          done
+      # ==============================================================================
+      # FIRMA OFICIAL APP STORE / TESTFLIGHT
+      # (DESCOMENTAR ESTA SECCION CUANDO PAGUEN LOS $99 USD Y CARGUEN LOS SECRETOS)
+      # ==============================================================================
+      # - name: Import signing certificate and provisioning profile
+      #   env:
+      #     CERT_P12_BASE64: ${{ secrets.IOS_CERT_P12_BASE64 }}
+      #     CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+      #     PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+      #     KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+      #     TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+      #   run: |
+      #     for v in CERT_P12_BASE64 CERT_PASSWORD PROFILE_BASE64 KEYCHAIN_PASSWORD TEAM_ID; do
+      #       if [ -z "${!v}" ]; then
+      #         echo "::error::Falta el secreto de iOS correspondiente a $v."
+      #         exit 1
+      #       fi
+      #     done
+      #
+      #     KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+      #     security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+      #     security set-keychain-settings -lut 21600 "$KEYCHAIN"
+      #     security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+      #
+      #     echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+      #     security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+      #     security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+      #     security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+      #
+      #     echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+      #     security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+      #     PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")"
+      #     PROFILE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/profile.plist")"
+      #     mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+      #     cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+      #
+      #     echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
+      #
+      # # El Runner usa firma automática; en CI se pasa a manual solo para el target
+      # # Runner, con la xcconfig que su configuración Release ya incluye. Así los
+      # # Pods no reciben el perfil de aprovisionamiento.
+      # - name: Configure manual signing for the Runner target
+      #   env:
+      #     TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+      #   run: |
+      #     {
+      #       echo ""
+      #       echo "CODE_SIGN_STYLE = Manual"
+      #       echo "DEVELOPMENT_TEAM = $TEAM_ID"
+      #       echo "PROVISIONING_PROFILE_SPECIFIER = $PROFILE_NAME"
+      #       echo "CODE_SIGN_IDENTITY = Apple Distribution"
+      #       echo "CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution"
+      #     } >> ios/Flutter/Release.xcconfig
+      #
+      #     cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+      #     <?xml version="1.0" encoding="UTF-8"?>
+      #     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      #     <plist version="1.0">
+      #     <dict>
+      #       <key>method</key><string>$EXPORT_METHOD</string>
+      #       <key>teamID</key><string>$TEAM_ID</string>
+      #       <key>signingStyle</key><string>manual</string>
+      #       <key>signingCertificate</key><string>Apple Distribution</string>
+      #       <key>stripSwiftSymbols</key><true/>
+      #       <key>provisioningProfiles</key>
+      #       <dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>
+      #     </dict>
+      #     </plist>
+      #     PLIST
+      #
+      # - name: Build IPA (signed and obfuscated)
+      #   run: |
+      #     mkdir -p build/debug-symbols-ios
+      #     flutter build ipa --release \
+      #       --export-options-plist="$RUNNER_TEMP/ExportOptions.plist" \
+      #       --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER" \
+      #       --dart-define=HWB_APP_VERSION="$BUILD_NAME+$BUILD_NUMBER" \
+      #       --obfuscate --split-debug-info=build/debug-symbols-ios \
+      #       --dart-define=ENV_FILE=.env.production
+      #
+      # - name: Remove signing material from the runner
+      #   if: always()
+      #   run: |
+      #     security delete-keychain "$RUNNER_TEMP/build.keychain-db" || true
+      #     rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/profile.mobileprovision"
 
-          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-
-          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
-
-          echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
-          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
-          PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")"
-          PROFILE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/profile.plist")"
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
-
-          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
-
-      # El Runner usa firma automática; en CI se pasa a manual solo para el target
-      # Runner, con la xcconfig que su configuración Release ya incluye. Así los
-      # Pods no reciben el perfil de aprovisionamiento.
-      - name: Configure manual signing for the Runner target
-        env:
-          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
-        run: |
-          {
-            echo ""
-            echo "CODE_SIGN_STYLE = Manual"
-            echo "DEVELOPMENT_TEAM = $TEAM_ID"
-            echo "PROVISIONING_PROFILE_SPECIFIER = $PROFILE_NAME"
-            echo "CODE_SIGN_IDENTITY = Apple Distribution"
-            echo "CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution"
-          } >> ios/Flutter/Release.xcconfig
-
-          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key><string>$EXPORT_METHOD</string>
-            <key>teamID</key><string>$TEAM_ID</string>
-            <key>signingStyle</key><string>manual</string>
-            <key>signingCertificate</key><string>Apple Distribution</string>
-            <key>stripSwiftSymbols</key><true/>
-            <key>provisioningProfiles</key>
-            <dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>
-          </dict>
-          </plist>
-          PLIST
-
-      - name: Build IPA (signed and obfuscated)
+      # ==============================================================================
+      # COMPILACION SIN FIRMA ACTIVA (MODO PRUEBAS / SIDELOADLY)
+      # (ELIMINAR ESTOS 2 PASOS CUANDO SE ACTIVE LA SECCION DE ARRIBA PARA APP STORE)
+      # ==============================================================================
+      - name: Build iOS App without codesign
         run: |
           mkdir -p build/debug-symbols-ios
-          flutter build ipa --release \
-            --export-options-plist="$RUNNER_TEMP/ExportOptions.plist" \
+          flutter build ios --release --config-only \
             --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER" \
             --dart-define=HWB_APP_VERSION="$BUILD_NAME+$BUILD_NUMBER" \
             --obfuscate --split-debug-info=build/debug-symbols-ios \
             --dart-define=ENV_FILE=.env.production
+          
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
 
-      - name: Package artifacts
+      - name: Package unsigned IPA
         run: |
           mkdir -p dist
-          cp build/ios/ipa/*.ipa "dist/hwb-${BUILD_NAME}+${BUILD_NUMBER}.ipa"
+          mkdir -p build/ios/iphoneos/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
+          (cd build/ios/iphoneos && zip -qr "../../../dist/hwb-${BUILD_NAME}+${BUILD_NUMBER}.ipa" Payload)
           tar -czf "debug-symbols-ios-${BUILD_NAME}+${BUILD_NUMBER}.tar.gz" -C build debug-symbols-ios
-
-      - name: Remove signing material from the runner
-        if: always()
-        run: |
-          security delete-keychain "$RUNNER_TEMP/build.keychain-db" || true
-          rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/profile.mobileprovision"
 
       - name: Upload release files
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
