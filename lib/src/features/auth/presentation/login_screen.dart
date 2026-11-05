@@ -32,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordFocus = FocusNode();
   bool _isLoading = false;
   bool _obscurePassword = true;
-  bool _rememberSession = true;
+  bool _rememberSession = false;
 
   @override
   void initState() {

@@ -1,7 +1,9 @@
 // lib/src/features/auth/data/auth_repository.dart
 
+import 'dart:async';
 import 'dart:convert';
-import 'package:crypto/crypto.dart' as crypto_pkg;
+import 'dart:math';
+import 'package:cryptography/cryptography.dart' show Hmac, Pbkdf2, SecretKey;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -48,6 +50,8 @@ class AuthRepository implements TokenProvider {
   static const String sessionKey = _sessionKey;
   @visibleForTesting
   static const String lastUserIdKey = _lastUserIdKey;
+  @visibleForTesting
+  static const String lockHashKey = _lockHashKey;
   static const String _lockHashKey = 'hwb_local_lock_hash';
 
   static const String _tokenKey = 'hwb_access_token';
@@ -66,6 +70,7 @@ class AuthRepository implements TokenProvider {
     _nfcKeyringKey,
     _clockMarkKey,
     _sessionKey,
+    _lockHashKey,
   ];
 
   static const Duration clockRollbackTolerance = Duration(hours: 24);
@@ -83,6 +88,12 @@ class AuthRepository implements TokenProvider {
   DateTime? _cachedClockMark;
   UserSession? _session;
   bool _isSessionRestoredFromStorage = false;
+
+  final ValueNotifier<bool> _isLocalLocked = ValueNotifier<bool>(false);
+  ValueListenable<bool> get isLocalLocked => _isLocalLocked;
+  void setLocalLocked(bool locked) {
+    _isLocalLocked.value = locked;
+  }
 
   bool get isSessionRestoredFromStorage => _isSessionRestoredFromStorage;
 
@@ -174,6 +185,7 @@ class AuthRepository implements TokenProvider {
     }
 
     _cachedToken = accessToken;
+    _isLocalLocked.value = false;
 
     await _saveLocalLockHash(fetchedSession.email, password);
 
@@ -222,27 +234,83 @@ class AuthRepository implements TokenProvider {
     return _session!;
   }
 
+  static const int _pbkdf2Iterations = 210000;
+
   Future<void> _saveLocalLockHash(String email, String rawPassword) async {
-    final bytes = utf8.encode('${email.trim().toLowerCase()}:$rawPassword');
-    final digest = crypto_pkg.sha256.convert(bytes).toString();
     try {
-      await _secureStorage.write(key: _lockHashKey, value: digest);
+      final random = Random.secure();
+      final saltBytes = Uint8List.fromList(
+        List<int>.generate(16, (_) => random.nextInt(256)),
+      );
+      final pbkdf2 = Pbkdf2(
+        macAlgorithm: Hmac.sha256(),
+        iterations: _pbkdf2Iterations,
+        bits: 256,
+      );
+      final secretKey = SecretKey(utf8.encode(rawPassword));
+      final newKey = await pbkdf2.deriveKey(
+        secretKey: secretKey,
+        nonce: saltBytes,
+      );
+      final hashBytes = await newKey.extractBytes();
+
+      final record = <String, dynamic>{
+        'email': email.trim().toLowerCase(),
+        'salt': base64Encode(saltBytes),
+        'iterations': _pbkdf2Iterations,
+        'hash': base64Encode(hashBytes),
+      };
+
+      await _secureStorage.write(key: _lockHashKey, value: jsonEncode(record));
     } catch (_) {}
   }
 
   Future<bool> verifyLocalLockPassword(String rawPassword) async {
     final session = _session;
-    if (session == null || session.email.isEmpty) return false;
+    if (session == null || session.email.trim().isEmpty) return false;
 
     try {
-      final storedHash = await _secureStorage.read(key: _lockHashKey);
-      if (storedHash == null || storedHash.isEmpty) return false;
+      final raw = await _secureStorage.read(key: _lockHashKey);
+      if (raw == null || raw.isEmpty) return false;
 
-      final bytes = utf8.encode(
-        '${session.email.trim().toLowerCase()}:$rawPassword',
+      final Object? decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return false;
+
+      final storedEmail = decoded['email'] as String?;
+      final saltBase64 = decoded['salt'] as String?;
+      final iterations =
+          (decoded['iterations'] as num?)?.toInt() ?? _pbkdf2Iterations;
+      final hashBase64 = decoded['hash'] as String?;
+
+      if (storedEmail == null ||
+          saltBase64 == null ||
+          hashBase64 == null ||
+          storedEmail != session.email.trim().toLowerCase()) {
+        return false;
+      }
+
+      final salt = base64Decode(saltBase64);
+      final expectedHash = base64Decode(hashBase64);
+
+      final pbkdf2 = Pbkdf2(
+        macAlgorithm: Hmac.sha256(),
+        iterations: iterations,
+        bits: 256,
       );
-      final currentHash = crypto_pkg.sha256.convert(bytes).toString();
-      return currentHash == storedHash;
+      final secretKey = SecretKey(utf8.encode(rawPassword));
+      final derived = await pbkdf2.deriveKey(secretKey: secretKey, nonce: salt);
+      final computedHash = await derived.extractBytes();
+
+      if (computedHash.length != expectedHash.length) return false;
+      var diff = 0;
+      for (var i = 0; i < computedHash.length; i++) {
+        diff |= computedHash[i] ^ expectedHash[i];
+      }
+      final isCorrect = diff == 0;
+      if (isCorrect) {
+        _isLocalLocked.value = false;
+      }
+      return isCorrect;
     } catch (_) {
       return false;
     }
@@ -288,6 +356,7 @@ class AuthRepository implements TokenProvider {
     final UserSession? persisted = await _readPersistedSession();
     if (persisted != null) {
       _isSessionRestoredFromStorage = true;
+      _isLocalLocked.value = true;
       _updateSession(persisted);
       return _session;
     }
@@ -295,6 +364,7 @@ class AuthRepository implements TokenProvider {
     try {
       final UserSession fetched = await _fetchMe(token);
       _updateSession(fetched);
+      _isLocalLocked.value = true;
       if (fetched.id.isNotEmpty) await _persistSession(fetched);
     } catch (_) {}
     return _session;
@@ -411,6 +481,10 @@ class AuthRepository implements TokenProvider {
       return null;
     }
 
+    if (_isLocalLocked.value) {
+      return null;
+    }
+
     if (_cachedKeyring?.isNotEmpty == true) return _cachedKeyring;
 
     if (_isWeb) return _cachedKeyring;
@@ -493,6 +567,7 @@ class AuthRepository implements TokenProvider {
     _cachedKeyring = null;
     _cachedClockMark = null;
     _isSessionRestoredFromStorage = false;
+    _isLocalLocked.value = false;
     _updateSession(null);
 
     if (_isWeb) {
