@@ -1,5 +1,7 @@
 // test/unit/nfc_keyring_test.dart
 
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 
@@ -218,6 +220,90 @@ void main() {
 
     test('fromJson retorna null sin material de llave', () {
       expect(NfcKeyring.fromJson(<String, dynamic>{}), isNull);
+    });
+  });
+
+  group('NfcKeyring.fingerprint', () {
+    // Los mismos valores que fija tests/api/v1/test_nfc_keyring.py en el
+    // backend. Si un repositorio cambia el formato solo, su prueba falla en vez
+    // de que los teléfonos reciban el anillo en cada refresh sin que nadie lo vea.
+    test('coincide con los vectores del backend', () {
+      expect(
+        NfcKeyring(
+          keys: <int, String>{0: _keyV0, 1: _keyV1},
+          currentVersion: 1,
+        ).fingerprint,
+        'b7c539062cef48a3632fb922bd08f8c4547698bc600a701e3795f32db1f98ff6',
+      );
+      expect(
+        NfcKeyring(keys: <int, String>{0: _keyV0}).fingerprint,
+        'b2553e649b119d8445a6c0ec187e646ae0ae8756413f50af50c97030abfc698f',
+      );
+    });
+
+    test('un anillo tal como lo envía el backend da el mismo valor', () {
+      final ring = NfcKeyring.fromResponse(<String, dynamic>{
+        'nfc_keyring': <String, String>{'1': _keyV1, '0': _keyV0},
+        'nfc_key_version': 1,
+      });
+
+      expect(
+        ring!.fingerprint,
+        'b7c539062cef48a3632fb922bd08f8c4547698bc600a701e3795f32db1f98ff6',
+      );
+    });
+
+    test('sobrevive al guardado en el almacén', () {
+      final original = NfcKeyring(
+        keys: <int, String>{0: _keyV0, 1: _keyV1},
+        currentVersion: 1,
+      );
+      final stored = jsonDecode(jsonEncode(original.toJson()));
+
+      expect(
+        NfcKeyring.fromJson(stored as Map<String, dynamic>)!.fingerprint,
+        original.fingerprint,
+      );
+    });
+
+    test('la versión 10 se ordena después de la 2', () {
+      expect(
+        NfcKeyring(
+          keys: <int, String>{10: _keyV2, 2: _keyV1},
+          currentVersion: 10,
+        ).fingerprint,
+        // sha256 de hwb-nfc-keyring:v1|current=10|2=<V1>|10=<V2>, en Python.
+        '7369f17f2654e882d2c1e09545707871b718737df17bef36c1012d50944e7f10',
+      );
+    });
+
+    test('cualquier cambio en el anillo la cambia', () {
+      final held = NfcKeyring(
+        keys: <int, String>{0: _keyV0, 1: _keyV1},
+        currentVersion: 1,
+      ).fingerprint;
+
+      final List<NfcKeyring> changed = <NfcKeyring>[
+        // Llavero nuevo: misma versión, otra llave.
+        NfcKeyring(
+          keys: <int, String>{0: _keyV2, 1: _keyV1},
+          currentVersion: 1,
+        ),
+        NfcKeyring(
+          keys: <int, String>{0: _keyV0, 1: _keyV1},
+          currentVersion: 0,
+        ),
+        NfcKeyring(keys: <int, String>{0: _keyV0, 1: _keyV1}),
+        NfcKeyring(keys: <int, String>{1: _keyV1}, currentVersion: 1),
+        NfcKeyring(
+          keys: <int, String>{0: _keyV0, 1: _keyV1, 2: _keyV2},
+          currentVersion: 1,
+        ),
+      ];
+
+      for (final NfcKeyring ring in changed) {
+        expect(ring.fingerprint, isNot(held));
+      }
     });
   });
 }
