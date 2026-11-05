@@ -384,12 +384,49 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       required String title,
       required String instruction,
     }) async {
+      // Verificación preventiva de capacidad antes de pedir el toque NFC (ADR-004: NTAG215 ~492 B)
+      const int ntag215Capacity = 492;
+      final fitBuilder = guardianFitBuilder(record: record, codec: codec);
+      final preFit = fitBuilder(ntag215Capacity);
+
+      if (!preFit.fits) {
+        final alertText = isEs
+            ? 'El registro del menor supera la capacidad de una tarjeta NTAG215 '
+                  '(${preFit.estimatedBytes} B requeridos > $ntag215Capacity B). '
+                  'Utilice una tarjeta NTAG216 para el cuidador.'
+            : 'The minor\'s record exceeds NTAG215 card capacity '
+                  '(${preFit.estimatedBytes} B needed > $ntag215Capacity B). '
+                  'Please use an NTAG216 card for the guardian.';
+
+        final useLargerCard = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(
+              isEs ? 'Tarjeta NTAG216 requerida' : 'NTAG216 card required',
+            ),
+            content: Text(alertText),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(isEs ? 'Omitir' : 'Skip'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: Text(isEs ? 'Tengo NTAG216' : 'I have NTAG216'),
+              ),
+            ],
+          ),
+        );
+
+        if (useLargerCard != true || !mounted) return;
+      }
+
       final ok = await showNfcGuidedWrite(
         context,
         title: title,
         instruction: instruction,
         write: () => makeService().writeGuardianRecord(
-          buildFit: guardianFitBuilder(record: record, codec: codec),
+          buildFit: fitBuilder,
           expectedUid: expectedUid,
           patientId: record.patientId,
         ),
