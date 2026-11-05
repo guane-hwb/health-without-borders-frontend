@@ -13,6 +13,14 @@
 // the current one. Rotation becomes: publish a new version, let tags migrate
 // as they are rewritten, then drop the old version from the ring.
 
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
+/// Tells the backend which ring this device holds, so a refresh or `/users/me`
+/// need not send it again (security review N12).
+const String nfcKeyringFingerprintHeader = 'X-NFC-Keyring-Fingerprint';
+
 /// Version reserved for the pre-versioning global key (`NFC_MASTER_KEY`).
 ///
 /// Tags written before key versioning carry no version header and are
@@ -119,6 +127,22 @@ class NfcKeyring {
   List<int> get versions {
     final sorted = keys.keys.toList()..sort();
     return sorted;
+  }
+
+  /// SHA-256 of this ring in lowercase hex, the same value the backend computes
+  /// (`nfc_keyring_fingerprint` in `security.py`; a test in each repository pins
+  /// the same vectors).
+  ///
+  /// It covers the key bytes, not only the versions: a new keyring also starts
+  /// at version 0, and comparing versions alone would keep the old key here.
+  /// If the two sides ever disagree, the device just keeps receiving the ring.
+  String get fingerprint {
+    final String canonical = <String>[
+      'hwb-nfc-keyring:v1',
+      'current=${currentVersion ?? ''}',
+      for (final int version in versions) '$version=${keys[version]}',
+    ].join('|');
+    return sha256.convert(utf8.encode(canonical)).toString();
   }
 
   /// Serialises to the same shape the backend sends, so the value can be

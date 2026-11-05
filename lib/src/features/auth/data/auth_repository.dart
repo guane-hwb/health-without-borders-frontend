@@ -334,11 +334,13 @@ class AuthRepository implements TokenProvider {
     final String? refreshToken = await _getRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) return null;
 
+    final Map<String, String>? heldKeyringHeaders = await _heldKeyringHeaders();
     final Map<String, dynamic> data;
     try {
       data = await _apiClient.postJson(
         path: '/api/v1/login/refresh',
         body: <String, dynamic>{'refresh_token': refreshToken},
+        headers: heldKeyringHeaders,
       );
     } on ApiException catch (e) {
       if (e.statusCode == 401) {
@@ -411,6 +413,12 @@ class AuthRepository implements TokenProvider {
       return null;
     }
 
+    return _heldKeyring();
+  }
+
+  /// The ring this device holds, in memory or in the secure store. Callers that
+  /// use the keys go through [getNfcKeyring], which enforces the session window.
+  Future<NfcKeyring?> _heldKeyring() async {
     if (_cachedKeyring?.isNotEmpty == true) return _cachedKeyring;
 
     if (_isWeb) return _cachedKeyring;
@@ -438,6 +446,16 @@ class AuthRepository implements TokenProvider {
     } catch (_) {}
 
     return null;
+  }
+
+  /// Tells the backend which ring is held, so it does not send it again. Null
+  /// without a ring, which gets one delivered. Never on the web: a browser
+  /// receives no keys, and the backend's CORS does not allow this header.
+  Future<Map<String, String>?> _heldKeyringHeaders() async {
+    if (_isWeb) return null;
+    final NfcKeyring? held = await _heldKeyring();
+    if (held == null) return null;
+    return <String, String>{nfcKeyringFingerprintHeader: held.fingerprint};
   }
 
   Future<bool> isNfcSessionExpired() async => !await _isSessionWindowOpen();
@@ -637,7 +655,10 @@ class AuthRepository implements TokenProvider {
   }
 
   Future<UserSession> _fetchMe(String token) async {
-    final headers = <String, String>{'Authorization': 'Bearer $token'};
+    final headers = <String, String>{
+      'Authorization': 'Bearer $token',
+      ...?await _heldKeyringHeaders(),
+    };
     final data = await _apiClient.getJson(
       path: '/api/v1/users/me',
       headers: headers,
