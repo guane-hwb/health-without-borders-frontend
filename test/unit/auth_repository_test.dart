@@ -1053,6 +1053,7 @@ void main() {
         AuthRepository.nfcKeyringKey,
         AuthRepository.clockMarkKey,
         AuthRepository.sessionKey,
+        AuthRepository.lockHashKey,
       ]) {
         verify(() => storage.delete(key: key)).called(1);
       }

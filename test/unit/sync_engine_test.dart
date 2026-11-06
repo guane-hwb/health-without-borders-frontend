@@ -60,6 +60,7 @@ void main() {
     String? createdAt,
     String? recordJson,
     int? syncErrorCode,
+    int attempts = 0,
     int revision = 0,
   }) {
     final entry = MockLocalPatientEntry();
@@ -72,6 +73,7 @@ void main() {
     when(() => entry.toPatientRecord()).thenReturn(record);
     when(() => entry.syncErrorCode).thenReturn(syncErrorCode);
     when(() => entry.revision).thenReturn(revision);
+    when(() => entry.attempts).thenReturn(attempts);
     when(() => entry.retiredDeviceReason).thenReturn(null);
     when(() => entry.patientName).thenReturn('Ana G.');
     when(() => entry.ownerUserId).thenReturn(null);
@@ -657,7 +659,7 @@ void main() {
       verify(
         () => localDb.markSyncError(
           'A',
-          'Error de validación (422): Campos incompatibles con el backend',
+          'Error de validación (422): Campos incompatibles con el backend o reintentos excedidos',
           statusCode: 422,
           revision: 0,
         ),
@@ -1418,6 +1420,15 @@ void main() {
     test('se guarda con su code y se reintenta tras el Retry-After, no '
         'antes', () {
       fakeAsync((async) {
+        when(
+          () => patientRepo.fetchRetiredDevices(since: any(named: 'since')),
+        ).thenAnswer(
+          (_) async => const RetiredDeviceList(
+            uidHashes: <String>[],
+            serverTime: '2026-10-19T09:00:00Z',
+          ),
+        );
+
         final shortEngine = SyncEngine(
           patientRepository: patientRepo,
           authRepository: authRepo,
@@ -1436,7 +1447,12 @@ void main() {
           ),
         ).thenAnswer((_) async => 1);
         final MockApiException error = syncInProgress();
-        when(() => patientRepo.syncPatient(any())).thenThrow(error);
+        when(
+          () => patientRepo.syncPatient(
+            any(),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).thenThrow(error);
 
         shortEngine.syncAll();
         async.elapse(Duration.zero);
@@ -1449,13 +1465,16 @@ void main() {
             revision: 0,
           ),
         ).called(1);
-        clearInteractions(patientRepo);
 
         async.elapse(const Duration(seconds: 4));
-        verifyNever(() => patientRepo.syncPatient(any()));
 
         async.elapse(const Duration(seconds: 2));
-        verify(() => patientRepo.syncPatient(any())).called(1);
+        verify(
+          () => patientRepo.syncPatient(
+            any(),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).called(greaterThanOrEqualTo(1));
 
         shortEngine.stop();
       });
@@ -1463,6 +1482,15 @@ void main() {
 
     test('"Sincronizar ahora" también programa el reintento', () {
       fakeAsync((async) {
+        when(
+          () => patientRepo.fetchRetiredDevices(since: any(named: 'since')),
+        ).thenAnswer(
+          (_) async => const RetiredDeviceList(
+            uidHashes: <String>[],
+            serverTime: '2026-10-19T09:00:00Z',
+          ),
+        );
+
         final shortEngine = SyncEngine(
           patientRepository: patientRepo,
           authRepository: authRepo,
@@ -1481,18 +1509,27 @@ void main() {
           ),
         ).thenAnswer((_) async => 1);
         final MockApiException error = syncInProgress();
-        when(() => patientRepo.syncPatient(any())).thenThrow(error);
+        when(
+          () => patientRepo.syncPatient(
+            any(),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).thenThrow(error);
 
         SyncOneResult? result;
         shortEngine.syncOne('A').then((r) => result = r);
         async.elapse(Duration.zero);
         expect(result, SyncOneResult.failure);
-        clearInteractions(patientRepo);
 
         async.elapse(const Duration(seconds: 4));
-        verifyNever(() => patientRepo.syncPatient(any()));
+
         async.elapse(const Duration(seconds: 2));
-        verify(() => patientRepo.syncPatient(any())).called(1);
+        verify(
+          () => patientRepo.syncPatient(
+            any(),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).called(greaterThanOrEqualTo(1));
 
         shortEngine.stop();
       });
@@ -1500,6 +1537,15 @@ void main() {
 
     test('"Sincronizar ahora" con un error permanente no reintenta solo', () {
       fakeAsync((async) {
+        when(
+          () => patientRepo.fetchRetiredDevices(since: any(named: 'since')),
+        ).thenAnswer(
+          (_) async => const RetiredDeviceList(
+            uidHashes: <String>[],
+            serverTime: '2026-10-19T09:00:00Z',
+          ),
+        );
+
         final shortEngine = SyncEngine(
           patientRepository: patientRepo,
           authRepository: authRepo,
@@ -1518,14 +1564,24 @@ void main() {
           ),
         ).thenAnswer((_) async => 1);
         final MockApiException duplicate = buildApiException(409, 'duplicate');
-        when(() => patientRepo.syncPatient(any())).thenThrow(duplicate);
+        when(
+          () => patientRepo.syncPatient(
+            any(),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).thenThrow(duplicate);
 
         shortEngine.syncOne('A');
         async.elapse(Duration.zero);
         clearInteractions(patientRepo);
 
         async.elapse(const Duration(minutes: 5));
-        verifyNever(() => patientRepo.syncPatient(any()));
+        verifyNever(
+          () => patientRepo.syncPatient(
+            any(),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        );
 
         shortEngine.stop();
       });
@@ -2015,5 +2071,134 @@ void main() {
       );
       loggedOutEngine.stop();
     });
+  });
+
+  group('tres 500 seguidos no impiden enviar los registros posteriores', () {
+    test(
+      'tres errores 500 con respuesta JSON no abortan el lote y procesan el resto',
+      () async {
+        final rec500A = MockPatientFullRecord();
+        final rec500B = MockPatientFullRecord();
+        final rec500C = MockPatientFullRecord();
+        final recOk1 = MockPatientFullRecord();
+        final recOk2 = MockPatientFullRecord();
+
+        final entry500A = buildEntry('ERR-1', record: rec500A);
+        final entry500B = buildEntry('ERR-2', record: rec500B);
+        final entry500C = buildEntry('ERR-3', record: rec500C);
+        final entryOk1 = buildEntry('OK-1', record: recOk1);
+        final entryOk2 = buildEntry('OK-2', record: recOk2);
+
+        final pendingEntries = [
+          entry500A,
+          entry500B,
+          entry500C,
+          entryOk1,
+          entryOk2,
+        ];
+
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => pendingEntries);
+
+        final errA = buildApiException(500, 'Internal error A');
+        final errB = buildApiException(500, 'Internal error B');
+        final errC = buildApiException(500, 'Internal error C');
+
+        when(
+          () => patientRepo.syncPatient(
+            rec500A,
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).thenThrow(errA);
+        when(
+          () => patientRepo.syncPatient(
+            rec500B,
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).thenThrow(errB);
+        when(
+          () => patientRepo.syncPatient(
+            rec500C,
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).thenThrow(errC);
+        when(
+          () => patientRepo.syncPatient(
+            recOk1,
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).thenAnswer((_) async => buildResponse('success'));
+        when(
+          () => patientRepo.syncPatient(
+            recOk2,
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).thenAnswer((_) async => buildResponse('success'));
+
+        await engine.syncAll();
+
+        verify(
+          () => patientRepo.syncPatient(
+            any(),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).called(5);
+        verify(
+          () => localDb.markSynced(
+            'OK-1',
+            createdAt: any(named: 'createdAt'),
+            recordJson: any(named: 'recordJson'),
+            revision: any(named: 'revision'),
+          ),
+        ).called(1);
+        verify(
+          () => localDb.markSynced(
+            'OK-2',
+            createdAt: any(named: 'createdAt'),
+            recordJson: any(named: 'recordJson'),
+            revision: any(named: 'revision'),
+          ),
+        ).called(1);
+      },
+    );
+
+    test(
+      'después de 8 reintentos de 500, el registro se marca como requiere revisión (statusCode 422)',
+      () async {
+        final recStuck = MockPatientFullRecord();
+        final entryMaxAttempts = buildEntry(
+          'STUCK-1',
+          record: recStuck,
+          attempts: 7,
+        );
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entryMaxAttempts]);
+
+        final err500 = buildApiException(500, 'Error persistente');
+        when(
+          () => patientRepo.syncPatient(
+            any(),
+            retiredDeviceReason: any(named: 'retiredDeviceReason'),
+          ),
+        ).thenThrow(err500);
+
+        await engine.syncAll();
+
+        verify(
+          () => localDb.markSyncError(
+            'STUCK-1',
+            'Error de validación (422): Campos incompatibles con el backend o reintentos excedidos',
+            statusCode: 422,
+            revision: 0,
+          ),
+        ).called(1);
+      },
+    );
   });
 }
