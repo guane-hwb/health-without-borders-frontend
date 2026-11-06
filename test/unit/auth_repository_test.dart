@@ -1577,6 +1577,7 @@ void main() {
         },
       );
       await repo.login(email: 'doc@hwb.org', password: 'x');
+      clearInteractions(storage);
 
       final NfcKeyring? keyring = await repo.getNfcKeyring();
 
@@ -1671,6 +1672,176 @@ void main() {
       ).thenThrow(Exception('llavero bloqueado'));
 
       expect(await repo.getNfcKeyring(), isNull);
+    });
+  });
+
+  group('huella del anillo (N12)', () {
+    final NfcKeyring held = NfcKeyring(
+      keys: <int, String>{0: 'AA' * 32},
+      currentVersion: 0,
+    );
+    final Map<String, String> heldHeaders = <String, String>{
+      nfcKeyringFingerprintHeader: held.fingerprint,
+    };
+
+    void stubHeldRing() {
+      stubStoredRefresh(_refreshJwt());
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => jsonEncode(held.toJson()));
+    }
+
+    void stubRefresh(Map<String, dynamic> extra) {
+      when(
+        () => api.postJson(
+          path: '/api/v1/login/refresh',
+          body: any(named: 'body'),
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer(
+        (_) async => <String, dynamic>{
+          'access_token': 'a2',
+          'refresh_token': _refreshJwt(),
+          ...extra,
+        },
+      );
+    }
+
+    Map<String, String>? sentOnRefresh() =>
+        verify(
+              () => api.postJson(
+                path: '/api/v1/login/refresh',
+                body: any(named: 'body'),
+                headers: captureAny(named: 'headers'),
+              ),
+            ).captured.last
+            as Map<String, String>?;
+
+    test('el refresh envía la huella del anillo guardado', () async {
+      stubHeldRing();
+      stubRefresh(const <String, dynamic>{});
+
+      await repo.refreshAccessToken();
+
+      expect(sentOnRefresh(), heldHeaders);
+    });
+
+    test('sin anillo no envía huella, y el servidor lo entrega', () async {
+      stubStoredRefresh(_refreshJwt());
+      stubRefresh(<String, dynamic>{
+        'nfc_keyring': {'0': 'BB' * 32},
+        'nfc_key_version': 0,
+      });
+
+      await repo.refreshAccessToken();
+
+      expect(sentOnRefresh(), isNull);
+      expect((await repo.getNfcKeyring())!.keyFor(0), 'BB' * 32);
+    });
+
+    test('una respuesta sin llaves conserva el anillo', () async {
+      stubHeldRing();
+      stubRefresh(const <String, dynamic>{
+        'nfc_keyring': null,
+        'nfc_encryption_key': null,
+        'nfc_key_version': null,
+      });
+
+      expect(await repo.refreshAccessToken(), 'a2');
+
+      expect((await repo.getNfcKeyring())!.keyFor(0), 'AA' * 32);
+      verifyNever(() => storage.delete(key: AuthRepository.nfcKeyringKey));
+    });
+
+    test('un anillo nuevo reemplaza al guardado y cambia la huella', () async {
+      stubHeldRing();
+      stubRefresh(<String, dynamic>{
+        'nfc_keyring': {'0': 'CC' * 32},
+        'nfc_key_version': 0,
+      });
+
+      await repo.refreshAccessToken();
+      await repo.refreshAccessToken();
+
+      expect((await repo.getNfcKeyring())!.keyFor(0), 'CC' * 32);
+      final String expected = NfcKeyring(
+        keys: <int, String>{0: 'CC' * 32},
+        currentVersion: 0,
+      ).fingerprint;
+      expect(sentOnRefresh(), <String, String>{
+        nfcKeyringFingerprintHeader: expected,
+      });
+    });
+
+    test('un anillo guardado ilegible no envía huella', () async {
+      stubStoredRefresh(_refreshJwt());
+      when(
+        () => storage.read(key: AuthRepository.nfcKeyringKey),
+      ).thenAnswer((_) async => '{no es json');
+      stubRefresh(const <String, dynamic>{});
+
+      await repo.refreshAccessToken();
+
+      expect(sentOnRefresh(), isNull);
+    });
+
+    test('/users/me envía la huella junto al token', () async {
+      stubHeldRing();
+      when(
+        () => storage.read(key: AuthRepository.tokenKey),
+      ).thenAnswer((_) async => _docJwt());
+      when(
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer((_) async => _meResponse());
+
+      await repo.getCurrentUser();
+
+      final Map<String, String> sent =
+          verify(
+                () => api.getJson(
+                  path: '/api/v1/users/me',
+                  headers: captureAny(named: 'headers'),
+                ),
+              ).captured.last
+              as Map<String, String>;
+      expect(sent[nfcKeyringFingerprintHeader], held.fingerprint);
+      expect(sent['Authorization'], startsWith('Bearer '));
+    });
+
+    test('la web nunca envía la huella', () async {
+      final AuthRepository webRepo = _makeRepo(
+        api: api,
+        storage: storage,
+        localDb: localDb,
+        forceWeb: true,
+      );
+      stubLogin(
+        token: <String, dynamic>{
+          'refresh_token': _refreshJwt(),
+          'nfc_encryption_key': 'web-nfc',
+        },
+      );
+      await webRepo.login(email: 'doc@hwb.org', password: 'x');
+      stubRefresh(const <String, dynamic>{});
+
+      await webRepo.refreshAccessToken();
+
+      expect(sentOnRefresh(), isNull);
+      final List<dynamic> meHeaders = verify(
+        () => api.getJson(
+          path: '/api/v1/users/me',
+          headers: captureAny(named: 'headers'),
+        ),
+      ).captured;
+      for (final dynamic headers in meHeaders) {
+        expect(
+          (headers as Map<String, String>).keys,
+          isNot(contains(nfcKeyringFingerprintHeader)),
+        );
+      }
     });
   });
 

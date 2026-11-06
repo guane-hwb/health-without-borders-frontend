@@ -65,6 +65,13 @@ The backend delivers a **ring** — `version -> key` — at login, refresh and
 `/users/me`. `NfcKeyring` (`lib/src/core/nfc/nfc_keyring.dart`) holds it;
 `AuthRepository.getNfcKeyring()` is the single accessor.
 
+A device that holds a ring sends `X-NFC-Keyring-Fingerprint` on refresh and
+`/users/me`: a SHA-256 over the keys and the current version it holds. If it
+matches, the backend does not send the ring again, and the response without keys
+leaves the held ring in place. Any change to the ring changes the fingerprint,
+so the next refresh delivers it. Login and the password change always deliver
+it. The web build holds no ring: the backend does not deliver keys to a browser.
+
 Reads resolve whichever version the chip names. Writes use the ring's current
 version.
 
