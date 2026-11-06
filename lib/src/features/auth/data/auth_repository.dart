@@ -54,6 +54,8 @@ class AuthRepository implements TokenProvider {
   static const String lockHashKey = _lockHashKey;
   static const String _lockHashKey = 'hwb_local_lock_hash';
 
+  static const String _pendingRevocationsKey = 'hwb_pending_logout_tokens';
+
   static const String _tokenKey = 'hwb_access_token';
   static const String _refreshKey = 'hwb_refresh_token';
   static const String _nfcKeyKey = 'hwb_nfc_key';
@@ -231,6 +233,7 @@ class AuthRepository implements TokenProvider {
       }
     }
 
+    flushPendingRevocations().ignore();
     return _session!;
   }
 
@@ -357,6 +360,11 @@ class AuthRepository implements TokenProvider {
       _isSessionRestoredFromStorage = true;
       _isLocalLocked.value = true;
       _updateSession(persisted);
+
+      if (_cachedKeyring == null) {
+        await getNfcKeyring();
+      }
+      flushPendingRevocations().ignore();
       return _session;
     }
 
@@ -365,6 +373,7 @@ class AuthRepository implements TokenProvider {
       _updateSession(fetched);
       _isLocalLocked.value = true;
       if (fetched.id.isNotEmpty) await _persistSession(fetched);
+      flushPendingRevocations().ignore();
     } catch (_) {}
     return _session;
   }
@@ -471,6 +480,7 @@ class AuthRepository implements TokenProvider {
       if (session.id.isNotEmpty) await _persistSession(_session!);
       await _saveLocalLockHash(session.email, newPassword);
     }
+    flushPendingRevocations().ignore();
     return _session!;
   }
 
@@ -510,6 +520,13 @@ class AuthRepository implements TokenProvider {
       }
     } catch (_) {}
 
+    if (_cachedToken != null && _cachedToken!.isNotEmpty) {
+      try {
+        await _fetchMe(_cachedToken!);
+        if (_cachedKeyring?.isNotEmpty == true) return _cachedKeyring;
+      } catch (_) {}
+    }
+
     return null;
   }
 
@@ -526,22 +543,157 @@ class AuthRepository implements TokenProvider {
     } catch (_) {}
   }
 
-  Future<void> logout({bool wipeLocalData = false}) async {
+  // ── Pending Revocations ───────────────────────────────────────────────────
+
+  Future<List<String>> getPendingRevocations() async {
     try {
-      final String? token =
-          _cachedToken ?? await _secureStorage.read(key: _tokenKey);
-      if (token != null && token.isNotEmpty) {
-        final String? refreshToken = await _getRefreshToken();
-        await _apiClient.postJson(
-          path: '/api/v1/logout',
-          headers: <String, String>{'Authorization': 'Bearer $token'},
-          body: <String, dynamic>{
-            if (refreshToken != null && refreshToken.isNotEmpty)
-              'refresh_token': refreshToken,
-          },
+      final String? raw = await _secureStorage.read(
+        key: _pendingRevocationsKey,
+      );
+      if (raw == null || raw.isEmpty) return <String>[];
+      final Object? decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .map((dynamic e) => e.toString())
+            .where((String s) => s.isNotEmpty)
+            .toList();
+      }
+    } catch (_) {}
+    return <String>[];
+  }
+
+  Future<void> _enqueuePendingRevocation(String refreshToken) async {
+    if (refreshToken.isEmpty) return;
+    try {
+      final List<String> current = await getPendingRevocations();
+      if (!current.contains(refreshToken)) {
+        current.add(refreshToken);
+        await _secureStorage.write(
+          key: _pendingRevocationsKey,
+          value: jsonEncode(current),
         );
       }
-    } catch (_) {
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error al guardar revocación pendiente de token',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  Future<void> flushPendingRevocations() async {
+    final List<String> pending = await getPendingRevocations();
+    if (pending.isEmpty) return;
+
+    final List<String> remaining = List<String>.from(pending);
+    for (final String token in pending) {
+      try {
+        await _apiClient.postJson(
+          path: '/api/v1/logout',
+          body: <String, dynamic>{'refresh_token': token},
+        );
+        remaining.remove(token);
+      } on ApiException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 400 || e.statusCode == 422) {
+          remaining.remove(token);
+        } else {
+          AppLogger.e(
+            'Error al revocar token pendiente en el servidor',
+            error: e,
+          );
+        }
+      } catch (e) {
+        AppLogger.e('Error al revocar token pendiente en el servidor: $e');
+      }
+    }
+
+    try {
+      if (remaining.isEmpty) {
+        await _secureStorage.delete(key: _pendingRevocationsKey);
+      } else {
+        await _secureStorage.write(
+          key: _pendingRevocationsKey,
+          value: jsonEncode(remaining),
+        );
+      }
+    } catch (_) {}
+  }
+
+  Future<void> logout({bool wipeLocalData = false}) async {
+    String? refreshToken;
+    bool logoutSuccess = false;
+
+    try {
+      String? token = _cachedToken ?? await _secureStorage.read(key: _tokenKey);
+      refreshToken = await _getRefreshToken();
+
+      if (token != null && token.isNotEmpty) {
+        final DateTime? expiry = _jwtExpiry(token);
+        final bool isExpired =
+            expiry == null || !DateTime.now().toUtc().isBefore(expiry);
+
+        if (isExpired) {
+          try {
+            final String? refreshedToken = await refreshAccessToken();
+            if (refreshedToken != null && refreshedToken.isNotEmpty) {
+              token = refreshedToken;
+              refreshToken = await _getRefreshToken();
+            }
+          } catch (e, stack) {
+            AppLogger.e(
+              'No se pudo refrescar el token expirado antes de cerrar sesión',
+              error: e,
+              stackTrace: stack,
+            );
+          }
+        }
+
+        try {
+          await _apiClient.postJson(
+            path: '/api/v1/logout',
+            headers: <String, String>{'Authorization': 'Bearer $token'},
+            body: <String, dynamic>{
+              if (refreshToken != null && refreshToken.isNotEmpty)
+                'refresh_token': refreshToken,
+            },
+          );
+          logoutSuccess = true;
+        } catch (e, stack) {
+          AppLogger.e(
+            'Error al revocar la sesión en el servidor durante logout',
+            error: e,
+            stackTrace: stack,
+          );
+          if (refreshToken != null && refreshToken.isNotEmpty) {
+            await _enqueuePendingRevocation(refreshToken);
+          }
+        }
+      } else if (refreshToken != null && refreshToken.isNotEmpty) {
+        try {
+          await _apiClient.postJson(
+            path: '/api/v1/logout',
+            body: <String, dynamic>{'refresh_token': refreshToken},
+          );
+          logoutSuccess = true;
+        } catch (e, stack) {
+          AppLogger.e(
+            'Error al enviar el refresh token a /logout',
+            error: e,
+            stackTrace: stack,
+          );
+          await _enqueuePendingRevocation(refreshToken);
+        }
+      }
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error inesperado durante el proceso de logout',
+        error: e,
+        stackTrace: stack,
+      );
+      if (refreshToken != null && refreshToken.isNotEmpty && !logoutSuccess) {
+        await _enqueuePendingRevocation(refreshToken);
+      }
     } finally {
       await clearSession();
       if (wipeLocalData || _isWeb) {
