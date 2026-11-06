@@ -346,7 +346,6 @@ class AuthRepository implements TokenProvider {
 
     final String? token = await _readStoredToken();
     if (token == null || token.isEmpty) {
-      if (_isWeb) await wipeLocalPhi(force: true);
       return null;
     }
     _cachedToken = token;
