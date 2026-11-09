@@ -43,12 +43,15 @@ void main() {
     );
   });
 
-  test('web: arrancar sin token borra la cola y la llave de la BD', () async {
-    await build(web: true).restoreSession();
+  test(
+    'web: arrancar sin token NO borra la cola ni la llave de la BD',
+    () async {
+      await build(web: true).restoreSession();
 
-    expect(idb, isEmpty);
-    expect(await secure.read(key: 'hwb_sqlite_aes_key'), isNull);
-  });
+      expect(idb, isNotEmpty);
+      expect(await secure.read(key: 'hwb_sqlite_aes_key'), isNotNull);
+    },
+  );
 
   test('móvil: arrancar sin token NO borra pendientes', () async {
     await build(web: false).restoreSession();

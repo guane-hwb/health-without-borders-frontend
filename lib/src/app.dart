@@ -20,6 +20,7 @@ import 'features/admin/data/stats_repository.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/data/user_repository.dart';
 import 'features/auth/presentation/auth_gate.dart';
+import 'features/auth/presentation/lock_gate.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'features/auth/presentation/session_window_banner.dart';
 import 'features/nfc/data/patient_repository.dart';
@@ -57,6 +58,9 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
     apiClient: _apiClient,
     authRepository: _authRepository,
   );
+  late final LockController _lockController = LockController(
+    authRepository: _authRepository,
+  );
   late final LocalDatabase _localDatabase = LocalDatabase.instance;
   late final SyncEngine _syncEngine = SyncEngine(
     patientRepository: _patientRepository,
@@ -89,6 +93,7 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _authRepository.sessionExpired.removeListener(_onSessionExpired);
+    _lockController.dispose();
     _bootstrap.dispose();
     _syncEngine.dispose();
     super.dispose();
@@ -145,7 +150,27 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
           onGenerateRoute: AppRoutes.onGenerateRoute,
           builder: (BuildContext context, Widget? child) => SessionWindowBanner(
             windowClosed: _authRepository.sessionWindowClosed,
-            child: child ?? const SizedBox.shrink(),
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (_) => _lockController.recordUserActivity(),
+              child: Stack(
+                children: [
+                  child ?? const SizedBox.shrink(),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _lockController.lockedListenable,
+                    builder: (context, locked, _) {
+                      if (!locked || _authRepository.currentUser == null) {
+                        return const SizedBox.shrink();
+                      }
+                      return LockScreen(
+                        authRepository: _authRepository,
+                        onUnlocked: _lockController.unlock,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
           ),
           home: AuthGate(authRepository: _authRepository),
         ),
