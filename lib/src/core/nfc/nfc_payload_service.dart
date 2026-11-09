@@ -47,6 +47,36 @@ GuardianFitBuilder guardianFitBuilder({
   );
 }
 
+/// NDEF capacity Android reports for an NTAG215, the smaller of the two chips
+/// ADR-004 supports. A guardian copy that does not fit here needs an NTAG216.
+const int kNtag215NdefCapacity = 492;
+
+/// The payload budget a guardian copy has on a chip whose NDEF capacity is
+/// [ndefCapacity]: the capacity minus what the MIME record adds around the
+/// payload (its header and the 28-character type string).
+///
+/// The overhead is measured on a 256-byte payload. From that size on the record
+/// stores its length in 4 bytes instead of 1, and a guardian copy is in
+/// practice longer than 255 B; measuring an empty payload came out 3 B short.
+/// A shorter copy just gets a budget 3 B on the safe side.
+///
+/// [NfcPayloadService.writeGuardianRecord] and the register wizard's check
+/// before the tap both use this, so the two cannot disagree.
+int guardianPayloadBudget(int ndefCapacity) {
+  const int probe = 256;
+  final int overhead =
+      NdefMessage(
+        records: [
+          NfcPayloadService.buildMimeRecord(
+            kHwbGuardianMimeType,
+            Uint8List(probe),
+          ),
+        ],
+      ).byteLength -
+      probe;
+  return ndefCapacity - overhead;
+}
+
 /// MIME type used for HWB NFC payloads.
 const String kHwbNdefMimeType = 'application/vnd.hwb.triage';
 
@@ -179,13 +209,9 @@ class NfcPayloadService {
           await _refuseAnotherPatientsDevice(tag, uid, patientId);
         }
 
-        // The MIME record overhead (header + the 28-char type string) comes out
-        // of maxSize, so the payload budget is maxSize minus that overhead.
-        // Measure it exactly with an empty payload rather than guessing.
-        final overhead = NdefMessage(
-          records: [buildMimeRecord(kHwbGuardianMimeType, Uint8List(0))],
-        ).byteLength;
-        final payloadBudget = ndef.maxSize - overhead;
+        // The MIME record overhead comes out of maxSize; see
+        // guardianPayloadBudget.
+        final payloadBudget = guardianPayloadBudget(ndef.maxSize);
 
         final fit = buildFit(payloadBudget);
         final encrypted = await codec.encode(
