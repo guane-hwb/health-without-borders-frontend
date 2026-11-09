@@ -1,11 +1,8 @@
 // test/widget/auth_gate_widget_test.dart
-//
-// AuthGate routes the first screen based on restoreSession(): a brief splash
-// while the (storage-only) restore runs, then HomeScreen if a session was
-// restored or LoginScreen otherwise.
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -18,31 +15,44 @@ import 'package:health_without_borders_frontend/src/features/auth/data/auth_repo
 import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/auth_gate.dart';
+import 'package:health_without_borders_frontend/src/features/auth/presentation/lock_gate.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
 import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
-
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
-/// Controllable AuthRepository fake. Only restoreSession/currentUser/logout are
-/// exercised here; the rest is left to Fake's noSuchMethod (never called).
+/// Controllable AuthRepository fake.
 class _GateAuth extends Fake implements AuthRepository {
-  _GateAuth({this.restoreResult, this.restoreFuture}) {
+  _GateAuth({
+    this.restoreResult,
+    this.restoreFuture,
+    bool initiallyLocked = false,
+  }) {
     _current = restoreResult;
     _sessionNotifier = ValueNotifier<UserSession?>(restoreResult);
+    _isLocalLocked = ValueNotifier<bool>(initiallyLocked);
   }
 
   final UserSession? restoreResult;
   final Future<UserSession?>? restoreFuture;
   UserSession? _current;
   late final ValueNotifier<UserSession?> _sessionNotifier;
+  late final ValueNotifier<bool> _isLocalLocked;
 
   @override
   UserSession? get currentUser => _current;
 
   @override
   ValueNotifier<UserSession?> get sessionNotifier => _sessionNotifier;
+
+  @override
+  ValueListenable<bool> get isLocalLocked => _isLocalLocked;
+
+  @override
+  void setLocalLocked(bool locked) {
+    _isLocalLocked.value = locked;
+  }
 
   @override
   Future<UserSession?> restoreSession() {
@@ -54,8 +64,6 @@ class _GateAuth extends Fake implements AuthRepository {
   Future<void> logout({bool wipeLocalData = false}) async {}
 }
 
-// Superadmin => HomeScreen renders the admin body (static cards, no sync card),
-// so no local database access is triggered during the render.
 UserSession _superadmin() => UserSession(
   id: 'uid-sa',
   email: 'root@hwb.org',
@@ -106,13 +114,12 @@ void main() {
     final auth = _GateAuth(restoreFuture: completer.future);
 
     await tester.pumpWidget(_wrap(auth));
-    await tester.pump(); // build the FutureBuilder once (still pending)
+    await tester.pump();
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.byType(HomeScreen), findsNothing);
     expect(find.byType(LoginScreen), findsNothing);
 
-    // Resolve so nothing is left dangling.
     completer.complete(null);
     await tester.pump();
     await tester.pump();
@@ -129,14 +136,31 @@ void main() {
     expect(find.byType(HomeScreen), findsNothing);
   });
 
-  testWidgets('sesión restaurada → HomeScreen', (tester) async {
-    final auth = _GateAuth(restoreResult: _superadmin());
+  testWidgets('sesión restaurada con bloqueo activo → LockScreen', (
+    tester,
+  ) async {
+    final auth = _GateAuth(restoreResult: _superadmin(), initiallyLocked: true);
+
+    await tester.pumpWidget(_wrap(auth));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(LockScreen), findsOneWidget);
+    expect(find.byType(HomeScreen), findsNothing);
+  });
+
+  testWidgets('sesión restaurada y desbloqueada → HomeScreen', (tester) async {
+    final auth = _GateAuth(
+      restoreResult: _superadmin(),
+      initiallyLocked: false,
+    );
 
     await tester.pumpWidget(_wrap(auth));
     await tester.pump();
     await tester.pump();
 
     expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.byType(LockScreen), findsNothing);
     expect(find.byType(LoginScreen), findsNothing);
   });
 }

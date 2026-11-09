@@ -521,18 +521,18 @@ void main() {
 
   // ── Group 8: Remember Me Checkbox ───────────────────────────────────────
   group('Checkbox recordar sesion', () {
-    testWidgets('inicia en true (marcado)', (tester) async {
+    testWidgets('inicia en false (desmarcado por seguridad)', (tester) async {
       await tester.pumpWidget(buildSubject());
       final checkbox = tester.widget<Checkbox>(find.byType(Checkbox));
-      expect(checkbox.value, isTrue);
+      expect(checkbox.value, isFalse);
     });
 
-    testWidgets('al tocarlo cambia a false', (tester) async {
+    testWidgets('al tocarlo cambia a true', (tester) async {
       await tester.pumpWidget(buildSubject());
       await tester.tap(find.byType(Checkbox));
       await tester.pump();
       final checkbox = tester.widget<Checkbox>(find.byType(Checkbox));
-      expect(checkbox.value, isFalse);
+      expect(checkbox.value, isTrue);
     });
   });
 
@@ -635,7 +635,7 @@ void main() {
         await tester.pump();
 
         final checkbox = tester.widget<Checkbox>(find.byType(Checkbox));
-        expect(checkbox.value, isFalse);
+        expect(checkbox.value, isTrue);
       },
     );
   });

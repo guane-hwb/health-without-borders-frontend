@@ -2027,6 +2027,31 @@ void main() {
       expect(await webRepo.isNfcSessionExpired(), isFalse);
       verifyNever(() => storage.read(key: AuthRepository.clockMarkKey));
     });
+
+    test(
+      'en web, restoreSession sin token NO borra la base local ni destruye la clave',
+      () async {
+        final webRepo = _makeRepo(
+          api: api,
+          storage: storage,
+          localDb: localDb,
+          forceWeb: true,
+        );
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenAnswer((_) async => null);
+        when(
+          () =>
+              localDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => 2);
+
+        final session = await webRepo.restoreSession();
+
+        expect(session, isNull);
+        verifyNever(() => localDb.clearAll());
+        verifyNever(() => localDb.destroyEncryptionKey());
+      },
+    );
   });
 }
 
