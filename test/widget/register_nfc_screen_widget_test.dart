@@ -12,6 +12,7 @@ import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_service.dart'
     show NfcService;
@@ -24,6 +25,7 @@ import 'package:health_without_borders_frontend/src/features/auth/domain/user_se
 import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/register_draft.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/add_consultation_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/add_vaccine_screen.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/register/register_nfc_screen.dart';
@@ -1195,6 +1197,139 @@ void main() {
         tester.widget<Step6Success>(find.byType(Step6Success)).sealed,
         isTrue,
       );
+    });
+
+    // A minor whose guardian copy lands between the real NTAG215 payload
+    // budget (492 B minus the MIME record) and the whole 492 B: the old check
+    // compared with 492 B, let this through and the write then failed.
+    // The second guardian has no device, so only one guardian copy is written.
+    void fillMinorThatOverflowsNtag215(RegisterDraft draft) {
+      draft
+        ..documentType = 'TI'
+        ..documentNumber = '1098765432'
+        ..firstName = 'Valentina'
+        ..secondName = 'Sofía'
+        ..firstLastName = 'Rodríguez'
+        ..secondLastName = 'Gómez'
+        ..dob = DateTime(2015, 3, 21)
+        ..street = 'Carrera 15 # 23-47, Barrio La Playa, apto. 302'
+        ..addressCity = 'Cúcuta'
+        ..cityCode = '54001'
+        ..addressState = 'Norte de Santander'
+        ..zone = 'U'
+        ..ethnicity = '06'
+        ..bloodType = 'O+'
+        ..guardianName = 'María Fernanda Gómez'
+        ..guardianPhone = '3001234567'
+        ..guardianDeviceUid = 'AA:BB:CC:DD'
+        ..guardianDocType = 'CC'
+        ..guardianDocNumber = '1090123456'
+        ..guardianAuthAccepted = true
+        ..guardianEmail = 'maria.gomez@example.com'
+        ..guardian2Name = 'Carlos Andrés Rodríguez'
+        ..guardian2Phone = '3109876543'
+        ..guardian2DocType = 'CC'
+        ..guardian2DocNumber = '1090654321'
+        ..guardian2AuthAccepted = true
+        ..guardian2Email = 'carlos.rodriguez@example.com';
+    }
+
+    /// Registers [fillMinorThatOverflowsNtag215] up to the hub, checks its
+    /// guardian copy really is in that window, and taps through the patient
+    /// device so the screen reaches the guardian device.
+    Future<void> reachGuardianWriteOfOversizedMinor(WidgetTester tester) async {
+      await pumpScreen(tester);
+      final RegisterDraft draft = tester
+          .widget<Step3PatientData>(find.byType(Step3PatientData))
+          .draft;
+      await advanceToReview(tester);
+      fillMinorThatOverflowsNtag215(draft);
+      await tester.widget<Step5Review>(find.byType(Step5Review)).onConfirm();
+      await tester.pumpAndSettle();
+
+      final PatientFullRecord saved = tester
+          .widget<Step6Success>(find.byType(Step6Success))
+          .patient;
+      final int smallest = guardianFitBuilder(
+        record: saved,
+        codec: NfcPayloadCodec.fromKeyring(
+          keyring: NfcKeyring.single(validHexKey),
+        ),
+      )(0).estimatedBytes;
+      expect(
+        smallest,
+        allOf(
+          greaterThan(guardianPayloadBudget(kNtag215NdefCapacity)),
+          lessThanOrEqualTo(kNtag215NdefCapacity),
+        ),
+        reason:
+            'the guardian copy must fall where the old check passed and the '
+            'write failed; adjust the draft if the payload format changed',
+      );
+
+      tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+      await tester.pump();
+      await tester.pump();
+      await finishSheet(tester);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'avisa antes del toque si la copia no cabe en un NTAG215, y "Omitir" no graba',
+      (tester) async {
+        await reachGuardianWriteOfOversizedMinor(tester);
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(find.textContaining('> 492 B'), findsOneWidget);
+
+        await tester.tap(find.text('Omitir'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsNothing);
+        expect(service.triageUids, hasLength(1));
+        expect(service.guardianUids, isEmpty);
+        verifyNever(() => db.clearChipsDirty(any(), guardian: true));
+      },
+    );
+
+    testWidgets(
+      'con "Tengo NTAG216" sigue y graba el dispositivo del cuidador',
+      (tester) async {
+        await reachGuardianWriteOfOversizedMinor(tester);
+
+        await tester.tap(find.text('Tengo NTAG216'));
+        // The guided write sheet animates until it is started: pump, do not
+        // settle, as the other tests do before finishSheet.
+        await tester.pump();
+        await tester.pump();
+        await finishSheet(tester);
+        await tester.pumpAndSettle();
+
+        expect(service.guardianUids, <String?>['AA:BB:CC:DD']);
+      },
+    );
+
+    testWidgets('sin aviso cuando la copia del cuidador cabe en un NTAG215', (
+      tester,
+    ) async {
+      await pumpScreen(tester);
+      tester
+              .widget<Step3PatientData>(find.byType(Step3PatientData))
+              .draft
+              .guardianDeviceUid =
+          'AA:BB:CC:DD';
+      await advanceToHub(tester);
+
+      tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+      await tester.pump();
+      await tester.pump();
+      await finishSheet(tester);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      await finishSheet(tester);
+      await tester.pumpAndSettle();
+
+      expect(service.guardianUids, <String?>['AA:BB:CC:DD']);
     });
 
     testWidgets('con dos cuidadores graba ambos dispositivos en orden', (
