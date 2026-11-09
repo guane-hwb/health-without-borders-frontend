@@ -384,25 +384,32 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       required String title,
       required String instruction,
     }) async {
-      // Verificación preventiva de capacidad antes de pedir el toque NFC (ADR-004: NTAG215 ~492 B)
-      const int ntag215Capacity = 492;
+      // Check before asking for the tap, with the same payload budget the
+      // write uses, on the smaller chip ADR-004 supports.
       final fitBuilder = guardianFitBuilder(record: record, codec: codec);
-      final preFit = fitBuilder(ntag215Capacity);
+      final int ntag215Budget = guardianPayloadBudget(kNtag215NdefCapacity);
+      final preFit = fitBuilder(ntag215Budget);
 
       if (!preFit.fits) {
+        // The whole NDEF message, so it compares with the chip's capacity.
+        final int neededBytes =
+            preFit.estimatedBytes + (kNtag215NdefCapacity - ntag215Budget);
         final alertText = isEs
-            ? 'El registro del menor supera la capacidad de una tarjeta NTAG215 '
-                  '(${preFit.estimatedBytes} B requeridos > $ntag215Capacity B). '
-                  'Utilice una tarjeta NTAG216 para el cuidador.'
-            : 'The minor\'s record exceeds NTAG215 card capacity '
-                  '(${preFit.estimatedBytes} B needed > $ntag215Capacity B). '
-                  'Please use an NTAG216 card for the guardian.';
+            ? 'El registro del menor supera la capacidad de un dispositivo '
+                  'NTAG215 ($neededBytes B requeridos > '
+                  '$kNtag215NdefCapacity B). Utilice un dispositivo NTAG216 '
+                  'como dispositivo del cuidador.'
+            : 'The minor\'s record exceeds the capacity of an NTAG215 device '
+                  '($neededBytes B needed > $kNtag215NdefCapacity B). '
+                  'Please use an NTAG216 device as the guardian device.';
 
         final useLargerCard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: Text(
-              isEs ? 'Tarjeta NTAG216 requerida' : 'NTAG216 card required',
+              isEs
+                  ? 'Se requiere un dispositivo NTAG216'
+                  : 'NTAG216 device required',
             ),
             content: Text(alertText),
             actions: [

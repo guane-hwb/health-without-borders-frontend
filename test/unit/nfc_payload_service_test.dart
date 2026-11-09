@@ -128,6 +128,35 @@ void main() {
       expect(message.byteLength, 300 + 32);
     });
 
+    // El aviso previo del registro comparaba el payload con los 492 B del
+    // chip, sin restar el registro: un payload de 459–492 B pasaba el aviso y
+    // fallaba al grabar.
+    test('el presupuesto del cuidador llena el chip exactamente', () {
+      for (final int capacity in <int>[kNtag215NdefCapacity, 888]) {
+        final int budget = guardianPayloadBudget(capacity);
+
+        expect(
+          _messageOf(kHwbGuardianMimeType, Uint8List(budget)).byteLength,
+          capacity,
+        );
+        expect(
+          _messageOf(kHwbGuardianMimeType, Uint8List(budget + 1)).byteLength,
+          greaterThan(capacity),
+        );
+      }
+      expect(guardianPayloadBudget(kNtag215NdefCapacity), 492 - 34);
+    });
+
+    test('el presupuesto nunca se pasa con un payload corto', () {
+      final int budget = guardianPayloadBudget(kNtag215NdefCapacity);
+      for (final int size in <int>[0, 100, 255, 256]) {
+        expect(
+          _messageOf(kHwbGuardianMimeType, Uint8List(size)).byteLength - size,
+          lessThanOrEqualTo(kNtag215NdefCapacity - budget),
+        );
+      }
+    });
+
     test(
       'rechaza un payload que el chequeo viejo habría dejado pasar',
       () async {
@@ -459,7 +488,7 @@ void main() {
       );
 
       expect(budgets, hasLength(1));
-      expect(budgets.single, lessThan(888));
+      expect(budgets.single, guardianPayloadBudget(888));
       expect(budgets.single, greaterThan(888 - 60));
     });
 
