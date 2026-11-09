@@ -338,9 +338,12 @@ class AuthRepository implements TokenProvider {
   Future<UserSession?> getCurrentUser() async {
     if (_session != null) return _session;
     try {
-      final token = await getAccessToken();
+      final String? token = _cachedToken ?? await _readStoredToken();
+      if (token == null || token.isEmpty) return null;
       _updateSession(await _fetchMe(token));
-    } catch (_) {}
+    } catch (_) {
+      return null;
+    }
     return _session;
   }
 
@@ -496,7 +499,17 @@ class AuthRepository implements TokenProvider {
       return null;
     }
 
-    return _heldKeyring();
+    final NfcKeyring? held = await _heldKeyring();
+    if (held != null && held.isNotEmpty) return held;
+
+    if (_cachedToken != null && _cachedToken!.isNotEmpty) {
+      try {
+        await _fetchMe(_cachedToken!);
+        if (_cachedKeyring?.isNotEmpty == true) return _cachedKeyring;
+      } catch (_) {}
+    }
+
+    return null;
   }
 
   /// The ring this device holds, in memory or in the secure store. Callers that
@@ -527,13 +540,6 @@ class AuthRepository implements TokenProvider {
         return restored;
       }
     } catch (_) {}
-
-    if (_cachedToken != null && _cachedToken!.isNotEmpty) {
-      try {
-        await _fetchMe(_cachedToken!);
-        if (_cachedKeyring?.isNotEmpty == true) return _cachedKeyring;
-      } catch (_) {}
-    }
 
     return null;
   }
