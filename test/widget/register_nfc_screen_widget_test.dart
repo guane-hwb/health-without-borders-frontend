@@ -1281,6 +1281,12 @@ void main() {
 
         expect(find.byType(AlertDialog), findsOneWidget);
         expect(find.textContaining('> 492 B'), findsOneWidget);
+        // The chips are "dispositivos", never "tarjetas".
+        expect(find.text('Se requiere un dispositivo NTAG216'), findsOneWidget);
+        expect(
+          find.textContaining(RegExp('tarjeta', caseSensitive: false)),
+          findsNothing,
+        );
 
         await tester.tap(find.text('Omitir'));
         await tester.pumpAndSettle();

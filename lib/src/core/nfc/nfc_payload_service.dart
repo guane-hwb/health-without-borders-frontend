@@ -609,9 +609,9 @@ class NfcPayloadTooLargeException implements Exception {
     final bool isNtag213 = chipCapacity <= 180;
     final bool isNtag215 = chipCapacity > 180 && chipCapacity <= 504;
     final String hint = isNtag213
-        ? ' (NTAG213 detectado: utilice tarjetas NTAG215 o NTAG216).'
+        ? ' (NTAG213 detectado: utilice dispositivos NTAG215 o NTAG216).'
         : (isNtag215
-              ? ' (Capacidad NTAG215 insuficiente: utilice tarjetas NTAG216 de mayor capacidad).'
+              ? ' (Capacidad NTAG215 insuficiente: utilice un dispositivo NTAG216, de mayor capacidad).'
               : '.');
     return 'NDEF message needs $messageBytes bytes ($payloadBytes of payload plus '
         '${messageBytes - payloadBytes} of record overhead) but the chip holds '

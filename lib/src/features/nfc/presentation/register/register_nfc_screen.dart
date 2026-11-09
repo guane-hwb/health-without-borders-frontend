@@ -395,18 +395,21 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         final int neededBytes =
             preFit.estimatedBytes + (kNtag215NdefCapacity - ntag215Budget);
         final alertText = isEs
-            ? 'El registro del menor supera la capacidad de una tarjeta NTAG215 '
-                  '($neededBytes B requeridos > $kNtag215NdefCapacity B). '
-                  'Utilice una tarjeta NTAG216 para el cuidador.'
-            : 'The minor\'s record exceeds NTAG215 card capacity '
+            ? 'El registro del menor supera la capacidad de un dispositivo '
+                  'NTAG215 ($neededBytes B requeridos > '
+                  '$kNtag215NdefCapacity B). Utilice un dispositivo NTAG216 '
+                  'como dispositivo del cuidador.'
+            : 'The minor\'s record exceeds the capacity of an NTAG215 device '
                   '($neededBytes B needed > $kNtag215NdefCapacity B). '
-                  'Please use an NTAG216 card for the guardian.';
+                  'Please use an NTAG216 device as the guardian device.';
 
         final useLargerCard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: Text(
-              isEs ? 'Tarjeta NTAG216 requerida' : 'NTAG216 card required',
+              isEs
+                  ? 'Se requiere un dispositivo NTAG216'
+                  : 'NTAG216 device required',
             ),
             content: Text(alertText),
             actions: [
