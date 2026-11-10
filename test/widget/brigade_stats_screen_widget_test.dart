@@ -883,11 +883,11 @@ void main() {
 
         await tester.tap(dropdownDecorator);
         await tester.pumpAndSettle();
+        expect(find.text('Org A'), findsOneWidget);
 
         await tester.tap(dropdownDecorator);
         await tester.pumpAndSettle();
-
-        expect(tester.takeException(), isNull);
+        expect(find.byType(BrigadeStatsScreen), findsOneWidget);
       },
     );
 

@@ -207,6 +207,14 @@ void main() {
     registerFallbackValue(_FakeMedicalHistoryItem());
   });
 
+  Future<void> confirmOk(WidgetTester tester) async {
+    final ok = find.text('OK');
+    if (ok.evaluate().isNotEmpty) {
+      await tester.tap(ok.last);
+      await tester.pumpAndSettle();
+    }
+  }
+
   group('_isFormValid (unit)', () {
     test('es false cuando historyCtrl está vacío', () {
       final ctrl = TextEditingController();
@@ -1505,20 +1513,32 @@ void main() {
         await tester.pumpAndSettle();
 
         final dateTimeRows = find.byIcon(Icons.calendar_today);
-        if (dateTimeRows.evaluate().isNotEmpty) {
-          await tester.ensureVisible(dateTimeRows.first);
-          await tester.tap(dateTimeRows.first, warnIfMissed: false);
-          await tester.pumpAndSettle();
+        expect(dateTimeRows, findsWidgets);
+        await tester.ensureVisible(dateTimeRows.at(1));
+        await tester.tap(dateTimeRows.at(1), warnIfMissed: false);
+        await tester.pumpAndSettle();
 
-          final okButton = find.text('OK');
-          if (okButton.evaluate().isNotEmpty) {
-            await tester.tap(okButton.last);
-            await tester.pumpAndSettle();
-          }
+        final prevMonth = find.byIcon(Icons.chevron_left);
+        if (prevMonth.evaluate().isNotEmpty) {
+          await tester.tap(prevMonth.first);
+          await tester.pumpAndSettle();
         }
+
+        final dayCell = find.text('10');
+        expect(dayCell, findsWidgets);
+        await tester.tap(dayCell.first);
+        await tester.pumpAndSettle();
+
+        await confirmOk(tester);
+        await confirmOk(tester);
 
         await _tapGuardar(tester);
         await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('anterior a la hora de inicio'),
+          findsOneWidget,
+        );
       },
     );
 
@@ -1536,50 +1556,17 @@ void main() {
         await tester.pumpAndSettle();
 
         final dropdowns = find.byType(DropdownButton<String>);
+        expect(dropdowns, findsWidgets);
 
-        if (dropdowns.evaluate().isNotEmpty) {
-          await tester.ensureVisible(dropdowns.at(0));
-          await tester.tap(dropdowns.at(0), warnIfMissed: false);
-          await tester.pumpAndSettle();
-          final option1 = find.text('Extramural móvil');
-          if (option1.evaluate().isNotEmpty) {
-            await tester.tap(option1.last);
-            await tester.pumpAndSettle();
-          }
-        }
+        await tester.ensureVisible(dropdowns.at(0));
+        await tester.tap(dropdowns.at(0), warnIfMissed: false);
+        await tester.pumpAndSettle();
+        final option1 = find.text('Extramural móvil');
+        expect(option1, findsWidgets);
+        await tester.tap(option1.last);
+        await tester.pumpAndSettle();
 
-        if (dropdowns.evaluate().length > 3) {
-          await tester.ensureVisible(dropdowns.at(3));
-          await tester.tap(dropdowns.at(3), warnIfMissed: false);
-          await tester.pumpAndSettle();
-          final optionDoc = find.text('Cédula de extranjería');
-          if (optionDoc.evaluate().isNotEmpty) {
-            await tester.tap(optionDoc.last);
-            await tester.pumpAndSettle();
-          }
-        }
-
-        if (dropdowns.evaluate().length > 4) {
-          await tester.ensureVisible(dropdowns.at(4));
-          await tester.tap(dropdowns.at(4), warnIfMissed: false);
-          await tester.pumpAndSettle();
-          final optionDx = find.text('Confirmado nuevo');
-          if (optionDx.evaluate().isNotEmpty) {
-            await tester.tap(optionDx.last);
-            await tester.pumpAndSettle();
-          }
-        }
-
-        if (dropdowns.evaluate().length > 5) {
-          await tester.ensureVisible(dropdowns.at(5));
-          await tester.tap(dropdowns.at(5), warnIfMissed: false);
-          await tester.pumpAndSettle();
-          final optionDischarge = find.text('Alta médica');
-          if (optionDischarge.evaluate().isNotEmpty) {
-            await tester.tap(optionDischarge.last);
-            await tester.pumpAndSettle();
-          }
-        }
+        expect(find.text('Extramural móvil'), findsWidgets);
       },
     );
 
@@ -1671,14 +1658,6 @@ void main() {
     }
   }
 
-  Future<void> confirmOk(WidgetTester tester) async {
-    final ok = find.text('OK');
-    if (ok.evaluate().isNotEmpty) {
-      await tester.tap(ok.last);
-      await tester.pumpAndSettle();
-    }
-  }
-
   Future<void> tryEnterLateTime(WidgetTester tester) async {
     final dialog = find.byType(TimePickerDialog);
     if (dialog.evaluate().isEmpty) return;
@@ -1722,10 +1701,16 @@ void main() {
         await tester.pumpWidget(_buildApp(patient: _fakePatient()));
         await tester.pumpAndSettle();
 
+        final dropdowns = find.byType(DropdownButton<String>);
+        expect(dropdowns, findsWidgets);
+
         await cycleDropdown(tester, 1);
         await cycleDropdown(tester, 2);
         await cycleDropdown(tester, 3);
         await cycleDropdown(tester, 4);
+
+        expect(find.byType(AddConsultationScreen), findsOneWidget);
+        expect(find.text('Evaluación clínica'), findsOneWidget);
       },
     );
   });

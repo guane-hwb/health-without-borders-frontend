@@ -632,9 +632,10 @@ void main() {
       resizeViewport(tester);
       await tester.pumpWidget(_buildStep4(draft: _emptyDraft()));
       await tester.pumpAndSettle();
+      expect(find.byType(Step4Background), findsOneWidget);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
-      expect(tester.takeException(), isNull);
+      expect(find.byType(Step4Background), findsNothing);
     });
   });
 

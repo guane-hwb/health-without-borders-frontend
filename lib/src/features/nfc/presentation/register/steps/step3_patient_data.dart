@@ -9,6 +9,7 @@ import '../../../../../shared/widgets/form_widgets.dart';
 import '../../../domain/register_draft.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../widgets/nfc_uid_field.dart';
+import '../../profile/sheets/edit_vital_signs_helpers.dart';
 
 const _kEnabledBorder = OutlineInputBorder(
   borderRadius: BorderRadius.all(Radius.circular(10)),
@@ -243,6 +244,22 @@ class _Step3State extends State<Step3PatientData> {
       );
     }
 
+    final weightText = _weight.text.trim();
+    if (weightText.isNotEmpty) {
+      final parsedWeight = parseWeight(weightText);
+      if (parsedWeight == null || !isWeightInRange(parsedWeight)) {
+        missing.add(weightErrorMessage(isEs: isEs));
+      }
+    }
+
+    final heightText = _height.text.trim();
+    if (heightText.isNotEmpty) {
+      final parsedHeight = parseHeight(heightText);
+      if (parsedHeight == null || !isHeightInRange(parsedHeight)) {
+        missing.add(heightErrorMessage(isEs: isEs));
+      }
+    }
+
     if (missing.isNotEmpty) {
       final errPrefix = isEs ? 'Campos requeridos' : 'Required fields';
       setState(() => _err = '$errPrefix: ${missing.join(', ')}');
@@ -272,8 +289,8 @@ class _Step3State extends State<Step3PatientData> {
 
     d.nationalityName = countryDisplay(d.nationalityCode).name(isEs: isEs);
 
-    d.weight = double.tryParse(_weight.text.trim().replaceAll(',', '.'));
-    d.height = double.tryParse(_height.text.trim().replaceAll(',', '.'));
+    d.weight = _weight.text.trim().isEmpty ? null : parseWeight(_weight.text);
+    d.height = _height.text.trim().isEmpty ? null : parseHeight(_height.text);
 
     applyDemographicSentinelDefaults(d);
 
