@@ -676,12 +676,14 @@ void main() {
       await _pumpScreen(tester, _record());
       await tester.tap(find.textContaining('Consultas'));
       await tester.pumpAndSettle();
+      expect(find.byType(ProfileTabConsultations), findsOneWidget);
     });
 
     testWidgets('8. Navegación a tab vacunas', (tester) async {
       await _pumpScreen(tester, _record());
       await tester.tap(find.textContaining('Vacunas'));
       await tester.pumpAndSettle();
+      expect(find.byType(ProfileTabVaccines), findsOneWidget);
     });
 
     testWidgets('9. Formato sexo M', (tester) async {
@@ -783,6 +785,7 @@ void main() {
       await _pumpScreen(tester, _record());
       await tester.tap(find.text('EN').first);
       await tester.pumpAndSettle();
+      expect(find.text('Summary'), findsWidgets);
     });
   });
 
@@ -820,6 +823,7 @@ void main() {
         );
         summary.onEditVitalSigns();
         await tester.pumpAndSettle();
+        expect(find.byType(EditVitalSignsSheet), findsOneWidget);
       },
     );
 
@@ -832,6 +836,7 @@ void main() {
       );
       summary.onEditAddress();
       await tester.pumpAndSettle();
+      expect(find.byType(EditAddressSheet), findsOneWidget);
     });
 
     testWidgets('25. Modal de cuidador 1 mediante callback', (tester) async {
@@ -841,6 +846,7 @@ void main() {
       );
       summary.onEditGuardian(1);
       await tester.pumpAndSettle();
+      expect(find.byType(EditGuardianSheet), findsOneWidget);
     });
 
     testWidgets('26. Modal de cuidador 2 mediante callback', (tester) async {
@@ -850,6 +856,7 @@ void main() {
       );
       summary.onEditGuardian(2);
       await tester.pumpAndSettle();
+      expect(find.byType(EditGuardianSheet), findsOneWidget);
     });
 
     testWidgets(
@@ -949,8 +956,10 @@ void main() {
       tester,
     ) async {
       await _pumpScreen(tester, _record());
+      expect(find.byIcon(Icons.arrow_back), findsOneWidget);
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
     });
 
     testWidgets('33. Abrir modal de alergias y simular botón cerrar', (
@@ -1001,6 +1010,7 @@ void main() {
         );
         summary.onEditGuardian(2);
         await tester.pumpAndSettle();
+        expect(find.byType(EditGuardianSheet), findsNothing);
       },
     );
 
@@ -1023,8 +1033,7 @@ void main() {
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
       );
-      summary.onEditAddress();
-      await tester.pumpAndSettle();
+      expect(summary.canEdit, isFalse);
     });
 
     testWidgets('38. Callback de signos vitales deshabilitado en readOnly', (
@@ -1034,8 +1043,7 @@ void main() {
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
       );
-      summary.onEditVitalSigns();
-      await tester.pumpAndSettle();
+      expect(summary.canEdit, isFalse);
     });
 
     testWidgets('39. Callback de cuidador deshabilitado en readOnly', (
@@ -1045,8 +1053,7 @@ void main() {
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
       );
-      summary.onEditGuardian(1);
-      await tester.pumpAndSettle();
+      expect(summary.canEdit, isFalse);
     });
 
     testWidgets('40. Callback de antecedentes deshabilitado en readOnly', (
@@ -1058,16 +1065,19 @@ void main() {
       );
       summary.onOpenBackground();
       await tester.pumpAndSettle();
+      expect(find.byType(BackgroundManageSheet), findsNothing);
     });
-  });
 
-  group('PatientProfileScreen - Tests 41 a 60 (Navegación y Flujos)', () {
     testWidgets('41. Navegación a agregar consulta con rol de Doctor', (
       tester,
     ) async {
       await _pumpScreen(tester, _record(), role: UserRole.doctor);
       await tester.tap(find.textContaining('Consultas'));
       await tester.pumpAndSettle();
+      final tab = tester.widget<ProfileTabConsultations>(
+        find.byType(ProfileTabConsultations),
+      );
+      expect(tab.canAdd, isTrue);
     });
 
     testWidgets('42. Intentar agregar consulta con rol de Enfermero/a', (
@@ -1076,30 +1086,52 @@ void main() {
       await _pumpScreen(tester, _record(), role: UserRole.nurse);
       await tester.tap(find.textContaining('Consultas'));
       await tester.pumpAndSettle();
+      final tab = tester.widget<ProfileTabConsultations>(
+        find.byType(ProfileTabConsultations),
+      );
+      expect(tab.canAdd, isFalse);
     });
 
     testWidgets('43. Navegación a agregar vacuna', (tester) async {
       await _pumpScreen(tester, _record(), role: UserRole.nurse);
       await tester.tap(find.textContaining('Vacunas'));
       await tester.pumpAndSettle();
+
+      final tab = tester.widget<ProfileTabVaccines>(
+        find.byType(ProfileTabVaccines),
+      );
+      tab.onAdd();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AddVaccineScreen), findsOneWidget);
     });
 
     testWidgets('44. Sync manual no muestra error en flujo normal', (
       tester,
     ) async {
-      await _pumpScreen(tester, _record());
+      late _Fakes fakes;
+      await _pumpScreen(tester, _record(), onFakesReady: (f) => fakes = f);
       await tester.pumpAndSettle();
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+      expect(fakes.syncEngine.callCount, 1);
+      expect(find.text('Fallo al sincronizar.'), findsNothing);
     });
 
     testWidgets('45. Sync con error controlado en repositorio', (tester) async {
       await _pumpScreen(tester, _record(), syncShouldThrow: true);
       await tester.pumpAndSettle();
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+      expect(find.text('Fallo al sincronizar.'), findsOneWidget);
     });
 
     testWidgets('46. Salir confirmando cambios con retroceso', (tester) async {
       await _pumpScreen(tester, _record());
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
     });
 
     testWidgets('47. Renderizado de campos con valores completos', (
@@ -1112,11 +1144,15 @@ void main() {
     testWidgets('48. Formato sin clave NFC guardada', (tester) async {
       await _pumpScreen(tester, _record(), nfcKey: '');
       await tester.pumpAndSettle();
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+      expect(find.textContaining('Juan'), findsWidgets);
     });
 
     testWidgets('49. Formato sin clave NFC en inglés', (tester) async {
       await _pumpScreen(tester, _record(), nfcKey: '', locale: 'en');
       await tester.pumpAndSettle();
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+      expect(find.text('Summary'), findsWidgets);
     });
 
     testWidgets(
@@ -1269,6 +1305,7 @@ void main() {
         );
         summary.onEditGuardian(1);
         await tester.pumpAndSettle();
+        expect(find.byType(EditGuardianSheet), findsOneWidget);
       });
 
       testWidgets('68. Probar cuidador con índice 2 cuando existe cuidador 2', (
@@ -1280,6 +1317,7 @@ void main() {
         );
         summary.onEditGuardian(2);
         await tester.pumpAndSettle();
+        expect(find.byType(EditGuardianSheet), findsOneWidget);
       });
 
       testWidgets('69. Renderizado en idioma EN', (tester) async {
@@ -2314,7 +2352,8 @@ void main() {
     testWidgets('108. Confirmar antecedentes personales actualiza el draft', (
       tester,
     ) async {
-      await _pumpScreen(tester, _record());
+      late _Fakes fakes;
+      await _pumpScreen(tester, _record(), onFakesReady: (f) => fakes = f);
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
       );
@@ -2331,12 +2370,14 @@ void main() {
           )
           .onConfirm('Sin antecedentes personales relevantes');
       await tester.pumpAndSettle();
+      expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
     });
 
     testWidgets('109. Agregar condición crónica desde antecedentes', (
       tester,
     ) async {
-      await _pumpScreen(tester, _record());
+      late _Fakes fakes;
+      await _pumpScreen(tester, _record(), onFakesReady: (f) => fakes = f);
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
       );
@@ -2353,11 +2394,13 @@ void main() {
           )
           .onAdd(ChronicConditionItem(chronicDescription: 'Asma'));
       await tester.pumpAndSettle();
+      expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
     });
 
     testWidgets('110. Eliminar condición crónica desde antecedentes', (
       tester,
     ) async {
+      late _Fakes fakes;
       await _pumpScreen(
         tester,
         _record(
@@ -2367,6 +2410,7 @@ void main() {
             ],
           ),
         ),
+        onFakesReady: (f) => fakes = f,
       );
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
@@ -2377,10 +2421,12 @@ void main() {
           .widget<BackgroundManageSheet>(find.byType(BackgroundManageSheet))
           .onRemoveChronic(0);
       await tester.pumpAndSettle();
+      expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
     });
 
     testWidgets('111. Agregar medicamento desde antecedentes', (tester) async {
-      await _pumpScreen(tester, _record());
+      late _Fakes fakes;
+      await _pumpScreen(tester, _record(), onFakesReady: (f) => fakes = f);
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
       );
@@ -2399,9 +2445,11 @@ void main() {
             ),
           );
       await tester.pumpAndSettle();
+      expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
     });
 
     testWidgets('112. Eliminar medicamento desde antecedentes', (tester) async {
+      late _Fakes fakes;
       await _pumpScreen(
         tester,
         _record(
@@ -2414,6 +2462,7 @@ void main() {
             ],
           ),
         ),
+        onFakesReady: (f) => fakes = f,
       );
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
@@ -2424,10 +2473,12 @@ void main() {
           .widget<BackgroundManageSheet>(find.byType(BackgroundManageSheet))
           .onRemoveMedication(0);
       await tester.pumpAndSettle();
+      expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
     });
 
     testWidgets('113. Agregar antecedente familiar', (tester) async {
-      await _pumpScreen(tester, _record());
+      late _Fakes fakes;
+      await _pumpScreen(tester, _record(), onFakesReady: (f) => fakes = f);
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
       );
@@ -2446,9 +2497,11 @@ void main() {
             ),
           );
       await tester.pumpAndSettle();
+      expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
     });
 
     testWidgets('114. Eliminar antecedente familiar', (tester) async {
+      late _Fakes fakes;
       await _pumpScreen(
         tester,
         _record(
@@ -2461,6 +2514,7 @@ void main() {
             ],
           ),
         ),
+        onFakesReady: (f) => fakes = f,
       );
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
@@ -2471,12 +2525,14 @@ void main() {
           .widget<BackgroundManageSheet>(find.byType(BackgroundManageSheet))
           .onRemoveFamily(0);
       await tester.pumpAndSettle();
+      expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
     });
 
     testWidgets('115. Agregar alergia desde el modal de alergias', (
       tester,
     ) async {
-      await _pumpScreen(tester, _record());
+      late _Fakes fakes;
+      await _pumpScreen(tester, _record(), onFakesReady: (f) => fakes = f);
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
       );
@@ -2490,16 +2546,19 @@ void main() {
           .widget<AddAllergySheet>(find.byType(AddAllergySheet))
           .onAdd(AllergyInfo(category: '02', allergen: 'Maní'));
       await tester.pumpAndSettle();
+      expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
     });
 
     testWidgets('116. Eliminar alergia desde el modal de alergias', (
       tester,
     ) async {
+      late _Fakes fakes;
       await _pumpScreen(
         tester,
         _record(
           allergies: [AllergyInfo(allergen: 'Aspirina', category: '01')],
         ),
+        onFakesReady: (f) => fakes = f,
       );
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
@@ -2510,6 +2569,7 @@ void main() {
           .widget<AllergiesManageSheet>(find.byType(AllergiesManageSheet))
           .onRemove(0);
       await tester.pumpAndSettle();
+      expect(fakes.db.savePatientCallCount, greaterThanOrEqualTo(1));
     });
   });
 

@@ -98,6 +98,8 @@ class SyncEngine {
     Duration(minutes: 30),
   ];
 
+  static const int maxSyncAttemptsBeforeBlocked = 8;
+
   Future<SyncResult>? _activeSyncAllFuture;
   Completer<void>? _syncOneCompletion;
   bool get _syncOneRunning => _syncOneCompletion != null;
@@ -426,9 +428,14 @@ class SyncEngine {
         AppLogger.e(
           'Fallo en sincronización para ${entry.patientId}: $errorMsg',
         );
+        final int nextAttempts = entry.attempts + 1;
+        final int? effectiveStatusCode =
+            nextAttempts >= maxSyncAttemptsBeforeBlocked ? 422 : null;
+
         await _localDb.markSyncError(
           entry.patientId,
           errorMsg,
+          statusCode: effectiveStatusCode,
           revision: entry.revision,
         );
         onRecordSynced?.call(entry.patientId, false, response.message);
@@ -450,24 +457,33 @@ class SyncEngine {
       }
 
       final bool isTransientServerError =
-          e.statusCode == 408 ||
-          e.statusCode == 429 ||
-          (e.statusCode != null &&
-              e.statusCode! >= 500 &&
-              e.statusCode! <= 599);
+          (e.statusCode == 408 ||
+              e.statusCode == 429 ||
+              e.statusCode == 502 ||
+              e.statusCode == 503 ||
+              e.statusCode == 504) &&
+          (e.code == null || e.code!.isEmpty);
+
+      final int nextAttempts = entry.attempts + 1;
+      int? effectiveStatusCode = e.statusCode;
+
+      if (!kPermanentSyncErrorCodes.contains(e.statusCode) &&
+          nextAttempts >= maxSyncAttemptsBeforeBlocked) {
+        effectiveStatusCode = 422;
+      }
 
       final String safeMsg = (ApiErrorCode.describe(e.code, isEs: true) != null)
           ? e.code!
           : (e.statusCode == 409 && e.message.isNotEmpty)
           ? e.message
-          : (e.statusCode == 422)
-          ? 'Error de validación (422): Campos incompatibles con el backend'
+          : (effectiveStatusCode == 422)
+          ? 'Error de validación (422): Campos incompatibles con el backend o reintentos excedidos'
           : e.message;
 
       await _localDb.markSyncError(
         entry.patientId,
         safeMsg,
-        statusCode: e.statusCode,
+        statusCode: effectiveStatusCode,
         revision: entry.revision,
       );
 
@@ -497,6 +513,12 @@ class SyncEngine {
           (isSocketException || isTimeout || e is http.ClientException) &&
           isOnline.value;
 
+      final int nextAttempts = entry.attempts + 1;
+      final int? effectiveStatusCode =
+          (!isNetworkError && nextAttempts >= maxSyncAttemptsBeforeBlocked)
+          ? 422
+          : null;
+
       final String safeMsg = isSocketException
           ? 'Error de conexión de red (Socket)'
           : isTimeout
@@ -506,6 +528,7 @@ class SyncEngine {
       await _localDb.markSyncError(
         entry.patientId,
         safeMsg,
+        statusCode: effectiveStatusCode,
         revision: entry.revision,
       );
       onRecordSynced?.call(entry.patientId, false, safeMsg);

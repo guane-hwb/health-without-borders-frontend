@@ -1,7 +1,6 @@
 // lib/src/features/sync/presentation/sync_queue_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../core/di/app_scope.dart';
@@ -13,7 +12,6 @@ import '../../../core/sync/sync_engine.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/locale_switcher.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
-import '../../nfc/domain/patient_record.dart';
 import '../../nfc/presentation/profile/patient_profile_screen.dart';
 
 class SyncQueueScreen extends StatefulWidget {
@@ -225,56 +223,10 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
     );
   }
 
-  String _formatClinicalSummary(PatientFullRecord record, bool isEs) {
-    final buffer = StringBuffer();
-    buffer.writeln(
-      isEs ? '=== RESUMEN CLÍNICO ===' : '=== CLINICAL SUMMARY ===',
-    );
-    buffer.writeln(
-      '${isEs ? "Paciente" : "Patient"}: ${record.patientInfo.fullName}',
-    );
-    buffer.writeln(
-      '${isEs ? "Documento" : "Document"}: ${record.patientInfo.identification.documentType} ${record.patientInfo.identification.documentNumber}',
-    );
-    buffer.writeln('');
-
-    if (record.medicalHistory.isNotEmpty) {
-      buffer.writeln(
-        isEs ? '--- CONSULTAS MÉDICAS ---' : '--- MEDICAL CONSULTATIONS ---',
-      );
-      for (final item in record.medicalHistory) {
-        buffer.writeln('• ${isEs ? "Fecha" : "Date"}: ${item.startDateTime}');
-        if (item.clinicalEvaluation.historyOfCurrentIllness != null) {
-          buffer.writeln(
-            '  ${isEs ? "Motivo/Historia" : "Reason/History"}: ${item.clinicalEvaluation.historyOfCurrentIllness}',
-          );
-        }
-        if (item.clinicalEvaluation.treatmentPlanObservations != null) {
-          buffer.writeln(
-            '  ${isEs ? "Plan" : "Plan"}: ${item.clinicalEvaluation.treatmentPlanObservations}',
-          );
-        }
-      }
-      buffer.writeln('');
-    }
-
-    if (record.vaccinationRecord.isNotEmpty) {
-      buffer.writeln(isEs ? '--- VACUNAS ---' : '--- VACCINATIONS ---');
-      for (final v in record.vaccinationRecord) {
-        buffer.writeln(
-          '• ${v.vaccineName} (${isEs ? "Dosis" : "Dose"} ${v.dose}) - ${v.date}',
-        );
-      }
-    }
-
-    return buffer.toString();
-  }
-
   Future<void> _delete(LocalPatientEntry e) async {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
     final db = AppScope.of(context).localDatabase;
-    final messenger = ScaffoldMessenger.of(context);
     final record = e.toPatientRecord();
 
     final hasClinicalData =
@@ -315,25 +267,6 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
           ],
         ),
         actions: [
-          if (hasClinicalData)
-            TextButton.icon(
-              icon: const Icon(Icons.copy, size: 16),
-              label: Text(isEs ? 'Copiar datos' : 'Copy clinical data'),
-              onPressed: () {
-                final summary = _formatClinicalSummary(record, isEs);
-                Clipboard.setData(ClipboardData(text: summary));
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      isEs
-                          ? 'Resumen clínico copiado al portapapeles.'
-                          : 'Clinical summary copied to clipboard.',
-                    ),
-                    backgroundColor: AppColors.primary,
-                  ),
-                );
-              },
-            ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(s.cancel),
@@ -650,30 +583,6 @@ class _QuarantineCard extends StatelessWidget {
               color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              icon: const Icon(Icons.copy, size: 14),
-              label: Text(
-                isEs ? 'Copiar datos crudos' : 'Copy raw data',
-                style: const TextStyle(fontSize: 12),
-              ),
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: rawData));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      isEs
-                          ? 'Datos en cuarentena copiados al portapapeles.'
-                          : 'Quarantined data copied to clipboard.',
-                    ),
-                    backgroundColor: AppColors.primary,
-                  ),
-                );
-              },
-            ),
-          ),
         ],
       ),
     );
@@ -696,8 +605,6 @@ class _SyncCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isConflict = entry.syncErrorCode == 409;
     final hasErr = entry.syncError?.isNotEmpty == true;
-    // A transient refusal (sync_in_progress) retries by itself: pending, not
-    // an error the user has to fix.
     final bool showsError =
         hasErr && !ApiErrorCode.isTransient(entry.syncError);
     final isEs = s.isEs;
@@ -920,7 +827,6 @@ class _SyncCard extends StatelessWidget {
       );
 }
 
-/// A sync the server accepted without taking all of it (see SyncNotice).
 class _SyncNoticeCard extends StatelessWidget {
   const _SyncNoticeCard({required this.notice, required this.onDismiss});
 
