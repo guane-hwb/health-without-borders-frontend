@@ -2201,4 +2201,131 @@ void main() {
       },
     );
   });
+
+  // ── Contraseña temporal ───────────────────────────────────────────────
+  //
+  // Con una contraseña temporal el backend responde 403
+  // password_change_required a todo salvo /users/me y el cambio de
+  // contraseña, y un 403 bloquearía para siempre los registros en cola.
+
+  group('contraseña temporal', () {
+    late MockLocalPatientEntry entryA;
+
+    setUp(() {
+      entryA = buildEntry('A', record: MockPatientFullRecord());
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer((_) async => [entryA]);
+    });
+
+    void signInOnTemporaryPassword() {
+      when(
+        () => authRepo.currentUser,
+      ).thenReturn(testUser.copyWith(mustChangePassword: true));
+    }
+
+    test('syncAll no envía nada hasta cambiar la contraseña', () async {
+      signInOnTemporaryPassword();
+
+      final result = await engine.syncAll();
+
+      expect(result.allSuccessful, isFalse);
+      expect(result.remainingRetryable, 0);
+      verifyNever(() => patientRepo.syncPatient(any()));
+      verifyNever(() => patientRepo.reportEmergencyAccess(any()));
+      verifyNever(() => patientRepo.reportNfcKeyVersions(any()));
+      verifyNever(
+        () => patientRepo.fetchRetiredDevices(since: any(named: 'since')),
+      );
+      verifyNever(
+        () => localDb.markSyncError(
+          any(),
+          any(),
+          statusCode: any(named: 'statusCode'),
+          revision: any(named: 'revision'),
+        ),
+      );
+    });
+
+    test(
+      'ni start ni la vuelta de la conexión envían nada hasta cambiarla',
+      () async {
+        signInOnTemporaryPassword();
+        final connectivity =
+            StreamController<List<ConnectivityResult>>.broadcast();
+        final connectivityEngine = SyncEngine(
+          patientRepository: patientRepo,
+          authRepository: authRepo,
+          localDatabase: localDb,
+          connectivityStream: connectivity.stream,
+        );
+        addTearDown(() async {
+          connectivityEngine.stop();
+          await connectivity.close();
+        });
+
+        connectivityEngine.start();
+        connectivity.add([ConnectivityResult.wifi]);
+        await Future<void>.delayed(const Duration(seconds: 4));
+
+        verifyNever(() => patientRepo.syncPatient(any()));
+      },
+    );
+
+    test('syncOne no envía el registro hasta cambiar la contraseña', () async {
+      signInOnTemporaryPassword();
+
+      final result = await engine.syncOne('A');
+
+      expect(result, SyncOneResult.failure);
+      verifyNever(() => patientRepo.syncPatient(any()));
+    });
+
+    test('tras cambiarla, el mismo registro se envía', () async {
+      signInOnTemporaryPassword();
+      await engine.syncAll();
+      when(() => authRepo.currentUser).thenReturn(testUser);
+      when(
+        () => patientRepo.syncPatient(any()),
+      ).thenAnswer((_) async => buildResponse('success'));
+
+      await engine.syncAll();
+
+      verify(() => patientRepo.syncPatient(any())).called(1);
+    });
+
+    test(
+      'un 403 password_change_required detiene el lote sin marcar el registro',
+      () async {
+        // La app aún no sabe que la cuenta tiene una contraseña temporal.
+        final entryB = buildEntry('B', record: MockPatientFullRecord());
+        when(
+          () => localDb.getUnsyncedRecords(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => [entryA, entryB]);
+        when(() => patientRepo.syncPatient(any())).thenThrow(
+          ApiException(
+            'Password change required.',
+            statusCode: 403,
+            code: 'password_change_required',
+          ),
+        );
+
+        final result = await engine.syncAll();
+
+        expect(result.allSuccessful, isFalse);
+        verify(() => patientRepo.syncPatient(any())).called(1);
+        verifyNever(
+          () => localDb.markSyncError(
+            any(),
+            any(),
+            statusCode: any(named: 'statusCode'),
+            revision: any(named: 'revision'),
+          ),
+        );
+      },
+    );
+  });
 }

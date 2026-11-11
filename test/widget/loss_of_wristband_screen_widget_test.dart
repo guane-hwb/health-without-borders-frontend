@@ -726,7 +726,7 @@ void main() {
 
   group('_search() — éxito', () {
     testWidgets(
-      'con nombre de acudiente diligenciado navega a PatientProfileScreen '
+      'con nombre de cuidador diligenciado navega a PatientProfileScreen '
       'permitiendo la reasignación',
       (tester) async {
         _setMobileScreenSize(tester);
@@ -775,7 +775,7 @@ void main() {
       },
     );
 
-    testWidgets('sin nombre de acudiente también navega a PatientProfileScreen '
+    testWidgets('sin nombre de cuidador también navega a PatientProfileScreen '
         '(guardianName llega como null)', (tester) async {
       _setMobileScreenSize(tester);
       final repo = _FakePatientRepository()..result = _fakePatientRecord();
