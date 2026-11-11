@@ -17,6 +17,16 @@ abstract final class SyncConflictCode {
   static const String guardiansNotChanged =
       'guardians_not_changed_by_tag_resolved_sync';
 
+  /// The copy had no baseVersion (an older app build, or a copy from a
+  /// guardian device written before the record had a version) and would have
+  /// removed allergies or background items: the server kept its own and added
+  /// what the copy brought.
+  static const String missingBaseVersion = 'missing_base_version';
+
+  /// The copy had other names, birth date, sex or identity document than the
+  /// server: a sync never changes them, so the server kept its own.
+  static const String identityEditNotApplied = 'identity_edit_not_applied';
+
   /// `visit_edit_not_applied:<encounterIdentifier>`: the server already had
   /// that visit and kept its own version, so the correction is not saved.
   static const String visitEditNotAppliedPrefix = 'visit_edit_not_applied:';
@@ -77,6 +87,26 @@ abstract final class SyncConflictCode {
               : 'The patient device already identified this patient in '
                     'another record. The guardians were not changed; the rest '
                     'was saved.',
+        missingBaseVersion =>
+          isEs
+              ? 'Esta copia no indicaba sobre qué versión del registro se '
+                    'hizo, así que el servidor no podía saber si era antigua. '
+                    'Conservó las alergias y antecedentes que ya tenía y '
+                    'agregó los nuevos: lo que se quitó aquí sigue en el '
+                    'servidor. El resto se guardó.'
+              : 'This copy did not say which version of the record it was '
+                    'based on, so the server could not tell whether it was '
+                    'old. It kept the allergies and history it already had '
+                    'and added the new ones: anything removed here is still '
+                    'on the server. The rest was saved.',
+        identityEditNotApplied =>
+          isEs
+              ? 'Los datos de identidad (nombres, fecha de nacimiento, sexo o '
+                    'documento) no se cambian al sincronizar: el servidor '
+                    'conservó los que tenía registrados. El resto se guardó.'
+              : 'Identity data (names, date of birth, sex or document) is not '
+                    'changed by a sync: the server kept what it had on record. '
+                    'The rest was saved.',
         visitEditNotAppliedPrefix => _editNotApplied(
           visits,
           isEs: isEs,
@@ -124,7 +154,9 @@ abstract final class SyncConflictCode {
   static bool _isKnown(String code) =>
       code == staleBaseVersion ||
       code == staleRetiredDeviceUid ||
-      code == guardiansNotChanged;
+      code == guardiansNotChanged ||
+      code == missingBaseVersion ||
+      code == identityEditNotApplied;
 
   static String _editNotApplied(
     int count, {
