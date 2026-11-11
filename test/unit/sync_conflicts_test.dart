@@ -47,6 +47,39 @@ void main() {
       expect(lines[2], contains('The corrections to 2 vaccines'));
     });
 
+    test('copia sin versión y edición de identidad tienen su propia línea', () {
+      final lines = SyncConflictCode.describe(const <String>[
+        'missing_base_version',
+        'identity_edit_not_applied',
+      ], isEs: true);
+
+      expect(lines, hasLength(2));
+      expect(lines[0], contains('no indicaba sobre qué versión'));
+      expect(lines[0], contains('lo que se quitó aquí sigue en el servidor'));
+      expect(lines[1], contains('no se cambian al sincronizar'));
+      expect(
+        lines,
+        isNot(
+          contains(
+            'El servidor no aplicó parte de los cambios; el resto se guardó.',
+          ),
+        ),
+      );
+    });
+
+    test('copia sin versión y edición de identidad en inglés', () {
+      final lines = SyncConflictCode.describe(const <String>[
+        'identity_edit_not_applied',
+        'missing_base_version',
+      ], isEs: false);
+
+      expect(lines[0], contains('is not changed by a sync'));
+      expect(
+        lines[1],
+        contains('anything removed here is still on the server'),
+      );
+    });
+
     test('un código desconocido da una sola línea genérica', () {
       final lines = SyncConflictCode.describe(const <String>[
         'something_new',

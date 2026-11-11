@@ -111,7 +111,13 @@ local queue and the guardian device.
 A `/sync` that the server accepts (`201`) answers with `record_version` (the
 version after this sync) and `conflicts` (the parts it kept as it had them, for
 example `stale_payload_base_version` when `baseVersion` was older than its
-own). The engine announces every saved record on `SyncEngine.savedRecords`:
+own). Two more codes have their own message in `SyncConflictCode.describe`:
+`missing_base_version` (a copy without `baseVersion`, from an older build or
+a guardian device written before the record had a version, would have removed
+allergies or background items, and the server kept them) and `identity_edit_not_applied` (names, birth date, sex or
+document differ from the server's, which a sync never changes). Any other code
+gets a generic line. The engine announces every saved record on
+`SyncEngine.savedRecords`:
 
 - The open profile adopts the new version, so its next edit is not taken for
   an old copy. An edit made while the sync was in flight is saved again on top
