@@ -671,7 +671,7 @@ void main() {
     );
   }
 
-  group('reconstructFromTriage - segundo acudiente', () {
+  group('reconstructFromTriage - segundo cuidador', () {
     test('con guardian2DeviceUid no vacío arma guardian2Info', () {
       final record = NfcGuardianPayload.reconstructFromTriage(
         triageWith(guardian2DeviceUid: 'GUARDIAN2:UID'),
@@ -765,7 +765,7 @@ void main() {
     });
   });
 
-  group('signature stripping - segundo acudiente', () {
+  group('signature stripping - segundo cuidador', () {
     test('también elimina signatureBase64 de guardian2Info', () {
       final record = _record(
         guardian2: GuardianInfo(

@@ -112,6 +112,13 @@ class SyncEngine {
 
   String? get _currentUserId => _authRepo?.currentUser?.id;
 
+  /// On a temporary password the server refuses every route but the password
+  /// change (403 password_change_required), and a 403 would block the queued
+  /// records for good. Nothing is sent until the user chooses their own
+  /// password; the new session starts the engine again.
+  bool get _mustChangePassword =>
+      _authRepo?.currentUser?.mustChangePassword == true;
+
   Future<void> refreshPendingCount() async {
     try {
       final retryable = await _localDb.getRetryablePendingCount(
@@ -266,6 +273,15 @@ class SyncEngine {
   Future<SyncResult> _executeSyncAll() async {
     if (_currentUserId == null) {
       AppLogger.d('syncAll omitido: no hay sesión activa.');
+      return const SyncResult(
+        allSuccessful: false,
+        remainingRetryable: 0,
+        remainingBlocked: 0,
+      );
+    }
+
+    if (_mustChangePassword) {
+      AppLogger.d('syncAll omitido: falta cambiar la contraseña temporal.');
       return const SyncResult(
         allSuccessful: false,
         remainingRetryable: 0,
@@ -451,7 +467,9 @@ class SyncEngine {
         return _SyncOutcome.abortBatch;
       }
 
-      if (ApiErrorCode.isAccountInactive(e.code)) {
+      // Neither is about the record: stop the batch, keep every row as it is.
+      if (ApiErrorCode.isAccountInactive(e.code) ||
+          e.code == ApiErrorCode.passwordChangeRequired) {
         onRecordSynced?.call(entry.patientId, false, e.code);
         return _SyncOutcome.abortBatch;
       }
@@ -606,6 +624,7 @@ class SyncEngine {
     if (_activeSyncAllFuture != null || _syncOneRunning) {
       return SyncOneResult.busy;
     }
+    if (_mustChangePassword) return SyncOneResult.failure;
     final Completer<void> completion = Completer<void>();
     _syncOneCompletion = completion;
 
