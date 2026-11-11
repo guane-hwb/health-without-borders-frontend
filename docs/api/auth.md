@@ -56,6 +56,14 @@ responses. It is true for accounts an administrator created and after a reset.
 While it is true, Home and every route open `ChangePasswordScreen(mandatory:
 true)`: no way back, only change the password or sign out.
 
+The backend agrees: on a temporary password it answers only `GET /users/me`,
+the password change, refresh and logout; every other route gets `403` with
+`code` `password_change_required`. So `SyncEngine` sends nothing while
+`mustChangePassword` is set (a `403` would block the queued records for good),
+and a `password_change_required` from `/sync` stops the batch and leaves every
+row as it was, like `user_inactive`. The session that comes back from the
+change starts the engine again.
+
 Administrators reset a password with `UserRepository.resetPassword(id)`
 (`POST /api/v1/users/{id}/reset-password`): superadmin, or org_admin for the
 doctors and nurses of their organization. The temporary password is shown once.
