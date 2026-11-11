@@ -614,6 +614,7 @@ class _UserCard extends StatelessWidget {
     UserRole.nurse => const Color(0xFF2E7D32),
     UserRole.orgAdmin => const Color(0xFF6A1B9A),
     UserRole.superadmin => const Color(0xFFB71C1C),
+    UserRole.unknown => Colors.grey,
   };
 }
 
@@ -629,6 +630,7 @@ class _RoleBadge extends StatelessWidget {
       UserRole.nurse => (s.roleNurse, const Color(0xFF2E7D32)),
       UserRole.orgAdmin => (s.roleOrgAdmin, const Color(0xFF6A1B9A)),
       UserRole.superadmin => (s.roleSuperadmin, const Color(0xFFB71C1C)),
+      UserRole.unknown => (s.isEs ? 'Desconocido' : 'Unknown', Colors.grey),
     };
 
     return Container(

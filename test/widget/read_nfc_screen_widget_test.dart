@@ -31,6 +31,14 @@ class MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class _MockPayloadService extends Mock implements NfcPayloadService {}
 
+class _TestUserSession extends Fake implements UserSession {
+  @override
+  String get id => 'capture-test-user';
+
+  @override
+  String get organizationId => 'capture-test-organization';
+}
+
 class FakePatientRepository implements PatientRepository {
   bool throw403ForGuardian = false;
   bool throwGenericError = false;
@@ -1678,9 +1686,7 @@ void main() {
       'Acceso de emergencia con usuario autenticado registra su id y su '
       'organización',
       (tester) async {
-        final UserSession session = UserSession.fromEmail(
-          'capture.test@example.com',
-        );
+        final UserSession session = _TestUserSession();
         fakeAuth.mockUser = session;
 
         await reachOfflineGate(tester, triage: makeTriage(minor: true));
