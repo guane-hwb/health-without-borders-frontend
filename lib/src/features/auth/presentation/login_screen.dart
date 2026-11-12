@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -18,6 +19,11 @@ class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.showSessionExpired = false});
 
   final bool showSessionExpired;
+
+  @visibleForTesting
+  static bool? debugIsWebOverride;
+
+  static bool get isWebPlatform => debugIsWebOverride ?? kIsWeb;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -115,6 +121,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final isWeb = LoginScreen.isWebPlatform;
+
     return Scaffold(
       backgroundColor: AppColors.white,
       resizeToAvoidBottomInset: true,
@@ -226,13 +234,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       Row(
                         children: [
-                          _RememberCheckbox(
-                            value: _rememberSession,
-                            onChanged: (v) =>
-                                setState(() => _rememberSession = v ?? true),
-                            label: s.rememberSession,
-                          ),
-                          const Spacer(),
+                          if (!isWeb)
+                            _RememberCheckbox(
+                              value: _rememberSession,
+                              onChanged: (v) =>
+                                  setState(() => _rememberSession = v ?? true),
+                              label: s.rememberSession,
+                            )
+                          else
+                            Expanded(
+                              child: Text(
+                                s.isEs
+                                    ? 'En el navegador la sesión termina al cerrar la pestaña'
+                                    : 'In the browser, the session ends when closing the tab',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          if (!isWeb) const Spacer(),
                           TextButton(
                             onPressed: _showForgotPasswordDialog,
                             style: TextButton.styleFrom(
@@ -332,7 +353,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await AppScope.of(context).authRepository.login(
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
-        rememberSession: _rememberSession,
+        rememberSession: LoginScreen.isWebPlatform ? false : _rememberSession,
       );
       if (!mounted) return;
       await Navigator.of(context).pushReplacement(

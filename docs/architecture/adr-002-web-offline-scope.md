@@ -23,7 +23,7 @@ The original text said Web eliminates local browser PHI persistence. The code do
 What is true, and is now the documented behaviour:
 - The **application shell** is online-only (guideline 3 is unchanged): without a first connection the Web app does not start.
 - Once running, a Web session that loses connectivity **can still queue edits** in IndexedDB. Those records are encrypted with AES-256-GCM before they are stored, and are removed when they sync.
-- On Web the AES key that protects that queue lives in the browser (`flutter_secure_storage` on Web keeps it in `localStorage`; tracked separately as a session-storage finding). Encryption at rest on Web therefore protects against casual inspection of IndexedDB, not against script running in the same origin.
+- On Web the AES key that protects that queue lives in the browser (`flutter_secure_storage` on Web keeps it in `sessionStorage` per tab; session lifecycle is tied to the browser tab). Encryption at rest on Web therefore protects against casual inspection of IndexedDB, not against script running in the same origin.
 - Shared workstations: logout must wipe the queue and the key. This is a release criterion for the Web build, not an assumption.
 
 ### Consequences (replaces the original "Pros")

@@ -70,7 +70,14 @@ class FakeAuthRepository extends Mock implements AuthRepository {
   }) async {
     lastEmail = email;
     lastPassword = password;
-    return currentUser ?? UserSession.fromEmail(email);
+    return currentUser ??
+        UserSession(
+          id: 'uid-001',
+          fullName: email,
+          email: email,
+          role: UserRole.doctor,
+          organizationId: 'org-01',
+        );
   }
 
   @override

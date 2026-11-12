@@ -35,18 +35,6 @@ class UserSession {
     );
   }
 
-  /// Minimal session built only from the JWT subject (email).
-  /// Used as a fallback until /users/me is available.
-  factory UserSession.fromEmail(String email) {
-    return UserSession(
-      id: '',
-      email: email,
-      fullName: _humanizeEmail(email),
-      role: UserRole.doctor, // safe default — UI adapts once role is confirmed
-      organizationId: '',
-    );
-  }
-
   final String id;
   final String email;
   final String fullName;
@@ -117,8 +105,9 @@ class UserSession {
       case 'nurse':
         return UserRole.nurse;
       case 'doctor':
-      default:
         return UserRole.doctor;
+      default:
+        return UserRole.unknown;
     }
   }
 }
@@ -127,7 +116,8 @@ enum UserRole {
   superadmin,
   orgAdmin,
   doctor,
-  nurse;
+  nurse,
+  unknown;
 
   bool get isAdmin => this == orgAdmin || this == superadmin;
   bool get isSuperadmin => this == superadmin;
@@ -162,9 +152,7 @@ enum UserRole {
       this == doctor || this == nurse || this == orgAdmin;
 
   /// Backend wire string for this role. Mirrors [UserSession._parseRole] so a
-  /// session survives a toJson/fromJson round-trip. Do NOT use `.name`: it would
-  /// emit `orgAdmin`, which `_parseRole` does not recognize and would collapse
-  /// to the doctor default on restore.
+  /// session survives a toJson/fromJson round-trip.
   String get wireValue {
     switch (this) {
       case UserRole.superadmin:
@@ -175,6 +163,8 @@ enum UserRole {
         return 'doctor';
       case UserRole.nurse:
         return 'nurse';
+      case UserRole.unknown:
+        return 'unknown';
     }
   }
 }

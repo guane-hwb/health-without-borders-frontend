@@ -22,6 +22,14 @@ import 'package:health_without_borders_frontend/src/features/auth/presentation/l
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
+UserSession buildTestSession(String email) => UserSession(
+  id: 'test-user-id',
+  email: email,
+  fullName: 'Test User',
+  role: UserRole.doctor,
+  organizationId: 'test-organization-id',
+);
+
 class FakeAuthRepository implements AuthRepository {
   bool loginCalled = false;
   String? loginEmail;
@@ -53,7 +61,7 @@ class FakeAuthRepository implements AuthRepository {
       _session = await loginHandler!(email: email, password: password);
       return _session!;
     }
-    _session = UserSession.fromEmail(email);
+    _session = buildTestSession(email);
     return _session!;
   }
 
@@ -313,7 +321,7 @@ void main() {
     testWidgets('navega a HomeScreen tras login exitoso', (tester) async {
       mockAuthRepo.loginHandler =
           ({required String email, required String password}) async {
-            return UserSession.fromEmail(email);
+            return buildTestSession(email);
           };
 
       await tester.pumpWidget(buildSubject());
@@ -349,7 +357,7 @@ void main() {
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-      completer.complete(UserSession.fromEmail('usuario@test.com'));
+      completer.complete(buildTestSession('usuario@test.com'));
       await tester.pumpAndSettle();
     });
   });
@@ -521,6 +529,14 @@ void main() {
 
   // ── Group 8: Remember Me Checkbox ───────────────────────────────────────
   group('Checkbox recordar sesion', () {
+    setUp(() {
+      LoginScreen.debugIsWebOverride = false;
+    });
+
+    tearDown(() {
+      LoginScreen.debugIsWebOverride = null;
+    });
+
     testWidgets('inicia en false (desmarcado por seguridad)', (tester) async {
       await tester.pumpWidget(buildSubject());
       final checkbox = tester.widget<Checkbox>(find.byType(Checkbox));
@@ -534,6 +550,20 @@ void main() {
       final checkbox = tester.widget<Checkbox>(find.byType(Checkbox));
       expect(checkbox.value, isTrue);
     });
+
+    testWidgets(
+      'criterio de aceptacion auditoria: en web no se muestra la casilla y se aclara que la sesion termina al cerrar la pestana',
+      (tester) async {
+        LoginScreen.debugIsWebOverride = true;
+        await tester.pumpWidget(buildSubject());
+
+        expect(find.byType(Checkbox), findsNothing);
+        expect(
+          find.text('En el navegador la sesión termina al cerrar la pestaña'),
+          findsOneWidget,
+        );
+      },
+    );
   });
 
   group('LoginScreen — Uncovered Branches & Keyboard Submissions', () {
@@ -555,7 +585,7 @@ void main() {
     ) async {
       mockAuthRepo.loginHandler =
           ({required String email, required String password}) async {
-            return UserSession.fromEmail(email);
+            return buildTestSession(email);
           };
 
       await tester.pumpWidget(buildSubject());
@@ -628,6 +658,7 @@ void main() {
     testWidgets(
       'tocar el texto de _RememberCheckbox conmuta el valor de la casilla',
       (tester) async {
+        LoginScreen.debugIsWebOverride = false;
         await tester.pumpWidget(buildSubject());
 
         final s = AppStrings.forTesting('es');
@@ -636,6 +667,7 @@ void main() {
 
         final checkbox = tester.widget<Checkbox>(find.byType(Checkbox));
         expect(checkbox.value, isTrue);
+        LoginScreen.debugIsWebOverride = null;
       },
     );
   });

@@ -38,7 +38,13 @@ class FakeAuthRepository implements AuthRepository {
     bool rememberSession = true,
   }) async {
     if (session != null) return session!;
-    return UserSession.fromEmail(email);
+    return UserSession(
+      id: 'user-test-01',
+      fullName: email,
+      email: email,
+      role: UserRole.doctor,
+      organizationId: 'org-01',
+    );
   }
 
   @override
@@ -251,11 +257,11 @@ void main() {
 
   // ── Group 5: body logic according to role ────────────────────────────────────
   group('HomeScreen._buildBody — selección de body por rol', () {
-    test('UserRole tiene exactamente 4 valores', () {
-      expect(UserRole.values.length, equals(4));
+    test('UserRole tiene exactamente 5 valores', () {
+      expect(UserRole.values.length, equals(5));
     });
 
-    test('los 4 roles son los esperados', () {
+    test('los 5 roles son los esperados', () {
       expect(
         UserRole.values,
         containsAll([
@@ -263,6 +269,7 @@ void main() {
           UserRole.orgAdmin,
           UserRole.doctor,
           UserRole.nurse,
+          UserRole.unknown,
         ]),
       );
     });
@@ -270,13 +277,20 @@ void main() {
     test(
       'doctor y nurse comparten el mismo body clínico (canRegisterPatient)',
       () {
-        // If both can register a patient, both receive the clinical body.
         final clinicalRoles = UserRole.values
-            .where((r) => r != UserRole.superadmin && r != UserRole.orgAdmin)
+            .where((r) => r.canRegisterPatient)
             .toList();
         expect(clinicalRoles, containsAll([UserRole.doctor, UserRole.nurse]));
+        expect(clinicalRoles.contains(UserRole.unknown), isFalse);
       },
     );
+
+    test('unknown no tiene permisos clínicos ni administrativos', () {
+      expect(UserRole.unknown.isAdmin, isFalse);
+      expect(UserRole.unknown.canRegisterPatient, isFalse);
+      expect(UserRole.unknown.canAddConsultation, isFalse);
+      expect(UserRole.unknown.canReadPatients, isFalse);
+    });
   });
 
   // ── Group 6: _greeting hora nocturna y límites ─────────────────────────────

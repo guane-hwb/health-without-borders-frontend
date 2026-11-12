@@ -1,4 +1,4 @@
-// test/unit/features/auth/domain/user_session_test.dart
+// test/unit/user_session_test.dart
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
@@ -122,42 +122,24 @@ void main() {
       expect(session.role, UserRole.doctor);
     });
 
-    test('defaults unknown role to doctor', () {
+    test('defaults unknown role to UserRole.unknown', () {
       final session = UserSession.fromJson(_baseJson(role: 'unknown_role'));
-      expect(session.role, UserRole.doctor);
+      expect(session.role, UserRole.unknown);
     });
 
-    test('defaults null role to doctor', () {
+    test('defaults null role to UserRole.unknown', () {
       final session = UserSession.fromJson(_baseJson(role: null));
-      expect(session.role, UserRole.doctor);
-    });
-  });
-
-  // ─────────────────────────────────────────────
-  // UserSession.fromEmail
-  // ─────────────────────────────────────────────
-  group('UserSession.fromEmail', () {
-    test('sets email and humanized fullName', () {
-      final session = UserSession.fromEmail('doctor.juan@org.com');
-      expect(session.email, 'doctor.juan@org.com');
-      expect(session.fullName, 'Doctor Juan');
+      expect(session.role, UserRole.unknown);
     });
 
-    test('defaults id and organizationId to empty string', () {
-      final session = UserSession.fromEmail('x@y.com');
-      expect(session.id, '');
-      expect(session.organizationId, '');
-    });
-
-    test('safe-defaults role to doctor', () {
-      final session = UserSession.fromEmail('x@y.com');
-      expect(session.role, UserRole.doctor);
-    });
-
-    test('isActive defaults to true', () {
-      final session = UserSession.fromEmail('x@y.com');
-      expect(session.isActive, isTrue);
-    });
+    test(
+      'criterio de aceptación auditoría: rol auxiliar no puede agregar consultas',
+      () {
+        final session = UserSession.fromJson({'role': 'auxiliar'});
+        expect(session.role, UserRole.unknown);
+        expect(session.role.canAddConsultation, isFalse);
+      },
+    );
   });
 
   // ─────────────────────────────────────────────
@@ -181,34 +163,37 @@ void main() {
   });
 
   // ─────────────────────────────────────────────
-  // _humanizeEmail
+  // _humanizeEmail (via fromJson)
   // ─────────────────────────────────────────────
-  group('_humanizeEmail (via fromEmail / fromJson)', () {
+  group('_humanizeEmail', () {
     test('handles dot separator', () {
-      expect(UserSession.fromEmail('john.doe@x.com').fullName, 'John Doe');
+      final session = UserSession.fromJson({'email': 'john.doe@x.com'});
+      expect(session.fullName, 'John Doe');
     });
 
     test('handles underscore separator', () {
-      expect(UserSession.fromEmail('john_doe@x.com').fullName, 'John Doe');
+      final session = UserSession.fromJson({'email': 'john_doe@x.com'});
+      expect(session.fullName, 'John Doe');
     });
 
     test('handles hyphen separator', () {
-      expect(UserSession.fromEmail('john-doe@x.com').fullName, 'John Doe');
+      final session = UserSession.fromJson({'email': 'john-doe@x.com'});
+      expect(session.fullName, 'John Doe');
     });
 
     test('handles mixed separators', () {
-      expect(
-        UserSession.fromEmail('dr.john_doe-jr@x.com').fullName,
-        'Dr John Doe Jr',
-      );
+      final session = UserSession.fromJson({'email': 'dr.john_doe-jr@x.com'});
+      expect(session.fullName, 'Dr John Doe Jr');
     });
 
     test('capitalizes single-word local part', () {
-      expect(UserSession.fromEmail('admin@x.com').fullName, 'Admin');
+      final session = UserSession.fromJson({'email': 'admin@x.com'});
+      expect(session.fullName, 'Admin');
     });
 
     test('collapses consecutive separators', () {
-      expect(UserSession.fromEmail('a..b@x.com').fullName, 'A B');
+      final session = UserSession.fromJson({'email': 'a..b@x.com'});
+      expect(session.fullName, 'A B');
     });
   });
 
@@ -223,6 +208,10 @@ void main() {
     );
     test('doctor is not admin', () => expect(UserRole.doctor.isAdmin, isFalse));
     test('nurse is not admin', () => expect(UserRole.nurse.isAdmin, isFalse));
+    test(
+      'unknown is not admin',
+      () => expect(UserRole.unknown.isAdmin, isFalse),
+    );
   });
 
   group('UserRole.isSuperadmin', () {
@@ -230,6 +219,7 @@ void main() {
     test('orgAdmin', () => expect(UserRole.orgAdmin.isSuperadmin, isFalse));
     test('doctor', () => expect(UserRole.doctor.isSuperadmin, isFalse));
     test('nurse', () => expect(UserRole.nurse.isSuperadmin, isFalse));
+    test('unknown', () => expect(UserRole.unknown.isSuperadmin, isFalse));
   });
 
   group('UserRole.canReadPatients', () {
@@ -245,6 +235,10 @@ void main() {
     test(
       'superadmin → false',
       () => expect(UserRole.superadmin.canReadPatients, isFalse),
+    );
+    test(
+      'unknown → false',
+      () => expect(UserRole.unknown.canReadPatients, isFalse),
     );
   });
 
@@ -265,6 +259,10 @@ void main() {
       'superadmin → false',
       () => expect(UserRole.superadmin.canRegisterPatient, isFalse),
     );
+    test(
+      'unknown → false',
+      () => expect(UserRole.unknown.canRegisterPatient, isFalse),
+    );
   });
 
   group('UserRole.canAddConsultation', () {
@@ -284,6 +282,10 @@ void main() {
       'superadmin → false',
       () => expect(UserRole.superadmin.canAddConsultation, isFalse),
     );
+    test(
+      'unknown → false',
+      () => expect(UserRole.unknown.canAddConsultation, isFalse),
+    );
   });
 
   group('UserRole.canAddVaccine', () {
@@ -297,6 +299,10 @@ void main() {
       'superadmin → false',
       () => expect(UserRole.superadmin.canAddVaccine, isFalse),
     );
+    test(
+      'unknown → false',
+      () => expect(UserRole.unknown.canAddVaccine, isFalse),
+    );
   });
 
   group('UserRole.canSyncPatient', () {
@@ -309,6 +315,10 @@ void main() {
     test(
       'superadmin → false',
       () => expect(UserRole.superadmin.canSyncPatient, isFalse),
+    );
+    test(
+      'unknown → false',
+      () => expect(UserRole.unknown.canSyncPatient, isFalse),
     );
   });
 
@@ -326,6 +336,10 @@ void main() {
       () => expect(UserRole.doctor.canManageUsers, isFalse),
     );
     test('nurse → false', () => expect(UserRole.nurse.canManageUsers, isFalse));
+    test(
+      'unknown → false',
+      () => expect(UserRole.unknown.canManageUsers, isFalse),
+    );
   });
 
   group('UserRole.canViewAnalytics', () {
@@ -345,6 +359,10 @@ void main() {
       'nurse → false',
       () => expect(UserRole.nurse.canViewAnalytics, isFalse),
     );
+    test(
+      'unknown → false',
+      () => expect(UserRole.unknown.canViewAnalytics, isFalse),
+    );
   });
 
   group('UserRole.canScanNfc', () {
@@ -358,6 +376,7 @@ void main() {
       'superadmin → false',
       () => expect(UserRole.superadmin.canScanNfc, isFalse),
     );
+    test('unknown → false', () => expect(UserRole.unknown.canScanNfc, isFalse));
   });
 
   group('UserRole.canSearchPatient', () {
@@ -373,6 +392,10 @@ void main() {
     test(
       'superadmin → false',
       () => expect(UserRole.superadmin.canSearchPatient, isFalse),
+    );
+    test(
+      'unknown → false',
+      () => expect(UserRole.unknown.canSearchPatient, isFalse),
     );
   });
 
@@ -454,6 +477,7 @@ void main() {
       expect(UserRole.orgAdmin.wireValue, 'org_admin');
       expect(UserRole.doctor.wireValue, 'doctor');
       expect(UserRole.nurse.wireValue, 'nurse');
+      expect(UserRole.unknown.wireValue, 'unknown');
     });
 
     test('wireValue round-trips vía fromJson para todos los roles', () {

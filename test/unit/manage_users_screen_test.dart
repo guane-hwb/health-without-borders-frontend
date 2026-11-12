@@ -50,6 +50,7 @@ Color roleColor(UserRole r) => switch (r) {
   UserRole.nurse => const Color(0xFF2E7D32),
   UserRole.orgAdmin => const Color(0xFF6A1B9A),
   UserRole.superadmin => const Color(0xFFB71C1C),
+  UserRole.unknown => const Color(0xFF757575),
 };
 
 String computeInitials(String fullName) => fullName
@@ -321,6 +322,7 @@ void main() {
       UserRole.nurse => 'Enfermería',
       UserRole.orgAdmin => 'Admin',
       UserRole.superadmin => 'Superadmin',
+      UserRole.unknown => 'Desconocido',
     };
 
     test(

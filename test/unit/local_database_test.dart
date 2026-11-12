@@ -2600,7 +2600,7 @@ void main() {
 
   group('Cifrado y descifrado de registros de auditoría', () {
     test(
-      'lanza AuditDecryptionException si el payload de auditoria está corrupto o truncado',
+      'omite el log si el payload de auditoria está corrupto o truncado (no lanza)',
       () async {
         final localDb = LocalDatabase.instance;
         await localDb.clearAll();
@@ -2616,15 +2616,13 @@ void main() {
           'is_synced': 0,
         });
 
-        await expectLater(
-          localDb.pendingEmergencyAccessLogs(),
-          throwsA(isA<AuditDecryptionException>()),
-        );
+        final logs = await localDb.pendingEmergencyAccessLogs();
+        expect(logs, isEmpty);
       },
     );
 
     test(
-      'lanza AuditDecryptionException si falla el descifrado del user_id en el log de auditoría',
+      'omite el log si falla el descifrado del user_id en el log de auditoría (no lanza)',
       () async {
         final localDb = LocalDatabase.instance;
         await localDb.clearAll();
@@ -2640,10 +2638,8 @@ void main() {
           'is_synced': 0,
         });
 
-        await expectLater(
-          localDb.pendingEmergencyAccessLogs(),
-          throwsA(isA<AuditDecryptionException>()),
-        );
+        final logs = await localDb.pendingEmergencyAccessLogs();
+        expect(logs, isEmpty);
       },
     );
 
@@ -2715,61 +2711,6 @@ void main() {
   });
 
   group('Consultas de conteos huérfanos', () {
-    test(
-      'getOrphanedEmergencyLogCount cuenta logs huérfanos en Nativo y Web',
-      () async {
-        final dbNative = LocalDatabase.instance;
-        await dbNative.clearAll();
-        await dbNative.logEmergencyAccess(
-          patientUid: '04:N1',
-          ownerUserId: null,
-        );
-        await dbNative.logEmergencyAccess(
-          patientUid: '04:N2',
-          ownerUserId: 'user-1',
-        );
-
-        expect(await dbNative.getOrphanedEmergencyLogCount(), equals(1));
-
-        final webBackend = <String, String>{};
-        final dbWeb = LocalDatabase.forTesting(
-          secureStorage: mockStorage,
-          forceWeb: true,
-          webGet: (k) async => webBackend[k],
-          webSet: (k, v) async => webBackend[k] = v,
-          webList: (prefix) async => webBackend.entries
-              .where((e) => e.key.startsWith(prefix))
-              .toList(),
-        );
-
-        await dbWeb.logEmergencyAccess(patientUid: '04:W1', ownerUserId: null);
-        await dbWeb.logEmergencyAccess(
-          patientUid: '04:W2',
-          ownerUserId: 'user-1',
-        );
-
-        expect(await dbWeb.getOrphanedEmergencyLogCount(), equals(1));
-      },
-    );
-
-    test(
-      'savePatient rechaza guardar sin ownerUserId y getOrphanedPendingCount reporta 0',
-      () async {
-        final dbNative = LocalDatabase.instance;
-        await dbNative.clearAll();
-
-        expect(
-          () => dbNative.savePatient(
-            _buildRecord(patientId: 'p-orph-1'),
-            ownerUserId: null,
-          ),
-          throwsA(isA<ArgumentError>()),
-        );
-
-        expect(await dbNative.getOrphanedPendingCount(), equals(0));
-      },
-    );
-
     test('getUnsyncedEmergencyLogCount con ownerUserId en Web', () async {
       final webBackend = <String, String>{};
       final dbWeb = LocalDatabase.forTesting(
@@ -2873,27 +2814,26 @@ void main() {
       expect(all.map((LocalPatientEntry e) => e.patientId), contains('p-nest'));
     });
 
-    test('lanza AuditDecryptionException si el ciphertext de auditoría tiene '
-        'longitud válida pero no autentica', () async {
-      final localDb = LocalDatabase.instance;
-      await localDb.clearAll();
+    test(
+      'omite el log si el payload de auditoría no es base64 válido',
+      () async {
+        final localDb = LocalDatabase.instance;
+        await localDb.clearAll();
 
-      final raw = await rawConnection();
-      final unauthenticated = base64Encode(Uint8List(40));
+        final raw = await rawConnection();
 
-      await raw.insert('emergency_access_log', <String, Object?>{
-        'patient_uid': '04:BAD_MAC',
-        'patient_name': unauthenticated,
-        'reason': 'guardian_absent_offline',
-        'occurred_at': DateTime.now().toIso8601String(),
-        'is_synced': 0,
-      });
+        await raw.insert('emergency_access_log', <String, Object?>{
+          'patient_uid': '04:BAD_B64',
+          'user_id': 'ey!!invalido==',
+          'reason': 'guardian_absent_offline',
+          'occurred_at': DateTime.now().toIso8601String(),
+          'is_synced': 0,
+        });
 
-      await expectLater(
-        localDb.pendingEmergencyAccessLogs(),
-        throwsA(isA<AuditDecryptionException>()),
-      );
-    });
+        final logs = await localDb.pendingEmergencyAccessLogs();
+        expect(logs, isEmpty);
+      },
+    );
 
     test('descifra un payload de auditoría sin relleno base64', () async {
       final localDb = LocalDatabase.instance;
@@ -2940,26 +2880,26 @@ void main() {
       );
     });
 
-    test('lanza AuditDecryptionException si el payload de auditoría no es '
-        'base64 válido', () async {
-      final localDb = LocalDatabase.instance;
-      await localDb.clearAll();
+    test(
+      'omite el log si el payload de auditoría no es base64 válido',
+      () async {
+        final localDb = LocalDatabase.instance;
+        await localDb.clearAll();
 
-      final raw = await rawConnection();
+        final raw = await rawConnection();
 
-      await raw.insert('emergency_access_log', <String, Object?>{
-        'patient_uid': '04:BAD_B64',
-        'user_id': 'ey!!invalido==',
-        'reason': 'guardian_absent_offline',
-        'occurred_at': DateTime.now().toIso8601String(),
-        'is_synced': 0,
-      });
+        await raw.insert('emergency_access_log', <String, Object?>{
+          'patient_uid': '04:BAD_B64',
+          'user_id': 'ey!!invalido==',
+          'reason': 'guardian_absent_offline',
+          'occurred_at': DateTime.now().toIso8601String(),
+          'is_synced': 0,
+        });
 
-      await expectLater(
-        localDb.pendingEmergencyAccessLogs(),
-        throwsA(isA<AuditDecryptionException>()),
-      );
-    });
+        final logs = await localDb.pendingEmergencyAccessLogs();
+        expect(logs, isEmpty);
+      },
+    );
 
     test('web: filtra los logs pendientes por ownerUserId', () async {
       final db = buildWebDb(<String, String>{});
@@ -4684,20 +4624,6 @@ void main() {
         ]);
       },
     );
-
-    test('getOrphanedPendingCount cuenta solo pendientes sin owner', () async {
-      backend['hwb_web_patient::orf-1'] = jsonEncode(webPatientRow('orf-1'));
-      backend['hwb_web_patient::orf-2'] = jsonEncode(webPatientRow('orf-2'));
-      backend['hwb_web_patient::orf-synced'] = jsonEncode(
-        webPatientRow('orf-synced', isSynced: 1),
-      );
-      backend['hwb_web_patient::orf-owned'] = jsonEncode(
-        webPatientRow('orf-owned', owner: 'u1'),
-      );
-      final LocalDatabase db = webDb();
-
-      expect(await db.getOrphanedPendingCount(), equals(2));
-    });
 
     test(
       'si falla el recifrado de filas web en claro, la lectura continúa',

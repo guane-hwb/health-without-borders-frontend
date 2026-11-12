@@ -1899,6 +1899,41 @@ void main() {
         verifyNever(() => localDb.markEmergencyLogsSynced(any()));
       },
     );
+
+    test(
+      'criterio auditoría: con una fila corrupta y dos válidas, se envían las dos válidas',
+      () async {
+        final validLogs = [
+          <String, Object?>{
+            'id': 301,
+            'patient_uid': '04:V1',
+            'reason': 'offline',
+          },
+          <String, Object?>{
+            'id': 302,
+            'patient_uid': '04:V2',
+            'reason': 'offline',
+          },
+        ];
+
+        when(
+          () => localDb.pendingEmergencyAccessLogs(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => validLogs);
+        when(
+          () => patientRepo.reportEmergencyAccess(any()),
+        ).thenAnswer((_) async {});
+        when(
+          () => localDb.markEmergencyLogsSynced(any()),
+        ).thenAnswer((_) async {});
+
+        await engine.syncAll();
+
+        verify(() => patientRepo.reportEmergencyAccess(validLogs)).called(1);
+        verify(() => localDb.markEmergencyLogsSynced([301, 302])).called(1);
+      },
+    );
   });
 
   group('Retry-After acumulado dentro de un mismo lote', () {

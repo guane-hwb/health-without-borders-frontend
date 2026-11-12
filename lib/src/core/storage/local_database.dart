@@ -1465,7 +1465,7 @@ class LocalDatabase {
       if (uId != null && uId.isNotEmpty) {
         final decryptedUserId = await _decryptAuditPayload(uId);
         if (decryptedUserId == '[CORRUPTED_KEY_MISSING]') {
-          throw AuditDecryptionException(id ?? 0);
+          continue;
         }
         mutable['user_id'] = decryptedUserId;
       }
@@ -1487,7 +1487,7 @@ class LocalDatabase {
       if (name != null && name.isNotEmpty) {
         final decryptedName = await _decryptAuditPayload(name);
         if (decryptedName == '[CORRUPTED_KEY_MISSING]') {
-          throw AuditDecryptionException(id ?? 0);
+          continue;
         }
         mutable['patient_name'] = decryptedName;
       }

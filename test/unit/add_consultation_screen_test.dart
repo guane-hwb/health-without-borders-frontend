@@ -26,6 +26,8 @@ import 'package:health_without_borders_frontend/src/core/network/reachability.da
 
 class _MockAuthRepository extends Mock implements AuthRepository {}
 
+class _MockUserSession extends Mock implements UserSession {}
+
 class _MockUserRepository extends Mock implements UserRepository {}
 
 class _MockPatientRepository extends Mock implements PatientRepository {}
@@ -964,7 +966,11 @@ void main() {
         when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
 
         final scope = _defaultScope(db: db, sync: sync);
-        final session = UserSession.fromEmail('capture.test@example.com');
+        final session = _MockUserSession();
+        when(() => session.id).thenReturn('capture-user-id');
+        when(
+          () => session.organizationId,
+        ).thenReturn('capture-organization-id');
         final auth = scope.authRepository as _MockAuthRepository;
         when(() => auth.currentUser).thenReturn(session);
 
