@@ -226,7 +226,8 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
   Future<void> _delete(LocalPatientEntry e) async {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
-    final db = AppScope.of(context).localDatabase;
+    final scope = AppScope.of(context);
+    final db = scope.localDatabase;
     final record = e.toPatientRecord();
 
     final hasClinicalData =
@@ -234,55 +235,28 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
         (record.medicalHistory.isNotEmpty ||
             record.vaccinationRecord.isNotEmpty);
 
-    final ok = await showDialog<bool>(
+    final reason = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.deleteRecord),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${s.deleteRecordConfirm}\n\n${e.maskedName}'),
-            if (hasClinicalData) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF3CD),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFFFEEBA)),
-                ),
-                child: Text(
-                  isEs
-                      ? 'Atención: Este registro contiene consultas médicas o vacunas que no se han sincronizado.'
-                      : 'Warning: This record contains unsynced medical consultations or vaccines.',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF856404),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(s.cancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              s.delete,
-              style: const TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
+      builder: (_) => _DeleteRecordDialog(
+        entry: e,
+        s: s,
+        isEs: isEs,
+        hasClinicalData: hasClinicalData,
       ),
     );
 
-    if (ok == true && mounted) {
+    if (reason != null && mounted) {
+      if (hasClinicalData) {
+        final currentUser = scope.authRepository.currentUser;
+        await db.logEmergencyAccess(
+          patientUid: e.deviceUid,
+          patientName: e.patientName,
+          userId: currentUser?.id,
+          ownerUserId: currentUser?.id,
+          organizationId: currentUser?.organizationId,
+          reason: 'discard_clinical_data: $reason',
+        );
+      }
       await db.deleteRecord(e.patientId);
       await _load();
     }
@@ -915,6 +889,108 @@ class _SyncNoticeCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DeleteRecordDialog extends StatefulWidget {
+  const _DeleteRecordDialog({
+    required this.entry,
+    required this.s,
+    required this.isEs,
+    required this.hasClinicalData,
+  });
+
+  final LocalPatientEntry entry;
+  final AppStrings s;
+  final bool isEs;
+  final bool hasClinicalData;
+
+  @override
+  State<_DeleteRecordDialog> createState() => _DeleteRecordDialogState();
+}
+
+class _DeleteRecordDialogState extends State<_DeleteRecordDialog> {
+  final _reasonCtrl = TextEditingController();
+  String? _validationError;
+
+  @override
+  void dispose() {
+    _reasonCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.s;
+    return AlertDialog(
+      title: Text(s.deleteRecord),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${s.deleteRecordConfirm}\n\n${widget.entry.maskedName}'),
+            if (widget.hasClinicalData) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3CD),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFFEEBA)),
+                ),
+                child: Text(
+                  widget.isEs
+                      ? 'Atención: Este registro contiene consultas médicas o vacunas que no se han sincronizado. Se requiere justificación clínica para descartarlo.'
+                      : 'Warning: This record contains unsynced medical consultations or vaccines. Clinical justification is required to discard it.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF856404),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _reasonCtrl,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: s.deleteRecordReasonLabel,
+                  hintText: s.deleteRecordReasonHint,
+                  errorText: _validationError,
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (_) {
+                  if (_validationError != null) {
+                    setState(() => _validationError = null);
+                  }
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: Text(s.cancel),
+        ),
+        TextButton(
+          onPressed: () {
+            final trimmed = _reasonCtrl.text.trim();
+            if (widget.hasClinicalData && trimmed.isEmpty) {
+              setState(() {
+                _validationError = s.deleteRecordReasonRequired;
+              });
+              return;
+            }
+            Navigator.of(context).pop(trimmed);
+          },
+          child: Text(s.delete, style: const TextStyle(color: AppColors.error)),
+        ),
+      ],
     );
   }
 }

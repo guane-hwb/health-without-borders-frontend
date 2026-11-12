@@ -175,3 +175,15 @@ directions and a partial rollout is safe.
 
 As of the current build, no rotation has occurred: every chip in the field is
 version 0, headerless.
+
+---
+
+## Offline Guardian Factor & Threat Model Considerations
+
+When operating without connectivity, the requirement for a guardian card before opening a minor's profile is enforced locally by the application interface (`read_nfc_screen.dart`):
+
+1. **Local Decryption:** The patient wristband payload (triage) is encrypted with the fleet-wide keyring. Once scanned, the client decrypts the payload in memory to inspect demographic fields (`dob`, `isMinor`) and identity linkages (`gUid`, `g2Uid`).
+2. **Access Control Enforcement:** If the patient is determined to be a minor (`isMinor == true`), the UI transitions to the second factor step demanding a scan of the guardian card matching `gUid` or `g2Uid`. If absent, only the read-only emergency triage flow (logged via `logEmergencyAccess`) is permitted.
+3. **Accepted Risk:** In an offline architecture utilizing a shared symmetric keyring, cryptographic enforcement of guardian presence cannot be guaranteed against a maliciously modified client application, because the client already holds the decrypted triage data in memory. This risk is accepted by design:
+   - Encrypting the guardian payload separately under a secret key held exclusively on the physical guardian card would prevent multi-brigade read-only triage in emergency situations.
+   - Genuine offline operations prioritize life-saving clinical triage (`break-glass`) while recording audit events locally for deferred backend synchronization.

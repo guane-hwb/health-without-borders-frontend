@@ -276,6 +276,9 @@ class AppStrings {
   String get deleteRecord => _get('deleteRecord');
   String get deleteRecordConfirm => _get('deleteRecordConfirm');
   String get pending => _get('pending');
+  String get deleteRecordReasonLabel => _get('deleteRecordReasonLabel');
+  String get deleteRecordReasonHint => _get('deleteRecordReasonHint');
+  String get deleteRecordReasonRequired => _get('deleteRecordReasonRequired');
 
   // ── Brigade ─────────────────────────────────────────────────────────────
   String get brigadeOffline => _get('brigadeOffline');
@@ -875,6 +878,11 @@ class AppStrings {
     'deleteRecordConfirm':
         'Esto eliminará permanentemente el registro local. Si no ha sido sincronizado, los datos se perderán.',
     'pending': 'Pendiente',
+    'deleteRecordReasonLabel': 'Motivo de eliminación *',
+    'deleteRecordReasonHint':
+        'Indique por qué descarta este registro clínico...',
+    'deleteRecordReasonRequired':
+        'Debe ingresar un motivo para descartar registros clínicos.',
 
     // Brigade
     'brigadeOffline': 'Modo brigada — Sin conexión',
@@ -1464,7 +1472,10 @@ class AppStrings {
     'deleteRecordConfirm':
         'This will permanently delete the local record. If it hasn\'t been synced, the data will be lost.',
     'pending': 'Pending',
-
+    'deleteRecordReasonLabel': 'Reason for deletion *',
+    'deleteRecordReasonHint': 'State why this clinical record is discarded...',
+    'deleteRecordReasonRequired':
+        'You must provide a reason to discard clinical records.',
     // Brigade
     'brigadeOffline': 'Brigade Mode — Offline',
     'patientsAppearHere': 'Patients will appear here as they are synced',

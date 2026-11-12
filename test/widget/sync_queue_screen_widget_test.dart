@@ -1967,7 +1967,7 @@ void main() {
       await openDeleteDialog(tester, makeClinicalEntry());
 
       expect(
-        find.text(
+        find.textContaining(
           'Atención: Este registro contiene consultas médicas o vacunas que '
           'no se han sincronizado.',
         ),
@@ -1982,7 +1982,7 @@ void main() {
       await openDeleteDialog(tester, makeClinicalEntry(), locale: 'en');
 
       expect(
-        find.text(
+        find.textContaining(
           'Warning: This record contains unsynced medical consultations or '
           'vaccines.',
         ),
@@ -1990,6 +1990,60 @@ void main() {
       );
       expect(find.text('Copy clinical data'), findsNothing);
     });
+
+    testWidgets(
+      'exige motivo obligatorio y registra auditoría al borrar datos clínicos',
+      (tester) async {
+        final clinicalEntry = makeClinicalEntry();
+        when(
+          () => db.logEmergencyAccess(
+            patientUid: any(named: 'patientUid'),
+            patientName: any(named: 'patientName'),
+            userId: any(named: 'userId'),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+            reason: any(named: 'reason'),
+          ),
+        ).thenAnswer((_) async {});
+        when(
+          () => db.deleteRecord(clinicalEntry.patientId),
+        ).thenAnswer((_) async {});
+
+        await openDeleteDialog(tester, clinicalEntry);
+
+        // Intentar eliminar sin ingresar motivo bloquea el borrado
+        await tester.tap(find.text('Eliminar'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(
+            'Debe ingresar un motivo para descartar registros clínicos.',
+          ),
+          findsOneWidget,
+        );
+        verifyNever(() => db.deleteRecord(any()));
+
+        // Ingresar motivo válido permite eliminar y deja registro en bitácora
+        await tester.enterText(
+          find.byType(TextField),
+          'Paciente duplicado en sistema',
+        );
+        await tester.tap(find.text('Eliminar'));
+        await tester.pumpAndSettle();
+
+        verify(
+          () => db.logEmergencyAccess(
+            patientUid: clinicalEntry.deviceUid,
+            patientName: clinicalEntry.patientName,
+            userId: any(named: 'userId'),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+            reason: 'discard_clinical_data: Paciente duplicado en sistema',
+          ),
+        ).called(1);
+        verify(() => db.deleteRecord(clinicalEntry.patientId)).called(1);
+      },
+    );
 
     testWidgets('sin datos clínicos no aparece la advertencia ni el botón', (
       tester,
