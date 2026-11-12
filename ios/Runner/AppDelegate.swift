@@ -1,42 +1,47 @@
-private var privacyProtectionView: UIView?
+import Flutter
+import UIKit
 
-  override func applicationWillResignActive(_ application: UIApplication) {
-    super.applicationWillResignActive(application)
-    showPrivacyProtectionView()
+@main
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
-  override func applicationDidBecomeActive(_ application: UIApplication) {
-    super.applicationDidBecomeActive(application)
-    checkAndHidePrivacyProtectionView()
-  }
-
-  private func showPrivacyProtectionView() {
-    guard privacyProtectionView == nil, let window = self.window else { return }
-
-    let view = UIView(frame: window.bounds)
-    view.backgroundColor = UIColor(red: 235/255.0, green: 242/255.0, blue: 248/255.0, alpha: 1.0)
-    view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-
-    let label = UILabel()
-    label.text = "Salud sin Fronteras"
-    label.font = UIFont.systemFont(ofSize: 22, weight: .bold)
-    label.textColor = UIColor(red: 26/255.0, green: 35/255.0, blue: 126/255.0, alpha: 1.0)
-    label.textAlignment = .center
-    label.translatesAutoresizingMaskIntoConstraints = false
-
-    view.addSubview(label)
-    NSLayoutConstraint.activate([
-      label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-      label.centerYAnchor.constraint(equalTo: view.centerYAnchor)
-    ])
-
-    window.addSubview(view)
-    privacyProtectionView = view
-  }
-
-  private func checkAndHidePrivacyProtectionView() {
-    if !UIScreen.main.isCaptured {
-      privacyProtectionView?.removeFromSuperview()
-      privacyProtectionView = nil
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "HwbBackupExclusion") {
+      BackupExclusion.register(with: registrar.messenger())
     }
   }
+}
+
+enum BackupExclusion {
+  static let channelName = "hwb/backup_exclusion"
+
+  static func register(with messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: channelName, binaryMessenger: messenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "excludeFromBackup" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let args = call.arguments as? [String: Any],
+            let path = args["path"] as? String, !path.isEmpty else {
+        result(FlutterError(code: "bad_args", message: "Falta 'path'", details: nil))
+        return
+      }
+      var url = URL(fileURLWithPath: path, isDirectory: true)
+      var values = URLResourceValues()
+      values.isExcludedFromBackup = true
+      do {
+        try url.setResourceValues(values)
+        result(nil)
+      } catch {
+        result(FlutterError(code: "exclude_failed", message: error.localizedDescription, details: nil))
+      }
+    }
+  }
+}
