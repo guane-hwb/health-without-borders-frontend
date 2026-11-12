@@ -136,8 +136,15 @@ gets a generic line. The engine announces every saved record on
 Every row carries `owner_user_id`. The engine, the sync queue and the home counts
 select the signed-in user's rows (and ownerless rows, which the first sync
 adopts). Another user's pending rows stay on the device, encrypted and unlisted,
-until that user signs in again; the queue only shows how many there are.
-Signing in as someone else no longer blocks or offers to discard them.
+until that user signs in again; the queue shows how many there are via
+`_foreignPendingCount` to alert the active worker.
+Signing in as someone else does not overwrite or discard them.
+
+#### Operational Policy & Resolution Path (Pilot Protocol)
+In clinical field missions with staff turnover, pending records left behind by a previous professional are handled as follows:
+1. **Field Handover Protocol:** Before rotating tablets or swapping brigade shifts, staff must perform a manual sync (`Sync all`) while connectivity is available.
+2. **Re-authentication on Same Device:** If records remain pending, the original author must log in on the device to complete the sync.
+3. **Supervisor / Admin Recovery Escalation:** If the author has permanently left the mission, the physical device must be presented to an authorized Organization Administrator (`org_admin`). Under the supervised procedure, the admin coordinates session elevation or backend account re-authentication to drain the local queue, preventing data loss before decommissioning or reassigning the tablet.
 
 `AuthRepository.clearSession()` deletes only the session's keys on a phone. On
 the web it still deletes everything, and logout wipes the local PHI.
