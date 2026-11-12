@@ -92,10 +92,12 @@ const Map<String, String> _fullToShort = <String, String>{
   'name': 'nm',
   'relationship': 'rel',
   'phone': 'ph',
+  'device_uid': 'dug',
   'consent': 'cs',
   'accepted': 'ac',
   'acceptedAt': 'aat',
   'email': 'em',
+  'policyVersion': 'pv',
 
   // Allergy
   'category': 'cat',

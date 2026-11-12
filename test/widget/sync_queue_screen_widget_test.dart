@@ -1677,26 +1677,6 @@ void main() {
     );
   });
 
-  List<String> captureClipboard() {
-    final List<String> copied = <String>[];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, (
-          MethodCall call,
-        ) async {
-          if (call.method == 'Clipboard.setData') {
-            final Map<Object?, Object?> args =
-                call.arguments as Map<Object?, Object?>;
-            copied.add(args['text'] as String);
-          }
-          return null;
-        });
-    addTearDown(
-      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null),
-    );
-    return copied;
-  }
-
   Future<void> pumpScreen(WidgetTester tester, {String locale = 'es'}) async {
     await tester.pumpWidget(
       buildTestApp(
@@ -1816,11 +1796,9 @@ void main() {
       ).thenAnswer((_) async => <MapEntry<String, String>>[quarantined]);
     });
 
-    testWidgets('muestra la tarjeta y "Copiar datos crudos" copia (ES)', (
+    testWidgets('muestra la tarjeta de cuarentena sin botones de copia (ES)', (
       tester,
     ) async {
-      final List<String> copied = captureClipboard();
-
       await pumpScreen(tester);
 
       expect(find.byIcon(Icons.cloud_done), findsNothing);
@@ -1830,22 +1808,12 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Clave: ${quarantined.key}'), findsOneWidget);
-
-      await tester.tap(find.text('Copiar datos crudos'));
-      await tester.pumpAndSettle();
-
-      expect(copied, <String>[quarantined.value]);
-      expect(
-        find.text('Datos en cuarentena copiados al portapapeles.'),
-        findsOneWidget,
-      );
+      expect(find.text('Copiar datos crudos'), findsNothing);
     });
 
-    testWidgets('muestra la tarjeta y "Copy raw data" copia (EN)', (
+    testWidgets('muestra la tarjeta de cuarentena sin botones de copia (EN)', (
       tester,
     ) async {
-      final List<String> copied = captureClipboard();
-
       await pumpScreen(tester, locale: 'en');
 
       expect(find.text('Quarantined Web Record'), findsOneWidget);
@@ -1853,15 +1821,7 @@ void main() {
         find.textContaining('This record could not be decrypted or processed'),
         findsOneWidget,
       );
-
-      await tester.tap(find.text('Copy raw data'));
-      await tester.pumpAndSettle();
-
-      expect(copied, <String>[quarantined.value]);
-      expect(
-        find.text('Quarantined data copied to clipboard.'),
-        findsOneWidget,
-      );
+      expect(find.text('Copy raw data'), findsNothing);
     });
   });
 
@@ -1953,7 +1913,7 @@ void main() {
     final Map<String, dynamic> json =
         jsonDecode(makeEntry().recordJson) as Map<String, dynamic>;
     if (consultations) {
-      json['medicalHistory'] = <Map<String, dynamic>>[
+      json['medicalHistory'] = [
         <String, dynamic>{
           'startDateTime': '2024-03-01T09:00:00',
           'clinicalEvaluation': <String, dynamic>{
@@ -1964,7 +1924,7 @@ void main() {
       ];
     }
     if (vaccines) {
-      json['vaccinationRecord'] = <Map<String, dynamic>>[
+      json['vaccinationRecord'] = [
         <String, dynamic>{
           'vaccineName': 'BCG',
           'dose': 1,
@@ -2001,103 +1961,87 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('advierte y "Copiar datos" copia el resumen completo (ES)', (
+    testWidgets('advierte al usuario sin opción de copiar datos (ES)', (
       tester,
     ) async {
-      final List<String> copied = captureClipboard();
-
       await openDeleteDialog(tester, makeClinicalEntry());
 
       expect(
-        find.text(
+        find.textContaining(
           'Atención: Este registro contiene consultas médicas o vacunas que '
           'no se han sincronizado.',
         ),
         findsOneWidget,
       );
-
-      await tester.tap(find.text('Copiar datos'));
-      await tester.pumpAndSettle();
-
-      expect(copied, hasLength(1));
-      final String summary = copied.single;
-      expect(summary, contains('=== RESUMEN CLÍNICO ==='));
-      expect(summary, contains('Paciente: '));
-      expect(summary, contains('Juan'));
-      expect(summary, contains('Documento: CC 123'));
-      expect(summary, contains('--- CONSULTAS MÉDICAS ---'));
-      expect(summary, contains('• Fecha: '));
-      expect(summary, contains('Motivo/Historia: Fiebre alta'));
-      expect(summary, contains('Plan: Reposo e hidratación'));
-      expect(summary, contains('--- VACUNAS ---'));
-      expect(summary, contains('• BCG (Dosis 1) - '));
-      expect(
-        find.text('Resumen clínico copiado al portapapeles.'),
-        findsOneWidget,
-      );
+      expect(find.text('Copiar datos'), findsNothing);
     });
 
-    testWidgets('advierte y "Copy clinical data" copia el resumen (EN)', (
+    testWidgets('advierte al usuario sin opción de copiar datos (EN)', (
       tester,
     ) async {
-      final List<String> copied = captureClipboard();
-
       await openDeleteDialog(tester, makeClinicalEntry(), locale: 'en');
 
       expect(
-        find.text(
+        find.textContaining(
           'Warning: This record contains unsynced medical consultations or '
           'vaccines.',
         ),
         findsOneWidget,
       );
-
-      await tester.tap(find.text('Copy clinical data'));
-      await tester.pumpAndSettle();
-
-      final String summary = copied.single;
-      expect(summary, contains('=== CLINICAL SUMMARY ==='));
-      expect(summary, contains('Patient: '));
-      expect(summary, contains('Document: CC 123'));
-      expect(summary, contains('--- MEDICAL CONSULTATIONS ---'));
-      expect(summary, contains('Date: '));
-      expect(summary, contains('Reason/History: Fiebre alta'));
-      expect(summary, contains('Plan: Reposo e hidratación'));
-      expect(summary, contains('--- VACCINATIONS ---'));
-      expect(summary, contains('(Dose 1)'));
-      expect(
-        find.text('Clinical summary copied to clipboard.'),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('solo vacunas: el resumen omite las consultas', (tester) async {
-      final List<String> copied = captureClipboard();
-
-      await openDeleteDialog(tester, makeClinicalEntry(consultations: false));
-      await tester.tap(find.text('Copiar datos'));
-      await tester.pumpAndSettle();
-
-      expect(copied.single, isNot(contains('CONSULTAS MÉDICAS')));
-      expect(copied.single, contains('--- VACUNAS ---'));
+      expect(find.text('Copy clinical data'), findsNothing);
     });
 
     testWidgets(
-      'consulta sin motivo ni plan: el resumen no incluye esas líneas',
+      'exige motivo obligatorio y registra auditoría al borrar datos clínicos',
       (tester) async {
-        final List<String> copied = captureClipboard();
+        final clinicalEntry = makeClinicalEntry();
+        when(
+          () => db.logEmergencyAccess(
+            patientUid: any(named: 'patientUid'),
+            patientName: any(named: 'patientName'),
+            userId: any(named: 'userId'),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+            reason: any(named: 'reason'),
+          ),
+        ).thenAnswer((_) async {});
+        when(
+          () => db.deleteRecord(clinicalEntry.patientId),
+        ).thenAnswer((_) async {});
 
-        await openDeleteDialog(
-          tester,
-          makeClinicalEntry(vaccines: false, details: false),
-        );
-        await tester.tap(find.text('Copiar datos'));
+        await openDeleteDialog(tester, clinicalEntry);
+
+        // Intentar eliminar sin ingresar motivo bloquea el borrado
+        await tester.tap(find.text('Eliminar'));
         await tester.pumpAndSettle();
 
-        expect(copied.single, contains('--- CONSULTAS MÉDICAS ---'));
-        expect(copied.single, isNot(contains('Motivo/Historia')));
-        expect(copied.single, isNot(contains('Plan:')));
-        expect(copied.single, isNot(contains('VACUNAS')));
+        expect(
+          find.text(
+            'Debe ingresar un motivo para descartar registros clínicos.',
+          ),
+          findsOneWidget,
+        );
+        verifyNever(() => db.deleteRecord(any()));
+
+        // Ingresar motivo válido permite eliminar y deja registro en bitácora
+        await tester.enterText(
+          find.byType(TextField),
+          'Paciente duplicado en sistema',
+        );
+        await tester.tap(find.text('Eliminar'));
+        await tester.pumpAndSettle();
+
+        verify(
+          () => db.logEmergencyAccess(
+            patientUid: clinicalEntry.deviceUid,
+            patientName: clinicalEntry.patientName,
+            userId: any(named: 'userId'),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+            reason: 'discard_clinical_data: Paciente duplicado en sistema',
+          ),
+        ).called(1);
+        verify(() => db.deleteRecord(clinicalEntry.patientId)).called(1);
       },
     );
 

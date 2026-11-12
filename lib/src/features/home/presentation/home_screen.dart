@@ -235,7 +235,49 @@ class HomeScreen extends StatelessWidget {
       UserRole.superadmin => _buildSuperadminBody(context),
       UserRole.orgAdmin => _buildOrgAdminBody(context),
       UserRole.doctor || UserRole.nurse => _buildClinicalBody(context, user),
+      UserRole.unknown => _buildUnknownRoleBody(context),
     };
+  }
+
+  Widget _buildUnknownRoleBody(BuildContext context) {
+    final s = AppStrings.of(context);
+    final isEs = s.isEs;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_outline, size: 48, color: AppColors.error),
+            const SizedBox(height: 16),
+            Text(
+              isEs
+                  ? 'Rol no soportado en esta versión'
+                  : 'Unsupported role in this version',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isEs
+                  ? 'Por favor, comuníquese con el administrador para verificar sus permisos o actualice la app.'
+                  : 'Please contact an administrator to verify your permissions or update the app.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 24),
+            _AccountButtons(onLogout: () => unawaited(confirmLogout(context))),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildSuperadminBody(BuildContext context) {
@@ -365,6 +407,7 @@ class _Header extends StatelessWidget {
       UserRole.orgAdmin => s.roleOrgAdmin,
       UserRole.doctor => s.roleDoctor,
       UserRole.nurse => s.roleNurse,
+      UserRole.unknown => s.isEs ? 'Desconocido' : 'Unknown',
     };
   }
 

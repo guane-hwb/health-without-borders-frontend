@@ -192,14 +192,255 @@ void main() {
     });
   });
 
-  group('Step3PatientData - happy path save fallback', () {
-    testWidgets('unparsable weight/height fall back to null', (tester) async {
+  group('Step3PatientData - validación de peso y talla', () {
+    testWidgets(
+      'campos vacíos de peso y talla se guardan como null sin error',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 3500);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+
+        var continued = false;
+        final draft = RegisterDraft();
+        await tester.pumpWidget(
+          _wrap(
+            Step3PatientData(
+              draft: draft,
+              onBack: () {},
+              onContinue: () => continued = true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final textFields = find.byType(TextField);
+        await tester.enterText(textFields.at(0), 'P-UID-999');
+        await tester.enterText(textFields.at(1), '1098765432');
+        await tester.enterText(textFields.at(2), 'Carmen');
+        await tester.enterText(textFields.at(4), 'Vargas');
+        draft.dob = DateTime(1995, 5, 20);
+
+        final allFields = tester
+            .widgetList<TextField>(find.byType(TextField))
+            .toList();
+
+        for (var i = 0; i < allFields.length; i++) {
+          final hint = allFields[i].decoration?.hintText ?? '';
+          if (hint.contains('Riohacha') || hint.contains('ej: Riohacha')) {
+            await tester.enterText(textFields.at(i), 'Riohacha');
+          } else if (hint.contains('La Guajira') ||
+              hint.contains('ej: La Guajira')) {
+            await tester.enterText(textFields.at(i), 'La Guajira');
+          }
+        }
+
+        await tester.pumpAndSettle();
+        await _reveal(tester, _continueButton);
+        await tester.tap(_continueButton);
+        await tester.pumpAndSettle();
+
+        expect(continued, isTrue);
+        expect(draft.weight, isNull);
+        expect(draft.height, isNull);
+      },
+    );
+
+    testWidgets(
+      'peso fuera de rango (-5, 0, 351) o texto inválido impide continuar',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 3500);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+
+        for (final invalidWeight in ['-5', '0', '351', '18 kg', '18,4,2']) {
+          var continued = false;
+          final draft = RegisterDraft();
+          await tester.pumpWidget(
+            _wrap(
+              Step3PatientData(
+                draft: draft,
+                onBack: () {},
+                onContinue: () => continued = true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final textFields = find.byType(TextField);
+          await tester.enterText(textFields.at(0), 'P-UID-999');
+          await tester.enterText(textFields.at(1), '1098765432');
+          await tester.enterText(textFields.at(2), 'Carmen');
+          await tester.enterText(textFields.at(4), 'Vargas');
+          draft.dob = DateTime(1995, 5, 20);
+
+          final allFields = tester
+              .widgetList<TextField>(find.byType(TextField))
+              .toList();
+
+          for (var i = 0; i < allFields.length; i++) {
+            final hint = allFields[i].decoration?.hintText ?? '';
+            if (hint.contains('Riohacha') || hint.contains('ej: Riohacha')) {
+              await tester.enterText(textFields.at(i), 'Riohacha');
+            } else if (hint.contains('La Guajira') ||
+                hint.contains('ej: La Guajira')) {
+              await tester.enterText(textFields.at(i), 'La Guajira');
+            }
+          }
+
+          final weightField = find.byWidgetPredicate(
+            (w) =>
+                w is TextField &&
+                (w.decoration?.hintText ?? '').contains('39.2'),
+          );
+          await tester.enterText(weightField, invalidWeight);
+
+          await tester.pumpAndSettle();
+          await _reveal(tester, _continueButton);
+          await tester.tap(_continueButton);
+          await tester.pumpAndSettle();
+
+          expect(
+            continued,
+            isFalse,
+            reason: 'No debió continuar con peso: $invalidWeight',
+          );
+          expect(find.byIcon(Icons.error_outline), findsOneWidget);
+          expect(
+            find.textContaining('El peso debe estar entre 0.2 kg y 350 kg'),
+            findsOneWidget,
+          );
+        }
+      },
+    );
+
+    testWidgets(
+      'talla fuera de rango (19, 251) o texto inválido impide continuar',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 3500);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+
+        for (final invalidHeight in ['-10', '19', '251', '150 cm']) {
+          var continued = false;
+          final draft = RegisterDraft();
+          await tester.pumpWidget(
+            _wrap(
+              Step3PatientData(
+                draft: draft,
+                onBack: () {},
+                onContinue: () => continued = true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final textFields = find.byType(TextField);
+          await tester.enterText(textFields.at(0), 'P-UID-999');
+          await tester.enterText(textFields.at(1), '1098765432');
+          await tester.enterText(textFields.at(2), 'Carmen');
+          await tester.enterText(textFields.at(4), 'Vargas');
+          draft.dob = DateTime(1995, 5, 20);
+
+          final allFields = tester
+              .widgetList<TextField>(find.byType(TextField))
+              .toList();
+
+          for (var i = 0; i < allFields.length; i++) {
+            final hint = allFields[i].decoration?.hintText ?? '';
+            if (hint.contains('Riohacha') || hint.contains('ej: Riohacha')) {
+              await tester.enterText(textFields.at(i), 'Riohacha');
+            } else if (hint.contains('La Guajira') ||
+                hint.contains('ej: La Guajira')) {
+              await tester.enterText(textFields.at(i), 'La Guajira');
+            }
+          }
+
+          final heightField = find.byWidgetPredicate(
+            (w) =>
+                w is TextField &&
+                (w.decoration?.hintText ?? '').contains('148'),
+          );
+          await tester.enterText(heightField, invalidHeight);
+
+          await tester.pumpAndSettle();
+          await _reveal(tester, _continueButton);
+          await tester.tap(_continueButton);
+          await tester.pumpAndSettle();
+
+          expect(
+            continued,
+            isFalse,
+            reason: 'No debió continuar con talla: $invalidHeight',
+          );
+          expect(find.byIcon(Icons.error_outline), findsOneWidget);
+          expect(
+            find.textContaining('La altura debe estar entre 20 cm y 250 cm'),
+            findsOneWidget,
+          );
+        }
+      },
+    );
+
+    testWidgets('acepta decimales con coma (ej. 18,4) y continúa', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3500);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      var continued = false;
       final draft = RegisterDraft();
       await tester.pumpWidget(
-        _wrap(Step3PatientData(draft: draft, onBack: () {}, onContinue: () {})),
+        _wrap(
+          Step3PatientData(
+            draft: draft,
+            onBack: () {},
+            onContinue: () => continued = true,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
-      expect(find.byType(Step3PatientData), findsOneWidget);
+
+      final textFields = find.byType(TextField);
+      await tester.enterText(textFields.at(0), 'P-UID-999');
+      await tester.enterText(textFields.at(1), '1098765432');
+      await tester.enterText(textFields.at(2), 'Carmen');
+      await tester.enterText(textFields.at(4), 'Vargas');
+      draft.dob = DateTime(1995, 5, 20);
+
+      final allFields = tester
+          .widgetList<TextField>(find.byType(TextField))
+          .toList();
+
+      for (var i = 0; i < allFields.length; i++) {
+        final hint = allFields[i].decoration?.hintText ?? '';
+        if (hint.contains('Riohacha') || hint.contains('ej: Riohacha')) {
+          await tester.enterText(textFields.at(i), 'Riohacha');
+        } else if (hint.contains('La Guajira') ||
+            hint.contains('ej: La Guajira')) {
+          await tester.enterText(textFields.at(i), 'La Guajira');
+        }
+      }
+
+      final weightField = find.byWidgetPredicate(
+        (w) =>
+            w is TextField && (w.decoration?.hintText ?? '').contains('39.2'),
+      );
+      await tester.enterText(weightField, '18,4');
+
+      final heightField = find.byWidgetPredicate(
+        (w) => w is TextField && (w.decoration?.hintText ?? '').contains('148'),
+      );
+      await tester.enterText(heightField, '110,5');
+
+      await tester.pumpAndSettle();
+      await _reveal(tester, _continueButton);
+      await tester.tap(_continueButton);
+      await tester.pumpAndSettle();
+
+      expect(continued, isTrue);
+      expect(draft.weight, 18.4);
+      expect(draft.height, 110.5);
     });
   });
 
@@ -226,10 +467,14 @@ void main() {
         await tester.enterText(docField, '123#');
         await tester.pumpAndSettle();
 
+        final invalidTextField = tester.widget<TextField>(docField);
+        expect(invalidTextField.controller?.text, '123#');
+
         await tester.enterText(docField, '');
         await tester.pumpAndSettle();
 
-        expect(tester.takeException(), isNull);
+        final emptyTextField = tester.widget<TextField>(docField);
+        expect(emptyTextField.controller?.text, isEmpty);
       },
     );
 
@@ -254,24 +499,13 @@ void main() {
         await tester.tap(expandIcon);
         await tester.pumpAndSettle();
 
-        await tester.tap(expandIcon);
-        await tester.pumpAndSettle();
-
-        await tester.tap(expandIcon);
-        await tester.pumpAndSettle();
-
         final menuItem = find.byType(MenuItemButton);
-        if (menuItem.evaluate().isNotEmpty) {
-          await tester.tap(menuItem.first);
-        } else {
-          final textFinder = find.textContaining('Cédula');
-          if (textFinder.evaluate().isNotEmpty) {
-            await tester.tap(textFinder.first);
-          }
-        }
+        expect(menuItem, findsWidgets);
+
+        await tester.tap(menuItem.first);
         await tester.pumpAndSettle();
 
-        expect(tester.takeException(), isNull);
+        expect(find.byType(Step3PatientData), findsOneWidget);
       },
     );
 

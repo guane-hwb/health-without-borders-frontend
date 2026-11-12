@@ -671,7 +671,7 @@ void main() {
     );
   }
 
-  group('reconstructFromTriage - segundo acudiente', () {
+  group('reconstructFromTriage - segundo cuidador', () {
     test('con guardian2DeviceUid no vacío arma guardian2Info', () {
       final record = NfcGuardianPayload.reconstructFromTriage(
         triageWith(guardian2DeviceUid: 'GUARDIAN2:UID'),
@@ -765,7 +765,7 @@ void main() {
     });
   });
 
-  group('signature stripping - segundo acudiente', () {
+  group('signature stripping - segundo cuidador', () {
     test('también elimina signatureBase64 de guardian2Info', () {
       final record = _record(
         guardian2: GuardianInfo(
@@ -915,4 +915,41 @@ void main() {
       expect(fit.totalVaccines, 1);
     });
   });
+
+  test(
+    'el registro base de un menor cabe en una NTAG215 (registro MIME incluido)',
+    () {
+      final codec = NfcPayloadCodec(hexKey: '0123456789abcdef' * 4);
+      final minorRecord = _record(
+        allergies: <AllergyInfo>[
+          AllergyInfo(category: '01', allergen: 'Penicilina', reaction: 'Rash'),
+        ],
+        guardian: GuardianInfo(
+          name: 'María Pérez',
+          relationship: '01',
+          phone: '3001234567',
+          deviceUid: '04:8E:7F:11:22:33:44',
+          documentType: 'CC',
+          documentNumber: '1098765432',
+          consent: GuardianConsent(
+            accepted: true,
+            acceptedAt: '2026-01-01T00:00:00Z',
+            email: 'maria@example.com',
+          ),
+        ),
+      );
+
+      final fit = NfcGuardianPayload.buildWithinCapacity(
+        record: minorRecord,
+        capacityBytes: guardianPayloadBudget(kNtag215NdefCapacity),
+        estimateSize: codec.estimateSize,
+      );
+
+      expect(fit.fits, isTrue);
+      expect(
+        fit.estimatedBytes,
+        lessThanOrEqualTo(guardianPayloadBudget(kNtag215NdefCapacity)),
+      );
+    },
+  );
 }

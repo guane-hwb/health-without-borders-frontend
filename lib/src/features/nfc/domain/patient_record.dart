@@ -503,10 +503,10 @@ class GuardianInfo {
     'relationship': relationship,
     'phone': phone,
     if (deviceUid != null) 'device_uid': deviceUid,
-    if (docType != null) 'docType': docType,
-    if (docNumber != null) 'docNumber': docNumber,
-    if (documentType != null) 'documentType': documentType,
-    if (documentNumber != null) 'documentNumber': documentNumber,
+    if (documentType != null || docType != null)
+      'documentType': documentType ?? docType,
+    if (documentNumber != null || docNumber != null)
+      'documentNumber': documentNumber ?? docNumber,
     if (consent != null) 'consent': consent!.toJson(),
   };
 

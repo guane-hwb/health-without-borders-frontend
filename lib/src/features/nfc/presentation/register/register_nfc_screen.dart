@@ -384,12 +384,56 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
       required String title,
       required String instruction,
     }) async {
+      // Check before asking for the tap, with the same payload budget the
+      // write uses, on the smaller chip ADR-004 supports.
+      final fitBuilder = guardianFitBuilder(record: record, codec: codec);
+      final int ntag215Budget = guardianPayloadBudget(kNtag215NdefCapacity);
+      final preFit = fitBuilder(ntag215Budget);
+
+      if (!preFit.fits) {
+        // The whole NDEF message, so it compares with the chip's capacity.
+        final int neededBytes =
+            preFit.estimatedBytes + (kNtag215NdefCapacity - ntag215Budget);
+        final alertText = isEs
+            ? 'El registro del menor supera la capacidad de un dispositivo '
+                  'NTAG215 ($neededBytes B requeridos > '
+                  '$kNtag215NdefCapacity B). Utilice un dispositivo NTAG216 '
+                  'como dispositivo del cuidador.'
+            : 'The minor\'s record exceeds the capacity of an NTAG215 device '
+                  '($neededBytes B needed > $kNtag215NdefCapacity B). '
+                  'Please use an NTAG216 device as the guardian device.';
+
+        final useLargerCard = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(
+              isEs
+                  ? 'Se requiere un dispositivo NTAG216'
+                  : 'NTAG216 device required',
+            ),
+            content: Text(alertText),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(isEs ? 'Omitir' : 'Skip'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: Text(isEs ? 'Tengo NTAG216' : 'I have NTAG216'),
+              ),
+            ],
+          ),
+        );
+
+        if (useLargerCard != true || !mounted) return;
+      }
+
       final ok = await showNfcGuidedWrite(
         context,
         title: title,
         instruction: instruction,
         write: () => makeService().writeGuardianRecord(
-          buildFit: guardianFitBuilder(record: record, codec: codec),
+          buildFit: fitBuilder,
           expectedUid: expectedUid,
           patientId: record.patientId,
         ),

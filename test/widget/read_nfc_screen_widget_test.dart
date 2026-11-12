@@ -31,6 +31,14 @@ class MockLocalDatabase extends Mock implements LocalDatabase {}
 
 class _MockPayloadService extends Mock implements NfcPayloadService {}
 
+class _TestUserSession extends Fake implements UserSession {
+  @override
+  String get id => 'capture-test-user';
+
+  @override
+  String get organizationId => 'capture-test-organization';
+}
+
 class FakePatientRepository implements PatientRepository {
   bool throw403ForGuardian = false;
   bool throwGenericError = false;
@@ -694,7 +702,7 @@ void main() {
       expect(find.byIcon(Icons.wifi), findsOneWidget);
     });
 
-    testWidgets('el 403 del acudiente se reconoce por code, no por el texto', (
+    testWidgets('el 403 del cuidador se reconoce por code, no por el texto', (
       tester,
     ) async {
       fakeRepo.throw403ForGuardian = true;
@@ -736,14 +744,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.textContaining('El dispositivo no corresponde a ningún acudiente'),
+        find.textContaining('El dispositivo no corresponde a ningún cuidador'),
         findsOneWidget,
       );
       expect(find.text('Guardian inválido.'), findsNothing);
     });
 
     testWidgets(
-      'un 403 de cuenta desactivada no pide el dispositivo del acudiente',
+      'un 403 de cuenta desactivada no pide el dispositivo del cuidador',
       (tester) async {
         fakeRepo.throw403ForGuardian = true;
         fakeRepo.guardianRequiredMessage = 'Inactive user (guardian)';
@@ -1642,8 +1650,8 @@ void main() {
     );
 
     testWidgets(
-      'Con keyring y sin override, el escaneo del cuidador offline lee la '
-      'tarjeta con el servicio de la fábrica',
+      'Con keyring y sin override, el escaneo del cuidador offline lee el '
+      'dispositivo con el servicio de la fábrica',
       (tester) async {
         await reachOfflineGate(
           tester,
@@ -1678,9 +1686,7 @@ void main() {
       'Acceso de emergencia con usuario autenticado registra su id y su '
       'organización',
       (tester) async {
-        final UserSession session = UserSession.fromEmail(
-          'capture.test@example.com',
-        );
+        final UserSession session = _TestUserSession();
         fakeAuth.mockUser = session;
 
         await reachOfflineGate(tester, triage: makeTriage(minor: true));

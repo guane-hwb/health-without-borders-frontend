@@ -232,8 +232,8 @@ void main() {
     }
   });
 
-  group('Consentimiento al editar el acudiente', () {
-    testWidgets('editar el mismo acudiente conserva su consentimiento', (
+  group('Consentimiento al editar el cuidador', () {
+    testWidgets('editar el mismo cuidador conserva su consentimiento', (
       tester,
     ) async {
       GuardianInfo? received;

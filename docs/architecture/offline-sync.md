@@ -111,7 +111,13 @@ local queue and the guardian device.
 A `/sync` that the server accepts (`201`) answers with `record_version` (the
 version after this sync) and `conflicts` (the parts it kept as it had them, for
 example `stale_payload_base_version` when `baseVersion` was older than its
-own). The engine announces every saved record on `SyncEngine.savedRecords`:
+own). Two more codes have their own message in `SyncConflictCode.describe`:
+`missing_base_version` (a copy without `baseVersion`, from an older build or
+a guardian device written before the record had a version, would have removed
+allergies or background items, and the server kept them) and `identity_edit_not_applied` (names, birth date, sex or
+document differ from the server's, which a sync never changes). Any other code
+gets a generic line. The engine announces every saved record on
+`SyncEngine.savedRecords`:
 
 - The open profile adopts the new version, so its next edit is not taken for
   an old copy. An edit made while the sync was in flight is saved again on top
@@ -130,8 +136,15 @@ own). The engine announces every saved record on `SyncEngine.savedRecords`:
 Every row carries `owner_user_id`. The engine, the sync queue and the home counts
 select the signed-in user's rows (and ownerless rows, which the first sync
 adopts). Another user's pending rows stay on the device, encrypted and unlisted,
-until that user signs in again; the queue only shows how many there are.
-Signing in as someone else no longer blocks or offers to discard them.
+until that user signs in again; the queue shows how many there are via
+`_foreignPendingCount` to alert the active worker.
+Signing in as someone else does not overwrite or discard them.
+
+#### Operational Policy & Resolution Path (Pilot Protocol)
+In clinical field missions with staff turnover, pending records left behind by a previous professional are handled as follows:
+1. **Field Handover Protocol:** Before rotating tablets or swapping brigade shifts, staff must perform a manual sync (`Sync all`) while connectivity is available.
+2. **Re-authentication on Same Device:** If records remain pending, the original author must log in on the device to complete the sync.
+3. **Supervisor / Admin Recovery Escalation:** If the author has permanently left the mission, the physical device must be presented to an authorized Organization Administrator (`org_admin`). Under the supervised procedure, the admin coordinates session elevation or backend account re-authentication to drain the local queue, preventing data loss before decommissioning or reassigning the tablet.
 
 `AuthRepository.clearSession()` deletes only the session's keys on a phone. On
 the web it still deletes everything, and logout wipes the local PHI.

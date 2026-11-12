@@ -1,7 +1,6 @@
 // lib/src/features/sync/presentation/sync_queue_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../core/di/app_scope.dart';
@@ -13,7 +12,6 @@ import '../../../core/sync/sync_engine.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/locale_switcher.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
-import '../../nfc/domain/patient_record.dart';
 import '../../nfc/presentation/profile/patient_profile_screen.dart';
 
 class SyncQueueScreen extends StatefulWidget {
@@ -225,56 +223,11 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
     );
   }
 
-  String _formatClinicalSummary(PatientFullRecord record, bool isEs) {
-    final buffer = StringBuffer();
-    buffer.writeln(
-      isEs ? '=== RESUMEN CLÍNICO ===' : '=== CLINICAL SUMMARY ===',
-    );
-    buffer.writeln(
-      '${isEs ? "Paciente" : "Patient"}: ${record.patientInfo.fullName}',
-    );
-    buffer.writeln(
-      '${isEs ? "Documento" : "Document"}: ${record.patientInfo.identification.documentType} ${record.patientInfo.identification.documentNumber}',
-    );
-    buffer.writeln('');
-
-    if (record.medicalHistory.isNotEmpty) {
-      buffer.writeln(
-        isEs ? '--- CONSULTAS MÉDICAS ---' : '--- MEDICAL CONSULTATIONS ---',
-      );
-      for (final item in record.medicalHistory) {
-        buffer.writeln('• ${isEs ? "Fecha" : "Date"}: ${item.startDateTime}');
-        if (item.clinicalEvaluation.historyOfCurrentIllness != null) {
-          buffer.writeln(
-            '  ${isEs ? "Motivo/Historia" : "Reason/History"}: ${item.clinicalEvaluation.historyOfCurrentIllness}',
-          );
-        }
-        if (item.clinicalEvaluation.treatmentPlanObservations != null) {
-          buffer.writeln(
-            '  ${isEs ? "Plan" : "Plan"}: ${item.clinicalEvaluation.treatmentPlanObservations}',
-          );
-        }
-      }
-      buffer.writeln('');
-    }
-
-    if (record.vaccinationRecord.isNotEmpty) {
-      buffer.writeln(isEs ? '--- VACUNAS ---' : '--- VACCINATIONS ---');
-      for (final v in record.vaccinationRecord) {
-        buffer.writeln(
-          '• ${v.vaccineName} (${isEs ? "Dosis" : "Dose"} ${v.dose}) - ${v.date}',
-        );
-      }
-    }
-
-    return buffer.toString();
-  }
-
   Future<void> _delete(LocalPatientEntry e) async {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
-    final db = AppScope.of(context).localDatabase;
-    final messenger = ScaffoldMessenger.of(context);
+    final scope = AppScope.of(context);
+    final db = scope.localDatabase;
     final record = e.toPatientRecord();
 
     final hasClinicalData =
@@ -282,74 +235,28 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
         (record.medicalHistory.isNotEmpty ||
             record.vaccinationRecord.isNotEmpty);
 
-    final ok = await showDialog<bool>(
+    final reason = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.deleteRecord),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${s.deleteRecordConfirm}\n\n${e.maskedName}'),
-            if (hasClinicalData) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF3CD),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFFFEEBA)),
-                ),
-                child: Text(
-                  isEs
-                      ? 'Atención: Este registro contiene consultas médicas o vacunas que no se han sincronizado.'
-                      : 'Warning: This record contains unsynced medical consultations or vaccines.',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF856404),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          if (hasClinicalData)
-            TextButton.icon(
-              icon: const Icon(Icons.copy, size: 16),
-              label: Text(isEs ? 'Copiar datos' : 'Copy clinical data'),
-              onPressed: () {
-                final summary = _formatClinicalSummary(record, isEs);
-                Clipboard.setData(ClipboardData(text: summary));
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      isEs
-                          ? 'Resumen clínico copiado al portapapeles.'
-                          : 'Clinical summary copied to clipboard.',
-                    ),
-                    backgroundColor: AppColors.primary,
-                  ),
-                );
-              },
-            ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(s.cancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              s.delete,
-              style: const TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
+      builder: (_) => _DeleteRecordDialog(
+        entry: e,
+        s: s,
+        isEs: isEs,
+        hasClinicalData: hasClinicalData,
       ),
     );
 
-    if (ok == true && mounted) {
+    if (reason != null && mounted) {
+      if (hasClinicalData) {
+        final currentUser = scope.authRepository.currentUser;
+        await db.logEmergencyAccess(
+          patientUid: e.deviceUid,
+          patientName: e.patientName,
+          userId: currentUser?.id,
+          ownerUserId: currentUser?.id,
+          organizationId: currentUser?.organizationId,
+          reason: 'discard_clinical_data: $reason',
+        );
+      }
       await db.deleteRecord(e.patientId);
       await _load();
     }
@@ -650,30 +557,6 @@ class _QuarantineCard extends StatelessWidget {
               color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              icon: const Icon(Icons.copy, size: 14),
-              label: Text(
-                isEs ? 'Copiar datos crudos' : 'Copy raw data',
-                style: const TextStyle(fontSize: 12),
-              ),
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: rawData));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      isEs
-                          ? 'Datos en cuarentena copiados al portapapeles.'
-                          : 'Quarantined data copied to clipboard.',
-                    ),
-                    backgroundColor: AppColors.primary,
-                  ),
-                );
-              },
-            ),
-          ),
         ],
       ),
     );
@@ -696,8 +579,6 @@ class _SyncCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isConflict = entry.syncErrorCode == 409;
     final hasErr = entry.syncError?.isNotEmpty == true;
-    // A transient refusal (sync_in_progress) retries by itself: pending, not
-    // an error the user has to fix.
     final bool showsError =
         hasErr && !ApiErrorCode.isTransient(entry.syncError);
     final isEs = s.isEs;
@@ -920,7 +801,6 @@ class _SyncCard extends StatelessWidget {
       );
 }
 
-/// A sync the server accepted without taking all of it (see SyncNotice).
 class _SyncNoticeCard extends StatelessWidget {
   const _SyncNoticeCard({required this.notice, required this.onDismiss});
 
@@ -1009,6 +889,108 @@ class _SyncNoticeCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DeleteRecordDialog extends StatefulWidget {
+  const _DeleteRecordDialog({
+    required this.entry,
+    required this.s,
+    required this.isEs,
+    required this.hasClinicalData,
+  });
+
+  final LocalPatientEntry entry;
+  final AppStrings s;
+  final bool isEs;
+  final bool hasClinicalData;
+
+  @override
+  State<_DeleteRecordDialog> createState() => _DeleteRecordDialogState();
+}
+
+class _DeleteRecordDialogState extends State<_DeleteRecordDialog> {
+  final _reasonCtrl = TextEditingController();
+  String? _validationError;
+
+  @override
+  void dispose() {
+    _reasonCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.s;
+    return AlertDialog(
+      title: Text(s.deleteRecord),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${s.deleteRecordConfirm}\n\n${widget.entry.maskedName}'),
+            if (widget.hasClinicalData) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3CD),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFFEEBA)),
+                ),
+                child: Text(
+                  widget.isEs
+                      ? 'Atención: Este registro contiene consultas médicas o vacunas que no se han sincronizado. Se requiere justificación clínica para descartarlo.'
+                      : 'Warning: This record contains unsynced medical consultations or vaccines. Clinical justification is required to discard it.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF856404),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _reasonCtrl,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: s.deleteRecordReasonLabel,
+                  hintText: s.deleteRecordReasonHint,
+                  errorText: _validationError,
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (_) {
+                  if (_validationError != null) {
+                    setState(() => _validationError = null);
+                  }
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: Text(s.cancel),
+        ),
+        TextButton(
+          onPressed: () {
+            final trimmed = _reasonCtrl.text.trim();
+            if (widget.hasClinicalData && trimmed.isEmpty) {
+              setState(() {
+                _validationError = s.deleteRecordReasonRequired;
+              });
+              return;
+            }
+            Navigator.of(context).pop(trimmed);
+          },
+          child: Text(s.delete, style: const TextStyle(color: AppColors.error)),
+        ),
+      ],
     );
   }
 }

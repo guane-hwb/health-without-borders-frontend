@@ -115,8 +115,6 @@ abstract final class NfcGuardianPayload {
     var size = estimateSize(aliasGuardianPayload(payload));
 
     while (size > capacityBytes && (n > 0 || m > 0)) {
-      // Drop from whichever history is currently larger; alternate on ties so
-      // neither one is starved unnecessarily.
       if (n >= m && n > 0) {
         n--;
       } else {
@@ -289,8 +287,6 @@ abstract final class NfcGuardianPayload {
     return visit;
   }
 
-  /// Removes a guardian's consent signature (PNG base64) from its serialized
-  /// map, if present. Accepts the raw `guardianInfo`/`guardian2Info` value.
   static void _stripConsentSignature(Object? guardianMap) {
     if (guardianMap is Map && guardianMap['consent'] is Map) {
       (guardianMap['consent'] as Map).remove('signatureBase64');

@@ -49,6 +49,11 @@ abstract final class ApiErrorCode {
   /// transient: asking again gives the same answer.
   static const String storedRecordInvalid = 'stored_record_invalid';
 
+  /// The session was opened with a temporary password an administrator set
+  /// (403): only `/users/me` and the password change answer until the user
+  /// chooses their own. Not a fault of the record: keep it queued.
+  static const String passwordChangeRequired = 'password_change_required';
+
   /// The account can no longer use the API: sign out, keep pending data.
   static bool isAccountInactive(String? code) =>
       code == userInactive || code == organizationInactive;
@@ -101,11 +106,11 @@ abstract final class ApiErrorCode {
     loginPaused => tooManyAttempts(null, isEs: isEs),
     guardianRequired =>
       isEs
-          ? 'Paciente menor de edad: se requiere el dispositivo del acudiente.'
+          ? 'Paciente menor de edad: se requiere el dispositivo del cuidador.'
           : 'Minor patient: the guardian device is required.',
     guardianMismatch =>
       isEs
-          ? 'El dispositivo no corresponde a ningún acudiente registrado de '
+          ? 'El dispositivo no corresponde a ningún cuidador registrado de '
                 'este paciente.'
           : 'This device does not belong to any registered guardian of this '
                 'patient.',
@@ -138,6 +143,10 @@ abstract final class ApiErrorCode {
                 'Usa un dispositivo nuevo.'
           : 'This device was retired and no longer identifies a '
                 'patient. Use a new device.',
+    passwordChangeRequired =>
+      isEs
+          ? 'Debes cambiar tu contraseña temporal antes de continuar.'
+          : 'You must change your temporary password before continuing.',
     storedRecordInvalid =>
       isEs
           ? 'No se pudo leer el registro de este paciente en el servidor. '

@@ -1,7 +1,9 @@
 // lib/src/features/auth/data/auth_repository.dart
 
+import 'dart:async';
 import 'dart:convert';
-import 'package:crypto/crypto.dart' as crypto_pkg;
+import 'dart:math';
+import 'package:cryptography/cryptography.dart' show Hmac, Pbkdf2, SecretKey;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -48,7 +50,11 @@ class AuthRepository implements TokenProvider {
   static const String sessionKey = _sessionKey;
   @visibleForTesting
   static const String lastUserIdKey = _lastUserIdKey;
+  @visibleForTesting
+  static const String lockHashKey = _lockHashKey;
   static const String _lockHashKey = 'hwb_local_lock_hash';
+
+  static const String _pendingRevocationsKey = 'hwb_pending_logout_tokens';
 
   static const String _tokenKey = 'hwb_access_token';
   static const String _refreshKey = 'hwb_refresh_token';
@@ -66,6 +72,7 @@ class AuthRepository implements TokenProvider {
     _nfcKeyringKey,
     _clockMarkKey,
     _sessionKey,
+    _lockHashKey,
   ];
 
   static const Duration clockRollbackTolerance = Duration(hours: 24);
@@ -83,6 +90,12 @@ class AuthRepository implements TokenProvider {
   DateTime? _cachedClockMark;
   UserSession? _session;
   bool _isSessionRestoredFromStorage = false;
+
+  final ValueNotifier<bool> _isLocalLocked = ValueNotifier<bool>(false);
+  ValueListenable<bool> get isLocalLocked => _isLocalLocked;
+  void setLocalLocked(bool locked) {
+    _isLocalLocked.value = locked;
+  }
 
   bool get isSessionRestoredFromStorage => _isSessionRestoredFromStorage;
 
@@ -174,6 +187,7 @@ class AuthRepository implements TokenProvider {
     }
 
     _cachedToken = accessToken;
+    _isLocalLocked.value = false;
 
     await _saveLocalLockHash(fetchedSession.email, password);
 
@@ -219,30 +233,87 @@ class AuthRepository implements TokenProvider {
       }
     }
 
+    flushPendingRevocations().ignore();
     return _session!;
   }
 
+  static const int _pbkdf2Iterations = 210000;
+
   Future<void> _saveLocalLockHash(String email, String rawPassword) async {
-    final bytes = utf8.encode('${email.trim().toLowerCase()}:$rawPassword');
-    final digest = crypto_pkg.sha256.convert(bytes).toString();
     try {
-      await _secureStorage.write(key: _lockHashKey, value: digest);
+      final random = Random.secure();
+      final saltBytes = Uint8List.fromList(
+        List<int>.generate(16, (_) => random.nextInt(256)),
+      );
+      final pbkdf2 = Pbkdf2(
+        macAlgorithm: Hmac.sha256(),
+        iterations: _pbkdf2Iterations,
+        bits: 256,
+      );
+      final secretKey = SecretKey(utf8.encode(rawPassword));
+      final newKey = await pbkdf2.deriveKey(
+        secretKey: secretKey,
+        nonce: saltBytes,
+      );
+      final hashBytes = await newKey.extractBytes();
+
+      final record = <String, dynamic>{
+        'email': email.trim().toLowerCase(),
+        'salt': base64Encode(saltBytes),
+        'iterations': _pbkdf2Iterations,
+        'hash': base64Encode(hashBytes),
+      };
+
+      await _secureStorage.write(key: _lockHashKey, value: jsonEncode(record));
     } catch (_) {}
   }
 
   Future<bool> verifyLocalLockPassword(String rawPassword) async {
     final session = _session;
-    if (session == null || session.email.isEmpty) return false;
+    if (session == null || session.email.trim().isEmpty) return false;
 
     try {
-      final storedHash = await _secureStorage.read(key: _lockHashKey);
-      if (storedHash == null || storedHash.isEmpty) return false;
+      final raw = await _secureStorage.read(key: _lockHashKey);
+      if (raw == null || raw.isEmpty) return false;
 
-      final bytes = utf8.encode(
-        '${session.email.trim().toLowerCase()}:$rawPassword',
+      final Object? decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return false;
+
+      final storedEmail = decoded['email'] as String?;
+      final saltBase64 = decoded['salt'] as String?;
+      final iterations =
+          (decoded['iterations'] as num?)?.toInt() ?? _pbkdf2Iterations;
+      final hashBase64 = decoded['hash'] as String?;
+
+      if (storedEmail == null ||
+          saltBase64 == null ||
+          hashBase64 == null ||
+          storedEmail != session.email.trim().toLowerCase()) {
+        return false;
+      }
+
+      final salt = base64Decode(saltBase64);
+      final expectedHash = base64Decode(hashBase64);
+
+      final pbkdf2 = Pbkdf2(
+        macAlgorithm: Hmac.sha256(),
+        iterations: iterations,
+        bits: 256,
       );
-      final currentHash = crypto_pkg.sha256.convert(bytes).toString();
-      return currentHash == storedHash;
+      final secretKey = SecretKey(utf8.encode(rawPassword));
+      final derived = await pbkdf2.deriveKey(secretKey: secretKey, nonce: salt);
+      final computedHash = await derived.extractBytes();
+
+      if (computedHash.length != expectedHash.length) return false;
+      var diff = 0;
+      for (var i = 0; i < computedHash.length; i++) {
+        diff |= computedHash[i] ^ expectedHash[i];
+      }
+      final isCorrect = diff == 0;
+      if (isCorrect) {
+        _isLocalLocked.value = false;
+      }
+      return isCorrect;
     } catch (_) {
       return false;
     }
@@ -267,9 +338,12 @@ class AuthRepository implements TokenProvider {
   Future<UserSession?> getCurrentUser() async {
     if (_session != null) return _session;
     try {
-      final token = await getAccessToken();
+      final String? token = _cachedToken ?? await _readStoredToken();
+      if (token == null || token.isEmpty) return null;
       _updateSession(await _fetchMe(token));
-    } catch (_) {}
+    } catch (_) {
+      return null;
+    }
     return _session;
   }
 
@@ -278,7 +352,6 @@ class AuthRepository implements TokenProvider {
 
     final String? token = await _readStoredToken();
     if (token == null || token.isEmpty) {
-      if (_isWeb) await wipeLocalPhi(force: true);
       return null;
     }
     _cachedToken = token;
@@ -288,14 +361,22 @@ class AuthRepository implements TokenProvider {
     final UserSession? persisted = await _readPersistedSession();
     if (persisted != null) {
       _isSessionRestoredFromStorage = true;
+      _isLocalLocked.value = true;
       _updateSession(persisted);
+
+      if (_cachedKeyring == null) {
+        await getNfcKeyring();
+      }
+      flushPendingRevocations().ignore();
       return _session;
     }
 
     try {
       final UserSession fetched = await _fetchMe(token);
       _updateSession(fetched);
+      _isLocalLocked.value = true;
       if (fetched.id.isNotEmpty) await _persistSession(fetched);
+      flushPendingRevocations().ignore();
     } catch (_) {}
     return _session;
   }
@@ -404,6 +485,7 @@ class AuthRepository implements TokenProvider {
       if (session.id.isNotEmpty) await _persistSession(_session!);
       await _saveLocalLockHash(session.email, newPassword);
     }
+    flushPendingRevocations().ignore();
     return _session!;
   }
 
@@ -413,7 +495,21 @@ class AuthRepository implements TokenProvider {
       return null;
     }
 
-    return _heldKeyring();
+    if (_isLocalLocked.value) {
+      return null;
+    }
+
+    final NfcKeyring? held = await _heldKeyring();
+    if (held != null && held.isNotEmpty) return held;
+
+    if (_cachedToken != null && _cachedToken!.isNotEmpty) {
+      try {
+        await _fetchMe(_cachedToken!);
+        if (_cachedKeyring?.isNotEmpty == true) return _cachedKeyring;
+      } catch (_) {}
+    }
+
+    return null;
   }
 
   /// The ring this device holds, in memory or in the secure store. Callers that
@@ -471,22 +567,157 @@ class AuthRepository implements TokenProvider {
     } catch (_) {}
   }
 
-  Future<void> logout({bool wipeLocalData = false}) async {
+  // ── Pending Revocations ───────────────────────────────────────────────────
+
+  Future<List<String>> getPendingRevocations() async {
     try {
-      final String? token =
-          _cachedToken ?? await _secureStorage.read(key: _tokenKey);
-      if (token != null && token.isNotEmpty) {
-        final String? refreshToken = await _getRefreshToken();
-        await _apiClient.postJson(
-          path: '/api/v1/logout',
-          headers: <String, String>{'Authorization': 'Bearer $token'},
-          body: <String, dynamic>{
-            if (refreshToken != null && refreshToken.isNotEmpty)
-              'refresh_token': refreshToken,
-          },
+      final String? raw = await _secureStorage.read(
+        key: _pendingRevocationsKey,
+      );
+      if (raw == null || raw.isEmpty) return <String>[];
+      final Object? decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .map((dynamic e) => e.toString())
+            .where((String s) => s.isNotEmpty)
+            .toList();
+      }
+    } catch (_) {}
+    return <String>[];
+  }
+
+  Future<void> _enqueuePendingRevocation(String refreshToken) async {
+    if (refreshToken.isEmpty) return;
+    try {
+      final List<String> current = await getPendingRevocations();
+      if (!current.contains(refreshToken)) {
+        current.add(refreshToken);
+        await _secureStorage.write(
+          key: _pendingRevocationsKey,
+          value: jsonEncode(current),
         );
       }
-    } catch (_) {
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error al guardar revocación pendiente de token',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  Future<void> flushPendingRevocations() async {
+    final List<String> pending = await getPendingRevocations();
+    if (pending.isEmpty) return;
+
+    final List<String> remaining = List<String>.from(pending);
+    for (final String token in pending) {
+      try {
+        await _apiClient.postJson(
+          path: '/api/v1/logout',
+          body: <String, dynamic>{'refresh_token': token},
+        );
+        remaining.remove(token);
+      } on ApiException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 400 || e.statusCode == 422) {
+          remaining.remove(token);
+        } else {
+          AppLogger.e(
+            'Error al revocar token pendiente en el servidor',
+            error: e,
+          );
+        }
+      } catch (e) {
+        AppLogger.e('Error al revocar token pendiente en el servidor: $e');
+      }
+    }
+
+    try {
+      if (remaining.isEmpty) {
+        await _secureStorage.delete(key: _pendingRevocationsKey);
+      } else {
+        await _secureStorage.write(
+          key: _pendingRevocationsKey,
+          value: jsonEncode(remaining),
+        );
+      }
+    } catch (_) {}
+  }
+
+  Future<void> logout({bool wipeLocalData = false}) async {
+    String? refreshToken;
+    bool logoutSuccess = false;
+
+    try {
+      String? token = _cachedToken ?? await _secureStorage.read(key: _tokenKey);
+      refreshToken = await _getRefreshToken();
+
+      if (token != null && token.isNotEmpty) {
+        final DateTime? expiry = _jwtExpiry(token);
+        final bool isExpired =
+            expiry == null || !DateTime.now().toUtc().isBefore(expiry);
+
+        if (isExpired) {
+          try {
+            final String? refreshedToken = await refreshAccessToken();
+            if (refreshedToken != null && refreshedToken.isNotEmpty) {
+              token = refreshedToken;
+              refreshToken = await _getRefreshToken();
+            }
+          } catch (e, stack) {
+            AppLogger.e(
+              'No se pudo refrescar el token expirado antes de cerrar sesión',
+              error: e,
+              stackTrace: stack,
+            );
+          }
+        }
+
+        try {
+          await _apiClient.postJson(
+            path: '/api/v1/logout',
+            headers: <String, String>{'Authorization': 'Bearer $token'},
+            body: <String, dynamic>{
+              if (refreshToken != null && refreshToken.isNotEmpty)
+                'refresh_token': refreshToken,
+            },
+          );
+          logoutSuccess = true;
+        } catch (e, stack) {
+          AppLogger.e(
+            'Error al revocar la sesión en el servidor durante logout',
+            error: e,
+            stackTrace: stack,
+          );
+          if (refreshToken != null && refreshToken.isNotEmpty) {
+            await _enqueuePendingRevocation(refreshToken);
+          }
+        }
+      } else if (refreshToken != null && refreshToken.isNotEmpty) {
+        try {
+          await _apiClient.postJson(
+            path: '/api/v1/logout',
+            body: <String, dynamic>{'refresh_token': refreshToken},
+          );
+          logoutSuccess = true;
+        } catch (e, stack) {
+          AppLogger.e(
+            'Error al enviar el refresh token a /logout',
+            error: e,
+            stackTrace: stack,
+          );
+          await _enqueuePendingRevocation(refreshToken);
+        }
+      }
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error inesperado durante el proceso de logout',
+        error: e,
+        stackTrace: stack,
+      );
+      if (refreshToken != null && refreshToken.isNotEmpty && !logoutSuccess) {
+        await _enqueuePendingRevocation(refreshToken);
+      }
     } finally {
       await clearSession();
       if (wipeLocalData || _isWeb) {
@@ -511,6 +742,7 @@ class AuthRepository implements TokenProvider {
     _cachedKeyring = null;
     _cachedClockMark = null;
     _isSessionRestoredFromStorage = false;
+    _isLocalLocked.value = false;
     _updateSession(null);
 
     if (_isWeb) {

@@ -24,7 +24,7 @@ import '../utils/app_logger.dart';
 import '../utils/clinical_time.dart';
 import 'web_storage.dart' as web_storage;
 
-const Set<int> kPermanentSyncErrorCodes = <int>{400, 403, 409, 422};
+const Set<int> kPermanentSyncErrorCodes = <int>{400, 403, 404, 409, 413, 422};
 
 final String _permanentCodesSql = kPermanentSyncErrorCodes.join(', ');
 
@@ -204,7 +204,7 @@ class LocalDatabase {
   ];
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 12;
+  static const int _dbVersion = 13;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
@@ -1064,6 +1064,7 @@ class LocalDatabase {
             sync_error    TEXT,
             sync_error_code INTEGER,
             created_at    TEXT NOT NULL,
+            attempts      INTEGER NOT NULL DEFAULT 0,
             synced_at     TEXT,
             revision      INTEGER NOT NULL DEFAULT 0,
             owner_user_id TEXT,
@@ -1148,6 +1149,14 @@ class LocalDatabase {
         }
         if (oldVersion < 12) {
           await _createRetiredDeviceTables(db);
+        }
+        if (oldVersion < 13) {
+          await _addColumnIfMissing(
+            db,
+            _table,
+            'attempts',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
         }
       },
     );
@@ -1456,7 +1465,7 @@ class LocalDatabase {
       if (uId != null && uId.isNotEmpty) {
         final decryptedUserId = await _decryptAuditPayload(uId);
         if (decryptedUserId == '[CORRUPTED_KEY_MISSING]') {
-          throw AuditDecryptionException(id ?? 0);
+          continue;
         }
         mutable['user_id'] = decryptedUserId;
       }
@@ -1478,7 +1487,7 @@ class LocalDatabase {
       if (name != null && name.isNotEmpty) {
         final decryptedName = await _decryptAuditPayload(name);
         if (decryptedName == '[CORRUPTED_KEY_MISSING]') {
-          throw AuditDecryptionException(id ?? 0);
+          continue;
         }
         mutable['patient_name'] = decryptedName;
       }
@@ -1665,6 +1674,7 @@ class LocalDatabase {
           'is_synced': isSynced ? 1 : 0,
           'sync_error': null,
           'sync_error_code': null,
+          'attempts': 0,
           'created_at': createdAt,
           'synced_at': isSynced ? DateTime.now().toIso8601String() : null,
           'revision': revision,
@@ -2041,10 +2051,12 @@ class LocalDatabase {
             ((current['revision'] as int?) ?? 0) != revision) {
           return;
         }
+        final currentAttempts = (current['attempts'] as int?) ?? 0;
         final updated = <String, dynamic>{
           ...current,
           'sync_error': error,
           'sync_error_code': statusCode,
+          'attempts': currentAttempts + 1,
         };
         await _webPutPatient(patientId, updated);
       });
@@ -2052,18 +2064,16 @@ class LocalDatabase {
     }
     final db = await _database;
     if (revision != null) {
-      await db!.update(
-        _table,
-        <String, dynamic>{'sync_error': error, 'sync_error_code': statusCode},
-        where: 'patient_id = ? AND revision = ?',
-        whereArgs: <Object>[patientId, revision],
+      await db!.rawUpdate(
+        'UPDATE $_table SET sync_error = ?, sync_error_code = ?, attempts = attempts + 1 '
+        'WHERE patient_id = ? AND revision = ?',
+        <Object?>[error, statusCode, patientId, revision],
       );
     } else {
-      await db!.update(
-        _table,
-        <String, dynamic>{'sync_error': error, 'sync_error_code': statusCode},
-        where: 'patient_id = ?',
-        whereArgs: <String>[patientId],
+      await db!.rawUpdate(
+        'UPDATE $_table SET sync_error = ?, sync_error_code = ?, attempts = attempts + 1 '
+        'WHERE patient_id = ?',
+        <Object?>[error, statusCode, patientId],
       );
     }
   }
@@ -2535,6 +2545,7 @@ class LocalPatientEntry {
     required this.isSynced,
     this.syncError,
     this.syncErrorCode,
+    this.attempts = 0,
     required this.createdAt,
     this.syncedAt,
     this.revision = 0,
@@ -2552,6 +2563,7 @@ class LocalPatientEntry {
       isSynced: (row['is_synced'] as int) == 1,
       syncError: row['sync_error'] as String?,
       syncErrorCode: row['sync_error_code'] as int?,
+      attempts: (row['attempts'] as int?) ?? 0,
       createdAt: row['created_at'] as String,
       syncedAt: row['synced_at'] as String?,
       revision: (row['revision'] as int?) ?? 0,
@@ -2568,6 +2580,7 @@ class LocalPatientEntry {
   final bool isSynced;
   final String? syncError;
   final int? syncErrorCode;
+  final int attempts;
   final String createdAt;
   final String? syncedAt;
   final int revision;

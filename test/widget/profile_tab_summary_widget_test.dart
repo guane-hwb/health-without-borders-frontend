@@ -327,7 +327,7 @@ void main() {
     });
   });
 
-  group('Consentimiento del acudiente —', () {
+  group('Consentimiento del cuidador —', () {
     testWidgets(
       'sin consentimiento aceptado muestra "Consentimiento pendiente"',
       (tester) async {

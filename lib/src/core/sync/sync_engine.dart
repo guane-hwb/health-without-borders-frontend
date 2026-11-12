@@ -98,6 +98,8 @@ class SyncEngine {
     Duration(minutes: 30),
   ];
 
+  static const int maxSyncAttemptsBeforeBlocked = 8;
+
   Future<SyncResult>? _activeSyncAllFuture;
   Completer<void>? _syncOneCompletion;
   bool get _syncOneRunning => _syncOneCompletion != null;
@@ -109,6 +111,13 @@ class SyncEngine {
   final ValueNotifier<bool> isOnline = ValueNotifier<bool>(true);
 
   String? get _currentUserId => _authRepo?.currentUser?.id;
+
+  /// On a temporary password the server refuses every route but the password
+  /// change (403 password_change_required), and a 403 would block the queued
+  /// records for good. Nothing is sent until the user chooses their own
+  /// password; the new session starts the engine again.
+  bool get _mustChangePassword =>
+      _authRepo?.currentUser?.mustChangePassword == true;
 
   Future<void> refreshPendingCount() async {
     try {
@@ -271,6 +280,15 @@ class SyncEngine {
       );
     }
 
+    if (_mustChangePassword) {
+      AppLogger.d('syncAll omitido: falta cambiar la contraseña temporal.');
+      return const SyncResult(
+        allSuccessful: false,
+        remainingRetryable: 0,
+        remainingBlocked: 0,
+      );
+    }
+
     await refreshPendingCount();
     await _syncEmergencyLogs();
     await _syncNfcKeyVersions();
@@ -426,9 +444,14 @@ class SyncEngine {
         AppLogger.e(
           'Fallo en sincronización para ${entry.patientId}: $errorMsg',
         );
+        final int nextAttempts = entry.attempts + 1;
+        final int? effectiveStatusCode =
+            nextAttempts >= maxSyncAttemptsBeforeBlocked ? 422 : null;
+
         await _localDb.markSyncError(
           entry.patientId,
           errorMsg,
+          statusCode: effectiveStatusCode,
           revision: entry.revision,
         );
         onRecordSynced?.call(entry.patientId, false, response.message);
@@ -444,30 +467,41 @@ class SyncEngine {
         return _SyncOutcome.abortBatch;
       }
 
-      if (ApiErrorCode.isAccountInactive(e.code)) {
+      // Neither is about the record: stop the batch, keep every row as it is.
+      if (ApiErrorCode.isAccountInactive(e.code) ||
+          e.code == ApiErrorCode.passwordChangeRequired) {
         onRecordSynced?.call(entry.patientId, false, e.code);
         return _SyncOutcome.abortBatch;
       }
 
       final bool isTransientServerError =
-          e.statusCode == 408 ||
-          e.statusCode == 429 ||
-          (e.statusCode != null &&
-              e.statusCode! >= 500 &&
-              e.statusCode! <= 599);
+          (e.statusCode == 408 ||
+              e.statusCode == 429 ||
+              e.statusCode == 502 ||
+              e.statusCode == 503 ||
+              e.statusCode == 504) &&
+          (e.code == null || e.code!.isEmpty);
+
+      final int nextAttempts = entry.attempts + 1;
+      int? effectiveStatusCode = e.statusCode;
+
+      if (!kPermanentSyncErrorCodes.contains(e.statusCode) &&
+          nextAttempts >= maxSyncAttemptsBeforeBlocked) {
+        effectiveStatusCode = 422;
+      }
 
       final String safeMsg = (ApiErrorCode.describe(e.code, isEs: true) != null)
           ? e.code!
           : (e.statusCode == 409 && e.message.isNotEmpty)
           ? e.message
-          : (e.statusCode == 422)
-          ? 'Error de validación (422): Campos incompatibles con el backend'
+          : (effectiveStatusCode == 422)
+          ? 'Error de validación (422): Campos incompatibles con el backend o reintentos excedidos'
           : e.message;
 
       await _localDb.markSyncError(
         entry.patientId,
         safeMsg,
-        statusCode: e.statusCode,
+        statusCode: effectiveStatusCode,
         revision: entry.revision,
       );
 
@@ -497,6 +531,12 @@ class SyncEngine {
           (isSocketException || isTimeout || e is http.ClientException) &&
           isOnline.value;
 
+      final int nextAttempts = entry.attempts + 1;
+      final int? effectiveStatusCode =
+          (!isNetworkError && nextAttempts >= maxSyncAttemptsBeforeBlocked)
+          ? 422
+          : null;
+
       final String safeMsg = isSocketException
           ? 'Error de conexión de red (Socket)'
           : isTimeout
@@ -506,6 +546,7 @@ class SyncEngine {
       await _localDb.markSyncError(
         entry.patientId,
         safeMsg,
+        statusCode: effectiveStatusCode,
         revision: entry.revision,
       );
       onRecordSynced?.call(entry.patientId, false, safeMsg);
@@ -583,6 +624,7 @@ class SyncEngine {
     if (_activeSyncAllFuture != null || _syncOneRunning) {
       return SyncOneResult.busy;
     }
+    if (_mustChangePassword) return SyncOneResult.failure;
     final Completer<void> completion = Completer<void>();
     _syncOneCompletion = completion;
 

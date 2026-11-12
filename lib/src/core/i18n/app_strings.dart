@@ -276,6 +276,9 @@ class AppStrings {
   String get deleteRecord => _get('deleteRecord');
   String get deleteRecordConfirm => _get('deleteRecordConfirm');
   String get pending => _get('pending');
+  String get deleteRecordReasonLabel => _get('deleteRecordReasonLabel');
+  String get deleteRecordReasonHint => _get('deleteRecordReasonHint');
+  String get deleteRecordReasonRequired => _get('deleteRecordReasonRequired');
 
   // ── Brigade ─────────────────────────────────────────────────────────────
   String get brigadeOffline => _get('brigadeOffline');
@@ -651,6 +654,16 @@ class AppStrings {
   String get offlineModeBadge => _get('offlineModeBadge');
   String get loginNetworkRequired => _get('loginNetworkRequired');
 
+  String get unlockTitle => _get('unlockTitle');
+  String get unlockSubtitle => _get('unlockSubtitle');
+  String get unlockPasswordHint => _get('unlockPasswordHint');
+  String get unlockButton => _get('unlockButton');
+  String get unlockIncorrectPassword => _get('unlockIncorrectPassword');
+  String unlockAttemptsRemaining(int n) =>
+      _get('unlockAttemptsRemaining').replaceAll('{n}', '$n');
+  String get unlockLockedOut => _get('unlockLockedOut');
+  String get switchUser => _get('switchUser');
+
   // ══════════════════════════════════════════════════════════════════════════
   // TRANSLATIONS
   // ══════════════════════════════════════════════════════════════════════════
@@ -865,6 +878,11 @@ class AppStrings {
     'deleteRecordConfirm':
         'Esto eliminará permanentemente el registro local. Si no ha sido sincronizado, los datos se perderán.',
     'pending': 'Pendiente',
+    'deleteRecordReasonLabel': 'Motivo de eliminación *',
+    'deleteRecordReasonHint':
+        'Indique por qué descarta este registro clínico...',
+    'deleteRecordReasonRequired':
+        'Debe ingresar un motivo para descartar registros clínicos.',
 
     // Brigade
     'brigadeOffline': 'Modo brigada — Sin conexión',
@@ -1235,6 +1253,17 @@ class AppStrings {
     'offlineModeBadge': 'Modo sin conexión',
     'loginNetworkRequired':
         'Se requiere conexión a internet para el primer inicio de sesión.',
+
+    'unlockTitle': 'Sesión bloqueada',
+    'unlockSubtitle': 'Ingresa tu contraseña para reanudar la sesión.',
+    'unlockPasswordHint': 'Contraseña de la cuenta',
+    'unlockButton': 'Desbloquear',
+    'unlockIncorrectPassword': 'Contraseña incorrecta.',
+    'unlockAttemptsRemaining':
+        'Contraseña incorrecta. Te quedan {n} intento(s).',
+    'unlockLockedOut':
+        'Demasiados intentos fallidos. La sesión ha sido cerrada por seguridad.',
+    'switchUser': 'Cambiar de usuario',
   };
 
   static const Map<String, String> _en = {
@@ -1443,7 +1472,10 @@ class AppStrings {
     'deleteRecordConfirm':
         'This will permanently delete the local record. If it hasn\'t been synced, the data will be lost.',
     'pending': 'Pending',
-
+    'deleteRecordReasonLabel': 'Reason for deletion *',
+    'deleteRecordReasonHint': 'State why this clinical record is discarded...',
+    'deleteRecordReasonRequired':
+        'You must provide a reason to discard clinical records.',
     // Brigade
     'brigadeOffline': 'Brigade Mode — Offline',
     'patientsAppearHere': 'Patients will appear here as they are synced',
@@ -1821,5 +1853,14 @@ class AppStrings {
     'offlineModeBadge': 'Offline mode',
     'loginNetworkRequired':
         'Internet connection is required for initial sign in.',
+
+    'unlockTitle': 'Session locked',
+    'unlockSubtitle': 'Enter your password to resume session.',
+    'unlockPasswordHint': 'Account password',
+    'unlockButton': 'Unlock',
+    'unlockIncorrectPassword': 'Incorrect password.',
+    'unlockAttemptsRemaining': 'Incorrect password. {n} attempt(s) remaining.',
+    'unlockLockedOut': 'Too many failed attempts. Session closed for security.',
+    'switchUser': 'Switch user',
   };
 }

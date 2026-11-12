@@ -1053,6 +1053,7 @@ void main() {
         AuthRepository.nfcKeyringKey,
         AuthRepository.clockMarkKey,
         AuthRepository.sessionKey,
+        AuthRepository.lockHashKey,
       ]) {
         verify(() => storage.delete(key: key)).called(1);
       }
@@ -2026,6 +2027,175 @@ void main() {
       expect(await webRepo.isNfcSessionExpired(), isFalse);
       expect(await webRepo.isNfcSessionExpired(), isFalse);
       verifyNever(() => storage.read(key: AuthRepository.clockMarkKey));
+    });
+
+    test(
+      'en web, restoreSession sin token NO borra la base local ni destruye la clave',
+      () async {
+        final webRepo = _makeRepo(
+          api: api,
+          storage: storage,
+          localDb: localDb,
+          forceWeb: true,
+        );
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenAnswer((_) async => null);
+        when(
+          () =>
+              localDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => 2);
+
+        final session = await webRepo.restoreSession();
+
+        expect(session, isNull);
+        verifyNever(() => localDb.clearAll());
+        verifyNever(() => localDb.destroyEncryptionKey());
+      },
+    );
+  });
+
+  group('logout()', () {
+    test('revoca tokens en el servidor y limpia la sesión', () async {
+      final jwt = _validJwt('a@b.com');
+      when(
+        () => api.postForm(
+          path: any(named: 'path'),
+          form: any(named: 'form'),
+        ),
+      ).thenAnswer(
+        (_) async => {'access_token': jwt, 'refresh_token': 'refresh-xyz'},
+      );
+      when(
+        () => api.getJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer((_) async => _meResponse());
+      when(
+        () => api.postJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer((_) async => <String, dynamic>{});
+
+      await repo.login(email: 'a@b.com', password: 'x');
+      await repo.logout();
+
+      expect(repo.hasToken, isFalse);
+      verify(() => storage.delete(key: AuthRepository.tokenKey)).called(1);
+      verifyNever(() => storage.deleteAll());
+    });
+
+    test(
+      'logout con access token caducado refresca antes y envía el token nuevo',
+      () async {
+        final expiredJwt = _buildJwt({
+          'sub': 'a@b.com',
+          'exp':
+              DateTime.now()
+                  .subtract(const Duration(hours: 2))
+                  .millisecondsSinceEpoch ~/
+              1000,
+        });
+        final freshJwt = _validJwt('a@b.com');
+        final freshRefresh = _refreshJwt();
+
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenAnswer((_) async => expiredJwt);
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => 'old-refresh-token');
+
+        when(
+          () => api.postJson(
+            path: '/api/v1/login/refresh',
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'access_token': freshJwt,
+            'refresh_token': freshRefresh,
+          },
+        );
+
+        when(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer((_) async => <String, dynamic>{});
+
+        await repo.logout();
+
+        verify(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            headers: {'Authorization': 'Bearer $freshJwt'},
+            body: {'refresh_token': freshRefresh},
+          ),
+        ).called(1);
+        expect(repo.hasToken, isFalse);
+      },
+    );
+
+    test(
+      'limpia la sesión y guarda revocación pendiente cuando no hay red',
+      () async {
+        final jwt = _validJwt('a@b.com');
+        when(
+          () => api.postForm(
+            path: any(named: 'path'),
+            form: any(named: 'form'),
+          ),
+        ).thenAnswer(
+          (_) async => {'access_token': jwt, 'refresh_token': 'r-123'},
+        );
+        when(
+          () => api.getJson(
+            path: any(named: 'path'),
+            headers: any(named: 'headers'),
+          ),
+        ).thenAnswer((_) async => _meResponse());
+        when(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenThrow(ApiException('offline', statusCode: 500));
+
+        await repo.login(email: 'a@b.com', password: 'x');
+        await repo.logout();
+
+        expect(repo.hasToken, isFalse);
+        verify(
+          () => storage.write(
+            key: 'hwb_pending_logout_tokens',
+            value: captureAny(named: 'value'),
+          ),
+        ).called(1);
+      },
+    );
+
+    test('sin token no llama al servidor pero limpia la sesión', () async {
+      when(
+        () => storage.read(key: AuthRepository.tokenKey),
+      ).thenAnswer((_) async => null);
+
+      await repo.logout();
+
+      verifyNever(
+        () => api.postJson(
+          path: any(named: 'path'),
+          headers: any(named: 'headers'),
+          body: any(named: 'body'),
+        ),
+      );
+      expect(repo.hasToken, isFalse);
     });
   });
 }
