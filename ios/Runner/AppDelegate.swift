@@ -15,7 +15,7 @@ private var privacyProtectionView: UIView?
 
     let view = UIView(frame: window.bounds)
     view.backgroundColor = UIColor(red: 235/255.0, green: 242/255.0, blue: 248/255.0, alpha: 1.0)
-    view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    view.autoresizingMask = UIView.AutoresizingMask([.flexibleWidth, .flexibleHeight])
 
     let label = UILabel()
     label.text = "Salud sin Fronteras"
