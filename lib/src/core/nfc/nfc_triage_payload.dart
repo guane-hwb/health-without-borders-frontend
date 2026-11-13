@@ -37,6 +37,7 @@ abstract final class NfcTriagePayload {
       'dob': pi.dob,
       'sex': pi.biologicalSex,
       'bt': pi.bloodType ?? '',
+      if (pi.bloodType != null && pi.isBloodTypeCertified) 'btC': true,
       'docT': pi.identification.documentType,
       'docN': pi.identification.documentNumber,
     };

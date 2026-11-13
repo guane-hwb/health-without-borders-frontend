@@ -24,6 +24,7 @@ class RegisterDraft {
   String? ethnicCommunity;
   String? disabilityCategory;
   String? bloodType;
+  bool isBloodTypeCertified = false;
   double? weight;
   double? height;
   String? street;
@@ -93,6 +94,7 @@ class RegisterDraft {
           zone: zone,
         ),
         bloodType: bloodType,
+        isBloodTypeCertified: bloodType != null ? isBloodTypeCertified : false,
         weight: weight,
         height: height,
       ),
