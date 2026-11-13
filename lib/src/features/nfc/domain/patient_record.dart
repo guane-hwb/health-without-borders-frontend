@@ -470,6 +470,7 @@ class GuardianInfo {
   GuardianInfo({
     required this.name,
     required this.relationship,
+    this.relationshipOther,
     required this.phone,
     this.deviceUid,
     this.docType,
@@ -483,6 +484,7 @@ class GuardianInfo {
     return GuardianInfo(
       name: json['name']?.toString() ?? '',
       relationship: json['relationship']?.toString() ?? '',
+      relationshipOther: json['relationshipOther']?.toString(),
       phone: json['phone']?.toString() ?? '',
       deviceUid: json['device_uid']?.toString(),
       docType: json['docType']?.toString() ?? json['documentType']?.toString(),
@@ -500,6 +502,7 @@ class GuardianInfo {
 
   final String name;
   final String relationship;
+  final String? relationshipOther;
   final String phone;
   final String? deviceUid; // NFC UID of the guardian's device
   final String? docType;
@@ -511,6 +514,8 @@ class GuardianInfo {
   Map<String, dynamic> toJson() => <String, dynamic>{
     'name': name,
     'relationship': relationship,
+    if (relationshipOther != null && relationshipOther!.trim().isNotEmpty)
+      'relationshipOther': relationshipOther!.trim(),
     'phone': phone,
     if (deviceUid != null) 'device_uid': deviceUid,
     if (documentType != null || docType != null)

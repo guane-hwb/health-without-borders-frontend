@@ -34,6 +34,7 @@ class RegisterDraft {
   String? zone;
   String? guardianName;
   String? guardianRelationship;
+  String? guardianRelationshipOther;
   String? guardianPhone;
   String? guardianDeviceUid;
   String? guardianDocType;
@@ -45,6 +46,7 @@ class RegisterDraft {
   List<List<Offset>> guardianSignatureStrokes = <List<Offset>>[];
   String? guardian2Name;
   String? guardian2Relationship;
+  String? guardian2RelationshipOther;
   String? guardian2Phone;
   String? guardian2DeviceUid;
   String? guardian2DocType;
@@ -101,6 +103,9 @@ class RegisterDraft {
       guardianInfo: GuardianInfo(
         name: guardianName ?? '',
         relationship: guardianRelationship ?? '01',
+        relationshipOther: (guardianRelationship == '05')
+            ? guardianRelationshipOther
+            : null,
         phone: guardianPhone ?? '',
         deviceUid: guardianDeviceUid,
         documentType: guardianDocType,

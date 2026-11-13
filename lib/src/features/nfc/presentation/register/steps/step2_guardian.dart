@@ -76,6 +76,7 @@ class _Step2State extends State<Step2Guardian> {
   late final TextEditingController _uid;
   late final TextEditingController _docNumber;
   late final TextEditingController _email;
+  late final TextEditingController _relOther1;
 
   String _selectedDocType = 'CC';
   bool _authAccepted = false;
@@ -90,6 +91,7 @@ class _Step2State extends State<Step2Guardian> {
   late final TextEditingController _docNumber2;
   late final TextEditingController _uid2;
   late final TextEditingController _email2;
+  late final TextEditingController _relOther2;
   String _selectedDocType2 = 'CC';
   String _guardian2Relationship = '01';
   bool _auth2Accepted = false;
@@ -106,6 +108,7 @@ class _Step2State extends State<Step2Guardian> {
     _uid = TextEditingController(text: d.guardianDeviceUid ?? '');
     _docNumber = TextEditingController(text: d.guardianDocNumber ?? '');
     _email = TextEditingController(text: d.guardianEmail ?? '');
+    _relOther1 = TextEditingController(text: d.guardianRelationshipOther ?? '');
     _selectedDocType = d.guardianDocType ?? 'CC';
     _authAccepted = d.guardianAuthAccepted ?? false;
 
@@ -114,6 +117,9 @@ class _Step2State extends State<Step2Guardian> {
     _docNumber2 = TextEditingController(text: d.guardian2DocNumber ?? '');
     _uid2 = TextEditingController(text: d.guardian2DeviceUid ?? '');
     _email2 = TextEditingController(text: d.guardian2Email ?? '');
+    _relOther2 = TextEditingController(
+      text: d.guardian2RelationshipOther ?? '',
+    );
     _selectedDocType2 = d.guardian2DocType ?? 'CC';
     _guardian2Relationship = d.guardian2Relationship ?? '01';
     _auth2Accepted = d.guardian2AuthAccepted ?? false;
@@ -134,11 +140,13 @@ class _Step2State extends State<Step2Guardian> {
     _uid.dispose();
     _docNumber.dispose();
     _email.dispose();
+    _relOther1.dispose();
     _name2.dispose();
     _phone2.dispose();
     _docNumber2.dispose();
     _uid2.dispose();
     _email2.dispose();
+    _relOther2.dispose();
     super.dispose();
   }
 
@@ -154,6 +162,10 @@ class _Step2State extends State<Step2Guardian> {
     d.guardianAuthAccepted = _authAccepted;
     d.guardianEmail = _email.text.trim().isEmpty ? null : _email.text.trim();
     d.guardianRelationship = d.guardianRelationship ?? '01';
+    d.guardianRelationshipOther =
+        (d.guardianRelationship == '05' && _relOther1.text.trim().isNotEmpty)
+        ? _relOther1.text.trim()
+        : null;
     d.guardianSignatureStrokes = _signatureStrokes
         .map((stroke) => List<Offset>.from(stroke))
         .toList();
@@ -171,6 +183,10 @@ class _Step2State extends State<Step2Guardian> {
           ? null
           : _docNumber2.text.trim();
       d.guardian2Relationship = _guardian2Relationship;
+      d.guardian2RelationshipOther =
+          (_guardian2Relationship == '05' && _relOther2.text.trim().isNotEmpty)
+          ? _relOther2.text.trim()
+          : null;
       d.guardian2AuthAccepted = _auth2Accepted;
       d.guardian2Email = _email2.text.trim().isEmpty
           ? null
@@ -319,7 +335,12 @@ class _Step2State extends State<Step2Guardian> {
         : 'Guardian 2 Authorization';
     final requiredFieldsLabel = isEs ? 'Campos requeridos' : 'Required fields';
 
+    final rel1 = widget.draft.guardianRelationship ?? '01';
+
     if (_name.text.trim().isEmpty) missing.add(s.guardianFullName);
+    if (rel1 == '05' && _relOther1.text.trim().isEmpty) {
+      missing.add(isEs ? 'Especifique el parentesco' : 'Specify relationship');
+    }
     if (_phone.text.trim().isEmpty) missing.add(s.guardianPhoneLabel);
     if (_selectedDocType.trim().isEmpty) missing.add(s.documentTypeLabel);
     if (_docNumber.text.trim().isEmpty) missing.add(s.documentNumberLabel);
@@ -349,6 +370,13 @@ class _Step2State extends State<Step2Guardian> {
     }
 
     if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
+      if (_guardian2Relationship == '05' && _relOther2.text.trim().isEmpty) {
+        missing.add(
+          isEs
+              ? 'Especifique el parentesco (Cuidador 2)'
+              : 'Specify relationship (Guardian 2)',
+        );
+      }
       if (validateDocumentNumber(_docNumber2.text) != null) {
         missing.add(
           isEs
@@ -402,6 +430,10 @@ class _Step2State extends State<Step2Guardian> {
         .map((stroke) => List<Offset>.from(stroke))
         .toList();
     d.guardianRelationship = d.guardianRelationship ?? '01';
+    d.guardianRelationshipOther =
+        (d.guardianRelationship == '05' && _relOther1.text.trim().isNotEmpty)
+        ? _relOther1.text.trim()
+        : null;
 
     if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
       d.guardian2Name = _name2.text.trim();
@@ -416,6 +448,10 @@ class _Step2State extends State<Step2Guardian> {
           ? null
           : _docNumber2.text.trim();
       d.guardian2Relationship = _guardian2Relationship;
+      d.guardian2RelationshipOther =
+          (_guardian2Relationship == '05' && _relOther2.text.trim().isNotEmpty)
+          ? _relOther2.text.trim()
+          : null;
       d.guardian2AuthAccepted = _auth2Accepted;
       d.guardian2Email = _email2.text.trim().isEmpty
           ? null
@@ -431,6 +467,7 @@ class _Step2State extends State<Step2Guardian> {
       d.guardian2DocType = null;
       d.guardian2DocNumber = null;
       d.guardian2Relationship = null;
+      d.guardian2RelationshipOther = null;
       d.guardian2AuthAccepted = null;
       d.guardian2Email = null;
       d.guardian2SignatureBase64 = null;
@@ -469,7 +506,10 @@ class _Step2State extends State<Step2Guardian> {
       '02': s.relSiblings,
       '03': s.relUncles,
       '04': s.relGrandparents,
+      '05': isEs ? 'Otro' : 'Other',
     };
+
+    final currentRel1 = d.guardianRelationship ?? '01';
 
     return Column(
       children: [
@@ -600,11 +640,31 @@ class _Step2State extends State<Step2Guardian> {
                           _RelChipSelector(
                             label: s.guardianRelationship,
                             required: true,
-                            value: d.guardianRelationship ?? '01',
+                            value: currentRel1,
                             options: rels,
-                            onChanged: (v) =>
-                                setState(() => d.guardianRelationship = v),
+                            onChanged: (v) => setState(() {
+                              d.guardianRelationship = v;
+                              if (v != '05') {
+                                _relOther1.clear();
+                                d.guardianRelationshipOther = null;
+                              }
+                            }),
                           ),
+                          if (currentRel1 == '05') ...[
+                            const SizedBox(height: 12),
+                            LabeledTextField(
+                              label: isEs
+                                  ? 'Especifique el parentesco'
+                                  : 'Specify relationship',
+                              controller: _relOther1,
+                              hint: isEs
+                                  ? 'Ej. Padrino, vecino, tutor legal'
+                                  : 'E.g. Godfather, neighbor, legal tutor',
+                              prefixIcon: Icons.family_restroom_outlined,
+                              requiredField: true,
+                              keyboardType: TextInputType.text,
+                            ),
+                          ],
                           const SizedBox(height: 12),
                           LabeledTextField(
                             label: s.guardianPhoneLabel,
@@ -683,6 +743,7 @@ class _Step2State extends State<Step2Guardian> {
                   docNumberCtrl: _docNumber2,
                   uidCtrl: _uid2,
                   emailCtrl: _email2,
+                  relOtherCtrl: _relOther2,
                   selectedDocType: _selectedDocType2,
                   relationship: _guardian2Relationship,
                   requiredForMinor: widget.requiredForMinor,
@@ -692,8 +753,13 @@ class _Step2State extends State<Step2Guardian> {
                   scanning: _scanning2,
                   onDocTypeChanged: (v) =>
                       setState(() => _selectedDocType2 = v),
-                  onRelationshipChanged: (v) =>
-                      setState(() => _guardian2Relationship = v),
+                  onRelationshipChanged: (v) => setState(() {
+                    _guardian2Relationship = v;
+                    if (v != '05') {
+                      _relOther2.clear();
+                      widget.draft.guardian2RelationshipOther = null;
+                    }
+                  }),
                   onRemove: () {
                     setState(() {
                       _hasGuardian2 = false;
@@ -702,6 +768,7 @@ class _Step2State extends State<Step2Guardian> {
                       _docNumber2.clear();
                       _uid2.clear();
                       _email2.clear();
+                      _relOther2.clear();
                       _selectedDocType2 = 'CC';
                       _guardian2Relationship = '01';
                       _auth2Accepted = false;
@@ -713,6 +780,7 @@ class _Step2State extends State<Step2Guardian> {
                       widget.draft.guardian2DocType = null;
                       widget.draft.guardian2DocNumber = null;
                       widget.draft.guardian2Relationship = null;
+                      widget.draft.guardian2RelationshipOther = null;
                       widget.draft.guardian2AuthAccepted = null;
                       widget.draft.guardian2Email = null;
                       widget.draft.guardian2SignatureBase64 = null;
@@ -1296,7 +1364,7 @@ class _PrivacyPolicyDialog extends StatelessWidget {
                         _PolicySection(
                           title: '5. Seguridad y Confidencialidad',
                           body:
-                              'Implementamos cifrado de grado militar (AES-256-GCM) en reposo y tránsito (HTTPS/TLS) para asegurar que la información no sea accesible por terceros no autorizados.',
+                              'Implementamos protocolos de cifrado y seguridad de alto nivel para garantizar que la información personal y médica se almacene de forma segura y solo sea accesible por partes autorizadas en una emergencia.',
                         ),
                       ]
                     : const [
@@ -1761,6 +1829,7 @@ class _Guardian2Section extends StatelessWidget {
     required this.docNumberCtrl,
     required this.uidCtrl,
     required this.emailCtrl,
+    required this.relOtherCtrl,
     required this.selectedDocType,
     required this.relationship,
     required this.requiredForMinor,
@@ -1786,6 +1855,7 @@ class _Guardian2Section extends StatelessWidget {
   final TextEditingController docNumberCtrl;
   final TextEditingController uidCtrl;
   final TextEditingController emailCtrl;
+  final TextEditingController relOtherCtrl;
   final String selectedDocType;
   final String relationship;
   final bool requiredForMinor;
@@ -1817,6 +1887,7 @@ class _Guardian2Section extends StatelessWidget {
       '02': s.relSiblings,
       '03': s.relUncles,
       '04': s.relGrandparents,
+      '05': isEs ? 'Otro' : 'Other',
     };
 
     return Container(
@@ -1893,6 +1964,21 @@ class _Guardian2Section extends StatelessWidget {
                   options: rels,
                   onChanged: onRelationshipChanged,
                 ),
+                if (relationship == '05') ...[
+                  const SizedBox(height: 12),
+                  LabeledTextField(
+                    label: isEs
+                        ? 'Especifique el parentesco'
+                        : 'Specify relationship',
+                    controller: relOtherCtrl,
+                    hint: isEs
+                        ? 'Ej. Padrino, vecino, tutor legal'
+                        : 'E.g. Godfather, neighbor, legal tutor',
+                    prefixIcon: Icons.family_restroom_outlined,
+                    requiredField: true,
+                    keyboardType: TextInputType.text,
+                  ),
+                ],
                 const SizedBox(height: 12),
                 LabeledTextField(
                   label: s.guardianPhoneLabel,

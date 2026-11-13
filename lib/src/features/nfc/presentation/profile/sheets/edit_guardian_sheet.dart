@@ -48,6 +48,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   late TextEditingController _phoneCtrl;
   late TextEditingController _docNumberCtrl;
   late TextEditingController _emailCtrl;
+  late TextEditingController _relOtherCtrl;
   late String _relationship;
   late String _selectedDocType;
 
@@ -55,6 +56,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   late final String _initialPhone;
   late final String _initialDocNumber;
   late final String _initialRelationship;
+  late final String _initialRelOther;
   late final String _initialDocType;
 
   bool _authAccepted = false;
@@ -62,7 +64,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   List<Offset>? _currentStroke;
   String? _authErrorMsg;
 
-  static const List<String> _relationshipCodes = ['01', '02', '03', '04'];
+  static const List<String> _relationshipCodes = ['01', '02', '03', '04', '05'];
 
   String _relationshipLabel(AppStrings s, String code) {
     switch (code) {
@@ -74,6 +76,8 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
         return s.relUncles;
       case '04':
         return s.relGrandparents;
+      case '05':
+        return s.isEs ? 'Otro' : 'Other';
       default:
         return code;
     }
@@ -87,6 +91,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     _initialDocNumber =
         widget.guardian.docNumber ?? widget.guardian.documentNumber ?? '';
     _initialRelationship = widget.guardian.relationship;
+    _initialRelOther = widget.guardian.relationshipOther ?? '';
     _initialDocType =
         widget.guardian.docType ?? widget.guardian.documentType ?? 'CC';
 
@@ -94,6 +99,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     _phoneCtrl = TextEditingController(text: _initialPhone);
     _docNumberCtrl = TextEditingController(text: _initialDocNumber);
     _emailCtrl = TextEditingController();
+    _relOtherCtrl = TextEditingController(text: _initialRelOther);
     _relationship = _initialRelationship;
     _selectedDocType = _initialDocType;
 
@@ -113,6 +119,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     _phoneCtrl.dispose();
     _docNumberCtrl.dispose();
     _emailCtrl.dispose();
+    _relOtherCtrl.dispose();
     super.dispose();
   }
 
@@ -127,12 +134,14 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     final phoneChanged = _phoneCtrl.text.trim() != _initialPhone;
     final docNumChanged = _docNumberCtrl.text.trim() != _initialDocNumber;
     final relChanged = _relationship != _initialRelationship;
+    final relOtherChanged = _relOtherCtrl.text.trim() != _initialRelOther;
     final docTypeChanged = _selectedDocType != _initialDocType;
 
     return nameChanged ||
         phoneChanged ||
         docNumChanged ||
         relChanged ||
+        relOtherChanged ||
         docTypeChanged ||
         _authAccepted ||
         _signatureStrokes.isNotEmpty;
@@ -230,6 +239,10 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
     final edited = GuardianInfo(
       name: _nameCtrl.text.trim(),
       relationship: _relationship,
+      relationshipOther:
+          _relationship == '05' && _relOtherCtrl.text.trim().isNotEmpty
+          ? _relOtherCtrl.text.trim()
+          : null,
       phone: _phoneCtrl.text.trim(),
       docType: _selectedDocType,
       docNumber: _docNumberCtrl.text.trim().isEmpty
@@ -345,7 +358,12 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
                     children: _relationshipCodes.map((code) {
                       final sel = _relationship == code;
                       return GestureDetector(
-                        onTap: () => setState(() => _relationship = code),
+                        onTap: () => setState(() {
+                          _relationship = code;
+                          if (code != '05') {
+                            _relOtherCtrl.clear();
+                          }
+                        }),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
@@ -374,6 +392,28 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
                       );
                     }).toList(),
                   ),
+                  if (_relationship == '05') ...[
+                    const SizedBox(height: 12),
+                    _ValidatedField(
+                      label: isEs
+                          ? 'Especifique el parentesco'
+                          : 'Specify relationship',
+                      controller: _relOtherCtrl,
+                      hint: isEs
+                          ? 'Ej. Padrino, vecino, tutor legal'
+                          : 'E.g. Godfather, neighbor, legal tutor',
+                      prefixIcon: Icons.family_restroom_outlined,
+                      validator: (v) {
+                        if (_relationship == '05' &&
+                            (v == null || v.trim().isEmpty)) {
+                          return isEs
+                              ? 'Por favor especifique el parentesco'
+                              : 'Please specify the relationship';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 14),
 
                   _ValidatedField(
