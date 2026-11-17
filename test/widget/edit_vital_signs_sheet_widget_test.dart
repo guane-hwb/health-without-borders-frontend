@@ -14,7 +14,12 @@ Widget _wrap({
   String? bloodType,
   double? previousWeight,
   double? previousHeight,
-  void Function({String? bloodType, double? weight, double? height})? onConfirm,
+  void Function({
+    String? bloodType,
+    double? weight,
+    double? height,
+    bool isBloodTypeCertified,
+  })? onConfirm,
 }) {
   return AppLocale(
     locale: locale,
@@ -29,7 +34,12 @@ Widget _wrap({
           previousHeight: previousHeight,
           onConfirm:
               onConfirm ??
-              ({String? bloodType, double? weight, double? height}) {},
+              ({
+                String? bloodType,
+                double? weight,
+                double? height,
+                bool isBloodTypeCertified = false,
+              }) {},
         ),
       ),
     ),
@@ -230,7 +240,12 @@ void main() {
             weight: 72.5,
             height: 170.0,
             bloodType: 'O+',
-            onConfirm: ({String? bloodType, double? weight, double? height}) {
+            onConfirm: ({
+              String? bloodType,
+              double? weight,
+              double? height,
+              bool isBloodTypeCertified = false,
+            }) {
               confirmedWeight = weight;
               confirmedHeight = height;
               confirmedBloodType = bloodType;
@@ -259,7 +274,12 @@ void main() {
 
         await tester.pumpWidget(
           _wrap(
-            onConfirm: ({String? bloodType, double? weight, double? height}) {
+            onConfirm: ({
+              String? bloodType,
+              double? weight,
+              double? height,
+              bool isBloodTypeCertified = false,
+            }) {
               confirmedWeight = weight;
               confirmedBloodType = bloodType;
             },
@@ -293,7 +313,12 @@ void main() {
 
         await tester.pumpWidget(
           _wrap(
-            onConfirm: ({String? bloodType, double? weight, double? height}) {
+            onConfirm: ({
+              String? bloodType,
+              double? weight,
+              double? height,
+              bool isBloodTypeCertified = false,
+            }) {
               confirmedWeight = weight;
               confirmedHeight = height;
               confirmedBloodType = bloodType;
@@ -320,7 +345,12 @@ void main() {
       String? selectedBlood;
       await tester.pumpWidget(
         _wrap(
-          onConfirm: ({String? bloodType, double? weight, double? height}) {
+          onConfirm: ({
+            String? bloodType,
+            double? weight,
+            double? height,
+            bool isBloodTypeCertified = false,
+          }) {
             selectedBlood = bloodType;
           },
         ),
@@ -346,7 +376,12 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           bloodType: 'AB+',
-          onConfirm: ({String? bloodType, double? weight, double? height}) {
+          onConfirm: ({
+            String? bloodType,
+            double? weight,
+            double? height,
+            bool isBloodTypeCertified = false,
+          }) {
             selectedBlood = bloodType;
           },
         ),
@@ -621,6 +656,7 @@ void main() {
                                 String? bloodType,
                                 double? weight,
                                 double? height,
+                                bool isBloodTypeCertified = false,
                               }) {},
                         ),
                       ),

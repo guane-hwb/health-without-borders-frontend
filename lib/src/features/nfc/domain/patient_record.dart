@@ -218,6 +218,7 @@ class PatientInfo {
     this.disabilityCategory,
     required this.address,
     this.bloodType,
+    this.isBloodTypeCertified = false,
     this.weight,
     this.height,
   });
@@ -247,6 +248,9 @@ class PatientInfo {
           ? Address.fromJson(json['address'] as Map<String, dynamic>)
           : Address(city: '', state: ''),
       bloodType: json['bloodType']?.toString(),
+      isBloodTypeCertified:
+          json['isBloodTypeCertified'] == true ||
+          json['is_blood_type_certified'] == true,
       weight: (json['weight'] as num?)?.toDouble(),
       height: (json['height'] as num?)?.toDouble(),
     );
@@ -267,6 +271,7 @@ class PatientInfo {
   final String? disabilityCategory;
   final Address address;
   final String? bloodType;
+  final bool isBloodTypeCertified;
   final double? weight;
   final double? height;
 
@@ -296,6 +301,7 @@ class PatientInfo {
     String? disabilityCategory,
     Address? address,
     String? bloodType,
+    bool? isBloodTypeCertified,
     double? weight,
     double? height,
   }) {
@@ -315,6 +321,7 @@ class PatientInfo {
       disabilityCategory: disabilityCategory ?? this.disabilityCategory,
       address: address ?? this.address,
       bloodType: bloodType ?? this.bloodType,
+      isBloodTypeCertified: isBloodTypeCertified ?? this.isBloodTypeCertified,
       weight: weight ?? this.weight,
       height: height ?? this.height,
     );
@@ -340,6 +347,7 @@ class PatientInfo {
           disabilityCategory == other.disabilityCategory &&
           address == other.address &&
           bloodType == other.bloodType &&
+          isBloodTypeCertified == other.isBloodTypeCertified &&
           weight == other.weight &&
           height == other.height;
 
@@ -357,6 +365,7 @@ class PatientInfo {
     genderIdentity,
     Object.hash(ethnicity, ethnicCommunity, disabilityCategory, address),
     bloodType,
+    isBloodTypeCertified,
     weight,
     height,
   );
@@ -377,6 +386,7 @@ class PatientInfo {
     if (disabilityCategory != null) 'disabilityCategory': disabilityCategory,
     'address': address.toJson(),
     if (bloodType != null) 'bloodType': bloodType,
+    'isBloodTypeCertified': isBloodTypeCertified,
     if (weight != null) 'weight': weight,
     if (height != null) 'height': height,
   };
@@ -460,6 +470,7 @@ class GuardianInfo {
   GuardianInfo({
     required this.name,
     required this.relationship,
+    this.relationshipOther,
     required this.phone,
     this.deviceUid,
     this.docType,
@@ -473,6 +484,7 @@ class GuardianInfo {
     return GuardianInfo(
       name: json['name']?.toString() ?? '',
       relationship: json['relationship']?.toString() ?? '',
+      relationshipOther: json['relationshipOther']?.toString(),
       phone: json['phone']?.toString() ?? '',
       deviceUid: json['device_uid']?.toString(),
       docType: json['docType']?.toString() ?? json['documentType']?.toString(),
@@ -490,6 +502,7 @@ class GuardianInfo {
 
   final String name;
   final String relationship;
+  final String? relationshipOther;
   final String phone;
   final String? deviceUid; // NFC UID of the guardian's device
   final String? docType;
@@ -501,6 +514,8 @@ class GuardianInfo {
   Map<String, dynamic> toJson() => <String, dynamic>{
     'name': name,
     'relationship': relationship,
+    if (relationshipOther != null && relationshipOther!.trim().isNotEmpty)
+      'relationshipOther': relationshipOther!.trim(),
     'phone': phone,
     if (deviceUid != null) 'device_uid': deviceUid,
     if (documentType != null || docType != null)

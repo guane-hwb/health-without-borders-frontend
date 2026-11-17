@@ -475,11 +475,17 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     }
   }
 
-  void _updateVitalSigns({double? weight, double? height, String? bloodType}) {
+  void _updateVitalSigns({
+    double? weight,
+    double? height,
+    String? bloodType,
+    bool isBloodTypeCertified = false,
+  }) {
     _draftController.updateVitalSigns(
       weight: weight,
       height: height,
       bloodType: bloodType,
+      isBloodTypeCertified: isBloodTypeCertified,
     );
     unawaited(_saveAndPendingSync());
   }

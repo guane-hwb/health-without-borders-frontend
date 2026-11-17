@@ -20,7 +20,12 @@ abstract class PatientProfileSheets {
     BuildContext context, {
     required PatientFullRecord draft,
     required PatientFullRecord original,
-    required void Function({double? weight, double? height, String? bloodType})
+    required void Function({
+      double? weight,
+      double? height,
+      String? bloodType,
+      bool isBloodTypeCertified,
+    })
     onConfirm,
   }) async {
     await showModalBottomSheet<void>(
@@ -31,6 +36,7 @@ abstract class PatientProfileSheets {
         weight: draft.patientInfo.weight,
         height: draft.patientInfo.height,
         bloodType: draft.patientInfo.bloodType,
+        isBloodTypeCertified: draft.patientInfo.isBloodTypeCertified,
         previousWeight: original.patientInfo.weight,
         previousHeight: original.patientInfo.height,
         onConfirm: onConfirm,

@@ -49,6 +49,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   String _practitionerDocType = 'CC';
   final _practitionerDocCtrl = TextEditingController();
   final _practitionerNameCtrl = TextEditingController();
+  bool _practitionerPrefilled = false;
 
   // ── Provider (Res. 866 Elem. 16) ─────────────────────────────────────────
   final _providerRepsCtrl = TextEditingController();
@@ -95,6 +96,30 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       final s = AppStrings.of(context);
       final isEs = s.isEs;
       _payerNameCtrl.text = isEs ? 'No asegurado' : 'Uninsured';
+    }
+
+    if (!_practitionerPrefilled) {
+      _practitionerPrefilled = true;
+      final user = AppScope.of(context).authRepository.currentUser;
+      if (user != null) {
+        const validDocTypes = {'CC', 'CE', 'PA', 'TI', 'RC', 'MS'};
+        if (validDocTypes.contains(user.documentType)) {
+          _practitionerDocType = user.documentType;
+        }
+        if (_practitionerDocCtrl.text.isEmpty &&
+            user.documentNumber != null &&
+            user.documentNumber!.isNotEmpty) {
+          _practitionerDocCtrl.text = user.documentNumber!;
+        }
+        if (_practitionerNameCtrl.text.isEmpty && user.fullName.isNotEmpty) {
+          _practitionerNameCtrl.text = user.fullName;
+        }
+        if (_providerNameCtrl.text.isEmpty &&
+            user.organizationName != null &&
+            user.organizationName!.trim().isNotEmpty) {
+          _providerNameCtrl.text = user.organizationName!.trim();
+        }
+      }
     }
   }
 

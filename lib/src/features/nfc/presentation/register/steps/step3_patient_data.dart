@@ -286,6 +286,9 @@ class _Step3State extends State<Step3PatientData> {
         ? null
         : _ethnicComm.text.trim();
     d.bloodType = (d.bloodType ?? '').trim().isEmpty ? null : d.bloodType;
+    if (d.bloodType == null) {
+      d.isBloodTypeCertified = false;
+    }
 
     d.nationalityName = countryDisplay(d.nationalityCode).name(isEs: isEs);
 
@@ -688,9 +691,63 @@ class _Step3State extends State<Step3PatientData> {
                     required: false,
                     allowDeselect: true,
                     onChanged: (v) => setState(() {
-                      d.bloodType = (d.bloodType == v) ? null : v;
+                      if (d.bloodType == v) {
+                        d.bloodType = null;
+                        d.isBloodTypeCertified = false;
+                      } else {
+                        d.bloodType = v;
+                      }
                     }),
                   ),
+                  if (d.bloodType != null) ...[
+                    const SizedBox(height: 14),
+                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                    const SizedBox(height: 12),
+                    _ChipSelector(
+                      label: isEs
+                          ? '¿El cuidador presentó certificado o examen?'
+                          : 'Did the caregiver show a certificate or lab test?',
+                      value: d.isBloodTypeCertified ? 'certified' : 'mentioned',
+                      options: {
+                        'certified': isEs ? 'Sí' : 'Yes',
+                        'mentioned': isEs ? 'No' : 'No',
+                      },
+                      required: true,
+                      onChanged: (val) => setState(() {
+                        d.isBloodTypeCertified = (val == 'certified');
+                      }),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(
+                          d.isBloodTypeCertified
+                              ? Icons.lock_outline
+                              : Icons.info_outline,
+                          size: 14,
+                          color: d.isBloodTypeCertified
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            d.isBloodTypeCertified
+                                ? (isEs
+                                      ? 'Al estar certificado, quedará bloqueado en Leer NFC.'
+                                      : 'Once certified, it will be locked in Read NFC.')
+                                : (isEs
+                                      ? 'Podrá editarse desde Leer NFC si luego presentan examen.'
+                                      : 'Can be edited from Read NFC if a test is provided later.'),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
 

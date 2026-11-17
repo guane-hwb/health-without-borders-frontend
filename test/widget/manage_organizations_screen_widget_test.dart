@@ -105,6 +105,8 @@ class _FakeRepo implements UserRepository {
     required String role,
     required String password,
     String? organizationId,
+    String? documentNumber,
+    String? documentType,
   }) => throw UnimplementedError();
 
   @override

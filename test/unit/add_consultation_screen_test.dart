@@ -971,6 +971,10 @@ void main() {
         when(
           () => session.organizationId,
         ).thenReturn('capture-organization-id');
+        when(() => session.documentType).thenReturn('CC');
+        when(() => session.documentNumber).thenReturn(null);
+        when(() => session.fullName).thenReturn('');
+        when(() => session.organizationName).thenReturn(null);
         final auth = scope.authRepository as _MockAuthRepository;
         when(() => auth.currentUser).thenReturn(session);
 
