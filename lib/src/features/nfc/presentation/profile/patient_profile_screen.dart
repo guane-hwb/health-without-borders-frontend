@@ -700,8 +700,26 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     );
   }
 
+  /// The system back warns, as the header's arrow does, before it discards a
+  /// change whose local save failed (iOS turns its edge swipe off meanwhile).
+  /// Confirmed, it pops only this route, as it does with nothing to lose:
+  /// the screen below expects to be returned to (the NFC reading goes back
+  /// to its first step).
+  Future<void> _onSystemBack(bool didPop, Object? result) async {
+    if (didPop || !await confirmProfileExit(context, _lastSaveFailed)) return;
+    if (mounted) Navigator.of(context).pop(result);
+  }
+
   @override
   Widget build(BuildContext context) {
+    return PopScope<Object?>(
+      canPop: !_lastSaveFailed,
+      onPopInvokedWithResult: _onSystemBack,
+      child: _buildProfile(context),
+    );
+  }
+
+  Widget _buildProfile(BuildContext context) {
     final p = _draft;
     return Scaffold(
       backgroundColor: const Color(0xFFF2F6FA),

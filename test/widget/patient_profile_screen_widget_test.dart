@@ -2289,6 +2289,132 @@ void main() {
     });
   });
 
+  group('Retroceso del sistema — confirmación tras un guardado fallido', () {
+    /// Opens the profile the way the NFC reading screen does: over the home
+    /// screen and a reading screen, so a system back has a route to return
+    /// to and the test can tell one pop from a return to the home screen.
+    Future<void> pumpProfileOverReading(
+      WidgetTester tester, {
+      required LocalDatabase localDatabase,
+    }) async {
+      await tester.pumpWidget(
+        _wrap(
+          const Scaffold(body: Text('Inicio')),
+          localDatabase: localDatabase,
+        ),
+      );
+      final NavigatorState navigator = Navigator.of(
+        tester.element(find.text('Inicio')),
+      );
+      unawaited(
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: Text('Lectura NFC')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      unawaited(
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => PatientProfileScreen(patient: _record()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    /// Confirms an address edit and closes the sheet, as its "Guardar"
+    /// button does, so the profile is the top route again.
+    Future<void> editAddress(WidgetTester tester) async {
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      summary.onEditAddress();
+      await tester.pumpAndSettle();
+      final Finder sheet = find.byType(EditAddressSheet);
+      tester
+          .widget<EditAddressSheet>(sheet)
+          .onConfirm(Address(city: 'Cali', state: 'Valle'));
+      Navigator.of(tester.element(sheet)).pop();
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> pressSystemBack(WidgetTester tester) async {
+      expect(await tester.binding.handlePopRoute(), isTrue);
+      await tester.pumpAndSettle();
+    }
+
+    const String warning =
+        'El último cambio no pudo guardarse en el dispositivo. '
+        'Si sale ahora se perderá.';
+
+    testWidgets('con el último guardado fallido pregunta antes de salir y '
+        '"Cancelar" deja el perfil abierto', (tester) async {
+      final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+      await pumpProfileOverReading(tester, localDatabase: db);
+      await editAddress(tester);
+      expect(find.textContaining('El cambio NO está a salvo'), findsOneWidget);
+
+      await pressSystemBack(tester);
+
+      expect(find.text('Cambios sin guardar'), findsOneWidget);
+      expect(find.text(warning), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancelar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+      expect(find.text('Lectura NFC'), findsNothing);
+    });
+
+    testWidgets('"Salir" deja el perfil y vuelve a la pantalla anterior, no '
+        'al inicio', (tester) async {
+      final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+      await pumpProfileOverReading(tester, localDatabase: db);
+      await editAddress(tester);
+
+      await pressSystemBack(tester);
+      expect(find.text('Cambios sin guardar'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Salir'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(PatientProfileScreen), findsNothing);
+      expect(find.text('Lectura NFC'), findsOneWidget);
+    });
+
+    testWidgets('el retroceso del sistema sobre el aviso lo cierra sin salir', (
+      tester,
+    ) async {
+      final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+      await pumpProfileOverReading(tester, localDatabase: db);
+      await editAddress(tester);
+
+      await pressSystemBack(tester);
+      expect(find.text('Cambios sin guardar'), findsOneWidget);
+      await pressSystemBack(tester);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+    });
+
+    testWidgets('sin guardado fallido sale a la pantalla anterior sin '
+        'preguntar', (tester) async {
+      final db = _FaultyLocalDatabase();
+      await pumpProfileOverReading(tester, localDatabase: db);
+      await editAddress(tester);
+      expect(find.textContaining('El cambio NO está a salvo'), findsNothing);
+
+      await pressSystemBack(tester);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(PatientProfileScreen), findsNothing);
+      expect(find.text('Lectura NFC'), findsOneWidget);
+    });
+  });
+
   group('Confirmación de sheets — actualizan el draft y disparan guardado', () {
     testWidgets('105. Confirmar signos vitales actualiza el draft', (
       tester,
