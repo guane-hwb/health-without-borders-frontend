@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show min;
 import 'dart:typed_data';
 
 import 'package:nfc_manager/ndef_record.dart';
@@ -371,10 +372,20 @@ class NfcPayloadService {
       payloadBytes: result.bytesWritten,
       messageBytes: result.messageBytes,
       chipCapacity: result.chipCapacity,
+      // Totals are what the copy carries on a chip with room for everything
+      // (the most recent, up to the copy's own limit), so kept < total means
+      // the chip's capacity left history out, and nothing else.
       consultationsKept: fit?.includedConsultations,
-      consultationsTotal: fit?.totalConsultations,
+      consultationsTotal: fit == null
+          ? null
+          : min(
+              fit.totalConsultations,
+              NfcGuardianPayload.kDefaultMaxConsultations,
+            ),
       vaccinesKept: fit?.includedVaccines,
-      vaccinesTotal: fit?.totalVaccines,
+      vaccinesTotal: fit == null
+          ? null
+          : min(fit.totalVaccines, NfcGuardianPayload.kDefaultMaxVaccines),
       writtenAt: DateTime.now().toUtc(),
     );
     unawaited(

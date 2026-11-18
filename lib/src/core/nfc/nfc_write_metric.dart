@@ -54,13 +54,14 @@ class NfcWriteMetric {
   /// NDEF capacity the chip reported.
   final int chipCapacity;
 
-  /// Consultations on the guardian copy and in the record; null for a patient
-  /// device, whose triage carries no history.
+  /// Consultations the guardian copy kept, and those it would carry on a chip
+  /// with room for everything (the most recent, up to the copy's limit of 3).
+  /// `kept < total` therefore means the chip's capacity left some out. Null
+  /// for a patient device, whose triage carries no history.
   final int? consultationsKept;
   final int? consultationsTotal;
 
-  /// Vaccines on the guardian copy and in the record; null for a patient
-  /// device.
+  /// Same as the consultations, for vaccines.
   final int? vaccinesKept;
   final int? vaccinesTotal;
 

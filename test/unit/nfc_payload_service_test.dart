@@ -1057,9 +1057,12 @@ void main() {
       expect(m.deviceRole, 'guardian');
       expect(m.chipCapacity, 888);
       expect(m.consultationsKept, 1);
-      expect(m.consultationsTotal, 4);
+      // El registro tiene 4 y 5, pero la copia nunca lleva más de 3: el total
+      // es lo que cabría en un chip sin límite, y sólo la capacidad dejó fuera
+      // dos consultas.
+      expect(m.consultationsTotal, 3);
       expect(m.vaccinesKept, 3);
-      expect(m.vaccinesTotal, 5);
+      expect(m.vaccinesTotal, 3);
     });
 
     test(

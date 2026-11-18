@@ -160,7 +160,7 @@ guardian copy had to leave history out.
 | `device_role` | `patient` | `guardian` |
 | `payload_format`, `key_version` | format of the payload (1 today) and key version | same |
 | `payload_bytes`, `message_bytes`, `chip_capacity` | encrypted payload, whole NDEF message, capacity the chip reported | same |
-| `consultations_kept/total`, `vaccines_kept/total` | null | what the copy kept, of what the record holds |
+| `consultations_kept/total`, `vaccines_kept/total` | null | what the copy kept, of what it would carry on a chip with room for everything (the most recent, at most 3): `kept < total` means the chip's capacity left history out |
 | `written_at` | UTC | UTC |
 
 No UID, no patient, no record content: a row cannot be traced back to a person.
