@@ -1697,7 +1697,7 @@ void main() {
     }
   }
 
-  group('COBERTURA 100%: dropdowns restantes (grupo, entorno, doc, dx)', () {
+  group('validaciones de coherencia temporal entre inicio y fin', () {
     testWidgets(
       'reabrir y reseleccionar grupo de servicio, entorno, tipo de doc y tipo de diagnóstico invoca sus onChanged',
       (tester) async {
@@ -1725,227 +1725,264 @@ void main() {
     );
   });
 
-  group('COBERTURA 100%: fecha/hora de fin (onPick, onClear, botón limpiar)', () {
-    testWidgets(
-      'seleccionar fecha de fin muestra el valor y el botón de limpiar; limpiar lo revierte',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 2200);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+  group(
+    'AddConsultationScreen — selectores de grupo de servicio, entorno, documento y diagnóstico',
+    () {
+      testWidgets(
+        'reabrir y reseleccionar grupo de servicio, entorno, tipo de doc y tipo de diagnóstico invoca sus onChanged',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 2400);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(() {
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          });
 
-        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
-        await tester.pumpAndSettle();
-
-        final calendarIcons = find.byIcon(Icons.calendar_today);
-        await tester.ensureVisible(calendarIcons.at(1));
-        await tester.tap(calendarIcons.at(1), warnIfMissed: false);
-        await tester.pumpAndSettle();
-
-        await confirmOk(tester);
-        await confirmOk(tester);
-
-        expect(find.text('— no definido —'), findsNothing);
-
-        final clearBtn = find.byIcon(Icons.clear);
-        expect(clearBtn, findsOneWidget);
-        await tester.tap(clearBtn);
-        await tester.pumpAndSettle();
-
-        expect(find.text('— no definido —'), findsOneWidget);
-      },
-    );
-  });
-
-  group('COBERTURA 100%: validaciones de coherencia temporal restantes', () {
-    testWidgets(
-      'fecha de fin anterior a la fecha de inicio dispara el SnackBar correspondiente',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 2200);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
-        await tester.pumpAndSettle();
-
-        final historyField = textFieldWithHint(_hintHistory);
-        await tester.ensureVisible(historyField);
-        await tester.enterText(historyField, 'Consulta con fin anterior');
-        await tester.pumpAndSettle();
-
-        final calendarIcons = find.byIcon(Icons.calendar_today);
-        await tester.ensureVisible(calendarIcons.at(1));
-        await tester.tap(calendarIcons.at(1), warnIfMissed: false);
-        await tester.pumpAndSettle();
-
-        final prevMonth = find.byIcon(Icons.chevron_left);
-        if (prevMonth.evaluate().isNotEmpty) {
-          await tester.tap(prevMonth.first);
+          await tester.pumpWidget(_buildApp(patient: _fakePatient()));
           await tester.pumpAndSettle();
-        }
 
-        final dayCell = find.text('10');
-        if (dayCell.evaluate().isNotEmpty) {
-          await tester.tap(dayCell.first);
+          final dropdowns = find.byType(DropdownButton<String>);
+          expect(dropdowns, findsWidgets);
+
+          await cycleDropdown(tester, 1);
+          await cycleDropdown(tester, 2);
+          await cycleDropdown(tester, 3);
+          await cycleDropdown(tester, 4);
+
+          expect(find.byType(AddConsultationScreen), findsOneWidget);
+          expect(find.text('Evaluación clínica'), findsOneWidget);
+        },
+      );
+    },
+  );
+
+  group(
+    'AddConsultationScreen — selección y limpieza de fecha y hora de fin',
+    () {
+      testWidgets(
+        'seleccionar fecha de fin muestra el valor y el botón de limpiar; limpiar lo revierte',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 2200);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(() {
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          });
+
+          await tester.pumpWidget(_buildApp(patient: _fakePatient()));
           await tester.pumpAndSettle();
-        }
 
-        await confirmOk(tester);
-        await confirmOk(tester);
-
-        await _tapGuardar(tester);
-        await tester.pumpAndSettle();
-
-        expect(
-          find.textContaining('anterior a la hora de inicio'),
-          findsOneWidget,
-        );
-      },
-    );
-
-    testWidgets(
-      'guarda exitosamente con fecha/hora de fin definida (toIso8601WithOffset con valor)',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 2400);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        final db = _MockLocalDatabase();
-        final sync = _MockSyncEngine();
-        when(
-          () => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
-        ).thenAnswer((_) async {});
-        when(
-          () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
-        ).thenAnswer((_) async {});
-        when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
-
-        await tester.pumpWidget(
-          _buildApp(
-            patient: _fakePatient(),
-            scope: _defaultScope(db: db, sync: sync),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        final historyField = textFieldWithHint(_hintHistory);
-        await tester.ensureVisible(historyField);
-        await tester.enterText(historyField, 'Consulta con fin definido');
-        await tester.pumpAndSettle();
-
-        final calendarIcons = find.byIcon(Icons.calendar_today);
-        await tester.ensureVisible(calendarIcons.first);
-        await tester.tap(calendarIcons.first, warnIfMissed: false);
-        await tester.pumpAndSettle();
-        await confirmOk(tester);
-        await confirmOk(tester);
-
-        await tester.ensureVisible(calendarIcons.at(1));
-        await tester.tap(calendarIcons.at(1), warnIfMissed: false);
-        await tester.pumpAndSettle();
-
-        await confirmOk(tester);
-        await confirmOk(tester);
-
-        final clearBtn = find.byIcon(Icons.clear);
-        if (clearBtn.evaluate().isNotEmpty) {
-          await tester.ensureVisible(clearBtn.first);
+          final calendarIcons = find.byIcon(Icons.calendar_today);
+          await tester.ensureVisible(calendarIcons.at(1));
+          await tester.tap(calendarIcons.at(1), warnIfMissed: false);
           await tester.pumpAndSettle();
-        }
 
-        await _tapGuardar(tester);
-        await tester.pumpAndSettle();
+          await confirmOk(tester);
+          await confirmOk(tester);
 
-        final capturedRecord =
-            verify(
-                  () => db.savePatient(
-                    captureAny(),
-                    ownerUserId: any(named: 'ownerUserId'),
-                  ),
-                ).captured.first
-                as PatientFullRecord;
-        final encounter = capturedRecord.medicalHistory.first;
+          expect(find.text('— no definido —'), findsNothing);
 
-        expect(encounter.startDateTime, isNotNull);
-        expect(
-          encounter.startDateTime,
-          matches(
-            RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$'),
-          ),
-        );
-      },
-    );
+          final clearBtn = find.byIcon(Icons.clear);
+          expect(clearBtn, findsOneWidget);
+          await tester.tap(clearBtn);
+          await tester.pumpAndSettle();
 
-    testWidgets(
-      'hora de inicio fijada al final del día actual dispara el SnackBar de fecha futura',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 2200);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+          expect(find.text('— no definido —'), findsOneWidget);
+        },
+      );
+    },
+  );
 
-        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
-        await tester.pumpAndSettle();
+  group(
+    'AddConsultationScreen — validaciones de coherencia temporal entre inicio y fin',
+    () {
+      testWidgets(
+        'fecha de fin anterior a la fecha de inicio dispara el SnackBar correspondiente',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 2200);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(() {
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          });
 
-        final historyField = textFieldWithHint(_hintHistory);
-        await tester.ensureVisible(historyField);
-        await tester.enterText(historyField, 'Consulta con hora futura');
-        await tester.pumpAndSettle();
+          await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+          await tester.pumpAndSettle();
 
-        final calendarIcons = find.byIcon(Icons.calendar_today);
-        await tester.ensureVisible(calendarIcons.first);
-        await tester.tap(calendarIcons.first, warnIfMissed: false);
-        await tester.pumpAndSettle();
+          final historyField = textFieldWithHint(_hintHistory);
+          await tester.ensureVisible(historyField);
+          await tester.enterText(historyField, 'Consulta con fin anterior');
+          await tester.pumpAndSettle();
 
-        await confirmOk(tester); // fecha (hoy, único día permitido)
-        await tryEnterLateTime(tester); // intenta fijar 23:59
-        await confirmOk(tester); // hora
+          final calendarIcons = find.byIcon(Icons.calendar_today);
+          await tester.ensureVisible(calendarIcons.at(1));
+          await tester.tap(calendarIcons.at(1), warnIfMissed: false);
+          await tester.pumpAndSettle();
 
-        await _tapGuardar(tester);
-        await tester.pumpAndSettle();
-      },
-    );
+          final prevMonth = find.byIcon(Icons.chevron_left);
+          if (prevMonth.evaluate().isNotEmpty) {
+            await tester.tap(prevMonth.first);
+            await tester.pumpAndSettle();
+          }
 
-    testWidgets(
-      'hora de fin fijada al final del día actual dispara el SnackBar de fin en el futuro',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 2200);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+          final dayCell = find.text('10');
+          if (dayCell.evaluate().isNotEmpty) {
+            await tester.tap(dayCell.first);
+            await tester.pumpAndSettle();
+          }
 
-        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
-        await tester.pumpAndSettle();
+          await confirmOk(tester);
+          await confirmOk(tester);
 
-        final historyField = textFieldWithHint(_hintHistory);
-        await tester.ensureVisible(historyField);
-        await tester.enterText(historyField, 'Consulta con fin futuro');
-        await tester.pumpAndSettle();
+          await _tapGuardar(tester);
+          await tester.pumpAndSettle();
 
-        final calendarIcons = find.byIcon(Icons.calendar_today);
-        await tester.ensureVisible(calendarIcons.at(1));
-        await tester.tap(calendarIcons.at(1), warnIfMissed: false);
-        await tester.pumpAndSettle();
+          expect(
+            find.textContaining('anterior a la hora de inicio'),
+            findsOneWidget,
+          );
+        },
+      );
 
-        await confirmOk(tester);
-        await tryEnterLateTime(tester);
-        await confirmOk(tester);
+      testWidgets(
+        'guarda exitosamente con fecha/hora de fin definida (toIso8601WithOffset con valor)',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 2400);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(() {
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          });
 
-        await _tapGuardar(tester);
-        await tester.pumpAndSettle();
-      },
-    );
-  });
+          final db = _MockLocalDatabase();
+          final sync = _MockSyncEngine();
+          when(
+            () => db.savePatient(any(), ownerUserId: any(named: 'ownerUserId')),
+          ).thenAnswer((_) async {});
+          when(
+            () => db.markChipsDirty(any(), guardian: any(named: 'guardian')),
+          ).thenAnswer((_) async {});
+          when(() => sync.syncAll()).thenAnswer((_) async => _MockSyncResult());
+
+          await tester.pumpWidget(
+            _buildApp(
+              patient: _fakePatient(),
+              scope: _defaultScope(db: db, sync: sync),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final historyField = textFieldWithHint(_hintHistory);
+          await tester.ensureVisible(historyField);
+          await tester.enterText(historyField, 'Consulta con fin definido');
+          await tester.pumpAndSettle();
+
+          final calendarIcons = find.byIcon(Icons.calendar_today);
+          await tester.ensureVisible(calendarIcons.first);
+          await tester.tap(calendarIcons.first, warnIfMissed: false);
+          await tester.pumpAndSettle();
+          await confirmOk(tester);
+          await confirmOk(tester);
+
+          await tester.ensureVisible(calendarIcons.at(1));
+          await tester.tap(calendarIcons.at(1), warnIfMissed: false);
+          await tester.pumpAndSettle();
+
+          await confirmOk(tester);
+          await confirmOk(tester);
+
+          final clearBtn = find.byIcon(Icons.clear);
+          if (clearBtn.evaluate().isNotEmpty) {
+            await tester.ensureVisible(clearBtn.first);
+            await tester.pumpAndSettle();
+          }
+
+          await _tapGuardar(tester);
+          await tester.pumpAndSettle();
+
+          final capturedRecord =
+              verify(
+                    () => db.savePatient(
+                      captureAny(),
+                      ownerUserId: any(named: 'ownerUserId'),
+                    ),
+                  ).captured.first
+                  as PatientFullRecord;
+          final encounter = capturedRecord.medicalHistory.first;
+
+          expect(encounter.startDateTime, isNotNull);
+          expect(
+            encounter.startDateTime,
+            matches(
+              RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$'),
+            ),
+          );
+        },
+      );
+
+      testWidgets(
+        'hora de inicio fijada al final del día actual dispara el SnackBar de fecha futura',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 2200);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(() {
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          });
+
+          await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+          await tester.pumpAndSettle();
+
+          final historyField = textFieldWithHint(_hintHistory);
+          await tester.ensureVisible(historyField);
+          await tester.enterText(historyField, 'Consulta con hora futura');
+          await tester.pumpAndSettle();
+
+          final calendarIcons = find.byIcon(Icons.calendar_today);
+          await tester.ensureVisible(calendarIcons.first);
+          await tester.tap(calendarIcons.first, warnIfMissed: false);
+          await tester.pumpAndSettle();
+
+          await confirmOk(tester); // fecha (hoy, único día permitido)
+          await tryEnterLateTime(tester); // intenta fijar 23:59
+          await confirmOk(tester); // hora
+
+          await _tapGuardar(tester);
+          await tester.pumpAndSettle();
+        },
+      );
+
+      testWidgets(
+        'hora de fin fijada al final del día actual dispara el SnackBar de fin en el futuro',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 2200);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(() {
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          });
+
+          await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+          await tester.pumpAndSettle();
+
+          final historyField = textFieldWithHint(_hintHistory);
+          await tester.ensureVisible(historyField);
+          await tester.enterText(historyField, 'Consulta con fin futuro');
+          await tester.pumpAndSettle();
+
+          final calendarIcons = find.byIcon(Icons.calendar_today);
+          await tester.ensureVisible(calendarIcons.at(1));
+          await tester.tap(calendarIcons.at(1), warnIfMissed: false);
+          await tester.pumpAndSettle();
+
+          await confirmOk(tester);
+          await tryEnterLateTime(tester);
+          await confirmOk(tester);
+
+          await _tapGuardar(tester);
+          await tester.pumpAndSettle();
+        },
+      );
+    },
+  );
 }

@@ -949,7 +949,7 @@ void main() {
     );
   });
 
-  group('EditGuardianSheet — Cobertura 100% (Firma, Checkbox y Errores)', () {
+  group('EditGuardianSheet — (Firma, Checkbox y Errores)', () {
     testWidgets(
       'Ejecuta gestos de firma (onPanStart, onPanUpdate, onPanEnd) y _clearSignature',
       (tester) async {

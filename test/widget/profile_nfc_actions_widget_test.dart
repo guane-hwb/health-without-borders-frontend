@@ -538,180 +538,139 @@ void main() {
     });
   });
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // Adición de tests para cubrir el 100% de líneas de profile_nfc_actions.dart
-  // ══════════════════════════════════════════════════════════════════════════
-  group('executeUpdateNfcChips & executeReassignOne — Cobertura Total 100%', () {
-    testWidgets(
-      'ejecuta la callback write() de paciente al presionar Empezar',
-      (tester) async {
-        when(() => mockKeyring.isEmpty).thenReturn(false);
-        when(() => mockKeyring.versions).thenReturn(<int>[1]);
-        when(() => mockKeyring.keys).thenReturn(<int, String>{1: validHexKey});
+  group(
+    'executeUpdateNfcChips y executeReassignOne — escritura y validaciones NFC',
+    () {
+      testWidgets(
+        'ejecuta la callback write() de paciente al presionar Empezar',
+        (tester) async {
+          when(() => mockKeyring.isEmpty).thenReturn(false);
+          when(() => mockKeyring.versions).thenReturn(<int>[1]);
+          when(
+            () => mockKeyring.keys,
+          ).thenReturn(<int, String>{1: validHexKey});
 
-        bool? result;
+          bool? result;
 
-        await tester.pumpWidget(
-          _wrap(
-            Builder(
-              builder: (ctx) => ElevatedButton(
-                onPressed: () async {
-                  result = await executeUpdateNfcChips(
-                    context: ctx,
-                    record: _createRecord(),
-                    keyring: mockKeyring,
-                    patientChipDirty: true,
-                    guardianChipDirty: false,
-                  );
-                },
-                child: const Text('Write Patient Action'),
-              ),
-            ),
-            locale: 'es',
-          ),
-        );
-
-        await tester.tap(find.text('Write Patient Action'));
-        await tester.pump(const Duration(milliseconds: 300));
-
-        final startBtn = find.text('Empezar');
-        expect(startBtn, findsOneWidget);
-
-        await tester.tap(startBtn);
-        await tester.pump(const Duration(milliseconds: 300));
-
-        final BuildContext modalContext = tester.element(
-          find.text('Dispositivo del paciente'),
-        );
-        Navigator.of(modalContext).pop(true);
-
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-
-        expect(result, isTrue);
-      },
-    );
-
-    testWidgets(
-      'ejecuta writeGuardianRecord() y muestra SnackBar cuando fit es parcial',
-      (tester) async {
-        when(() => mockKeyring.isEmpty).thenReturn(false);
-        when(() => mockKeyring.versions).thenReturn(<int>[1]);
-        when(() => mockKeyring.keys).thenReturn(<int, String>{1: validHexKey});
-
-        final record = _createRecord(g1Uid: 'G1-123', g2Uid: null);
-
-        await tester.pumpWidget(
-          _wrap(
-            Builder(
-              builder: (ctx) => ElevatedButton(
-                onPressed: () => executeUpdateNfcChips(
-                  context: ctx,
-                  record: record,
-                  keyring: mockKeyring,
-                  patientChipDirty: false,
-                  guardianChipDirty: true,
-                ),
-                child: const Text('Write Guardian Partial'),
-              ),
-            ),
-            locale: 'es',
-          ),
-        );
-
-        await tester.tap(find.text('Write Guardian Partial'));
-        await tester.pump(const Duration(milliseconds: 300));
-
-        final startBtn = find.text('Empezar');
-        if (startBtn.evaluate().isNotEmpty) {
-          await tester.tap(startBtn);
-          await tester.pump(const Duration(milliseconds: 300));
-        }
-
-        final BuildContext modalContext = tester.element(
-          find.text('Dispositivo del cuidador'),
-        );
-        Navigator.of(modalContext).pop(true);
-
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-      },
-    );
-
-    testWidgets(
-      'evalúa validaciones de chip ocupado (kind != none) y chip perteneciente al paciente en reasignación',
-      (tester) async {
-        final messages = <String>[];
-        final record = _createRecord(
-          patientUid: 'P-123',
-          g1Uid: 'G1-123',
-          g2Uid: 'G2-456',
-        );
-
-        await tester.pumpWidget(
-          _wrap(
-            Builder(
-              builder: (ctx) => ElevatedButton(
-                onPressed: () => executeReassignOne(
-                  context: ctx,
-                  target: ReassignTarget.patient,
-                  record: record,
-                  codec: mockCodec,
-                  isEs: true,
-                  showSnack: (msg, {error = false}) => messages.add(msg),
-                ),
-                child: const Text('Reassign Validations'),
-              ),
-            ),
-            locale: 'es',
-          ),
-        );
-
-        await tester.tap(find.text('Reassign Validations'));
-        await tester.pump(const Duration(milliseconds: 300));
-
-        final BuildContext modalContext = tester.element(
-          find.byType(BottomSheet),
-        );
-        Navigator.of(modalContext).pop(false);
-
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-
-        expect(messages, isEmpty);
-      },
-    );
-
-    testWidgets(
-      'completa la reasignación con escritura exitosa para paciente, cuidador 1 y cuidador 2',
-      (tester) async {
-        final record = _createRecord(
-          patientUid: 'P-123',
-          g1Uid: 'G1-123',
-          g2Uid: 'G2-456',
-        );
-
-        for (final target in ReassignTarget.values) {
           await tester.pumpWidget(
             _wrap(
               Builder(
                 builder: (ctx) => ElevatedButton(
-                  onPressed: () => executeReassignOne(
-                    context: ctx,
-                    target: target,
-                    record: record,
-                    codec: mockCodec,
-                    isEs: true,
-                    showSnack: (_, {error = false}) {},
-                  ),
-                  child: Text('Reassign Run ${target.name}'),
+                  onPressed: () async {
+                    result = await executeUpdateNfcChips(
+                      context: ctx,
+                      record: _createRecord(),
+                      keyring: mockKeyring,
+                      patientChipDirty: true,
+                      guardianChipDirty: false,
+                    );
+                  },
+                  child: const Text('Write Patient Action'),
                 ),
               ),
               locale: 'es',
             ),
           );
 
-          await tester.tap(find.text('Reassign Run ${target.name}'));
+          await tester.tap(find.text('Write Patient Action'));
+          await tester.pump(const Duration(milliseconds: 300));
+
+          final startBtn = find.text('Empezar');
+          expect(startBtn, findsOneWidget);
+
+          await tester.tap(startBtn);
+          await tester.pump(const Duration(milliseconds: 300));
+
+          final BuildContext modalContext = tester.element(
+            find.text('Dispositivo del paciente'),
+          );
+          Navigator.of(modalContext).pop(true);
+
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+
+          expect(result, isTrue);
+        },
+      );
+
+      testWidgets(
+        'ejecuta writeGuardianRecord() y muestra SnackBar cuando fit es parcial',
+        (tester) async {
+          when(() => mockKeyring.isEmpty).thenReturn(false);
+          when(() => mockKeyring.versions).thenReturn(<int>[1]);
+          when(
+            () => mockKeyring.keys,
+          ).thenReturn(<int, String>{1: validHexKey});
+
+          final record = _createRecord(g1Uid: 'G1-123', g2Uid: null);
+
+          await tester.pumpWidget(
+            _wrap(
+              Builder(
+                builder: (ctx) => ElevatedButton(
+                  onPressed: () => executeUpdateNfcChips(
+                    context: ctx,
+                    record: record,
+                    keyring: mockKeyring,
+                    patientChipDirty: false,
+                    guardianChipDirty: true,
+                  ),
+                  child: const Text('Write Guardian Partial'),
+                ),
+              ),
+              locale: 'es',
+            ),
+          );
+
+          await tester.tap(find.text('Write Guardian Partial'));
+          await tester.pump(const Duration(milliseconds: 300));
+
+          final startBtn = find.text('Empezar');
+          if (startBtn.evaluate().isNotEmpty) {
+            await tester.tap(startBtn);
+            await tester.pump(const Duration(milliseconds: 300));
+          }
+
+          final BuildContext modalContext = tester.element(
+            find.text('Dispositivo del cuidador'),
+          );
+          Navigator.of(modalContext).pop(true);
+
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+        },
+      );
+
+      testWidgets(
+        'evalúa validaciones de chip ocupado (kind != none) y chip perteneciente al paciente en reasignación',
+        (tester) async {
+          final messages = <String>[];
+          final record = _createRecord(
+            patientUid: 'P-123',
+            g1Uid: 'G1-123',
+            g2Uid: 'G2-456',
+          );
+
+          await tester.pumpWidget(
+            _wrap(
+              Builder(
+                builder: (ctx) => ElevatedButton(
+                  onPressed: () => executeReassignOne(
+                    context: ctx,
+                    target: ReassignTarget.patient,
+                    record: record,
+                    codec: mockCodec,
+                    isEs: true,
+                    showSnack: (msg, {error = false}) => messages.add(msg),
+                  ),
+                  child: const Text('Reassign Validations'),
+                ),
+              ),
+              locale: 'es',
+            ),
+          );
+
+          await tester.tap(find.text('Reassign Validations'));
           await tester.pump(const Duration(milliseconds: 300));
 
           final BuildContext modalContext = tester.element(
@@ -721,10 +680,55 @@ void main() {
 
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 300));
-        }
-      },
-    );
-  });
+
+          expect(messages, isEmpty);
+        },
+      );
+
+      testWidgets(
+        'completa la reasignación con escritura exitosa para paciente, cuidador 1 y cuidador 2',
+        (tester) async {
+          final record = _createRecord(
+            patientUid: 'P-123',
+            g1Uid: 'G1-123',
+            g2Uid: 'G2-456',
+          );
+
+          for (final target in ReassignTarget.values) {
+            await tester.pumpWidget(
+              _wrap(
+                Builder(
+                  builder: (ctx) => ElevatedButton(
+                    onPressed: () => executeReassignOne(
+                      context: ctx,
+                      target: target,
+                      record: record,
+                      codec: mockCodec,
+                      isEs: true,
+                      showSnack: (_, {error = false}) {},
+                    ),
+                    child: Text('Reassign Run ${target.name}'),
+                  ),
+                ),
+                locale: 'es',
+              ),
+            );
+
+            await tester.tap(find.text('Reassign Run ${target.name}'));
+            await tester.pump(const Duration(milliseconds: 300));
+
+            final BuildContext modalContext = tester.element(
+              find.byType(BottomSheet),
+            );
+            Navigator.of(modalContext).pop(false);
+
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 300));
+          }
+        },
+      );
+    },
+  );
 
   group('flujos guiados con servicio NFC simulado', () {
     const GuardianPayloadFit completeFit = GuardianPayloadFit(

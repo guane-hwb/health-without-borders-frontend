@@ -193,10 +193,6 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // ADDITIONAL TESTS FOR 100% CODE COVERAGE IN ADD_MEDICATION_SHEET.DART
-  // =========================================================================
-
   group('AddMedicationSheet — Unsaved Changes Logic', () {
     bool hasUnsavedChanges({
       String name = '',

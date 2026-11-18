@@ -669,10 +669,6 @@ void main() {
     },
   );
 
-  // =========================================================================
-  // ADDITIONAL TESTS FOR 100% CODE COVERAGE IN EDIT_CHRONIC_PERSONAL_SHEET.DART
-  // =========================================================================
-
   group(
     'EditChronicPersonalSheet – Unsaved Changes Dialog & PopScope Handlers',
     () {

@@ -4716,7 +4716,7 @@ void main() {
     });
   });
 
-  group('Cobertura 100% — huérfanos y validación de owner en nativo', () {
+  group('Conteo de registros huérfanos y validación de ownerUserId en nativo', () {
     test(
       'getOrphanedEmergencyLogCount cuenta logs sin dueño y pendientes (nativo y web)',
       () async {

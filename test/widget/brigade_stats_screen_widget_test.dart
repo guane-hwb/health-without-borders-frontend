@@ -841,10 +841,6 @@ void main() {
     );
   });
 
-  // =========================================================================
-  // ADDITIONAL TESTS FOR 100% CODE COVERAGE IN BRIGADE_STATS_SCREEN.DART
-  // =========================================================================
-
   group('BrigadeStatsScreen — Uncovered Branches & UI Callbacks', () {
     testWidgets('reloads stats when app resumes from background', (
       tester,

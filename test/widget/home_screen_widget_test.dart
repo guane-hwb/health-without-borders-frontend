@@ -1192,7 +1192,7 @@ void main() {
   );
 
   group(
-    'HomeScreen — Cobertura 100% (Subtítulo nulo y refresco tras pop de SyncQueue)',
+    'HomeScreen — renderizado de tarjetas sin subtítulo y refresco al volver de SyncQueue',
     () {
       testWidgets(
         'renderiza _ActionCard correctamente cuando el subtítulo es nulo',
@@ -1372,133 +1372,42 @@ void main() {
     });
   });
 
-  group('HomeScreen — Cobertura 100% (aviso de pendientes al cerrar sesión)', () {
-    Future<void> tapLogout(WidgetTester tester) async {
-      final logoutIcon = find.byIcon(Icons.logout_rounded);
-      await tester.scrollUntilVisible(logoutIcon, 80);
-      await tester.ensureVisible(logoutIcon);
-      await tester.pumpAndSettle();
-      await tester.tap(logoutIcon);
-      await tester.pumpAndSettle();
-    }
+  group(
+    'HomeScreen — advertencia de pendientes y borrado en Web al cerrar sesión)',
+    () {
+      Future<void> tapLogout(WidgetTester tester) async {
+        final logoutIcon = find.byIcon(Icons.logout_rounded);
+        await tester.scrollUntilVisible(logoutIcon, 80);
+        await tester.ensureVisible(logoutIcon);
+        await tester.pumpAndSettle();
+        await tester.tap(logoutIcon);
+        await tester.pumpAndSettle();
+      }
 
-    void stubPending({int patients = 0, int logs = 0}) {
-      when(
-        () => mockDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
-      ).thenAnswer((_) async => patients);
-      when(
-        () => mockDb.getUnsyncedEmergencyLogCount(
-          ownerUserId: any(named: 'ownerUserId'),
-        ),
-      ).thenAnswer((_) async => logs);
-    }
+      void stubPending({int patients = 0, int logs = 0}) {
+        when(
+          () => mockDb.getUnsyncedCount(ownerUserId: any(named: 'ownerUserId')),
+        ).thenAnswer((_) async => patients);
+        when(
+          () => mockDb.getUnsyncedEmergencyLogCount(
+            ownerUserId: any(named: 'ownerUserId'),
+          ),
+        ).thenAnswer((_) async => logs);
+      }
 
-    String expectedEs(int total) => kIsWeb
-        ? 'Atención: $total registro(s) no se pudieron sincronizar. Al cerrar '
-              'sesión se ELIMINARÁN de este navegador y no se podrán recuperar.'
-        : 'Atención: Hay $total registro(s) pendiente(s) por sincronizar en '
-              'este dispositivo.';
-    String expectedEn(int total) => kIsWeb
-        ? 'Warning: $total record(s) could not be synced. Signing out will '
-              'DELETE them from this browser and they cannot be recovered.'
-        : 'Warning: There are $total pending record(s) on this device.';
+      String expectedEs(int total) => kIsWeb
+          ? 'Atención: $total registro(s) no se pudieron sincronizar. Al cerrar '
+                'sesión se ELIMINARÁN de este navegador y no se podrán recuperar.'
+          : 'Atención: Hay $total registro(s) pendiente(s) por sincronizar en '
+                'este dispositivo.';
+      String expectedEn(int total) => kIsWeb
+          ? 'Warning: $total record(s) could not be synced. Signing out will '
+                'DELETE them from this browser and they cannot be recovered.'
+          : 'Warning: There are $total pending record(s) on this device.';
 
-    testWidgets('con registros pendientes muestra el aviso en español', (
-      tester,
-    ) async {
-      stubPending(patients: 2, logs: 1);
-      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
-      await tester.pumpAndSettle();
-
-      await tapLogout(tester);
-
-      expect(find.byType(AlertDialog), findsOneWidget);
-      expect(find.text(expectedEs(3)), findsOneWidget);
-    });
-
-    testWidgets('con registros pendientes muestra el aviso en inglés', (
-      tester,
-    ) async {
-      stubPending(patients: 2, logs: 1);
-      await tester.pumpWidget(
-        _wrapHome(user: _session(UserRole.doctor), locale: 'en'),
-      );
-      await tester.pumpAndSettle();
-
-      await tapLogout(tester);
-
-      expect(find.text(expectedEn(3)), findsOneWidget);
-    });
-
-    testWidgets('solo con logs de emergencia pendientes también avisa', (
-      tester,
-    ) async {
-      stubPending(patients: 0, logs: 4);
-      await tester.pumpWidget(_wrapHome(user: _session(UserRole.nurse)));
-      await tester.pumpAndSettle();
-
-      await tapLogout(tester);
-
-      expect(find.text(expectedEs(4)), findsOneWidget);
-    });
-
-    testWidgets('el aviso usa el estilo de advertencia (fondo ámbar)', (
-      tester,
-    ) async {
-      stubPending(patients: 1);
-      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
-      await tester.pumpAndSettle();
-
-      await tapLogout(tester);
-
-      final box = tester.widget<Container>(
-        find
-            .ancestor(
-              of: find.text(expectedEs(1)),
-              matching: find.byType(Container),
-            )
-            .first,
-      );
-      final deco = box.decoration! as BoxDecoration;
-      expect(deco.color, const Color(0xFFFFF3CD));
-      expect(deco.borderRadius, BorderRadius.circular(8));
-      expect(deco.border, Border.all(color: const Color(0xFFFFEEBA)));
-    });
-
-    testWidgets('sin pendientes NO muestra el aviso', (tester) async {
-      stubPending();
-      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
-      await tester.pumpAndSettle();
-
-      await tapLogout(tester);
-
-      expect(find.textContaining('Atención'), findsNothing);
-    });
-
-    testWidgets('confirmar con pendientes igualmente cierra sesión', (
-      tester,
-    ) async {
-      stubPending(patients: 2);
-      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
-      await tester.pumpAndSettle();
-
-      await tapLogout(tester);
-      await tester.tap(
-        find
-            .descendant(
-              of: find.byType(AlertDialog),
-              matching: find.byType(TextButton),
-            )
-            .last,
-      );
-      await tester.pumpAndSettle();
-
-      expect(mockAuth.clearSessionCalled, isTrue);
-    });
-
-    testWidgets(
-      'web: sincroniza antes de preguntar y advierte que se ELIMINARÁN',
-      (tester) async {
+      testWidgets('con registros pendientes muestra el aviso en español', (
+        tester,
+      ) async {
         stubPending(patients: 2, logs: 1);
         await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
         await tester.pumpAndSettle();
@@ -1506,15 +1415,12 @@ void main() {
         await tapLogout(tester);
 
         expect(find.byType(AlertDialog), findsOneWidget);
-        expect(find.textContaining('ELIMINARÁN'), findsOneWidget);
-        verify(() => mockDb.getUnsyncedCount(ownerUserId: null)).called(1);
-      },
-      skip: !kIsWeb,
-    );
+        expect(find.text(expectedEs(3)), findsOneWidget);
+      });
 
-    testWidgets(
-      'web: el aviso en inglés indica que se eliminarán de este navegador',
-      (tester) async {
+      testWidgets('con registros pendientes muestra el aviso en inglés', (
+        tester,
+      ) async {
         stubPending(patients: 2, logs: 1);
         await tester.pumpWidget(
           _wrapHome(user: _session(UserRole.doctor), locale: 'en'),
@@ -1523,97 +1429,62 @@ void main() {
 
         await tapLogout(tester);
 
-        expect(
-          find.text(
-            'Warning: 3 record(s) could not be synced. Signing out will '
-            'DELETE them from this browser and they cannot be recovered.',
-          ),
-          findsOneWidget,
-        );
-      },
-      skip: !kIsWeb,
-    );
+        expect(find.text(expectedEn(3)), findsOneWidget);
+      });
 
-    testWidgets(
-      'web: tras la sincronización previa permite confirmar y cerrar sesión',
-      (tester) async {
+      testWidgets('solo con logs de emergencia pendientes también avisa', (
+        tester,
+      ) async {
+        stubPending(patients: 0, logs: 4);
+        await tester.pumpWidget(_wrapHome(user: _session(UserRole.nurse)));
+        await tester.pumpAndSettle();
+
+        await tapLogout(tester);
+
+        expect(find.text(expectedEs(4)), findsOneWidget);
+      });
+
+      testWidgets('el aviso usa el estilo de advertencia (fondo ámbar)', (
+        tester,
+      ) async {
         stubPending(patients: 1);
         await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
         await tester.pumpAndSettle();
 
         await tapLogout(tester);
-        expect(find.byType(AlertDialog), findsOneWidget);
 
-        await tester.tap(
+        final box = tester.widget<Container>(
           find
-              .descendant(
-                of: find.byType(AlertDialog),
-                matching: find.byType(TextButton),
+              .ancestor(
+                of: find.text(expectedEs(1)),
+                matching: find.byType(Container),
               )
-              .last,
+              .first,
         );
-        await tester.pumpAndSettle();
-
-        expect(mockAuth.clearSessionCalled, isTrue);
-      },
-      skip: !kIsWeb,
-    );
-
-    group('forzando el comportamiento web', () {
-      setUp(() {
-        HomeScreen.debugIsWebOverride = true;
-        addTearDown(() => HomeScreen.debugIsWebOverride = null);
+        final deco = box.decoration! as BoxDecoration;
+        expect(deco.color, const Color(0xFFFFF3CD));
+        expect(deco.borderRadius, BorderRadius.circular(8));
+        expect(deco.border, Border.all(color: const Color(0xFFFFEEBA)));
       });
 
-      testWidgets('el aviso en español dice que se ELIMINARÁN del navegador', (
-        tester,
-      ) async {
-        stubPending(patients: 2, logs: 1);
+      testWidgets('sin pendientes NO muestra el aviso', (tester) async {
+        stubPending();
         await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
         await tester.pumpAndSettle();
 
         await tapLogout(tester);
 
-        expect(
-          find.text(
-            'Atención: 3 registro(s) no se pudieron sincronizar. Al cerrar '
-            'sesión se ELIMINARÁN de este navegador y no se podrán recuperar.',
-          ),
-          findsOneWidget,
-        );
-        verify(() => mockDb.getUnsyncedCount(ownerUserId: null)).called(1);
+        expect(find.textContaining('Atención'), findsNothing);
       });
 
-      testWidgets('el aviso en inglés dice que se eliminarán del navegador', (
+      testWidgets('confirmar con pendientes igualmente cierra sesión', (
         tester,
       ) async {
-        stubPending(patients: 2, logs: 1);
-        await tester.pumpWidget(
-          _wrapHome(user: _session(UserRole.doctor), locale: 'en'),
-        );
-        await tester.pumpAndSettle();
-
-        await tapLogout(tester);
-
-        expect(
-          find.text(
-            'Warning: 3 record(s) could not be synced. Signing out will '
-            'DELETE them from this browser and they cannot be recovered.',
-          ),
-          findsOneWidget,
-        );
-      });
-
-      testWidgets('sincroniza antes de preguntar y permite cerrar sesión', (
-        tester,
-      ) async {
-        stubPending(patients: 1);
+        stubPending(patients: 2);
         await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
         await tester.pumpAndSettle();
 
         await tapLogout(tester);
-        expect(find.byType(AlertDialog), findsOneWidget);
-
         await tester.tap(
           find
               .descendant(
@@ -1626,8 +1497,140 @@ void main() {
 
         expect(mockAuth.clearSessionCalled, isTrue);
       });
-    });
-  });
+
+      testWidgets(
+        'web: sincroniza antes de preguntar y advierte que se ELIMINARÁN',
+        (tester) async {
+          stubPending(patients: 2, logs: 1);
+          await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+          await tester.pumpAndSettle();
+
+          await tapLogout(tester);
+
+          expect(find.byType(AlertDialog), findsOneWidget);
+          expect(find.textContaining('ELIMINARÁN'), findsOneWidget);
+          verify(() => mockDb.getUnsyncedCount(ownerUserId: null)).called(1);
+        },
+        skip: !kIsWeb,
+      );
+
+      testWidgets(
+        'web: el aviso en inglés indica que se eliminarán de este navegador',
+        (tester) async {
+          stubPending(patients: 2, logs: 1);
+          await tester.pumpWidget(
+            _wrapHome(user: _session(UserRole.doctor), locale: 'en'),
+          );
+          await tester.pumpAndSettle();
+
+          await tapLogout(tester);
+
+          expect(
+            find.text(
+              'Warning: 3 record(s) could not be synced. Signing out will '
+              'DELETE them from this browser and they cannot be recovered.',
+            ),
+            findsOneWidget,
+          );
+        },
+        skip: !kIsWeb,
+      );
+
+      testWidgets(
+        'web: tras la sincronización previa permite confirmar y cerrar sesión',
+        (tester) async {
+          stubPending(patients: 1);
+          await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+          await tester.pumpAndSettle();
+
+          await tapLogout(tester);
+          expect(find.byType(AlertDialog), findsOneWidget);
+
+          await tester.tap(
+            find
+                .descendant(
+                  of: find.byType(AlertDialog),
+                  matching: find.byType(TextButton),
+                )
+                .last,
+          );
+          await tester.pumpAndSettle();
+
+          expect(mockAuth.clearSessionCalled, isTrue);
+        },
+        skip: !kIsWeb,
+      );
+
+      group('forzando el comportamiento web', () {
+        setUp(() {
+          HomeScreen.debugIsWebOverride = true;
+          addTearDown(() => HomeScreen.debugIsWebOverride = null);
+        });
+
+        testWidgets('el aviso en español dice que se ELIMINARÁN del navegador', (
+          tester,
+        ) async {
+          stubPending(patients: 2, logs: 1);
+          await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+          await tester.pumpAndSettle();
+
+          await tapLogout(tester);
+
+          expect(
+            find.text(
+              'Atención: 3 registro(s) no se pudieron sincronizar. Al cerrar '
+              'sesión se ELIMINARÁN de este navegador y no se podrán recuperar.',
+            ),
+            findsOneWidget,
+          );
+          verify(() => mockDb.getUnsyncedCount(ownerUserId: null)).called(1);
+        });
+
+        testWidgets('el aviso en inglés dice que se eliminarán del navegador', (
+          tester,
+        ) async {
+          stubPending(patients: 2, logs: 1);
+          await tester.pumpWidget(
+            _wrapHome(user: _session(UserRole.doctor), locale: 'en'),
+          );
+          await tester.pumpAndSettle();
+
+          await tapLogout(tester);
+
+          expect(
+            find.text(
+              'Warning: 3 record(s) could not be synced. Signing out will '
+              'DELETE them from this browser and they cannot be recovered.',
+            ),
+            findsOneWidget,
+          );
+        });
+
+        testWidgets('sincroniza antes de preguntar y permite cerrar sesión', (
+          tester,
+        ) async {
+          stubPending(patients: 1);
+          await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+          await tester.pumpAndSettle();
+
+          await tapLogout(tester);
+          expect(find.byType(AlertDialog), findsOneWidget);
+
+          await tester.tap(
+            find
+                .descendant(
+                  of: find.byType(AlertDialog),
+                  matching: find.byType(TextButton),
+                )
+                .last,
+          );
+          await tester.pumpAndSettle();
+
+          expect(mockAuth.clearSessionCalled, isTrue);
+        });
+      });
+    },
+  );
 
   group('HomeScreen — saludo según la hora (_greeting)', () {
     tearDown(() => HomeScreen.debugNowOverride = null);

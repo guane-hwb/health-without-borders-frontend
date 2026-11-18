@@ -2827,7 +2827,7 @@ void main() {
     );
   });
 
-  group('Cobertura 100% — _reassignDevices con keyring NFC inválido', () {
+  group('_reassignDevices — keyring NFC inválido', () {
     Future<void> triggerReassign(WidgetTester tester) async {
       PatientProfileScreen.showReassignDeviceDialogImpl =
           (context, {required isEs, required hasG1, required hasG2}) async =>
@@ -2915,7 +2915,7 @@ void main() {
     );
   });
 
-  group('Cobertura 100% — _saveAndPendingSync sin sesión en memoria', () {
+  group('_saveAndPendingSync — restauración de sesión en memoria', () {
     Future<void> editAddress(WidgetTester tester) async {
       final summary = tester.widget<ProfileTabSummary>(
         find.byType(ProfileTabSummary),
@@ -2985,7 +2985,7 @@ void main() {
     );
   });
 
-  group('Cobertura 100% — _sync sin conexión y con errores', () {
+  group('_sync — manejo sin conexión y fallos de sincronización', () {
     testWidgets(
       '136. Sync manual sin conexión muestra snackbar naranja en español y '
       'no llama a syncAll',
@@ -3559,7 +3559,7 @@ void main() {
     });
   });
 
-  group('Cobertura 100% — rol sin permiso y resultados de sync', () {
+  group('Permisos de rol para reasignar y mensajes de resultado de sync', () {
     final List<UserRole> blockedRoles = UserRole.values
         .where((UserRole r) => !r.canSyncPatient)
         .toList();
