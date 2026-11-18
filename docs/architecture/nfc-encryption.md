@@ -35,6 +35,25 @@ device is scanned. Offline, the reader uses the guardian copy only when its
 `device_uid` is the patient device just scanned; otherwise it shows the triage,
 read-only.
 
+### How the guardian copy is fitted to the chip
+
+The guardian copy carries at most the three most recent consultations and the
+three most recent vaccines. `NfcGuardianPayload.buildWithinCapacity` fits it to
+the capacity the chip reports, inside the tap, in two steps:
+
+1. **Trim.** While the encoded copy does not fit, drop the oldest entry of one
+   history at a time, alternating between consultations and vaccines (a
+   consultation first when both hold the same number).
+2. **Give back.** Once it fits, return to the history that was not cut last the
+   entries it lost, one at a time, while they still fit.
+
+The result leaves no entry out while there is room for it: adding the next
+consultation or the next vaccine would not fit. Without the second step the
+alternation dropped vaccines in step with consultations, and since a
+consultation is several times larger than a vaccine, a card with room for three
+vaccines was written with one. Each history keeps its most recent entries, so the
+partial-device notice ("the most recent entries were saved") stays accurate.
+
 ---
 
 ## Wire format

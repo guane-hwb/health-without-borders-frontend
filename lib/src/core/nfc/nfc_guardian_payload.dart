@@ -78,13 +78,27 @@ abstract final class NfcGuardianPayload {
 
   /// Builds the largest guardian payload that fits within [capacityBytes].
   ///
-  /// Starts from [maxConsultations]/[maxVaccines] and, if the estimated
-  /// encoded size exceeds the card capacity, drops the oldest entries one at a
-  /// time (alternating between the two histories) until it fits or there is
-  /// nothing left to drop.
+  /// Two steps:
+  ///
+  /// 1. **Trim.** Starts from [maxConsultations]/[maxVaccines] and, while the
+  ///    estimated encoded size exceeds the card capacity, drops the oldest
+  ///    entry of one history at a time, alternating between the two (a
+  ///    consultation first when both hold the same number), until it fits or
+  ///    there is nothing left to drop.
+  /// 2. **Give back.** Once it fits, the history that was *not* cut last gets
+  ///    back, one at a time, the entries it lost while they still fit.
+  ///
+  /// Step 2 exists because the trim has to keep dropping vaccines in step with
+  /// consultations until the first combination that fits, and a consultation
+  /// is several times larger than a vaccine: without it, a card with room for
+  /// three vaccines was written with one. After step 2 no entry is left out
+  /// while there is room for it: adding the next consultation or the next
+  /// vaccine to the result would not fit. Entries stay the most recent ones of
+  /// each history, so the partial-device notice still reads true.
   ///
   /// [estimateSize] should be [NfcPayloadCodec.estimateSize], which accounts
-  /// for CBOR + DEFLATE + the 28-byte AES-GCM overhead.
+  /// for CBOR + DEFLATE + the 28-byte AES-GCM overhead. It is called once per
+  /// combination tried and never twice for the same one.
   static GuardianPayloadFit buildWithinCapacity({
     required PatientFullRecord record,
     required int capacityBytes,
@@ -103,36 +117,66 @@ abstract final class NfcGuardianPayload {
     if (m > record.vaccinationRecord.length) {
       m = record.vaccinationRecord.length;
     }
+    final int maxN = n;
+    final int maxM = m;
 
     // The payload is built with the full, readable shape, but what actually
     // gets written (and must fit) is the key-aliased version. Measure that, so
-    // the trim loop reflects the real on-chip size and does not over-trim.
-    var payload = buildGuardianPayload(
-      record: record,
-      maxConsultations: n,
-      maxVaccines: m,
-    );
-    var size = estimateSize(aliasGuardianPayload(payload));
+    // the loops reflect the real on-chip size and do not over-trim. It is
+    // carried aliased: reconstructFromGuardian un-aliases on read.
+    Map<String, dynamic> aliased(int consultations, int vaccines) =>
+        aliasGuardianPayload(
+          buildGuardianPayload(
+            record: record,
+            maxConsultations: consultations,
+            maxVaccines: vaccines,
+          ),
+        );
 
+    var payload = aliased(n, m);
+    var size = estimateSize(payload);
+
+    // Step 1: trim, alternating between the two histories.
+    var consultationCutLast = false;
+    var vaccineCutLast = false;
     while (size > capacityBytes && (n > 0 || m > 0)) {
-      if (n >= m && n > 0) {
+      consultationCutLast = n >= m && n > 0;
+      vaccineCutLast = !consultationCutLast;
+      if (consultationCutLast) {
         n--;
       } else {
         m--;
       }
-      payload = buildGuardianPayload(
-        record: record,
-        maxConsultations: n,
-        maxVaccines: m,
-      );
-      size = estimateSize(aliasGuardianPayload(payload));
+      payload = aliased(n, m);
+      size = estimateSize(payload);
+    }
+
+    // Step 2: give back to the other history what still fits. The history cut
+    // last cannot grow: one more of its entries is the combination the trim
+    // just left because it did not fit.
+    if (size <= capacityBytes) {
+      while (consultationCutLast && m < maxM) {
+        final Map<String, dynamic> candidate = aliased(n, m + 1);
+        final int candidateSize = estimateSize(candidate);
+        if (candidateSize > capacityBytes) break;
+        m++;
+        payload = candidate;
+        size = candidateSize;
+      }
+      while (vaccineCutLast && n < maxN) {
+        final Map<String, dynamic> candidate = aliased(n + 1, m);
+        final int candidateSize = estimateSize(candidate);
+        if (candidateSize > capacityBytes) break;
+        n++;
+        payload = candidate;
+        size = candidateSize;
+      }
     }
 
     return GuardianPayloadFit(
-      // Carry the aliased payload: this is what will be written, and its size is
-      // what `estimatedBytes` reflects. reconstructFromGuardian un-aliases on
-      // read, so the round trip stays correct.
-      payload: aliasGuardianPayload(payload),
+      // The aliased payload: this is what will be written, and its size is
+      // what `estimatedBytes` reflects.
+      payload: payload,
       includedConsultations: n,
       includedVaccines: m,
       totalConsultations: record.medicalHistory.length,
