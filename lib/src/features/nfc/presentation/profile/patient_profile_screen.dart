@@ -149,6 +149,12 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (mounted) setState(() {});
   }
 
+  /// Every save here writes the whole draft, so it also keeps a change whose
+  /// own save failed: leaving no longer needs the warning.
+  void _onDraftSaved() {
+    if (_lastSaveFailed && mounted) setState(() => _lastSaveFailed = false);
+  }
+
   void _onRecordSaved(RecordSyncResult result) {
     if (!mounted) return;
     final effect = _draftController.applySyncResult(result);
@@ -363,6 +369,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         organizationId: currentUser?.organizationId,
         retiredDeviceReason: selection.reason,
       );
+      _onDraftSaved();
       await scope.localDatabase.clearChipsDirty(
         record.patientId,
         patient: patientDone,
@@ -446,6 +453,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ownerUserId: currentUser.id,
         organizationId: currentUser.organizationId,
       );
+      _onDraftSaved();
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
       if (_hasInternet) await _sync(silent: true);
     } catch (e, stack) {
@@ -465,10 +473,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
           action: SnackBarAction(
             label: isEs ? 'Reintentar' : 'Retry',
             textColor: Colors.white,
-            onPressed: () {
-              setState(() => _lastSaveFailed = false);
-              _saveAndPendingSync();
-            },
+            onPressed: () => unawaited(_saveAndPendingSync()),
           ),
         ),
       );
@@ -584,6 +589,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ownerUserId: currentUser?.id,
         organizationId: currentUser?.organizationId,
       );
+      _onDraftSaved();
 
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
       _conflictsDuringSync = false;
