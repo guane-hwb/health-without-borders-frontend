@@ -40,4 +40,8 @@ class AppScope extends InheritedNotifier<ValueNotifier<UserSession?>> {
     if (scope == null) throw StateError('AppScope not found in widget tree.');
     return scope;
   }
+
+  /// Like [of], but null where there is no scope (isolated widget tests).
+  static AppScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppScope>();
 }

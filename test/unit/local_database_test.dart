@@ -16,6 +16,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:health_without_borders_frontend/src/core/nfc/retired_device_hash.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_write_metric.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 
@@ -1688,6 +1689,7 @@ void main() {
           tables,
           containsAll(<String>['retired_devices', 'retired_devices_cursor']),
         );
+        expect(tables, contains('nfc_write_metrics'));
 
         final emergencyColumns = (await raw.rawQuery(
           'PRAGMA table_info(emergency_access_log)',
@@ -2156,6 +2158,95 @@ void main() {
         );
       },
     );
+  });
+
+  group('Métricas de escritura NFC (nativo)', () {
+    NfcWriteMetric metric({int messageBytes = 173, String role = 'patient'}) =>
+        NfcWriteMetric(
+          deviceRole: role,
+          payloadFormat: kCurrentNfcPayloadFormat,
+          keyVersion: 0,
+          payloadBytes: messageBytes - 29,
+          messageBytes: messageBytes,
+          chipCapacity: 492,
+          writtenAt: DateTime.utc(2026, 11, 17, 21),
+        );
+
+    test('registra la escritura y queda pendiente, en orden', () async {
+      final db = LocalDatabase.instance;
+
+      await db.recordNfcWriteMetric(metric(messageBytes: 173));
+      await db.recordNfcWriteMetric(
+        metric(messageBytes: 704, role: 'guardian'),
+      );
+
+      final pending = await db.pendingNfcWriteMetrics();
+      expect(pending, hasLength(2));
+      expect(pending.first['message_bytes'], 173);
+      expect(pending.first['device_role'], 'patient');
+      expect(pending.last['device_role'], 'guardian');
+      expect(pending.first['written_at'], '2026-11-17T21:00:00.000Z');
+      expect(pending.first.containsKey('device_uid'), isFalse);
+    });
+
+    test('borra sólo lo que el servidor aceptó', () async {
+      final db = LocalDatabase.instance;
+      await db.recordNfcWriteMetric(metric(messageBytes: 100));
+      await db.recordNfcWriteMetric(metric(messageBytes: 200));
+      final first = (await db.pendingNfcWriteMetrics()).first['id']! as int;
+
+      await db.deleteNfcWriteMetrics(<int>[first]);
+
+      final pending = await db.pendingNfcWriteMetrics();
+      expect(pending, hasLength(1));
+      expect(pending.single['message_bytes'], 200);
+    });
+
+    test('borrar una lista vacía no toca nada', () async {
+      final db = LocalDatabase.instance;
+      await db.recordNfcWriteMetric(metric());
+
+      await db.deleteNfcWriteMetrics(<int>[]);
+
+      expect(await db.pendingNfcWriteMetrics(), hasLength(1));
+    });
+
+    test(
+      'sin sincronizar nunca guarda más del tope: quedan las últimas',
+      () async {
+        final db = LocalDatabase.instance;
+        const extra = 5;
+        for (
+          var i = 0;
+          i < LocalDatabase.maxPendingNfcWriteMetrics + extra;
+          i++
+        ) {
+          await db.recordNfcWriteMetric(metric(messageBytes: 100 + i));
+        }
+
+        final pending = await db.pendingNfcWriteMetrics();
+        expect(pending, hasLength(LocalDatabase.maxPendingNfcWriteMetrics));
+        expect(pending.first['message_bytes'], 100 + extra);
+      },
+    );
+
+    test('la versión Web no guarda métricas: no escribe chips', () async {
+      final webBackend = <String, String>{};
+      final db = LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        forceWeb: true,
+        webGet: (key) async => webBackend[key],
+        webSet: (key, value) async => webBackend[key] = value,
+        webRemove: (key) async => webBackend.remove(key),
+        webList: (prefix) async =>
+            webBackend.entries.where((e) => e.key.startsWith(prefix)).toList(),
+      );
+
+      await db.recordNfcWriteMetric(metric());
+
+      expect(await db.pendingNfcWriteMetrics(), isEmpty);
+      expect(webBackend, isEmpty);
+    });
   });
 
   group('Versiones de llave NFC observadas (nativo)', () {

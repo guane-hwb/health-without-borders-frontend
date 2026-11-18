@@ -147,6 +147,35 @@ them accordingly.
 
 ---
 
+## Write-size telemetry
+
+Every successful chip write records its sizes in `nfc_write_metrics`, and
+`SyncEngine` reports them to `POST /api/v1/patients/nfc-write-metrics`. The
+question they answer is how the payload format and the guardian copy should
+change: how close each write comes to the chip's capacity, and how often the
+guardian copy had to leave history out.
+
+| Field | Patient device | Guardian device |
+|---|---|---|
+| `device_role` | `patient` | `guardian` |
+| `payload_format`, `key_version` | format of the payload (1 today) and key version | same |
+| `payload_bytes`, `message_bytes`, `chip_capacity` | encrypted payload, whole NDEF message, capacity the chip reported | same |
+| `consultations_kept/total`, `vaccines_kept/total` | null | what the copy kept, of what the record holds |
+| `written_at` | UTC | UTC |
+
+No UID, no patient, no record content: a row cannot be traced back to a person.
+`NfcPayloadService` builds the metric after `write()` returns and hands it to the
+`onWritten` observer without awaiting it; a failure is logged and the write is
+unaffected. The table keeps at most `LocalDatabase.maxPendingNfcWriteMetrics`
+rows (the newest), and rows are deleted as soon as the server accepts them. The
+web build writes no chips and stores nothing.
+
+The same sizes for records that already exist, before any build reports them,
+come from `tool/nfc_measure/` (aggregates only; read its README before running
+it on real records).
+
+---
+
 ## Updating the fleet
 
 The build compatibility rule that matters, in both directions:

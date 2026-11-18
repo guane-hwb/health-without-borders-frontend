@@ -292,6 +292,7 @@ class SyncEngine {
     await refreshPendingCount();
     await _syncEmergencyLogs();
     await _syncNfcKeyVersions();
+    await _syncNfcWriteMetrics();
 
     bool cycleBatchSuccessful = true;
 
@@ -673,6 +674,30 @@ class SyncEngine {
     } catch (e, stack) {
       AppLogger.e(
         'Error descargando la lista de dispositivos retirados',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  /// Reports the sizes of chip writes and deletes what the server accepted.
+  /// A failure leaves them for the next cycle; nothing else depends on them.
+  Future<void> _syncNfcWriteMetrics() async {
+    try {
+      final pending = await _localDb.pendingNfcWriteMetrics();
+      if (pending.isEmpty) return;
+
+      await _patientRepo.reportNfcWriteMetrics(pending);
+
+      final ids = pending
+          .map((Map<String, Object?> r) => (r['id'] as num?)?.toInt())
+          .whereType<int>()
+          .toList();
+      await _localDb.deleteNfcWriteMetrics(ids);
+      AppLogger.d('Métricas de escritura NFC reportadas: ${ids.length}');
+    } catch (e, stack) {
+      AppLogger.e(
+        'Error reportando métricas de escritura NFC',
         error: e,
         stackTrace: stack,
       );

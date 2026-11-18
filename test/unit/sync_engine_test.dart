@@ -141,6 +141,11 @@ void main() {
       ),
     ).thenAnswer((_) async => []);
     when(() => localDb.pendingNfcKeyVersions()).thenAnswer((_) async => []);
+    when(() => localDb.pendingNfcWriteMetrics()).thenAnswer((_) async => []);
+    when(() => localDb.deleteNfcWriteMetrics(any())).thenAnswer((_) async {});
+    when(
+      () => patientRepo.reportNfcWriteMetrics(any()),
+    ).thenAnswer((_) async {});
     when(() => localDb.retiredDevicesSyncedAt()).thenAnswer((_) async => null);
     when(
       () => localDb.addRetiredDeviceHashes(
@@ -1324,6 +1329,61 @@ void main() {
       // La telemetría nunca puede tumbar la sincronización clínica.
       await expectLater(engine.syncAll(), completes);
       verifyNever(() => localDb.markNfcKeyVersionsSynced(any()));
+    });
+  });
+
+  group('métricas de escritura NFC', () {
+    Map<String, Object?> row(int id, {int messageBytes = 173}) =>
+        <String, Object?>{
+          'id': id,
+          'device_role': 'patient',
+          'payload_format': 1,
+          'key_version': 0,
+          'payload_bytes': messageBytes - 29,
+          'message_bytes': messageBytes,
+          'chip_capacity': 492,
+          'written_at': '2026-11-17T21:00:00.000Z',
+        };
+
+    test('sin métricas pendientes no llama al repositorio', () async {
+      await engine.syncAll();
+
+      verifyNever(() => patientRepo.reportNfcWriteMetrics(any()));
+      verifyNever(() => localDb.deleteNfcWriteMetrics(any()));
+    });
+
+    test('envía las pendientes y borra las que el servidor aceptó', () async {
+      when(
+        () => localDb.pendingNfcWriteMetrics(),
+      ).thenAnswer((_) async => [row(3), row(4, messageBytes: 704)]);
+
+      await engine.syncAll();
+
+      final sent =
+          verify(
+                () => patientRepo.reportNfcWriteMetrics(captureAny()),
+              ).captured.single
+              as List<Map<String, Object?>>;
+      expect(sent, hasLength(2));
+      final deleted =
+          verify(
+                () => localDb.deleteNfcWriteMetrics(captureAny()),
+              ).captured.single
+              as List<int>;
+      expect(deleted, <int>[3, 4]);
+    });
+
+    test('un fallo al reportar no aborta el lote ni borra nada', () async {
+      when(
+        () => localDb.pendingNfcWriteMetrics(),
+      ).thenAnswer((_) async => [row(3)]);
+      when(
+        () => patientRepo.reportNfcWriteMetrics(any()),
+      ).thenThrow(Exception('sin red'));
+
+      // La telemetría nunca puede tumbar la sincronización clínica.
+      await expectLater(engine.syncAll(), completes);
+      verifyNever(() => localDb.deleteNfcWriteMetrics(any()));
     });
   });
 

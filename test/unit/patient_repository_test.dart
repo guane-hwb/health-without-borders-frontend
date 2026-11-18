@@ -716,6 +716,86 @@ void main() {
     );
   });
 
+  group('reportNfcWriteMetrics', () {
+    test('no hace ninguna petición si no hay métricas pendientes', () async {
+      await repository.reportNfcWriteMetrics(<Map<String, Object?>>[]);
+
+      verifyNever(
+        () => apiClient.postJson(
+          path: any(named: 'path'),
+          body: any(named: 'body'),
+          headers: any(named: 'headers'),
+          timeout: any(named: 'timeout'),
+        ),
+      );
+    });
+
+    test('envía a /api/v1/patients/nfc-write-metrics sólo los campos del '
+        'endpoint', () async {
+      when(
+        () => apiClient.postJson(
+          path: '/api/v1/patients/nfc-write-metrics',
+          body: any(named: 'body'),
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer((_) async => <String, dynamic>{});
+
+      await repository.reportNfcWriteMetrics(<Map<String, Object?>>[
+        <String, Object?>{
+          'id': 7,
+          'device_role': 'guardian',
+          'payload_format': 1,
+          'key_version': 0,
+          'payload_bytes': 700,
+          'message_bytes': 734,
+          'chip_capacity': 872,
+          'consultations_kept': 0,
+          'consultations_total': 2,
+          'vaccines_kept': 3,
+          'vaccines_total': 3,
+          'written_at': '2026-11-17T21:05:00.000Z',
+        },
+        <String, Object?>{
+          'id': 8,
+          'device_role': 'patient',
+          'payload_format': 1,
+          'key_version': 0,
+          'payload_bytes': 144,
+          'message_bytes': 173,
+          'chip_capacity': 492,
+          'consultations_kept': null,
+          'consultations_total': null,
+          'vaccines_kept': null,
+          'vaccines_total': null,
+          // Una hora ilegible no puede tumbar el lote: va la del envío.
+          'written_at': 'NOT_A_DATE',
+        },
+      ]);
+
+      final body =
+          verify(
+                () => apiClient.postJson(
+                  path: '/api/v1/patients/nfc-write-metrics',
+                  body: captureAny(named: 'body'),
+                  headers: expectedAuthHeader,
+                ),
+              ).captured.single
+              as Map<String, dynamic>;
+      final entries = body['entries'] as List<dynamic>;
+
+      expect(entries, hasLength(2));
+      final first = entries[0] as Map<String, Object?>;
+      expect(first.containsKey('id'), isFalse);
+      expect(first['device_role'], 'guardian');
+      expect(first['message_bytes'], 734);
+      expect(first['consultations_total'], 2);
+      expect(first['written_at'], '2026-11-17T21:05:00.000Z');
+      final second = entries[1] as Map<String, Object?>;
+      expect(second['consultations_kept'], isNull);
+      expect(second['written_at'] as String, endsWith('Z'));
+    });
+  });
+
   group('contrato de errores: se conservan statusCode y code', () {
     const record = _FakePatientFullRecord(<String, dynamic>{});
 

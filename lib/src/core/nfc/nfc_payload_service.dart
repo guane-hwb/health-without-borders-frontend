@@ -1,17 +1,20 @@
 // lib/src/core/nfc/nfc_payload_service.dart
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:nfc_manager/ndef_record.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
+import '../utils/app_logger.dart';
 import 'nfc_guardian_alias.dart';
 import 'nfc_guardian_payload.dart';
 import 'nfc_keyring.dart' show kLegacyNfcKeyVersion;
 import 'nfc_payload_codec.dart';
 import 'nfc_session_manager.dart';
 import 'nfc_triage_payload.dart';
+import 'nfc_write_metric.dart';
 
 export 'nfc_session_manager.dart'
     show
@@ -96,11 +99,19 @@ const String kHwbGuardianMimeType = 'application/vnd.hwb.guardian';
 /// Owns no radio state: every operation goes through [NfcTagSource], which
 /// serialises callers and guarantees the future resolves.
 class NfcPayloadService {
-  NfcPayloadService({required this.codec, NfcTagSource? tagSource})
-    : _tagSource = tagSource ?? NfcSessionManager.instance;
+  /// [onWritten] is told the sizes of every successful write (see
+  /// [NfcWriteMetric]). It is not awaited and its failures are only logged:
+  /// telemetry never delays or fails a write.
+  NfcPayloadService({
+    required this.codec,
+    NfcTagSource? tagSource,
+    NfcWriteObserver? onWritten,
+  }) : _tagSource = tagSource ?? NfcSessionManager.instance,
+       _onWritten = onWritten;
 
   final NfcPayloadCodec codec;
   final NfcTagSource _tagSource;
+  final NfcWriteObserver? _onWritten;
 
   bool get _bindsToChip {
     final int? version = codec.writeKeyVersion;
@@ -183,8 +194,8 @@ class NfcPayloadService {
     Duration timeout = NfcSessionManager.defaultTimeout,
     NfcCancelToken? cancel,
     String? alertMessage,
-  }) {
-    return _tagSource.withTag<NfcWriteResult>(
+  }) async {
+    final NfcWriteResult result = await _tagSource.withTag<NfcWriteResult>(
       (HwbTag tag) async {
         final uid = tag.uid;
         if (uid.isEmpty) {
@@ -248,6 +259,8 @@ class NfcPayloadService {
       cancel: cancel,
       alertMessage: alertMessage,
     );
+    _notifyWritten(result, deviceRole: 'guardian');
+    return result;
   }
 
   /// Shared NDEF write: encodes [payload], waits for a chip, optionally
@@ -280,7 +293,7 @@ class NfcPayloadService {
       } catch (_) {}
     }
 
-    return _tagSource.withTag<NfcWriteResult>(
+    final NfcWriteResult result = await _tagSource.withTag<NfcWriteResult>(
       (HwbTag tag) async {
         final uid = tag.uid;
         if (uid.isEmpty) {
@@ -337,6 +350,44 @@ class NfcPayloadService {
       timeout: timeout,
       cancel: cancel,
       alertMessage: alertMessage,
+    );
+    _notifyWritten(
+      result,
+      deviceRole: mimeType == kHwbGuardianMimeType ? 'guardian' : 'patient',
+    );
+    return result;
+  }
+
+  /// Tells [_onWritten] the sizes of a write that succeeded. Not awaited, and
+  /// a failure is only logged: the chip is already written.
+  void _notifyWritten(NfcWriteResult result, {required String deviceRole}) {
+    final NfcWriteObserver? observer = _onWritten;
+    if (observer == null) return;
+    final GuardianPayloadFit? fit = result.fit;
+    final metric = NfcWriteMetric(
+      deviceRole: deviceRole,
+      payloadFormat: kCurrentNfcPayloadFormat,
+      keyVersion: NfcWriteMetric.keyVersionOf(codec.writeKeyVersion),
+      payloadBytes: result.bytesWritten,
+      messageBytes: result.messageBytes,
+      chipCapacity: result.chipCapacity,
+      consultationsKept: fit?.includedConsultations,
+      consultationsTotal: fit?.totalConsultations,
+      vaccinesKept: fit?.includedVaccines,
+      vaccinesTotal: fit?.totalVaccines,
+      writtenAt: DateTime.now().toUtc(),
+    );
+    unawaited(
+      Future<void>.sync(() => observer(metric)).catchError((
+        Object error,
+        StackTrace stack,
+      ) {
+        AppLogger.e(
+          'No se pudo registrar la métrica de escritura NFC',
+          error: error,
+          stackTrace: stack,
+        );
+      }),
     );
   }
 

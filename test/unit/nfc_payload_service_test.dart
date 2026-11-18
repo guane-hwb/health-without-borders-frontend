@@ -13,6 +13,7 @@ import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart'
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_session_manager.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_write_metric.dart';
 
 // ── Fakes ───────────────────────────────────────────────────────────────────
 //
@@ -988,6 +989,133 @@ void main() {
         chipCapacity: 200,
       );
       expect(result.utilizationPercent, 50.0);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Métricas de escritura: tamaños y conteos de cada escritura que salió bien
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('métricas de escritura', () {
+    late List<NfcWriteMetric> reported;
+
+    Future<void> record(NfcWriteMetric m) async => reported.add(m);
+
+    NfcPayloadService observed(HwbTag tag, {NfcWriteObserver? onWritten}) =>
+        NfcPayloadService(
+          codec: codec,
+          tagSource: _FakeTagSource.tag(tag),
+          onWritten: onWritten ?? record,
+        );
+
+    setUp(() {
+      reported = <NfcWriteMetric>[];
+      when(() => codec.writeKeyVersion).thenReturn(0);
+      when(
+        () => codec.encode(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer((_) async => Uint8List(150));
+    });
+
+    test(
+      'una manilla escrita informa sus tamaños y nada de historial',
+      () async {
+        final result = await observed(
+          _blankChip(),
+        ).writeTriagePayload({'fn': 'Martha'});
+        await pumpEventQueue();
+
+        expect(reported, hasLength(1));
+        final m = reported.single;
+        expect(m.deviceRole, 'patient');
+        expect(m.payloadFormat, kCurrentNfcPayloadFormat);
+        expect(m.keyVersion, 0);
+        expect(m.payloadBytes, 150);
+        expect(m.messageBytes, result.messageBytes);
+        expect(m.chipCapacity, kNtag215MaxSize);
+        expect(m.consultationsKept, isNull);
+        expect(m.vaccinesTotal, isNull);
+        expect(m.writtenAt.isUtc, isTrue);
+      },
+    );
+
+    test('una copia del acudiente informa cuánto historial cupo', () async {
+      await observed(_blankChip(maxSize: 888)).writeGuardianRecord(
+        buildFit: (int budget) => const GuardianPayloadFit(
+          payload: {'a': 1},
+          includedConsultations: 1,
+          includedVaccines: 3,
+          totalConsultations: 4,
+          totalVaccines: 5,
+          estimatedBytes: 178,
+          fits: true,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(reported, hasLength(1));
+      final m = reported.single;
+      expect(m.deviceRole, 'guardian');
+      expect(m.chipCapacity, 888);
+      expect(m.consultationsKept, 1);
+      expect(m.consultationsTotal, 4);
+      expect(m.vaccinesKept, 3);
+      expect(m.vaccinesTotal, 5);
+    });
+
+    test(
+      'la copia escrita con writeGuardianPayload cuenta como acudiente',
+      () async {
+        await observed(_blankChip()).writeGuardianPayload({'a': 1});
+        await pumpEventQueue();
+
+        expect(reported.single.deviceRole, 'guardian');
+        expect(reported.single.consultationsKept, isNull);
+      },
+    );
+
+    test('una escritura que no cabe no informa nada', () async {
+      when(
+        () => codec.encode(any(), extraAad: any(named: 'extraAad')),
+      ).thenAnswer((_) async => Uint8List(600));
+
+      await expectLater(
+        observed(_blankChip()).writeTriagePayload({'fn': 'Martha'}),
+        throwsA(isA<NfcPayloadTooLargeException>()),
+      );
+      await pumpEventQueue();
+
+      expect(reported, isEmpty);
+    });
+
+    test('un chip de otro paciente no informa nada', () async {
+      await expectLater(
+        observed(
+          _blankChip(uid: '11:22:33'),
+        ).writeTriagePayload({'fn': 'Martha'}, expectedUid: kExpectedUid),
+        throwsA(isA<NfcUidMismatchException>()),
+      );
+      await pumpEventQueue();
+
+      expect(reported, isEmpty);
+    });
+
+    test('si registrar la métrica falla, la escritura sigue bien', () async {
+      final result = await observed(
+        _blankChip(),
+        onWritten: (NfcWriteMetric m) async => throw StateError('disco lleno'),
+      ).writeTriagePayload({'fn': 'Martha'});
+      await pumpEventQueue();
+
+      expect(result.uid, kExpectedUid);
+    });
+
+    test('sin observador escribe igual', () async {
+      final result = await _service(
+        codec,
+        _blankChip(),
+      ).writeTriagePayload({'fn': 'Martha'});
+
+      expect(result.bytesWritten, 150);
     });
   });
 
