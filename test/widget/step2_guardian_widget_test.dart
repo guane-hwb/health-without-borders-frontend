@@ -569,7 +569,7 @@ void main() {
       );
 
       testWidgets(
-        '29. Dibujado de firma biométrica en Canvas, generación de Base64 y borrado',
+        '29. Guardar con firma genera el Base64 y "Limpiar firma" lo borra',
         (tester) async {
           resizeViewport(tester);
           bool continueCalled = false;
@@ -609,12 +609,16 @@ void main() {
           // 3. Confirmar que la firma y los datos pasaron la validación y llamaron a onContinue
           expect(continueCalled, isTrue);
           expect(find.byIcon(Icons.error_outline), findsNothing);
+          expect(draft.guardianSignatureBase64, isNotNull);
 
           // 4. Probar la función de limpiar firma
           final clearBtn = find.text('Limpiar firma').first;
           await tester.ensureVisible(clearBtn);
           await tester.tap(clearBtn);
           await tester.pumpAndSettle();
+
+          expect(draft.guardianSignatureBase64, isNull);
+          expect(draft.guardianSignatureStrokes, isEmpty);
         },
       );
 
@@ -709,6 +713,9 @@ void main() {
         final ceItem = find.text(s.docTypeCE).last;
         await tester.tap(ceItem);
         await tester.pumpAndSettle();
+
+        expect(find.text(s.docTypeCE), findsOneWidget);
+        expect(find.text(s.docTypeCC), findsNothing);
       });
 
       testWidgets(
@@ -818,7 +825,7 @@ void main() {
       );
 
       testWidgets(
-        '37. Interacción completa con gestos de firma (panStart, panUpdate, panEnd) y checkbox de Cuidador 1 y Cuidador 2',
+        '37. Agregar el cuidador 2 y tocar sus campos y casillas no lanza excepciones',
         (tester) async {
           resizeViewport(tester);
           await tester.pumpWidget(buildSubject());
@@ -867,6 +874,8 @@ void main() {
             await tester.tap(checkboxes.last);
             await tester.pumpAndSettle();
           }
+
+          expect(tester.takeException(), isNull);
         },
       );
 
@@ -907,6 +916,19 @@ void main() {
             find.textContaining('Documento de cuidador inválido'),
             findsOneWidget,
           );
+          for (final message in const <String>[
+            'Teléfono inválido (mínimo 7 dígitos)',
+            'Correo electrónico inválido',
+            'Documento de cuidador 2 inválido',
+            'Teléfono de cuidador 2 inválido',
+            'Correo de cuidador 2 inválido',
+          ]) {
+            expect(
+              find.textContaining(message),
+              findsOneWidget,
+              reason: message,
+            );
+          }
         },
       );
     },

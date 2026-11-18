@@ -662,24 +662,21 @@ void main() {
     );
   });
 
-  group(
-    'K. Estado de verificación de cuidador offline (offlineGuardianRequired',
-    () {
-      test(
-        'K-01 offlineGuardianRequired se activa al detectar menor en triage',
-        () {
-          final state = _FakeReadNfcState()..offlineGuardianRequired = true;
-          expect(state.offlineGuardianRequired, isTrue);
-        },
-      );
-
-      test('K-02 resetAfterOpenProfile restablece offlineGuardianRequired', () {
+  group('K. offlineGuardianRequired en la réplica local del estado', () {
+    test(
+      'K-01 offlineGuardianRequired se activa al detectar menor en triage',
+      () {
         final state = _FakeReadNfcState()..offlineGuardianRequired = true;
-        state.resetAfterOpenProfile();
-        expect(state.offlineGuardianRequired, isFalse);
-      });
-    },
-  );
+        expect(state.offlineGuardianRequired, isTrue);
+      },
+    );
+
+    test('K-02 resetAfterOpenProfile restablece offlineGuardianRequired', () {
+      final state = _FakeReadNfcState()..offlineGuardianRequired = true;
+      state.resetAfterOpenProfile();
+      expect(state.offlineGuardianRequired, isFalse);
+    });
+  });
 
   group('L. Cobertura completa de ramas offline y cancelaciones', () {
     test('L-01 offlineGuardianRequired se desactiva al regresar a paso 1', () {

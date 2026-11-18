@@ -1022,92 +1022,60 @@ void main() {
     );
   });
 
-  group(
-    'ReadNfcScreen — motivos de retiro, expiración de sesión offline y acceso de emergencia',
-    () {
-      testWidgets(
-        'Muestra razones de retiro por dispositivo dañado y reemplazado en 410',
-        (tester) async {
-          fakeRepo.throwRetired410 = true;
+  group('ReadNfcScreen — motivos de retiro y expiración de sesión offline', () {
+    testWidgets(
+      'Muestra razones de retiro por dispositivo dañado y reemplazado en 410',
+      (tester) async {
+        fakeRepo.throwRetired410 = true;
 
-          fakeRepo.retiredReason = 'damaged';
-          await tester.pumpWidget(
-            _buildTestableWidget(
-              child: const ReadNfcScreen(),
-              repo: fakeRepo,
-              authRepo: fakeAuth,
-            ),
-          );
-          await tester.pump();
-          await tester.enterText(find.byType(TextField), 'HWB-DAMAGED');
-          await tester.tap(find.byType(OutlinedButton));
-          await tester.pumpAndSettle();
+        fakeRepo.retiredReason = 'damaged';
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: const ReadNfcScreen(),
+            repo: fakeRepo,
+            authRepo: fakeAuth,
+          ),
+        );
+        await tester.pump();
+        await tester.enterText(find.byType(TextField), 'HWB-DAMAGED');
+        await tester.tap(find.byType(OutlinedButton));
+        await tester.pumpAndSettle();
 
-          expect(find.textContaining('dañado'), findsOneWidget);
+        expect(find.textContaining('dañado'), findsOneWidget);
 
-          fakeRepo.retiredReason = 'replaced';
-          await tester.tap(find.byType(OutlinedButton));
-          await tester.pumpAndSettle();
+        fakeRepo.retiredReason = 'replaced';
+        await tester.tap(find.byType(OutlinedButton));
+        await tester.pumpAndSettle();
 
-          expect(find.textContaining('reemplazado'), findsOneWidget);
-        },
-      );
+        expect(find.textContaining('reemplazado'), findsOneWidget);
+      },
+    );
 
-      testWidgets(
-        'Muestra error cuando la sesión NFC expiró y ocurre un error offline',
-        (tester) async {
-          fakeRepo.throwNonApiError = true;
-          fakeAuth.isSessionExpiredFlag = true;
-          fakeAuth.nfcKey = null;
+    testWidgets(
+      'Muestra error cuando la sesión NFC expiró y ocurre un error offline',
+      (tester) async {
+        fakeRepo.throwNonApiError = true;
+        fakeAuth.isSessionExpiredFlag = true;
+        fakeAuth.nfcKey = null;
 
-          NfcService.overrideReadDeviceUid = () async => 'HWB-EXPIRED-OFFLINE';
+        NfcService.overrideReadDeviceUid = () async => 'HWB-EXPIRED-OFFLINE';
 
-          await tester.pumpWidget(
-            _buildTestableWidget(
-              child: const ReadNfcScreen(),
-              repo: fakeRepo,
-              authRepo: fakeAuth,
-            ),
-          );
-          await tester.pump();
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: const ReadNfcScreen(),
+            repo: fakeRepo,
+            authRepo: fakeAuth,
+          ),
+        );
+        await tester.pump();
 
-          await tester.tap(find.byIcon(Icons.wifi));
-          await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.wifi));
+        await tester.pumpAndSettle();
 
-          expect(find.textContaining('su sesión expiró'), findsOneWidget);
-        },
-      );
-
-      testWidgets(
-        'Acceso de emergencia abre diálogo y registra en BD local al confirmar',
-        (tester) async {
-          fakeRepo.throwNonApiError = true;
-          fakeAuth.nfcKey = 'secret-key';
-
-          await tester.pumpWidget(
-            _buildTestableWidget(
-              child: const ReadNfcScreen(),
-              repo: fakeRepo,
-              authRepo: fakeAuth,
-            ),
-          );
-          await tester.pump();
-
-          final emergencyBtnFinder = find.text('Acceso de emergencia');
-          if (emergencyBtnFinder.evaluate().isNotEmpty) {
-            await tester.tap(emergencyBtnFinder);
-            await tester.pumpAndSettle();
-
-            expect(find.byType(AlertDialog), findsOneWidget);
-            await tester.tap(find.text('Cancelar'));
-            await tester.pumpAndSettle();
-
-            expect(find.byType(AlertDialog), findsNothing);
-          }
-        },
-      );
-    },
-  );
+        expect(find.textContaining('su sesión expiró'), findsOneWidget);
+      },
+    );
+  });
 
   group('ReadNfcScreen — Lectura real de chip (overrideReadHwbChip)', () {
     testWidgets(
@@ -1541,6 +1509,16 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(find.byType(AlertDialog), findsNothing);
+          verifyNever(
+            () => mockDb.logEmergencyAccess(
+              patientUid: any(named: 'patientUid'),
+              patientName: any(named: 'patientName'),
+              userId: any(named: 'userId'),
+              ownerUserId: any(named: 'ownerUserId'),
+              organizationId: any(named: 'organizationId'),
+            ),
+          );
+          expect(find.byType(PatientProfileScreen), findsNothing);
         },
       );
 

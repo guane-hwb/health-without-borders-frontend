@@ -1697,39 +1697,11 @@ void main() {
     }
   }
 
-  group('validaciones de coherencia temporal entre inicio y fin', () {
-    testWidgets(
-      'reabrir y reseleccionar grupo de servicio, entorno, tipo de doc y tipo de diagnóstico invoca sus onChanged',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 2400);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
-        await tester.pumpAndSettle();
-
-        final dropdowns = find.byType(DropdownButton<String>);
-        expect(dropdowns, findsWidgets);
-
-        await cycleDropdown(tester, 1);
-        await cycleDropdown(tester, 2);
-        await cycleDropdown(tester, 3);
-        await cycleDropdown(tester, 4);
-
-        expect(find.byType(AddConsultationScreen), findsOneWidget);
-        expect(find.text('Evaluación clínica'), findsOneWidget);
-      },
-    );
-  });
-
   group(
     'AddConsultationScreen — selectores de grupo de servicio, entorno, documento y diagnóstico',
     () {
       testWidgets(
-        'reabrir y reseleccionar grupo de servicio, entorno, tipo de doc y tipo de diagnóstico invoca sus onChanged',
+        'abrir y cerrar los selectores de grupo de servicio, entorno, tipo de doc y tipo de diagnóstico no rompe la pantalla',
         (tester) async {
           tester.view.physicalSize = const Size(800, 2400);
           tester.view.devicePixelRatio = 1.0;
@@ -1917,6 +1889,12 @@ void main() {
               RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$'),
             ),
           );
+          expect(
+            encounter.endDateTime,
+            matches(
+              RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$'),
+            ),
+          );
         },
       );
 
@@ -1949,6 +1927,11 @@ void main() {
 
           await _tapGuardar(tester);
           await tester.pumpAndSettle();
+
+          expect(
+            find.text('La hora de inicio no puede ser una fecha/hora futura.'),
+            findsOneWidget,
+          );
         },
       );
 
@@ -1981,6 +1964,11 @@ void main() {
 
           await _tapGuardar(tester);
           await tester.pumpAndSettle();
+
+          expect(
+            find.text('La hora de fin no puede ser una fecha/hora futura.'),
+            findsOneWidget,
+          );
         },
       );
     },
