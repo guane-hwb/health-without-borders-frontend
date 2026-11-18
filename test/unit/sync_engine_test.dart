@@ -2363,4 +2363,82 @@ void main() {
       },
     );
   });
+
+  group(
+    'Reintentos máximos en fallos no controlados y reprogramación en syncOne',
+    () {
+      test(
+        'error no controlado con >= 8 intentos y sin red activa marca el registro como 422',
+        () async {
+          final entryMaxAttempts = buildEntry(
+            'STUCK-OFFLINE',
+            record: MockPatientFullRecord(),
+            attempts: 7,
+          );
+          when(
+            () => localDb.getUnsyncedRecords(
+              ownerUserId: any(named: 'ownerUserId'),
+            ),
+          ).thenAnswer((_) async => [entryMaxAttempts]);
+
+          engine.isOnline.value = false;
+          when(
+            () => patientRepo.syncPatient(any()),
+          ).thenThrow(const SocketException('sin conexión'));
+
+          await engine.syncAll();
+
+          verify(
+            () => localDb.markSyncError(
+              'STUCK-OFFLINE',
+              'Error de conexión de red (Socket)',
+              statusCode: 422,
+              revision: 0,
+            ),
+          ).called(1);
+        },
+      );
+
+      test(
+        'syncOne ante un fallo transitorio de red (SocketException) programa _scheduleRetry',
+        () {
+          fakeAsync((async) {
+            final shortEngine = SyncEngine(
+              patientRepository: patientRepo,
+              authRepository: authRepo,
+              localDatabase: localDb,
+              retryBackoff: const [Duration(milliseconds: 100)],
+            );
+
+            final entry = buildEntry('NET-1', record: MockPatientFullRecord());
+            when(
+              () => localDb.getUnsyncedRecords(
+                ownerUserId: any(named: 'ownerUserId'),
+              ),
+            ).thenAnswer((_) async => [entry]);
+            when(
+              () => localDb.getRetryablePendingCount(
+                ownerUserId: any(named: 'ownerUserId'),
+              ),
+            ).thenAnswer((_) async => 1);
+            when(
+              () => patientRepo.syncPatient(any()),
+            ).thenThrow(const SocketException('fallo temporal de red'));
+
+            SyncOneResult? result;
+            shortEngine.syncOne('NET-1').then((r) => result = r);
+            async.elapse(Duration.zero);
+
+            expect(result, SyncOneResult.failure);
+            clearInteractions(patientRepo);
+
+            async.elapse(const Duration(milliseconds: 120));
+            verify(() => patientRepo.syncPatient(any())).called(1);
+
+            shortEngine.stop();
+          });
+        },
+      );
+    },
+  );
 }
