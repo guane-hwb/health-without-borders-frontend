@@ -8,12 +8,14 @@ import 'package:nfc_manager/ndef_record.dart';
 
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_alias.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_payload.dart';
-import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart'
-    show kLegacyNfcKeyVersion;
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_format.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_session_manager.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_write_metric.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_triage_payload.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 
 // ── Fakes ───────────────────────────────────────────────────────────────────
 //
@@ -1120,6 +1122,300 @@ void main() {
 
       expect(result.bytesWritten, 150);
     });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Formato 2 (ADR 005): registro externo, CBOR tipado, diccionario
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('formato 2', () {
+    const String hexKey =
+        '0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20';
+    final NfcPayloadCodec real = NfcPayloadCodec.fromKeyring(
+      keyring: NfcKeyring.single(hexKey),
+    );
+
+    PatientFullRecord record() => PatientFullRecord(
+      patientId: '3b2e1f00-aaaa-4bbb-8ccc-0123456789ab',
+      deviceUid: kExpectedUid,
+      patientInfo: PatientInfo(
+        identification: PatientIdentification(
+          documentType: 'PT',
+          documentNumber: '1234567890',
+        ),
+        firstLastName: 'Rodríguez',
+        firstName: 'Valentina',
+        dob: '2019-03-14',
+        biologicalSex: 'F',
+        address: Address(city: 'Cúcuta', state: 'Norte de Santander'),
+        bloodType: 'O+',
+      ),
+      guardianInfo: GuardianInfo(
+        name: 'María Pérez',
+        relationship: '01',
+        phone: '3001234567',
+        deviceUid: '04:11:22:33',
+      ),
+      medicalHistory: <MedicalHistoryItem>[
+        MedicalHistoryItem(
+          encounterIdentifier: '7f1c2a9e-0b4d-4c3e-9a51-2d6f8e0c1b77',
+          startDateTime: '2026-06-10T09:30:00-05:00',
+          clinicalEvaluation: ClinicalEvaluation(
+            historyOfCurrentIllness: 'Fiebre de 3 días y tos seca.',
+          ),
+        ),
+      ],
+    );
+
+    NfcPayloadService writer(
+      HwbTag tag, {
+      NfcPayloadCodec? codec,
+      NfcPayloadFormat format = NfcPayloadFormat.v2,
+    }) => NfcPayloadService(
+      codec: codec ?? real,
+      tagSource: _FakeTagSource.tag(tag),
+      writeFormat: format,
+    );
+
+    /// The same chip after the write, as the next tap would see it.
+    HwbTag readBack(_FakeNdef ndef, {String uid = kExpectedUid}) => HwbTag(
+      uid: uid,
+      ndef: _FakeNdef(maxSize: ndef.maxSize, cachedMessage: ndef.written),
+    );
+
+    test('una escritura en formato 2 se informa como formato 2', () async {
+      final reported = <NfcWriteMetric>[];
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+
+      final result =
+          await NfcPayloadService(
+            codec: real,
+            tagSource: _FakeTagSource.tag(
+              HwbTag(uid: kExpectedUid, ndef: ndef),
+            ),
+            writeFormat: NfcPayloadFormat.v2,
+            onWritten: (NfcWriteMetric m) async => reported.add(m),
+          ).writeTriagePayload(
+            NfcTriagePayload.buildPatientPayload(record: record()),
+            expectedUid: kExpectedUid,
+          );
+      await pumpEventQueue();
+
+      expect(reported, hasLength(1));
+      expect(reported.single.payloadFormat, 2);
+      expect(reported.single.deviceRole, 'patient');
+      expect(reported.single.messageBytes, result.messageBytes);
+      expect(reported.single.messageBytes, ndef.written!.byteLength);
+    });
+
+    test('la manilla se escribe en un registro externo y se lee', () async {
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      final payload = NfcTriagePayload.buildPatientPayload(record: record());
+
+      await writer(
+        HwbTag(uid: kExpectedUid, ndef: ndef),
+      ).writeTriagePayload(payload, expectedUid: kExpectedUid);
+
+      final written = ndef.written!.records.single;
+      expect(written.typeNameFormat, TypeNameFormat.external);
+      expect(String.fromCharCodes(written.type), kHwbTriageV2Type);
+
+      // Lo lee un servicio que escribe formato 1: toda build lee los dos.
+      final read = await writer(
+        readBack(ndef),
+        format: NfcPayloadFormat.v1,
+      ).readHwbChip();
+      expect(read.kind, HwbChipKind.triage);
+      expect(read.triage!.firstName, 'Valentina');
+      expect(read.triage!.dob, '2019-03-14');
+      expect(read.triage!.guardianDeviceUid, '04:11:22:33');
+      expect(read.keyVersion, kLegacyNfcKeyVersion);
+    });
+
+    test(
+      'la copia del acudiente se ajusta al presupuesto del formato 2',
+      () async {
+        final budgets = <int>[];
+        final ndef = _FakeNdef(maxSize: 872);
+        final GuardianFitBuilder fit = guardianFitBuilder(
+          record: record(),
+          codec: real,
+          format: NfcPayloadFormat.v2,
+        );
+
+        final result = await writer(HwbTag(uid: kExpectedUid, ndef: ndef))
+            .writeGuardianRecord(
+              buildFit: (int budget) {
+                budgets.add(budget);
+                return fit(budget);
+              },
+            );
+
+        expect(
+          budgets.single,
+          guardianPayloadBudget(872, format: NfcPayloadFormat.v2),
+        );
+        expect(
+          String.fromCharCodes(ndef.written!.records.single.type),
+          kHwbGuardianV2Type,
+        );
+        expect(result.messageBytes, ndef.written!.byteLength);
+
+        final read = await writer(readBack(ndef)).readHwbChip();
+        expect(read.kind, HwbChipKind.guardian);
+        expect(read.guardianRecord, result.fit!.payload);
+        final rebuilt = NfcGuardianPayload.reconstructFromGuardian(
+          read.guardianRecord!,
+        );
+        expect(
+          rebuilt.medicalHistory.single.encounterIdentifier,
+          '7f1c2a9e-0b4d-4c3e-9a51-2d6f8e0c1b77',
+        );
+      },
+    );
+
+    test('el registro externo deja más presupuesto que el MIME', () {
+      final int v1 = guardianPayloadBudget(492, format: NfcPayloadFormat.v1);
+      final int v2 = guardianPayloadBudget(492, format: NfcPayloadFormat.v2);
+      expect(v1, 492 - 34);
+      expect(v2, 492 - 23);
+    });
+
+    test('un servicio de formato 2 sigue leyendo chips de formato 1', () async {
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      await writer(
+        HwbTag(uid: kExpectedUid, ndef: ndef),
+        format: NfcPayloadFormat.v1,
+      ).writeTriagePayload(
+        NfcTriagePayload.buildPatientPayload(record: record()),
+      );
+      expect(ndef.written!.records.single.typeNameFormat, TypeNameFormat.media);
+
+      final read = await writer(readBack(ndef)).readHwbChip();
+      expect(read.kind, HwbChipKind.triage);
+      expect(read.triage!.lastName, 'Rodríguez');
+    });
+
+    test('con llave versión 1 queda amarrado al chip', () async {
+      final NfcPayloadCodec v1Key = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring.single(hexKey, version: 1),
+      );
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      await writer(
+        HwbTag(uid: kExpectedUid, ndef: ndef),
+        codec: v1Key,
+      ).writeTriagePayload(
+        NfcTriagePayload.buildPatientPayload(record: record()),
+        expectedUid: kExpectedUid,
+      );
+
+      final own = await writer(readBack(ndef), codec: v1Key).readHwbChip();
+      expect(own.kind, HwbChipKind.triage);
+      expect(own.keyVersion, 1);
+      expect(own.hadHeader, isTrue);
+
+      // El mismo contenido copiado a otro chip no se abre.
+      final copied = await writer(
+        readBack(ndef, uid: '99:88:77'),
+        codec: v1Key,
+      ).readHwbChip();
+      expect(copied.kind, HwbChipKind.none);
+    });
+
+    test('rechaza la copia de otro paciente también en formato 2', () async {
+      final ndef = _FakeNdef(maxSize: 872);
+      await writer(HwbTag(uid: kExpectedUid, ndef: ndef)).writeGuardianRecord(
+        buildFit: guardianFitBuilder(
+          record: record(),
+          codec: real,
+          format: NfcPayloadFormat.v2,
+        ),
+      );
+
+      await expectLater(
+        writer(readBack(ndef)).writeGuardianRecord(
+          buildFit: guardianFitBuilder(
+            record: record(),
+            codec: real,
+            format: NfcPayloadFormat.v2,
+          ),
+          patientId: 'otro-paciente',
+        ),
+        throwsA(isA<NfcDeviceInUseException>()),
+      );
+    });
+
+    test(
+      'una manilla de formato 2 cuenta como dispositivo de paciente',
+      () async {
+        final ndef = _FakeNdef(maxSize: 872);
+        await writer(HwbTag(uid: kExpectedUid, ndef: ndef)).writeTriagePayload(
+          NfcTriagePayload.buildPatientPayload(record: record()),
+        );
+
+        await expectLater(
+          writer(readBack(ndef)).writeGuardianRecord(
+            buildFit: guardianFitBuilder(
+              record: record(),
+              codec: real,
+              format: NfcPayloadFormat.v2,
+            ),
+            patientId: record().patientId,
+          ),
+          throwsA(
+            isA<NfcDeviceInUseException>().having(
+              (NfcDeviceInUseException e) => e.patientDevice,
+              'patientDevice',
+              isTrue,
+            ),
+          ),
+        );
+      },
+    );
+
+    test('lo que no volvería idéntico no se escribe', () async {
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+
+      await expectLater(
+        writer(
+          HwbTag(uid: kExpectedUid, ndef: ndef),
+        ).writeTriagePayload(<String, dynamic>{'docN': 123}),
+        throwsA(isA<NfcWriteException>()),
+      );
+      expect(ndef.written, isNull);
+    });
+
+    test('un registro externo dañado se lee como chip sin datos', () async {
+      final tag = HwbTag(
+        uid: kExpectedUid,
+        ndef: _FakeNdef(
+          maxSize: kNtag215MaxSize,
+          cachedMessage: NdefMessage(
+            records: <NdefRecord>[
+              buildExternalRecord(kHwbTriageV2Type, Uint8List(60)),
+            ],
+          ),
+        ),
+      );
+
+      final read = await writer(tag).readHwbChip();
+
+      expect(read.kind, HwbChipKind.none);
+    });
+
+    test(
+      'la lectura de triaje por separado también lee el formato 2',
+      () async {
+        final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+        await writer(HwbTag(uid: kExpectedUid, ndef: ndef)).writeTriagePayload(
+          NfcTriagePayload.buildPatientPayload(record: record()),
+        );
+
+        final read = await writer(readBack(ndef)).readTriagePayload();
+
+        expect(read.triage!.documentNumber, '1234567890');
+      },
+    );
   });
 
   group('HwbChipReadResult', () {

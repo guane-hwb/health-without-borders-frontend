@@ -13,14 +13,19 @@ Read it before touching anything to do with keys in a deployed environment.
 ## What is on the chip
 
 Every HWB chip — a patient device or a guardian card — carries its clinical
-payload through this pipeline:
+payload in one of two formats, and every build since ADR 005 reads both:
 
 ```
-JSON map → CBOR → DEFLATE → AES-256-GCM
+format 1: JSON map → CBOR → DEFLATE → AES-256-GCM, in a MIME record
+format 2: JSON map → typed CBOR → DEFLATE with a preset dictionary
+          → AES-256-GCM, in an NFC Forum external record
 ```
 
-`lib/src/core/nfc/nfc_payload_codec.dart` owns all of it. Both chip types go
-through the **same** `NfcPayloadService` and therefore the same key.
+`lib/src/core/nfc/nfc_payload_codec.dart` owns format 1 and the encryption of
+both; `nfc_payload_v2.dart` builds the format 2 plaintext. A build writes format
+1 unless it was made with `--dart-define=HWB_NFC_PAYLOAD_FORMAT=2`
+(`kNfcWriteFormat`; see ADR 005 before changing it). Both chip types go through
+the **same** `NfcPayloadService` and therefore the same key.
 
 The chip's hardware UID is **not** encrypted and is always readable. That
 matters: a device with connectivity can resolve the patient from the UID alone
@@ -56,6 +61,16 @@ header only ever appears once a deployment rotates to version 1.
 
 `decode()` reads both layouts. For a headerless payload it reports the version
 whose key succeeded, which is the version the chip is effectively on.
+
+The envelope is the same in both payload formats. What it encloses differs:
+
+| Payload format | Record | Plaintext inside the envelope |
+|---|---|---|
+| 1 | MIME `application/vnd.hwb.triage` / `…guardian` | DEFLATE of CBOR |
+| 2 | external `guane.com.co:hwbt` / `…:hwbg` | `[2][dictionary id]` + DEFLATE, primed with that dictionary, of typed CBOR |
+
+The chip binding of ADR 003 puts the record type in the associated data, so a
+payload cannot be moved between formats either.
 
 ---
 
@@ -188,6 +203,15 @@ The build compatibility rule that matters, in both directions:
 
 So while the current version is `0`, builds are interchangeable in both
 directions and a partial rollout is safe.
+
+The payload format follows the same rule. A build before ADR 005 does not know
+format 2 and sees such a chip as blank, so format 2 is written only after every
+device runs a build that reads it (phase 2 of ADR 005):
+
+| Chip written in | Read by a build before ADR 005 | Read by a build with it |
+|---|---|---|
+| Format 1 | ✅ | ✅ |
+| Format 2 | ❌ (blank) | ✅ |
 
 !!! warning "Before any rotation"
     The current version must stay at `0` until **every** device runs a build

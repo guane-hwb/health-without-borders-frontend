@@ -10,10 +10,17 @@
 // out. The audit that motivates them measured synthetic records only.
 
 import 'nfc_keyring.dart' show kLegacyNfcKeyVersion;
+import 'nfc_payload_format.dart';
 
-/// Format of the payloads this build writes: CBOR + DEFLATE + AES-GCM in a
-/// MIME record (see `docs/architecture/nfc-encryption.md`).
+/// Format 1: CBOR + DEFLATE + AES-GCM in a MIME record, what every build
+/// writes unless it was made for a format 2 field test (see
+/// [kNfcWriteFormat] and `docs/architecture/nfc-encryption.md`). A write
+/// reports the format it actually used ([nfcPayloadFormatNumber]).
 const int kCurrentNfcPayloadFormat = 1;
+
+/// The number the backend stores for [format]: 1 or 2.
+int nfcPayloadFormatNumber(NfcPayloadFormat format) =>
+    format == NfcPayloadFormat.v2 ? 2 : 1;
 
 /// Called after every successful chip write. Implementations must not throw:
 /// a lost metric delays a decision, it must never fail a write.
