@@ -2406,6 +2406,29 @@ void main() {
       expect(find.byType(PatientProfileScreen), findsOneWidget);
     });
 
+    testWidgets('una edición que no se guarda porque se perdió la sesión '
+        'también pregunta antes de salir', (tester) async {
+      late _Fakes fakes;
+      final db = _FaultyLocalDatabase();
+      await _pumpProfileOverReading(
+        tester,
+        localDatabase: db,
+        onFakesReady: (f) => fakes = f,
+      );
+      fakes.auth.hasCurrentUser = false;
+
+      await _saveAddress(tester);
+      expect(
+        find.text('Sesión no activa. Vuelve a iniciar sesión.'),
+        findsOneWidget,
+      );
+      expect(db.savePatientCallCount, 0);
+
+      await _pressSystemBack(tester);
+
+      expect(find.text('Cambios sin guardar'), findsOneWidget);
+    });
+
     testWidgets('sin guardado fallido sale a la pantalla anterior sin '
         'preguntar', (tester) async {
       final db = _FaultyLocalDatabase();

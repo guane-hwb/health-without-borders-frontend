@@ -438,6 +438,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
     if (currentUser == null) {
       if (!mounted) return;
+      // Nothing was saved, so leaving must warn as after a failed save.
+      setState(() => _lastSaveFailed = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Sesión no activa. Vuelve a iniciar sesión.'),
