@@ -4715,6 +4715,137 @@ void main() {
       await expectLater(db.dismissSyncNotice('p-web'), completes);
     });
   });
+
+  group('Cobertura 100% — huérfanos y validación de owner en nativo', () {
+    test(
+      'getOrphanedEmergencyLogCount cuenta logs sin dueño y pendientes (nativo y web)',
+      () async {
+        // ── Ruta nativa ──
+        final nativeDb = LocalDatabase.instance;
+        await nativeDb.clearAll();
+        final raw = await rawConnection();
+        await raw.delete('emergency_access_log');
+
+        await nativeDb.logEmergencyAccess(patientUid: '04:ORPH-1');
+        await nativeDb.logEmergencyAccess(
+          patientUid: '04:OWNED-1',
+          ownerUserId: 'u1',
+        );
+
+        expect(await nativeDb.getOrphanedEmergencyLogCount(), equals(1));
+
+        final pendingNative = await nativeDb.pendingEmergencyAccessLogs();
+        final orphanId =
+            pendingNative.firstWhere(
+                  (r) => r['patient_uid'] == '04:ORPH-1',
+                )['id']
+                as int;
+        await nativeDb.markEmergencyLogsSynced(<int>[orphanId]);
+        expect(await nativeDb.getOrphanedEmergencyLogCount(), equals(0));
+
+        // ── Ruta Web ──
+        final webBackend = <String, String>{};
+        final webDb = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await webDb.logEmergencyAccess(patientUid: '04:W-ORPH-1');
+        await webDb.logEmergencyAccess(
+          patientUid: '04:W-OWNED-1',
+          ownerUserId: 'u1',
+        );
+
+        expect(await webDb.getOrphanedEmergencyLogCount(), equals(1));
+      },
+    );
+
+    test(
+      'getOrphanedPendingCount cuenta pacientes sin dueño y pendientes (nativo y web)',
+      () async {
+        // ── Ruta nativa ──
+        final nativeDb = LocalDatabase.instance;
+        await nativeDb.clearAll();
+        final raw = await rawConnection();
+
+        await raw.insert('local_patients', <String, Object?>{
+          'patient_id': 'n-orphan-1',
+          'device_uid': 'dev-orphan-1',
+          'patient_name': 'Orphan N.',
+          'record_json': '{"patientId":"n-orphan-1"}',
+          'is_synced': 0,
+          'owner_user_id': null,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+        await nativeDb.savePatient(
+          _buildRecord(patientId: 'n-owned-1'),
+          ownerUserId: 'u1',
+        );
+
+        expect(await nativeDb.getOrphanedPendingCount(), equals(1));
+
+        // ── Ruta Web ──
+        final webBackend = <String, String>{};
+        final webDb = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        webBackend['hwb_web_patient::w-orphan-1'] =
+            jsonEncode(<String, Object?>{
+              'patient_id': 'w-orphan-1',
+              'device_uid': 'dev-w-orphan',
+              'patient_name': 'Orphan W.',
+              'record_json': '{"patientId":"w-orphan-1"}',
+              'is_synced': 0,
+              'owner_user_id': null,
+              'created_at': DateTime.now().toIso8601String(),
+            });
+        await webDb.savePatient(
+          _buildRecord(patientId: 'w-owned-1'),
+          ownerUserId: 'u1',
+        );
+
+        expect(await webDb.getOrphanedPendingCount(), equals(1));
+      },
+    );
+
+    test(
+      'nativo: savePatient sin ownerUserId ni registro previo lanza ArgumentError',
+      () async {
+        final nativeDb = LocalDatabase.instance;
+        await nativeDb.clearAll();
+
+        await expectLater(
+          nativeDb.savePatient(
+            _buildRecord(patientId: 'native-no-owner'),
+            ownerUserId: null,
+          ),
+          throwsArgumentError,
+        );
+
+        await expectLater(
+          nativeDb.savePatient(
+            _buildRecord(patientId: 'native-blank-owner'),
+            ownerUserId: '   ',
+          ),
+          throwsArgumentError,
+        );
+
+        expect(await nativeDb.getAllRecords(), isEmpty);
+      },
+    );
+  });
 }
 
 class _MockFile extends Mock implements File {}
