@@ -2,6 +2,9 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_payload.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_triage_payload.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 
@@ -15,6 +18,7 @@ PatientFullRecord _fullRecord({
   String dob = '2015-03-10',
   String biologicalSex = 'F',
   String? bloodType = 'O+',
+  bool isBloodTypeCertified = false,
   String documentType = 'DNI',
   String documentNumber = '12345678',
   String guardianName = 'Guardian One',
@@ -33,6 +37,7 @@ PatientFullRecord _fullRecord({
       dob: dob,
       biologicalSex: biologicalSex,
       bloodType: bloodType,
+      isBloodTypeCertified: isBloodTypeCertified,
       identification: PatientIdentification(
         documentType: documentType,
         documentNumber: documentNumber,
@@ -80,6 +85,18 @@ void main() {
       final payload = NfcTriagePayload.buildPatientPayload(record: record);
 
       expect(payload['bt'], 'A-');
+    });
+
+    test('writes btC only for a certified blood type', () {
+      final certified = NfcTriagePayload.buildPatientPayload(
+        record: _fullRecord(bloodType: 'A-', isBloodTypeCertified: true),
+      );
+      final reported = NfcTriagePayload.buildPatientPayload(
+        record: _fullRecord(bloodType: 'A-'),
+      );
+
+      expect(certified['btC'], isTrue);
+      expect(reported.containsKey('btC'), isFalse);
     });
 
     // -----------------------------------------------------------------------
@@ -325,6 +342,28 @@ void main() {
       'vid': 'VID-00123',
     };
 
+    test('reads btC as a certified blood type', () {
+      final summary = NfcTriagePayload.fromPayload(<String, dynamic>{
+        ...fullPayload,
+        'btC': true,
+      });
+
+      expect(summary.bloodTypeCertified, isTrue);
+    });
+
+    test('anything but btC: true reads as not certified', () {
+      for (final Object? value in <Object?>[null, false, 'true', 1]) {
+        final payload = <String, dynamic>{...fullPayload};
+        if (value != null) payload['btC'] = value;
+
+        expect(
+          NfcTriagePayload.fromPayload(payload).bloodTypeCertified,
+          isFalse,
+          reason: 'btC = $value',
+        );
+      }
+    });
+
     test('maps all fields to TriageSummary correctly', () {
       final summary = NfcTriagePayload.fromPayload(fullPayload);
 
@@ -368,6 +407,7 @@ void main() {
       expect(summary.chronicConditions, '');
       expect(summary.vidaCode, null);
       expect(summary.allergies, isEmpty);
+      expect(summary.bloodTypeCertified, isFalse);
     });
 
     test('ignores non-Map entries inside alg list', () {
@@ -384,6 +424,63 @@ void main() {
       final summary = NfcTriagePayload.fromPayload(payload);
 
       expect(summary.allergies, isEmpty);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Blood-type certification, written and read back through the chip codec
+  // -------------------------------------------------------------------------
+  group('blood-type certification on the patient device —', () {
+    final codec = NfcPayloadCodec.fromKeyring(
+      keyring: NfcKeyring.single('ab' * 32),
+    );
+
+    Future<PatientFullRecord> writeAndRead(PatientFullRecord record) async {
+      final bytes = await codec.encode(
+        NfcTriagePayload.buildPatientPayload(record: record),
+      );
+      final decoded = await codec.decode(bytes);
+      return NfcGuardianPayload.reconstructFromTriage(
+        NfcTriagePayload.fromPayload(decoded!),
+      );
+    }
+
+    test('a certified blood type is still certified after the read', () async {
+      final rebuilt = await writeAndRead(
+        _fullRecord(bloodType: 'B+', isBloodTypeCertified: true),
+      );
+
+      expect(rebuilt.patientInfo.bloodType, 'B+');
+      expect(rebuilt.patientInfo.isBloodTypeCertified, isTrue);
+    });
+
+    test('a reported blood type stays reported', () async {
+      final rebuilt = await writeAndRead(_fullRecord(bloodType: 'B+'));
+
+      expect(rebuilt.patientInfo.bloodType, 'B+');
+      expect(rebuilt.patientInfo.isBloodTypeCertified, isFalse);
+    });
+
+    test('no blood type means nothing to certify', () {
+      const triage = TriageSummary(
+        firstName: 'Ana',
+        lastName: 'García',
+        dob: '2015-03-10',
+        biologicalSex: 'F',
+        bloodType: '',
+        bloodTypeCertified: true,
+        documentType: 'DNI',
+        documentNumber: '12345678',
+        guardianPhone: '',
+        guardianDeviceUid: '',
+        chronicConditions: '',
+        allergies: <TriageAllergy>[],
+      );
+
+      final rebuilt = NfcGuardianPayload.reconstructFromTriage(triage);
+
+      expect(rebuilt.patientInfo.bloodType, isNull);
+      expect(rebuilt.patientInfo.isBloodTypeCertified, isFalse);
     });
   });
 
