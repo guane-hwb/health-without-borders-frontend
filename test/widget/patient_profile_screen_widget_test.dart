@@ -121,7 +121,7 @@ class _FakeAuthRepository extends AuthRepository {
   final Duration? keyDelay;
 
   /// Si es false, `currentUser` devuelve null (sesión en memoria perdida).
-  final bool hasCurrentUser;
+  bool hasCurrentUser;
 
   /// Usuario que devuelve `restoreSession()` (null = no hay sesión guardada).
   final UserSession? restoredUser;
@@ -607,6 +607,67 @@ Future<void> _settleReassign(WidgetTester tester) async {
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
   }
+  await tester.pumpAndSettle();
+}
+
+/// Opens the profile the way the NFC reading screen does: over the home
+/// screen and a reading screen, so a system back has a route to return to
+/// and a test can tell one pop from a return to the home screen.
+Future<void> _pumpProfileOverReading(
+  WidgetTester tester, {
+  required LocalDatabase localDatabase,
+  bool allowReassign = false,
+  void Function(_Fakes fakes)? onFakesReady,
+}) async {
+  await tester.pumpWidget(
+    _wrap(
+      const Scaffold(body: Text('Inicio')),
+      localDatabase: localDatabase,
+      onFakesReady: onFakesReady,
+    ),
+  );
+  final NavigatorState navigator = Navigator.of(
+    tester.element(find.text('Inicio')),
+  );
+  unawaited(
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('Lectura NFC')),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  unawaited(
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => PatientProfileScreen(
+          patient: _record(),
+          allowReassign: allowReassign,
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// Confirms an address edit and closes the sheet, as its "Guardar" button
+/// does, so the profile is the top route again.
+Future<void> _saveAddress(WidgetTester tester, {String city = 'Cali'}) async {
+  final summary = tester.widget<ProfileTabSummary>(
+    find.byType(ProfileTabSummary),
+  );
+  summary.onEditAddress();
+  await tester.pumpAndSettle();
+  final Finder sheet = find.byType(EditAddressSheet);
+  tester
+      .widget<EditAddressSheet>(sheet)
+      .onConfirm(Address(city: city, state: 'Valle'));
+  Navigator.of(tester.element(sheet)).pop();
+  await tester.pumpAndSettle();
+}
+
+Future<void> _pressSystemBack(WidgetTester tester) async {
+  expect(await tester.binding.handlePopRoute(), isTrue);
   await tester.pumpAndSettle();
 }
 
@@ -2286,6 +2347,208 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(AlertDialog), findsNothing);
+    });
+  });
+
+  group('Retroceso del sistema — confirmación tras un guardado fallido', () {
+    const String warning =
+        'El último cambio no pudo guardarse en el dispositivo. '
+        'Si sale ahora se perderá.';
+
+    testWidgets('con el último guardado fallido pregunta antes de salir y '
+        '"Cancelar" deja el perfil abierto', (tester) async {
+      final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+      await _pumpProfileOverReading(tester, localDatabase: db);
+      await _saveAddress(tester);
+      expect(find.textContaining('El cambio NO está a salvo'), findsOneWidget);
+
+      await _pressSystemBack(tester);
+
+      expect(find.text('Cambios sin guardar'), findsOneWidget);
+      expect(find.text(warning), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancelar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+      expect(find.text('Lectura NFC'), findsNothing);
+    });
+
+    testWidgets('"Salir" deja el perfil y vuelve a la pantalla anterior, no '
+        'al inicio', (tester) async {
+      final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+      await _pumpProfileOverReading(tester, localDatabase: db);
+      await _saveAddress(tester);
+
+      await _pressSystemBack(tester);
+      expect(find.text('Cambios sin guardar'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Salir'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(PatientProfileScreen), findsNothing);
+      expect(find.text('Lectura NFC'), findsOneWidget);
+    });
+
+    testWidgets('el retroceso del sistema sobre el aviso lo cierra sin salir', (
+      tester,
+    ) async {
+      final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+      await _pumpProfileOverReading(tester, localDatabase: db);
+      await _saveAddress(tester);
+
+      await _pressSystemBack(tester);
+      expect(find.text('Cambios sin guardar'), findsOneWidget);
+      await _pressSystemBack(tester);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(PatientProfileScreen), findsOneWidget);
+    });
+
+    testWidgets('una edición que no se guarda porque se perdió la sesión '
+        'también pregunta antes de salir', (tester) async {
+      late _Fakes fakes;
+      final db = _FaultyLocalDatabase();
+      await _pumpProfileOverReading(
+        tester,
+        localDatabase: db,
+        onFakesReady: (f) => fakes = f,
+      );
+      fakes.auth.hasCurrentUser = false;
+
+      await _saveAddress(tester);
+      expect(
+        find.text('Sesión no activa. Vuelve a iniciar sesión.'),
+        findsOneWidget,
+      );
+      expect(db.savePatientCallCount, 0);
+
+      await _pressSystemBack(tester);
+
+      expect(find.text('Cambios sin guardar'), findsOneWidget);
+    });
+
+    testWidgets('sin guardado fallido sale a la pantalla anterior sin '
+        'preguntar', (tester) async {
+      final db = _FaultyLocalDatabase();
+      await _pumpProfileOverReading(tester, localDatabase: db);
+      await _saveAddress(tester);
+      expect(find.textContaining('El cambio NO está a salvo'), findsNothing);
+
+      await _pressSystemBack(tester);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(PatientProfileScreen), findsNothing);
+      expect(find.text('Lectura NFC'), findsOneWidget);
+    });
+  });
+
+  group('_lastSaveFailed — solo un guardado que funciona retira el aviso', () {
+    testWidgets('sin conexión, una edición posterior que sí se guarda lo '
+        'retira: el retroceso del sistema sale sin preguntar', (tester) async {
+      // Offline, so no sync saves the draft again behind the edit's save.
+      _setConnectivity([ConnectivityResult.none]);
+      final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+      await _pumpProfileOverReading(tester, localDatabase: db);
+      await _saveAddress(tester);
+      db.throwOnSavePatient = false;
+      await _saveAddress(tester, city: 'Palmira');
+
+      await _pressSystemBack(tester);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(PatientProfileScreen), findsNothing);
+      expect(find.text('Lectura NFC'), findsOneWidget);
+    });
+
+    testWidgets('un sync manual que guarda el borrador lo retira: la flecha '
+        'vuelve al inicio sin preguntar', (tester) async {
+      final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+      await _pumpProfileOverReading(tester, localDatabase: db);
+      await _saveAddress(tester);
+      db.throwOnSavePatient = false;
+
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onSync!();
+      await tester.pumpAndSettle();
+      tester.widget<ProfileHeader>(find.byType(ProfileHeader)).onBack();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(PatientProfileScreen), findsNothing);
+      expect(find.text('Inicio'), findsOneWidget);
+    });
+
+    testWidgets('una reasignación que guarda el borrador lo retira', (
+      tester,
+    ) async {
+      final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+      await _pumpProfileOverReading(
+        tester,
+        localDatabase: db,
+        allowReassign: true,
+      );
+      await _saveAddress(tester);
+      db.throwOnSavePatient = false;
+      PatientProfileScreen.showReassignDeviceDialogImpl =
+          (context, {required isEs, required hasG1, required hasG2}) async =>
+              const ReassignSelection(
+                targets: [ReassignTarget.patient],
+                reason: 'lost',
+              );
+      PatientProfileScreen.executeReassignOneImpl =
+          ({
+            required context,
+            required target,
+            required record,
+            required codec,
+            required isEs,
+            required showSnack,
+          }) async => record.copyWith(deviceUid: 'dev-NEW');
+
+      final summary = tester.widget<ProfileTabSummary>(
+        find.byType(ProfileTabSummary),
+      );
+      await tester.runAsync(() async {
+        summary.onReassignDevice!();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await _settleReassign(tester);
+      // The guardian device still names the old patient device.
+      await tester.tap(find.text('Más tarde'));
+      await tester.pumpAndSettle();
+
+      await _pressSystemBack(tester);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(PatientProfileScreen), findsNothing);
+      expect(find.text('Lectura NFC'), findsOneWidget);
+    });
+
+    testWidgets('"Reintentar" sin sesión no guarda nada y no lo retira', (
+      tester,
+    ) async {
+      late _Fakes fakes;
+      final db = _FaultyLocalDatabase()..throwOnSavePatient = true;
+      await _pumpProfileOverReading(
+        tester,
+        localDatabase: db,
+        onFakesReady: (f) => fakes = f,
+      );
+      await _saveAddress(tester);
+      fakes.auth.hasCurrentUser = false;
+
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Sesión no activa. Vuelve a iniciar sesión.'),
+        findsOneWidget,
+      );
+      expect(db.savePatientCallCount, 1);
+
+      await _pressSystemBack(tester);
+
+      expect(find.text('Cambios sin guardar'), findsOneWidget);
     });
   });
 
