@@ -1,6 +1,7 @@
 // test/unit/nfc_guardian_payload_test.dart
 
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_alias.dart';
@@ -579,6 +580,183 @@ void main() {
       expect(fit.fits, isTrue);
       expect(fit.estimatedBytes, lessThanOrEqualTo(budget));
       expect(fit.includedConsultations + fit.includedVaccines, lessThan(6));
+    });
+  });
+
+  group('buildWithinCapacity no deja fuera lo que cabe', () {
+    // Estimador sintético: un tamaño fijo por entrada, leído del payload con
+    // alias ('mh' = consultas, 'vr' = vacunas). Permite fijar exactamente qué
+    // combinaciones caben.
+    int Function(Map<String, dynamic>) costs({
+      required int base,
+      required int perConsultation,
+      required int perVaccine,
+    }) {
+      return (Map<String, dynamic> m) =>
+          base +
+          perConsultation * (m['mh'] as List<dynamic>).length +
+          perVaccine * (m['vr'] as List<dynamic>).length;
+    }
+
+    PatientFullRecord threeAndThree() => _record(
+      history: <MedicalHistoryItem>[
+        _consultation('2026-01-10T09:00:00'),
+        _consultation('2026-02-10T09:00:00'),
+        _consultation('2026-03-10T09:00:00'),
+      ],
+      vaccines: <VaccinationRecordItem>[
+        _vaccine('2026-01-01'),
+        _vaccine('2026-02-01'),
+        _vaccine('2026-03-01'),
+      ],
+    );
+
+    test('devuelve las vacunas que caben tras quitar las consultas', () {
+      // Una consulta (300) no cabe con la base (100) en 200; tres vacunas
+      // (3 × 20) sí. El recorte alterno llega a (0, 1) y antes paraba ahí.
+      final fit = NfcGuardianPayload.buildWithinCapacity(
+        record: threeAndThree(),
+        capacityBytes: 200,
+        estimateSize: costs(base: 100, perConsultation: 300, perVaccine: 20),
+      );
+
+      expect(fit.fits, isTrue);
+      expect(fit.includedConsultations, 0);
+      expect(fit.includedVaccines, 3);
+      expect(fit.estimatedBytes, 160);
+      expect(fit.droppedVaccines, 0);
+    });
+
+    test(
+      'devuelve las consultas que caben si lo último recortado fue una vacuna',
+      () {
+        // Simétrico: las vacunas son las grandes. El recorte llega a (0, 0)
+        // quitando una vacuna; caben las tres consultas.
+        final fit = NfcGuardianPayload.buildWithinCapacity(
+          record: threeAndThree(),
+          capacityBytes: 200,
+          estimateSize: costs(base: 100, perConsultation: 20, perVaccine: 300),
+        );
+
+        expect(fit.fits, isTrue);
+        expect(fit.includedConsultations, 3);
+        expect(fit.includedVaccines, 0);
+        expect(fit.estimatedBytes, 160);
+      },
+    );
+
+    test('el payload devuelto es el de la combinación elegida', () {
+      final fit = NfcGuardianPayload.buildWithinCapacity(
+        record: threeAndThree(),
+        capacityBytes: 200,
+        estimateSize: costs(base: 100, perConsultation: 300, perVaccine: 20),
+      );
+
+      expect(fit.payload['mh'], isEmpty);
+      expect(fit.payload['vr'], hasLength(3));
+      final rebuilt = NfcGuardianPayload.reconstructFromGuardian(fit.payload);
+      expect(
+        rebuilt.vaccinationRecord.map((VaccinationRecordItem v) => v.date),
+        <String>['2026-03-01', '2026-02-01', '2026-01-01'],
+      );
+    });
+
+    test('si no sobra espacio conserva el orden de recorte de siempre', () {
+      // Costes iguales: (2, 2) cabe justo y (2, 3) no. El resultado es el
+      // mismo que daba el recorte alterno.
+      final fit = NfcGuardianPayload.buildWithinCapacity(
+        record: threeAndThree(),
+        capacityBytes: 300,
+        estimateSize: costs(base: 100, perConsultation: 50, perVaccine: 50),
+      );
+
+      expect(fit.includedConsultations, 2);
+      expect(fit.includedVaccines, 2);
+      expect(fit.estimatedBytes, 300);
+    });
+
+    test('si no cabe ni la base no añade nada', () {
+      final fit = NfcGuardianPayload.buildWithinCapacity(
+        record: threeAndThree(),
+        capacityBytes: 99,
+        estimateSize: costs(base: 100, perConsultation: 1, perVaccine: 1),
+      );
+
+      expect(fit.fits, isFalse);
+      expect(fit.includedConsultations, 0);
+      expect(fit.includedVaccines, 0);
+    });
+
+    test('mide cada combinación una sola vez', () {
+      final seen = <String>[];
+      final fit = NfcGuardianPayload.buildWithinCapacity(
+        record: threeAndThree(),
+        capacityBytes: 200,
+        estimateSize: (Map<String, dynamic> m) {
+          final int c = (m['mh'] as List<dynamic>).length;
+          final int v = (m['vr'] as List<dynamic>).length;
+          seen.add('$c,$v');
+          return 100 + 300 * c + 20 * v;
+        },
+      );
+
+      expect(fit.includedVaccines, 3);
+      expect(seen.toSet(), hasLength(seen.length));
+    });
+
+    test('ninguna consulta ni vacuna más cabría junto al resultado', () {
+      // Propiedad sobre 2000 configuraciones: con tamaños que crecen con cada
+      // entrada, el resultado es maximal. Si cabe, añadirle la siguiente
+      // consulta o la siguiente vacuna ya no cabría; si no cabe, es porque ni
+      // la base cabe.
+      final rng = Random(20261117);
+      for (var i = 0; i < 2000; i++) {
+        final int consultations = rng.nextInt(4);
+        final int vaccines = rng.nextInt(4);
+        final record = _record(
+          history: <MedicalHistoryItem>[
+            for (var c = 0; c < consultations; c++)
+              _consultation('2026-0${c + 1}-10T09:00:00'),
+          ],
+          vaccines: <VaccinationRecordItem>[
+            for (var v = 0; v < vaccines; v++) _vaccine('2026-0${v + 1}-01'),
+          ],
+        );
+        final int base = 50 + rng.nextInt(400);
+        final int perConsultation = 1 + rng.nextInt(400);
+        final int perVaccine = 1 + rng.nextInt(400);
+        final int capacity = rng.nextInt(1600);
+        int size(int c, int v) => base + perConsultation * c + perVaccine * v;
+
+        final fit = NfcGuardianPayload.buildWithinCapacity(
+          record: record,
+          capacityBytes: capacity,
+          estimateSize: costs(
+            base: base,
+            perConsultation: perConsultation,
+            perVaccine: perVaccine,
+          ),
+        );
+
+        final int c = fit.includedConsultations;
+        final int v = fit.includedVaccines;
+        final String context =
+            'config $i: base $base, consulta $perConsultation, vacuna '
+            '$perVaccine, capacidad $capacity, historial '
+            '$consultations + $vaccines, resultado ($c, $v)';
+        expect(fit.estimatedBytes, size(c, v), reason: context);
+        if (!fit.fits) {
+          expect(size(0, 0), greaterThan(capacity), reason: context);
+          continue;
+        }
+        expect(size(c, v), lessThanOrEqualTo(capacity), reason: context);
+        if (c < consultations) {
+          expect(size(c + 1, v), greaterThan(capacity), reason: context);
+        }
+        if (v < vaccines) {
+          expect(size(c, v + 1), greaterThan(capacity), reason: context);
+        }
+      }
     });
   });
 
