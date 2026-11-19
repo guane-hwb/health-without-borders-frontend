@@ -98,7 +98,15 @@ class SyncEngine {
     Duration(minutes: 30),
   ];
 
+  /// Attempts after which a record that keeps failing for a reason of its own
+  /// (a 500, an unexpected error) is blocked as 422 for review. A failure that
+  /// says nothing about the record never blocks it: not reaching the server,
+  /// online or offline, or a status in [transientStatusCodes].
   static const int maxSyncAttemptsBeforeBlocked = 8;
+
+  /// Statuses that say the server cannot take the request now, not that the
+  /// record is wrong. They are retried for good, whatever their `code`.
+  static const Set<int> transientStatusCodes = <int>{408, 429, 502, 503, 504};
 
   Future<SyncResult>? _activeSyncAllFuture;
   Completer<void>? _syncOneCompletion;
@@ -474,18 +482,19 @@ class SyncEngine {
         return _SyncOutcome.abortBatch;
       }
 
+      final bool isTransientStatus = transientStatusCodes.contains(
+        e.statusCode,
+      );
       final bool isTransientServerError =
-          (e.statusCode == 408 ||
-              e.statusCode == 429 ||
-              e.statusCode == 502 ||
-              e.statusCode == 503 ||
-              e.statusCode == 504) &&
-          (e.code == null || e.code!.isEmpty);
+          isTransientStatus && (e.code == null || e.code!.isEmpty);
 
       final int nextAttempts = entry.attempts + 1;
       int? effectiveStatusCode = e.statusCode;
 
+      // A transient status is retried for good, a 503 sync_in_progress too:
+      // only a failure of the record's own is blocked after enough attempts.
       if (!kPermanentSyncErrorCodes.contains(e.statusCode) &&
+          !isTransientStatus &&
           nextAttempts >= maxSyncAttemptsBeforeBlocked) {
         effectiveStatusCode = 422;
       }
@@ -527,13 +536,17 @@ class SyncEngine {
       final bool isSocketException = e is SocketException;
       final bool isTimeout = e is TimeoutException;
 
-      final bool isNetworkError =
-          (isSocketException || isTimeout || e is http.ClientException) &&
-          isOnline.value;
+      // Not reaching the server says nothing about the record, so it never
+      // blocks it, online or offline. Only while online is it reported as a
+      // network failure, which schedules a retry; offline, the connectivity
+      // listener resumes the queue when the connection comes back.
+      final bool isTransportError =
+          isSocketException || isTimeout || e is http.ClientException;
+      final bool isNetworkError = isTransportError && isOnline.value;
 
       final int nextAttempts = entry.attempts + 1;
       final int? effectiveStatusCode =
-          (!isNetworkError && nextAttempts >= maxSyncAttemptsBeforeBlocked)
+          (!isTransportError && nextAttempts >= maxSyncAttemptsBeforeBlocked)
           ? 422
           : null;
 

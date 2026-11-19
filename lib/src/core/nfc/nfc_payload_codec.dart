@@ -52,6 +52,20 @@ class NfcDecodeResult {
   final bool hadHeader;
 }
 
+/// A plaintext opened by [NfcPayloadCodec.open], with the key version that
+/// opened it.
+class NfcOpenResult {
+  const NfcOpenResult({
+    required this.plaintext,
+    required this.keyVersion,
+    required this.hadHeader,
+  });
+
+  final Uint8List plaintext;
+  final int keyVersion;
+  final bool hadHeader;
+}
+
 /// Internal outcome of a decryption attempt.
 class _DecryptOutcome {
   const _DecryptOutcome(this.plaintext, this.keyVersion, this.hadHeader);
@@ -191,6 +205,33 @@ class NfcPayloadCodec {
       return null;
     }
   }
+
+  /// Encrypts a plaintext that is already serialized and compressed, exactly
+  /// as [encode] encrypts its own: same key version, header, nonce and
+  /// associated data. Payload format 2 builds its plaintext itself
+  /// (`nfc_payload_v2.dart`) and seals it here.
+  Future<Uint8List> seal(Uint8List plaintext, {Uint8List? extraAad}) =>
+      _encrypt(plaintext, extraAad: extraAad);
+
+  /// Decrypts what [seal] produced, with whichever key in the ring opens it.
+  /// Null when none does.
+  Future<NfcOpenResult?> open(Uint8List packed, {Uint8List? extraAad}) async {
+    try {
+      final outcome = await _decrypt(packed, extraAad: extraAad);
+      if (outcome == null) return null;
+      return NfcOpenResult(
+        plaintext: outcome.plaintext,
+        keyVersion: outcome.keyVersion,
+        hadHeader: outcome.hadHeader,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Bytes [seal] produces for a plaintext of [plaintextLength] bytes.
+  int sealedSize(int plaintextLength) =>
+      plaintextLength + _kAesGcmOverhead + (_writesHeader ? _kHeaderLength : 0);
 
   int estimateSize(Map<String, dynamic> data) {
     final cborBytes = _jsonToCbor(data);
