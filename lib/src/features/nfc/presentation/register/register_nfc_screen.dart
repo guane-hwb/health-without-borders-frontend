@@ -357,7 +357,10 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
     NfcPayloadService makeService() =>
         RegisterNfcScreen.overrideServiceBuilder?.call(codec) ??
-        NfcPayloadService(codec: codec);
+        NfcPayloadService(
+          codec: codec,
+          onWritten: scope.localDatabase.recordNfcWriteMetric,
+        );
 
     final patientOk = await showNfcGuidedWrite(
       context,

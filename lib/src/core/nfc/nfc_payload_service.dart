@@ -1,11 +1,14 @@
 // lib/src/core/nfc/nfc_payload_service.dart
 
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show min;
 import 'dart:typed_data';
 
 import 'package:nfc_manager/ndef_record.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
+import '../utils/app_logger.dart';
 import 'nfc_guardian_alias.dart';
 import 'nfc_guardian_payload.dart';
 import 'nfc_keyring.dart' show kLegacyNfcKeyVersion;
@@ -14,6 +17,7 @@ import 'nfc_payload_format.dart';
 import 'nfc_payload_v2.dart';
 import 'nfc_session_manager.dart';
 import 'nfc_triage_payload.dart';
+import 'nfc_write_metric.dart';
 
 export 'nfc_session_manager.dart'
     show
@@ -112,14 +116,21 @@ const String kHwbGuardianMimeType = 'application/vnd.hwb.guardian';
 class NfcPayloadService {
   /// Reads both payload formats; writes [writeFormat], which defaults to the
   /// build's [kNfcWriteFormat].
+  ///
+  /// [onWritten] is told the sizes of every successful write (see
+  /// [NfcWriteMetric]). It is not awaited and its failures are only logged:
+  /// telemetry never delays or fails a write.
   NfcPayloadService({
     required this.codec,
     NfcTagSource? tagSource,
     this.writeFormat = kNfcWriteFormat,
-  }) : _tagSource = tagSource ?? NfcSessionManager.instance;
+    NfcWriteObserver? onWritten,
+  }) : _tagSource = tagSource ?? NfcSessionManager.instance,
+       _onWritten = onWritten;
 
   final NfcPayloadCodec codec;
   final NfcTagSource _tagSource;
+  final NfcWriteObserver? _onWritten;
 
   /// Format of every payload this service writes.
   final NfcPayloadFormat writeFormat;
@@ -287,8 +298,8 @@ class NfcPayloadService {
     Duration timeout = NfcSessionManager.defaultTimeout,
     NfcCancelToken? cancel,
     String? alertMessage,
-  }) {
-    return _tagSource.withTag<NfcWriteResult>(
+  }) async {
+    final NfcWriteResult result = await _tagSource.withTag<NfcWriteResult>(
       (HwbTag tag) async {
         final uid = tag.uid;
         if (uid.isEmpty) {
@@ -354,6 +365,8 @@ class NfcPayloadService {
       cancel: cancel,
       alertMessage: alertMessage,
     );
+    _notifyWritten(result, deviceRole: 'guardian');
+    return result;
   }
 
   /// Shared NDEF write: encodes [payload], waits for a chip, optionally
@@ -381,7 +394,7 @@ class NfcPayloadService {
       } catch (_) {}
     }
 
-    return _tagSource.withTag<NfcWriteResult>(
+    final NfcWriteResult result = await _tagSource.withTag<NfcWriteResult>(
       (HwbTag tag) async {
         final uid = tag.uid;
         if (uid.isEmpty) {
@@ -433,6 +446,54 @@ class NfcPayloadService {
       timeout: timeout,
       cancel: cancel,
       alertMessage: alertMessage,
+    );
+    _notifyWritten(
+      result,
+      deviceRole: kind == NfcPayloadKind.guardian ? 'guardian' : 'patient',
+    );
+    return result;
+  }
+
+  /// Tells [_onWritten] the sizes of a write that succeeded. Not awaited, and
+  /// a failure is only logged: the chip is already written.
+  void _notifyWritten(NfcWriteResult result, {required String deviceRole}) {
+    final NfcWriteObserver? observer = _onWritten;
+    if (observer == null) return;
+    final GuardianPayloadFit? fit = result.fit;
+    final metric = NfcWriteMetric(
+      deviceRole: deviceRole,
+      payloadFormat: nfcPayloadFormatNumber(writeFormat),
+      keyVersion: NfcWriteMetric.keyVersionOf(codec.writeKeyVersion),
+      payloadBytes: result.bytesWritten,
+      messageBytes: result.messageBytes,
+      chipCapacity: result.chipCapacity,
+      // Totals are what the copy carries on a chip with room for everything
+      // (the most recent, up to the copy's own limit), so kept < total means
+      // the chip's capacity left history out, and nothing else.
+      consultationsKept: fit?.includedConsultations,
+      consultationsTotal: fit == null
+          ? null
+          : min(
+              fit.totalConsultations,
+              NfcGuardianPayload.kDefaultMaxConsultations,
+            ),
+      vaccinesKept: fit?.includedVaccines,
+      vaccinesTotal: fit == null
+          ? null
+          : min(fit.totalVaccines, NfcGuardianPayload.kDefaultMaxVaccines),
+      writtenAt: DateTime.now().toUtc(),
+    );
+    unawaited(
+      Future<void>.sync(() => observer(metric)).catchError((
+        Object error,
+        StackTrace stack,
+      ) {
+        AppLogger.e(
+          'No se pudo registrar la métrica de escritura NFC',
+          error: error,
+          stackTrace: stack,
+        );
+      }),
     );
   }
 

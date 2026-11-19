@@ -1,6 +1,7 @@
 // lib/src/features/nfc/data/patient_repository.dart
 
 import '../../../core/network/api_client.dart';
+import '../../../core/nfc/nfc_write_metric.dart';
 import '../../../core/nfc/retired_device_hash.dart';
 import '../../auth/data/auth_repository.dart';
 import '../domain/patient_record.dart';
@@ -175,6 +176,22 @@ class PatientRepository {
               },
             )
             .toList(),
+      },
+      headers: await _authHeaders(),
+    );
+  }
+
+  /// Reports the sizes of chip writes (see [NfcWriteMetric]).
+  ///
+  /// Each entry is rebuilt from the stored row with only the fields the
+  /// server takes, so the local id and anything else on the row stay on the
+  /// device.
+  Future<void> reportNfcWriteMetrics(List<Map<String, Object?>> rows) async {
+    if (rows.isEmpty) return;
+    await _apiClient.postJson(
+      path: '/api/v1/patients/nfc-write-metrics',
+      body: <String, dynamic>{
+        'entries': rows.map(NfcWriteMetric.apiEntryFromRow).toList(),
       },
       headers: await _authHeaders(),
     );
