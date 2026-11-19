@@ -8,6 +8,7 @@
 //   fn  = firstName         ln  = firstLastName
 //   dob = dateOfBirth       sex = biologicalSex
 //   bt  = bloodType         docT = documentType
+//   btC = bloodType certified by a test result (written only when true)
 //   docN = documentNumber   gPh = guardianPhone
 //   gUid = guardian1 device_uid
 //   g2Uid = guardian2 device_uid (optional)
@@ -110,6 +111,8 @@ abstract final class NfcTriagePayload {
       dob: payload['dob']?.toString() ?? '',
       biologicalSex: payload['sex']?.toString() ?? '',
       bloodType: payload['bt']?.toString() ?? '',
+      // Written only when true; anything else reads as not certified.
+      bloodTypeCertified: payload['btC'] == true,
       documentType: payload['docT']?.toString() ?? '',
       documentNumber: payload['docN']?.toString() ?? '',
       guardianPhone: payload['gPh']?.toString() ?? '',
@@ -130,6 +133,7 @@ class TriageSummary {
     required this.dob,
     required this.biologicalSex,
     required this.bloodType,
+    this.bloodTypeCertified = false,
     required this.documentType,
     required this.documentNumber,
     required this.guardianPhone,
@@ -145,6 +149,12 @@ class TriageSummary {
   final String dob;
   final String biologicalSex;
   final String bloodType;
+
+  /// Whether [bloodType] comes from a test result rather than from what the
+  /// caregiver said. Read back so that a record rebuilt from the patient
+  /// device alone still says the blood type was confirmed by a test.
+  final bool bloodTypeCertified;
+
   final String documentType;
   final String documentNumber;
   final String guardianPhone;

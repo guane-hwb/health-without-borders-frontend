@@ -250,6 +250,10 @@ abstract final class NfcGuardianPayload {
             : triage.biologicalSex,
         address: Address(city: '', state: ''),
         bloodType: triage.bloodType.isEmpty ? null : triage.bloodType,
+        // Same rule as every other path that sets it: no blood type, nothing
+        // to certify.
+        isBloodTypeCertified:
+            triage.bloodTypeCertified && triage.bloodType.isNotEmpty,
       ),
       guardianInfo: GuardianInfo(
         name: '',
