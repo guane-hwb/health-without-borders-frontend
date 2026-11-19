@@ -37,22 +37,25 @@ void main() {
       });
     });
 
-    test('una escritura de manilla no lleva conteos de historial', () {
-      final row = NfcWriteMetric(
-        deviceRole: 'patient',
-        payloadFormat: kCurrentNfcPayloadFormat,
-        keyVersion: 0,
-        payloadBytes: 144,
-        messageBytes: 173,
-        chipCapacity: 492,
-        writtenAt: DateTime.utc(2026, 11, 17),
-      ).toRow();
+    test(
+      'una escritura del dispositivo del paciente no lleva conteos de historial',
+      () {
+        final row = NfcWriteMetric(
+          deviceRole: 'patient',
+          payloadFormat: kCurrentNfcPayloadFormat,
+          keyVersion: 0,
+          payloadBytes: 144,
+          messageBytes: 173,
+          chipCapacity: 492,
+          writtenAt: DateTime.utc(2026, 11, 17),
+        ).toRow();
 
-      expect(row['consultations_kept'], isNull);
-      expect(row['consultations_total'], isNull);
-      expect(row['vaccines_kept'], isNull);
-      expect(row['vaccines_total'], isNull);
-    });
+        expect(row['consultations_kept'], isNull);
+        expect(row['consultations_total'], isNull);
+        expect(row['vaccines_kept'], isNull);
+        expect(row['vaccines_total'], isNull);
+      },
+    );
 
     test('al servidor sólo va lo que el endpoint recibe', () {
       final row = <String, Object?>{

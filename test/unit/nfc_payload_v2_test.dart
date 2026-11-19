@@ -118,21 +118,24 @@ void main() {
       expect(back, payload);
     });
 
-    test('la copia del acudiente vuelve idéntica y se reconstruye', () {
-      final record = _record(history: 3);
-      final copy = _guardianCopy(record);
+    test(
+      'la copia del dispositivo del cuidador vuelve idéntica y se reconstruye',
+      () {
+        final record = _record(history: 3);
+        final copy = _guardianCopy(record);
 
-      final back = NfcPayloadV2.decode(
-        NfcPayloadV2.encode(copy, NfcPayloadKind.guardian),
-        NfcPayloadKind.guardian,
-      );
+        final back = NfcPayloadV2.decode(
+          NfcPayloadV2.encode(copy, NfcPayloadKind.guardian),
+          NfcPayloadKind.guardian,
+        );
 
-      expect(back, copy);
-      final rebuilt = NfcGuardianPayload.reconstructFromGuardian(back);
-      expect(rebuilt.patientId, record.patientId);
-      expect(rebuilt.medicalHistory.first.startDateTime, isNotEmpty);
-      expect(rebuilt.patientInfo.weight, 14.6);
-    });
+        expect(back, copy);
+        final rebuilt = NfcGuardianPayload.reconstructFromGuardian(back);
+        expect(rebuilt.patientId, record.patientId);
+        expect(rebuilt.medicalHistory.first.startDateTime, isNotEmpty);
+        expect(rebuilt.patientInfo.weight, 14.6);
+      },
+    );
 
     test('ocupa menos que el formato 1', () async {
       final codec = NfcPayloadCodec.fromKeyring(
@@ -277,7 +280,7 @@ void main() {
 
     test('las claves tipadas sólo cuentan en su tipo de carga', () {
       // En el triaje, 'vid' es el código VIDA (texto); en la copia del
-      // acudiente es el id de una vacuna (UUID).
+      // dispositivo del cuidador es el id de una vacuna (UUID).
       const String uuid = '3b2e1f00-aaaa-4bbb-8ccc-0123456789ab';
       final triage = _raw(<String, dynamic>{
         'vid': uuid,

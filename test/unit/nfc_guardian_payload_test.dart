@@ -356,24 +356,27 @@ void main() {
     });
   });
 
-  group('certificación del grupo sanguíneo en la copia del acudiente', () {
-    test('la copia la conserva al reconstruir', () {
-      final base = _record();
-      final record = base.copyWith(
-        patientInfo: base.patientInfo.copyWith(isBloodTypeCertified: true),
-      );
-      final fit = NfcGuardianPayload.buildWithinCapacity(
-        record: record,
-        capacityBytes: 1000000,
-        estimateSize: (Map<String, dynamic> m) => 0,
-      );
+  group(
+    'certificación del grupo sanguíneo en la copia del dispositivo del cuidador',
+    () {
+      test('la copia la conserva al reconstruir', () {
+        final base = _record();
+        final record = base.copyWith(
+          patientInfo: base.patientInfo.copyWith(isBloodTypeCertified: true),
+        );
+        final fit = NfcGuardianPayload.buildWithinCapacity(
+          record: record,
+          capacityBytes: 1000000,
+          estimateSize: (Map<String, dynamic> m) => 0,
+        );
 
-      final rebuilt = NfcGuardianPayload.reconstructFromGuardian(fit.payload);
+        final rebuilt = NfcGuardianPayload.reconstructFromGuardian(fit.payload);
 
-      expect(rebuilt.patientInfo.bloodType, 'O+');
-      expect(rebuilt.patientInfo.isBloodTypeCertified, isTrue);
-    });
-  });
+        expect(rebuilt.patientInfo.bloodType, 'O+');
+        expect(rebuilt.patientInfo.isBloodTypeCertified, isTrue);
+      });
+    },
+  );
 
   group('reconstructFromGuardian round-trip', () {
     test('rebuilds an equivalent PatientFullRecord', () {
