@@ -7537,4 +7537,65 @@ void main() {
       },
     );
   });
+  group('AppStrings - session unlock keys', () {
+    test('unlockSubtitle returns non-empty localized text (es and en)', () {
+      final es = AppStrings.forTesting('es');
+      final en = AppStrings.forTesting('en');
+
+      expect(
+        es.unlockSubtitle,
+        'Ingresa tu contraseña para reanudar la sesión.',
+      );
+      expect(es.unlockSubtitle, isNot('unlockSubtitle'));
+
+      expect(en.unlockSubtitle, 'Enter your password to resume session.');
+      expect(en.unlockSubtitle, isNot('unlockSubtitle'));
+    });
+
+    test(
+      'unlockIncorrectPassword returns non-empty localized text (es and en)',
+      () {
+        final es = AppStrings.forTesting('es');
+        final en = AppStrings.forTesting('en');
+
+        expect(es.unlockIncorrectPassword, 'Contraseña incorrecta.');
+        expect(es.unlockIncorrectPassword, isNot('unlockIncorrectPassword'));
+
+        expect(en.unlockIncorrectPassword, 'Incorrect password.');
+        expect(en.unlockIncorrectPassword, isNot('unlockIncorrectPassword'));
+      },
+    );
+
+    test('unlockAttemptsRemaining interpolates {n} correctly (es and en)', () {
+      final es = AppStrings.forTesting('es');
+      final en = AppStrings.forTesting('en');
+
+      expect(es.unlockAttemptsRemaining(3), contains('3'));
+      expect(es.unlockAttemptsRemaining(1), contains('1'));
+      expect(es.unlockAttemptsRemaining(2), isNot(contains('{n}')));
+      expect(es.unlockAttemptsRemaining(2), isNot('unlockAttemptsRemaining'));
+
+      expect(en.unlockAttemptsRemaining(3), contains('3'));
+      expect(en.unlockAttemptsRemaining(1), contains('1'));
+      expect(en.unlockAttemptsRemaining(2), isNot(contains('{n}')));
+      expect(en.unlockAttemptsRemaining(2), isNot('unlockAttemptsRemaining'));
+    });
+
+    test('unlockLockedOut returns non-empty localized text (es and en)', () {
+      final es = AppStrings.forTesting('es');
+      final en = AppStrings.forTesting('en');
+
+      expect(
+        es.unlockLockedOut,
+        'Demasiados intentos fallidos. La sesión ha sido cerrada por seguridad.',
+      );
+      expect(es.unlockLockedOut, isNot('unlockLockedOut'));
+
+      expect(
+        en.unlockLockedOut,
+        'Too many failed attempts. Session closed for security.',
+      );
+      expect(en.unlockLockedOut, isNot('unlockLockedOut'));
+    });
+  });
 }

@@ -25,7 +25,7 @@ Patient devices require **NTAG215 or NTAG216**. NTAG213 is not supported.
 ## What the app already does
 - `nfc_triage_payload.dart` documents the NTAG215/216 requirement.
 - `NfcPayloadService` measures the whole NDEF message against the capacity the chip reports and throws `NfcPayloadTooLargeException` with the sizes; on a chip of 180 B or less the message says that an NTAG213 was detected and that NTAG215/216 must be used.
-- Guardian cards are fitted to the chip's real capacity (`buildWithinCapacity`); the triage payload is not trimmed, by design.
+- Guardian cards are fitted to the chip's real capacity (`buildWithinCapacity`), keeping the most recent consultations and vaccines and leaving none out while there is room for it (see "How the guardian copy is fitted to the chip" in `nfc-encryption.md`); the triage payload is not trimmed, by design.
 
 ## Consequences
 - A tap with an NTAG213 fails with a clear message instead of a write error halfway.
