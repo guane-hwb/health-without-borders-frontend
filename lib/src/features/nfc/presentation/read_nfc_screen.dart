@@ -612,21 +612,24 @@ class _ReadNfcScreenState extends State<ReadNfcScreen> {
         ),
       ),
     );
-    if (mounted) {
-      setState(() {
-        _step2 = false;
-        _patientDeviceUid = null;
-        _patientUidCtrl.clear();
-        _guardianUidCtrl.clear();
-        _errorMessage = null;
-      });
-    }
+    // Back from the profile (in the app, by the system back: the profile's
+    // own arrow pops to the home screen), the read is over.
+    if (mounted) _resetToStep1(keepPatientUid: false);
   }
 
-  void _backToStep1() {
+  void _backToStep1() => _resetToStep1(keepPatientUid: true);
+
+  /// Back to step 1, reading the patient device: nothing is left of the read
+  /// before, neither the guardian step nor a minor's offline guardian gate
+  /// (which would come back without its patient device UID). With
+  /// [keepPatientUid], the UID typed in the form stays, to send it again.
+  void _resetToStep1({required bool keepPatientUid}) {
     setState(() {
       _step2 = false;
+      _offlineTriage = null;
+      _offlineGuardianRequired = false;
       _patientDeviceUid = null;
+      if (!keepPatientUid) _patientUidCtrl.clear();
       _guardianUidCtrl.clear();
       _errorMessage = null;
     });
