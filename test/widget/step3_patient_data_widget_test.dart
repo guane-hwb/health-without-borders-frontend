@@ -71,6 +71,61 @@ void main() {
     });
   });
 
+  // What is typed here reaches the draft only on "Continuar": the register
+  // screen asks the step before leaving.
+  group('Step3PatientData - entrada sin guardar', () {
+    testWidgets('informa la entrada sin guardar y deja de hacerlo al '
+        'desmontarse', (tester) async {
+      final draft = RegisterDraft();
+      final probe = UnsavedInputProbe();
+      await tester.pumpWidget(
+        _wrap(
+          Step3PatientData(
+            draft: draft,
+            onBack: () {},
+            onContinue: () {},
+            unsavedInput: probe,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(probe.hasUnsavedInput, isFalse);
+
+      await tester.enterText(find.byType(TextField).at(2), 'Carmen');
+      expect(draft.firstName, isEmpty);
+      expect(probe.hasUnsavedInput, isTrue);
+
+      await tester.enterText(find.byType(TextField).at(2), '');
+      expect(probe.hasUnsavedInput, isFalse);
+
+      await tester.enterText(find.byType(TextField).at(2), 'Carmen');
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      expect(probe.hasUnsavedInput, isFalse);
+    });
+
+    testWidgets('lo ya guardado en el draft no cuenta como entrada sin '
+        'guardar', (tester) async {
+      final draft = RegisterDraft()
+        ..firstName = 'Carmen'
+        ..documentNumber = '1098765432'
+        ..dob = DateTime(1995, 5, 20);
+      final probe = UnsavedInputProbe();
+      await tester.pumpWidget(
+        _wrap(
+          Step3PatientData(
+            draft: draft,
+            onBack: () {},
+            onContinue: () {},
+            unsavedInput: probe,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(probe.hasUnsavedInput, isFalse);
+    });
+  });
+
   group('Step3PatientData - back navigation', () {
     testWidgets('tapping back invokes onBack without requiring valid data', (
       tester,
