@@ -7371,16 +7371,28 @@ void main() {
       expect(en.guardianEmail, equals('guardianEmail'));
     });
 
-    test('keys present only in the Spanish map fall back to the raw key '
-        'in English (documents a translation gap - see note above)', () {
+    test('the forgot-password dialog is translated in English, not shown '
+        'as its keys', () {
       final en = AppStrings.forTesting('en');
       final es = AppStrings.forTesting('es');
 
-      expect(en.ok, equals('ok'));
-      expect(es.ok, isNot(equals('ok')));
+      expect(en.ok, equals('Got it'));
+      expect(es.ok, equals('Entendido'));
 
-      expect(en.forgotPasswordMessage, equals('forgotPasswordMessage'));
+      expect(
+        en.forgotPasswordMessage,
+        equals('Contact the system administrator to reset your password.'),
+      );
       expect(es.forgotPasswordMessage, isNot(equals('forgotPasswordMessage')));
+    });
+
+    test('the Spanish and English tables translate the same keys', () {
+      final Set<String> es = AppStrings.keysForTesting('es');
+      final Set<String> en = AppStrings.keysForTesting('en');
+
+      expect(es, isNotEmpty);
+      expect(es.difference(en), isEmpty, reason: 'keys missing from _en');
+      expect(en.difference(es), isEmpty, reason: 'keys missing from _es');
     });
   });
 

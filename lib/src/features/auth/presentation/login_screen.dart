@@ -11,6 +11,7 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_error_codes.dart';
+import '../../../core/validation/identity_validators.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/hwb_logo.dart';
 import '../../home/presentation/home_screen.dart';
@@ -230,10 +231,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 if (v == null || v.trim().isEmpty) {
                                   return s.emailRequired;
                                 }
-                                final emailRegex = RegExp(
-                                  r'^[\w\-.]+@[\w\-]+\.[a-zA-Z]{2,}$',
-                                );
-                                if (!emailRegex.hasMatch(v.trim())) {
+                                if (validateEmail(v) != null) {
                                   return s.emailInvalid;
                                 }
                                 return null;
@@ -420,9 +418,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      final errorMessage = e.statusCode == 429
-          ? ApiErrorCode.tooManyAttempts(e.retryAfter, isEs: s.isEs)
-          : ApiErrorCode.describe(e.code, isEs: s.isEs) ?? e.message;
+      final errorMessage = _loginErrorMessage(e, s);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -455,6 +451,27 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// What a refused sign-in tells the user. Decided on the status and the
+  /// backend's `code`, never on [ApiException.message]: that is English for
+  /// the logs, and the 401 of a wrong password carries no code at all.
+  String _loginErrorMessage(ApiException e, AppStrings s) {
+    final int? status = e.statusCode;
+    if (status == 429) {
+      return ApiErrorCode.tooManyAttempts(e.retryAfter, isEs: s.isEs);
+    }
+    final String? known = ApiErrorCode.describe(e.code, isEs: s.isEs);
+    if (known != null) return known;
+    if (status == null) return s.loginFailed;
+    if (status == 401) return s.loginWrongCredentials;
+    // The client follows no redirect, and a 2xx only fails when its body is
+    // not the API's JSON: a captive portal answered (511 is its own status).
+    if ((status >= 200 && status < 400) || status == 511) {
+      return s.loginCaptivePortal;
+    }
+    if (status >= 500) return s.loginServerUnavailable;
+    return s.loginFailed;
   }
 
   void _showNetworkErrorSnackBar(String message) {
