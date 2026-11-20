@@ -15,11 +15,57 @@ import '../../../core/validation/identity_validators.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/hwb_logo.dart';
 import '../../home/presentation/home_screen.dart';
+import '../domain/user_session.dart';
+
+/// What the app does when the session expires: asks for the password again
+/// over whatever is open, instead of clearing the stack and losing, without
+/// asking, a form being filled in.
+///
+/// If the person whose session expired ([expiredUserId]) signs in again, they
+/// are back where they were, with what they had written. Another account, or a
+/// password that must be changed before anything else, clears the stack to
+/// Home: what is open belongs to the other session. Leaving the prompt with
+/// back clears it to the login.
+Future<void> reauthenticateOverCurrentScreen(
+  NavigatorState navigator, {
+  required String? expiredUserId,
+}) async {
+  final UserSession? session = await navigator.push<UserSession>(
+    MaterialPageRoute<UserSession>(
+      builder: (_) =>
+          const LoginScreen(showSessionExpired: true, returnsSession: true),
+    ),
+  );
+  if (!navigator.mounted) return;
+  final bool samePerson =
+      session != null &&
+      expiredUserId != null &&
+      expiredUserId.isNotEmpty &&
+      session.id == expiredUserId;
+  if (samePerson && !session.mustChangePassword) return;
+  unawaited(
+    navigator.pushAndRemoveUntil<void>(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            session == null ? const LoginScreen() : const HomeScreen(),
+      ),
+      (Route<dynamic> route) => false,
+    ),
+  );
+}
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, this.showSessionExpired = false});
+  const LoginScreen({
+    super.key,
+    this.showSessionExpired = false,
+    this.returnsSession = false,
+  });
 
   final bool showSessionExpired;
+
+  /// Pops with the signed-in [UserSession] instead of opening Home: the
+  /// prompt of [reauthenticateOverCurrentScreen].
+  final bool returnsSession;
 
   @visibleForTesting
   static bool? debugIsWebOverride;
@@ -348,12 +394,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await AppScope.of(context).authRepository.login(
-        email: _emailCtrl.text.trim(),
-        password: _passwordCtrl.text,
-        rememberSession: LoginScreen.isWebPlatform ? false : _rememberSession,
-      );
+      final UserSession session = await AppScope.of(context).authRepository
+          .login(
+            email: _emailCtrl.text.trim(),
+            password: _passwordCtrl.text,
+            rememberSession: LoginScreen.isWebPlatform
+                ? false
+                : _rememberSession,
+          );
       if (!mounted) return;
+      if (widget.returnsSession) {
+        Navigator.of(context).pop(session);
+        return;
+      }
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
       );

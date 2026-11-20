@@ -95,13 +95,20 @@ PatientFullRecord _fakePatient({String name = 'Ana García'}) =>
 // Widget wrapper
 // ---------------------------------------------------------------------------
 
+/// [pushed] opens the screen over another route, as the profile does, so the
+/// back arrow and the system back can leave it ('Abrir' opens it).
 Widget _buildApp({
   PatientFullRecord? patient,
   bool returnToProfile = false,
   AppScope? scope,
   String locale = 'es',
+  bool pushed = false,
 }) {
   final wrapper = scope ?? _defaultScope();
+  final Widget screen = AddVaccineScreen(
+    patient: patient,
+    returnToProfile: returnToProfile,
+  );
   return AppScope(
     authRepository: wrapper.authRepository,
     userRepository: wrapper.userRepository,
@@ -117,13 +124,46 @@ Widget _buildApp({
       locale: locale,
       setLocale: (_) {},
       child: MaterialApp(
-        home: AddVaccineScreen(
-          patient: patient,
-          returnToProfile: returnToProfile,
-        ),
+        home: pushed
+            ? Builder(
+                builder: (BuildContext context) => Scaffold(
+                  body: TextButton(
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).push(MaterialPageRoute<Object?>(builder: (_) => screen)),
+                    child: const Text('Abrir'),
+                  ),
+                ),
+              )
+            : screen,
       ),
     ),
   );
+}
+
+Future<void> _openPushed(
+  WidgetTester tester, {
+  bool returnToProfile = true,
+  AppScope? scope,
+}) async {
+  await tester.pumpWidget(
+    _buildApp(
+      patient: _fakePatient(),
+      returnToProfile: returnToProfile,
+      scope: scope,
+      pushed: true,
+    ),
+  );
+  await tester.tap(find.text('Abrir'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _fillVaccine(WidgetTester tester) async {
+  await tester.enterText(textFieldWithHint(_hintVaccineName).first, 'BCG');
+  await tester.enterText(textFieldWithHint(_hintCvxCode).first, '19');
+  await tester.enterText(textFieldWithHint(_hintAdminBy), 'Dr. Ruiz');
+  await tester.enterText(textFieldWithHint(_hintAdminAt), 'Clínica Central');
+  await tester.pump();
 }
 
 AppScope _defaultScope() {
@@ -1142,6 +1182,118 @@ void main() {
       expect(backIcon, findsOneWidget);
       await tester.tap(backIcon);
       await tester.pumpAndSettle();
+    });
+  });
+
+  group('Salir con algo escrito', () {
+    const String title = '¿Descartar lo escrito?';
+    const String message =
+        'Lo que escribió en este registro de vacunas se perderá.';
+
+    testWidgets('con «Administrado por» escrito, la flecha pregunta y '
+        '«Seguir editando» lo conserva', (tester) async {
+      await _openPushed(tester);
+      await tester.enterText(textFieldWithHint(_hintAdminBy), 'Enf. Ana Ruiz');
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsOneWidget);
+      expect(find.text(message), findsOneWidget);
+
+      await tester.tap(find.text('Seguir editando'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsNothing);
+      expect(find.byType(AddVaccineScreen), findsOneWidget);
+      expect(find.text('Enf. Ana Ruiz'), findsOneWidget);
+    });
+
+    testWidgets('un estado elegido detiene el retroceso del sistema y '
+        '«Descartar» sale', (tester) async {
+      await _openPushed(tester);
+      final rehusada = find.text('Rehusada por paciente');
+      await tester.ensureVisible(rehusada);
+      await tester.tap(rehusada);
+      await tester.pump();
+
+      expect(await tester.binding.handlePopRoute(), isTrue);
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsOneWidget);
+      expect(find.byType(AddVaccineScreen), findsOneWidget);
+
+      await tester.tap(find.text('Descartar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AddVaccineScreen), findsNothing);
+      expect(find.text('Abrir'), findsOneWidget);
+    });
+
+    testWidgets('sin cambios, la flecha sale sin preguntar', (tester) async {
+      await _openPushed(tester);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsNothing);
+      expect(find.byType(AddVaccineScreen), findsNothing);
+      expect(find.text('Abrir'), findsOneWidget);
+    });
+
+    testWidgets('al guardar vuelve al perfil sin preguntar', (tester) async {
+      await _openPushed(tester);
+      await _fillVaccine(tester);
+
+      await _tapGuardar(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsNothing);
+      expect(find.byType(AddVaccineScreen), findsNothing);
+      expect(find.text('Abrir'), findsOneWidget);
+    });
+
+    testWidgets('en el paso de éxito, la flecha sale sin preguntar', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      final scope = _defaultScope();
+      when(
+        () => scope.localDatabase.savePatient(
+          any(),
+          ownerUserId: any(named: 'ownerUserId'),
+        ),
+      ).thenAnswer((_) async {});
+      when(
+        () => scope.localDatabase.markChipsDirty(
+          any(),
+          guardian: any(named: 'guardian'),
+        ),
+      ).thenAnswer((_) async {});
+      when(
+        () => scope.syncEngine.refreshPendingCount(),
+      ).thenAnswer((_) async => 0);
+      when(
+        () => scope.syncEngine.syncAll(),
+      ).thenAnswer((_) async => _MockSyncResult());
+
+      await _openPushed(tester, returnToProfile: false, scope: scope);
+      await _fillVaccine(tester);
+      await _tapGuardar(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Vacuna guardada exitosamente'), findsWidgets);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsNothing);
+      expect(find.byType(AddVaccineScreen), findsNothing);
     });
   });
 }

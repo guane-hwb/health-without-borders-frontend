@@ -20,6 +20,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
+import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
@@ -142,7 +143,11 @@ void main() {
   late FakeAuthRepository mockAuthRepo;
 
   // ── Helper: wraps LoginScreen with all its required providers ─────────
-  Widget buildSubject({String locale = 'es', bool showSessionExpired = false}) {
+  Widget buildSubject({
+    String locale = 'es',
+    bool showSessionExpired = false,
+    Widget? home,
+  }) {
     final apiClient = ApiClient(baseUrl: 'https://example.com');
     final userRepository = UserRepository(
       apiClient: apiClient,
@@ -173,7 +178,7 @@ void main() {
         reachability: Reachability(baseUrl: 'http://localhost'),
         child: MaterialApp(
           routes: {'/login': (_) => const LoginScreen()},
-          home: LoginScreen(showSessionExpired: showSessionExpired),
+          home: home ?? LoginScreen(showSessionExpired: showSessionExpired),
         ),
       ),
     );
@@ -951,5 +956,107 @@ void main() {
         },
       );
     }
+  });
+
+  group('Sesión vencida: la contraseña se pide sobre la pantalla abierta', () {
+    const String written = 'Fiebre de 3 días';
+
+    /// A form with something written in it, and the session expiring over it
+    /// as the app reacts to AuthRepository.sessionExpired.
+    Future<NavigatorState> expireOverForm(
+      WidgetTester tester, {
+      required String? expiredUserId,
+    }) async {
+      await tester.pumpWidget(
+        buildSubject(home: const Scaffold(body: TextField())),
+      );
+      await tester.enterText(find.byType(TextField), written);
+      await tester.pump();
+      final NavigatorState navigator = tester.state<NavigatorState>(
+        find.byType(Navigator),
+      );
+      reauthenticateOverCurrentScreen(
+        navigator,
+        expiredUserId: expiredUserId,
+      ).ignore();
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsOneWidget);
+      return navigator;
+    }
+
+    Future<void> signIn(WidgetTester tester) async {
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
+      await tester.enterText(find.byType(TextFormField).last, 'password123');
+      await tester.tap(find.byType(ElevatedButton));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('si entra la misma persona, vuelve al formulario con lo '
+        'escrito', (tester) async {
+      final NavigatorState navigator = await expireOverForm(
+        tester,
+        expiredUserId: 'test-user-id',
+      );
+
+      await signIn(tester);
+
+      expect(mockAuthRepo.loginCalled, isTrue);
+      expect(find.byType(LoginScreen), findsNothing);
+      expect(find.byType(HomeScreen), findsNothing);
+      expect(find.text(written), findsOneWidget);
+      expect(navigator.canPop(), isFalse);
+    });
+
+    testWidgets('si entra otra cuenta, deja sólo el inicio de esa cuenta', (
+      tester,
+    ) async {
+      final NavigatorState navigator = await expireOverForm(
+        tester,
+        expiredUserId: 'otra-persona',
+      );
+
+      await signIn(tester);
+
+      expect(find.text(written), findsNothing);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(navigator.canPop(), isFalse);
+    });
+
+    testWidgets('si la misma persona debe cambiar la contraseña, deja sólo el '
+        'inicio, que se lo pide', (tester) async {
+      mockAuthRepo.loginHandler =
+          ({required String email, required String password}) async =>
+              buildTestSession(email).copyWith(mustChangePassword: true);
+      final NavigatorState navigator = await expireOverForm(
+        tester,
+        expiredUserId: 'test-user-id',
+      );
+
+      await signIn(tester);
+
+      expect(find.text(written), findsNothing);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(navigator.canPop(), isFalse);
+    });
+
+    testWidgets('si sale con el retroceso, deja sólo el inicio de sesión', (
+      tester,
+    ) async {
+      final NavigatorState navigator = await expireOverForm(
+        tester,
+        expiredUserId: 'test-user-id',
+      );
+
+      expect(await tester.binding.handlePopRoute(), isTrue);
+      await tester.pumpAndSettle();
+
+      expect(mockAuthRepo.loginCalled, isFalse);
+      expect(find.text(written), findsNothing);
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(navigator.canPop(), isFalse);
+    });
   });
 }

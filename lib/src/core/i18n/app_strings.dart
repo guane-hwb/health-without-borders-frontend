@@ -140,6 +140,11 @@ class AppStrings {
   String get newPatient => _get('newPatient');
   String get consultationSaved => _get('consultationSaved');
   String get vaccineSaved => _get('vaccineSaved');
+  String get discardWrittenTitle => _get('discardWrittenTitle');
+  String get discardConsultationMsg => _get('discardConsultationMsg');
+  String get discardVaccineMsg => _get('discardVaccineMsg');
+  String get keepEditing => _get('keepEditing');
+  String get discard => _get('discard');
   String get today => _get('today');
   // Step 1
   String get patientNfcDevice => _get('patientNfcDevice');
@@ -432,8 +437,8 @@ class AppStrings {
   String get syncBtn => _get('syncBtn');
   String get savedChangesMsg => _get('savedChangesMsg');
   String get notAuthorizedConsultations => _get('notAuthorizedConsultations');
-  String get unsyncedChangesTitle => _get('unsyncedChangesTitle');
-  String get exitWithoutSyncMsg => _get('exitWithoutSyncMsg');
+  String get discardSheetTitle => _get('discardSheetTitle');
+  String get discardSheetMsg => _get('discardSheetMsg');
   String get exit => _get('exit');
   String get tabSummary => _get('tabSummary');
   String get yearsOldSuffix => _get('yearsOldSuffix');
@@ -784,6 +789,12 @@ class AppStrings {
     'newPatient': 'Nuevo paciente',
     'consultationSaved': 'Consulta guardada exitosamente',
     'vaccineSaved': 'Vacuna guardada exitosamente',
+    'discardWrittenTitle': '¿Descartar lo escrito?',
+    'discardConsultationMsg': 'Lo que escribió en esta consulta se perderá.',
+    'discardVaccineMsg':
+        'Lo que escribió en este registro de vacunas se perderá.',
+    'keepEditing': 'Seguir editando',
+    'discard': 'Descartar',
     'today': 'Hoy',
     'patientNfcDevice': 'Dispositivo NFC del paciente',
     'patientNfcDeviceSub':
@@ -1065,8 +1076,8 @@ class AppStrings {
     'savedChangesMsg': 'Cambios guardados. Se sincronizarán automáticamente.',
     'notAuthorizedConsultations':
         'No autorizado: solo doctores pueden agregar consultas.',
-    'unsyncedChangesTitle': 'Cambios sin sincronizar',
-    'exitWithoutSyncMsg': 'Tienes cambios pendientes. ¿Salir sin sincronizar?',
+    'discardSheetTitle': '¿Descartar lo que escribió?',
+    'discardSheetMsg': 'Lo que escribió en esta hoja se perderá.',
     'exit': 'Salir',
     'tabSummary': 'Resumen',
     'yearsOldSuffix': 'años',
@@ -1417,6 +1428,13 @@ class AppStrings {
     'newPatient': 'New patient',
     'consultationSaved': 'Consultation saved successfully',
     'vaccineSaved': 'Vaccine saved successfully',
+    'discardWrittenTitle': 'Discard what you wrote?',
+    'discardConsultationMsg':
+        'What you wrote in this consultation will be lost.',
+    'discardVaccineMsg':
+        'What you wrote in this vaccination record will be lost.',
+    'keepEditing': 'Keep editing',
+    'discard': 'Discard',
     'today': 'Today',
     'patientNfcDevice': 'Patient NFC device',
     'patientNfcDeviceSub': 'Tap the NFC device or enter the UID manually.',
@@ -1699,8 +1717,8 @@ class AppStrings {
     'savedChangesMsg': 'Changes saved. They will sync automatically.',
     'notAuthorizedConsultations':
         'Not authorized: only doctors can add consultations.',
-    'unsyncedChangesTitle': 'Unsynchronized changes',
-    'exitWithoutSyncMsg': 'You have pending changes. Exit without syncing?',
+    'discardSheetTitle': 'Discard what you wrote?',
+    'discardSheetMsg': 'What you wrote in this sheet will be lost.',
     'exit': 'Exit',
     'tabSummary': 'Summary',
     'yearsOldSuffix': 'yrs',
