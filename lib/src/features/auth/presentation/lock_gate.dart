@@ -32,6 +32,12 @@ class LockController extends ChangeNotifier with WidgetsBindingObserver {
   bool get isLocked => _authRepo.isLocalLocked.value;
   ValueListenable<bool> get lockedListenable => _authRepo.isLocalLocked;
 
+  /// Whether the system back must be swallowed: under the lock it would pop
+  /// the screen the lock covers, and that screen could hold a form in progress.
+  /// The app answers `didPopRoute` with this from an observer registered
+  /// before the Navigator's.
+  bool get blocksSystemBack => isLocked && _authRepo.currentUser != null;
+
   void _onRepoLockChanged() {
     notifyListeners();
   }
@@ -90,15 +96,98 @@ class LockController extends ChangeNotifier with WidgetsBindingObserver {
   }
 }
 
+/// What the app's `builder` puts around its Navigator ([child]).
+///
+/// It records activity for [controller] and, while the app is locked, paints
+/// the one [LockScreen] above everything. What is underneath stays mounted, so
+/// it comes back as it was at the unlock, but meanwhile it is out of the
+/// semantics tree (TalkBack would still read it and activate its buttons), out
+/// of hit testing and out of focus.
+class LockLayer extends StatelessWidget {
+  const LockLayer({
+    super.key,
+    required this.controller,
+    required this.authRepository,
+    required this.navigatorKey,
+    required this.child,
+  });
+
+  final LockController controller;
+  final AuthRepository authRepository;
+
+  /// The app's Navigator. The lock is painted above it, where
+  /// `Navigator.of(context)` does not find it.
+  final GlobalKey<NavigatorState> navigatorKey;
+
+  final Widget child;
+
+  void _showLogin({required bool sessionExpired}) {
+    unawaited(
+      navigatorKey.currentState?.pushAndRemoveUntil(
+        // No transition: a route being removed stays painted under the one
+        // coming in until its animation ends, and the logout can lift the
+        // lock before that.
+        PageRouteBuilder<void>(
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          pageBuilder: (_, _, _) =>
+              LoginScreen(showSessionExpired: sessionExpired),
+        ),
+        (Route<dynamic> route) => false,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => controller.recordUserActivity(),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: controller.lockedListenable,
+        builder: (context, locked, _) {
+          final covered = locked && authRepository.currentUser != null;
+          return Stack(
+            children: [
+              ExcludeSemantics(
+                excluding: covered,
+                child: IgnorePointer(
+                  ignoring: covered,
+                  child: ExcludeFocus(excluding: covered, child: child),
+                ),
+              ),
+              if (covered)
+                // Outside the Navigator there is no Overlay, and the password
+                // field needs one for its selection handles and its menu.
+                Overlay.wrap(
+                  child: LockScreen(
+                    authRepository: authRepository,
+                    onUnlocked: controller.unlock,
+                    showLogin: _showLogin,
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 class LockScreen extends StatefulWidget {
   const LockScreen({
     super.key,
     required this.authRepository,
     required this.onUnlocked,
+    required this.showLogin,
   });
 
   final AuthRepository authRepository;
   final VoidCallback onUnlocked;
+
+  /// Replaces every route with the login screen. The lock lives outside the
+  /// Navigator ([LockLayer]), so it cannot navigate by itself.
+  final void Function({required bool sessionExpired}) showLogin;
 
   @override
   State<LockScreen> createState() => _LockScreenState();
@@ -139,15 +228,11 @@ class _LockScreenState extends State<LockScreen> {
     } else {
       _failedAttempts++;
       if (_failedAttempts >= _maxAttempts) {
-        // 5 intentos fallidos -> logout conservando pendientes
+        // 5 intentos fallidos -> logout conservando pendientes. El login va
+        // primero, aún bajo el bloqueo: el logout lo levanta y lo de debajo
+        // no debe quedar a la vista mientras termina.
+        widget.showLogin(sessionExpired: true);
         await widget.authRepository.logout(wipeLocalData: false);
-        if (!mounted) return;
-        await Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute<void>(
-            builder: (_) => const LoginScreen(showSessionExpired: true),
-          ),
-          (route) => false,
-        );
       } else {
         setState(() {
           _isLoading = false;
@@ -161,12 +246,9 @@ class _LockScreenState extends State<LockScreen> {
   }
 
   Future<void> _switchUser() async {
+    // Como arriba: el login antes que el logout, que levanta el bloqueo.
+    widget.showLogin(sessionExpired: false);
     await widget.authRepository.logout(wipeLocalData: false);
-    if (!mounted) return;
-    await Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
   }
 
   @override

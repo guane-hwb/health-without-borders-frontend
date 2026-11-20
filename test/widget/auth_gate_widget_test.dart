@@ -86,6 +86,11 @@ Widget _wrap(_GateAuth auth) {
     patientRepository: patientRepository,
     localDatabase: LocalDatabase.instance,
   );
+  // El mismo builder que lib/src/app.dart: el bloqueo es una capa sobre el
+  // Navigator, no una pantalla de AuthGate.
+  final navigatorKey = GlobalKey<NavigatorState>();
+  final lockController = LockController(authRepository: auth);
+  addTearDown(lockController.dispose);
 
   return AppLocale(
     locale: 'es',
@@ -101,7 +106,16 @@ Widget _wrap(_GateAuth auth) {
         authRepository: auth,
       ),
       reachability: Reachability(baseUrl: 'http://localhost'),
-      child: MaterialApp(home: AuthGate(authRepository: auth)),
+      child: MaterialApp(
+        navigatorKey: navigatorKey,
+        builder: (BuildContext context, Widget? child) => LockLayer(
+          controller: lockController,
+          authRepository: auth,
+          navigatorKey: navigatorKey,
+          child: child ?? const SizedBox.shrink(),
+        ),
+        home: AuthGate(authRepository: auth),
+      ),
     ),
   );
 }
@@ -136,7 +150,7 @@ void main() {
     expect(find.byType(HomeScreen), findsNothing);
   });
 
-  testWidgets('sesión restaurada con bloqueo activo → LockScreen', (
+  testWidgets('sesión restaurada con bloqueo activo → un solo LockScreen', (
     tester,
   ) async {
     final auth = _GateAuth(restoreResult: _superadmin(), initiallyLocked: true);
@@ -148,6 +162,33 @@ void main() {
     expect(find.byType(LockScreen), findsOneWidget);
     expect(find.byType(HomeScreen), findsNothing);
   });
+
+  testWidgets(
+    'un bloqueo posterior deja HomeScreen montado debajo y vuelve con su estado',
+    (tester) async {
+      final auth = _GateAuth(
+        restoreResult: _superadmin(),
+        initiallyLocked: true,
+      );
+      await tester.pumpWidget(_wrap(auth));
+      await tester.pump();
+      await tester.pump();
+
+      auth.setLocalLocked(false);
+      await tester.pump();
+      final Element home = tester.element(find.byType(HomeScreen));
+
+      auth.setLocalLocked(true);
+      await tester.pump();
+      expect(find.byType(LockScreen), findsOneWidget);
+      expect(tester.element(find.byType(HomeScreen)), same(home));
+
+      auth.setLocalLocked(false);
+      await tester.pump();
+      expect(find.byType(LockScreen), findsNothing);
+      expect(tester.element(find.byType(HomeScreen)), same(home));
+    },
+  );
 
   testWidgets('sesión restaurada y desbloqueada → HomeScreen', (tester) async {
     final auth = _GateAuth(
