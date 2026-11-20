@@ -10,6 +10,7 @@ import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../core/validation/identity_validators.dart';
 import '../../../../../shared/widgets/form_widgets.dart';
 import '../../../domain/register_draft.dart';
+import '../widgets/validation_feedback.dart';
 
 const _kEnabledBorder = OutlineInputBorder(
   borderRadius: BorderRadius.all(Radius.circular(10)),
@@ -45,6 +46,24 @@ Widget _buildLabel(String labelText, bool isRequired) {
     ),
     overflow: TextOverflow.ellipsis,
   );
+}
+
+/// The fields «Continuar» checks, in the order they appear on screen.
+enum _GuardianField {
+  name,
+  relOther,
+  phone,
+  docNumber,
+  uid,
+  auth,
+  email,
+  signature,
+  relOther2,
+  phone2,
+  docNumber2,
+  email2,
+  auth2,
+  signature2,
 }
 
 class Step2Guardian extends StatefulWidget {
@@ -83,7 +102,30 @@ class _Step2State extends State<Step2Guardian> {
   List<List<Offset>> _signatureStrokes = [];
   List<Offset>? _currentStroke;
   bool _scanning = false;
-  String? _err;
+
+  /// What the last «Continuar» found; the banner shows what is still open
+  /// ([openSummary]).
+  List<SummaryEntry<_GuardianField>> _summary = const [];
+  final _scroll = ScrollController();
+  final _focus = <_GuardianField, FocusNode>{
+    for (final f in const [
+      _GuardianField.name,
+      _GuardianField.relOther,
+      _GuardianField.phone,
+      _GuardianField.docNumber,
+      _GuardianField.uid,
+      _GuardianField.email,
+      _GuardianField.relOther2,
+      _GuardianField.phone2,
+      _GuardianField.docNumber2,
+      _GuardianField.email2,
+    ])
+      f: FocusNode(),
+  };
+
+  /// The error under each field, set by «Continuar»; typing in a field clears
+  /// its own.
+  final _fieldErrors = <_GuardianField, String>{};
 
   bool _hasGuardian2 = false;
   late final TextEditingController _name2;
@@ -147,7 +189,17 @@ class _Step2State extends State<Step2Guardian> {
     _uid2.dispose();
     _email2.dispose();
     _relOther2.dispose();
+    for (final node in _focus.values) {
+      node.dispose();
+    }
+    _scroll.dispose();
     super.dispose();
+  }
+
+  void _clearFieldError(_GuardianField field) {
+    if (_fieldErrors.containsKey(field)) {
+      setState(() => _fieldErrors.remove(field));
+    }
   }
 
   void _commitToDraft() {
@@ -209,7 +261,10 @@ class _Step2State extends State<Step2Guardian> {
       final uid = await (widget.readDevice ?? NfcService.readDeviceUid)();
       if (mounted) {
         setState(() {
-          if (uid != null) _uid.text = uid;
+          if (uid != null) {
+            _uid.text = uid;
+            _fieldErrors.remove(_GuardianField.uid);
+          }
           _scanning = false;
         });
       }
@@ -323,7 +378,8 @@ class _Step2State extends State<Step2Guardian> {
 
   Future<void> _save() async {
     final s = AppStrings.of(context);
-    final missing = <String>[];
+    final entries = <SummaryEntry<_GuardianField>>[];
+    final fieldErrors = <_GuardianField, String>{};
 
     final isEs = s.isEs;
     final bioSigLabel = isEs ? 'Firma biométrica' : 'Biometric signature';
@@ -333,82 +389,132 @@ class _Step2State extends State<Step2Guardian> {
     final auth2Label = isEs
         ? 'Autorización cuidador 2'
         : 'Guardian 2 Authorization';
-    final requiredFieldsLabel = isEs ? 'Campos requeridos' : 'Required fields';
+    final docFormatError = isEs
+        ? 'Documento de cuidador inválido (5 a 20 caracteres, sin símbolos)'
+        : 'Invalid guardian document (5 to 20 characters, no symbols)';
+    final emailFormatError = isEs
+        ? 'Correo electrónico inválido'
+        : 'Invalid email address';
+
+    // [label] goes under «Faltan»; the field shows [fieldError].
+    void lack(_GuardianField field, String label, [String? fieldError]) {
+      final shown = fieldError ?? s.formFieldRequired;
+      entries.add(SummaryEntry(label, field: field, fieldError: shown));
+      fieldErrors[field] = shown;
+    }
+
+    // [error] goes under «Corrija»; the field shows [fieldError] (the cause).
+    void reject(_GuardianField field, String error, [String? fieldError]) {
+      final shown = fieldError ?? error;
+      entries.add(
+        SummaryEntry(error, field: field, fieldError: shown, invalid: true),
+      );
+      fieldErrors[field] = shown;
+    }
 
     final rel1 = widget.draft.guardianRelationship ?? '01';
 
-    if (_name.text.trim().isEmpty) missing.add(s.guardianFullName);
-    if (rel1 == '05' && _relOther1.text.trim().isEmpty) {
-      missing.add(isEs ? 'Especifique el parentesco' : 'Specify relationship');
+    if (_name.text.trim().isEmpty) {
+      lack(_GuardianField.name, s.guardianFullName);
     }
-    if (_phone.text.trim().isEmpty) missing.add(s.guardianPhoneLabel);
-    if (_selectedDocType.trim().isEmpty) missing.add(s.documentTypeLabel);
-    if (_docNumber.text.trim().isEmpty) missing.add(s.documentNumberLabel);
-    if (_uid.text.trim().isEmpty) missing.add(s.guardianNfcDevice);
-    if (!_authAccepted) missing.add(privacyAuthLabel);
-    if (_signatureStrokes.isEmpty) missing.add(bioSigLabel);
+    if (rel1 == '05' && _relOther1.text.trim().isEmpty) {
+      lack(
+        _GuardianField.relOther,
+        isEs ? 'Especifique el parentesco' : 'Specify relationship',
+      );
+    }
+    if (_phone.text.trim().isEmpty) {
+      lack(_GuardianField.phone, s.guardianPhoneLabel);
+    }
+    if (_selectedDocType.trim().isEmpty) {
+      entries.add(SummaryEntry(s.documentTypeLabel));
+    }
+    if (_docNumber.text.trim().isEmpty) {
+      lack(_GuardianField.docNumber, s.documentNumberLabel);
+    }
+    if (_uid.text.trim().isEmpty) {
+      lack(_GuardianField.uid, s.guardianNfcDevice, s.nfcUidRequired);
+    }
+    if (!_authAccepted) lack(_GuardianField.auth, privacyAuthLabel);
+    if (_signatureStrokes.isEmpty) {
+      lack(_GuardianField.signature, bioSigLabel);
+    }
 
     if (_docNumber.text.trim().isNotEmpty &&
         validateDocumentNumber(_docNumber.text) != null) {
-      missing.add(
-        isEs
-            ? 'Documento de cuidador inválido (5 a 20 caracteres, sin símbolos)'
-            : 'Invalid guardian document (5 to 20 characters, no symbols)',
-      );
+      reject(_GuardianField.docNumber, docFormatError);
     }
     if (_phone.text.trim().isNotEmpty && validatePhone(_phone.text) != null) {
-      missing.add(
-        isEs
-            ? 'Teléfono inválido (mínimo 7 dígitos)'
-            : 'Invalid phone number (minimum 7 digits)',
-      );
+      reject(_GuardianField.phone, s.guardianPhoneInvalid);
     }
     if (_email.text.trim().isNotEmpty && validateEmail(_email.text) != null) {
-      missing.add(
-        isEs ? 'Correo electrónico inválido' : 'Invalid email address',
-      );
+      reject(_GuardianField.email, emailFormatError);
     }
 
     if (_hasGuardian2 && _name2.text.trim().isNotEmpty) {
       if (_guardian2Relationship == '05' && _relOther2.text.trim().isEmpty) {
-        missing.add(
+        lack(
+          _GuardianField.relOther2,
           isEs
               ? 'Especifique el parentesco (Cuidador 2)'
               : 'Specify relationship (Guardian 2)',
         );
       }
       if (validateDocumentNumber(_docNumber2.text) != null) {
-        missing.add(
+        reject(
+          _GuardianField.docNumber2,
           isEs
               ? 'Documento de cuidador 2 inválido'
               : 'Invalid guardian 2 document',
+          docFormatError,
         );
       }
       if (validatePhone(_phone2.text) != null) {
-        missing.add(
+        reject(
+          _GuardianField.phone2,
           isEs ? 'Teléfono de cuidador 2 inválido' : 'Invalid guardian 2 phone',
+          s.guardianPhoneInvalid,
         );
       }
       if (validateEmail(_email2.text) != null) {
-        missing.add(
+        reject(
+          _GuardianField.email2,
           isEs ? 'Correo de cuidador 2 inválido' : 'Invalid guardian 2 email',
+          emailFormatError,
         );
       }
 
       if (_signatureStrokes2.isNotEmpty) {
-        if (!_auth2Accepted) missing.add(auth2Label);
+        if (!_auth2Accepted) lack(_GuardianField.auth2, auth2Label);
       }
       if (_auth2Accepted && _signatureStrokes2.isEmpty) {
-        missing.add(isEs ? 'Firma del cuidador 2' : 'Guardian 2 signature');
+        lack(
+          _GuardianField.signature2,
+          isEs ? 'Firma del cuidador 2' : 'Guardian 2 signature',
+        );
       }
     }
 
-    if (missing.isNotEmpty) {
-      setState(() => _err = '$requiredFieldsLabel: ${missing.join(', ')}');
+    final summary = openSummary(s, entries, fieldErrors);
+    if (summary != null) {
+      setState(() {
+        _summary = entries;
+        _fieldErrors
+          ..clear()
+          ..addAll(fieldErrors);
+      });
+      announceValidation(context, summary);
+      final first = _GuardianField.values
+          .where(fieldErrors.containsKey)
+          .firstOrNull;
+      revealFirstInvalid(_scroll, _focus[first]);
       return;
     }
 
-    setState(() => _err = null);
+    setState(() {
+      _summary = const [];
+      _fieldErrors.clear();
+    });
 
     final sig1Base64 = await _signatureToBase64(_signatureStrokes);
     final sig2Base64 = _hasGuardian2
@@ -417,7 +523,9 @@ class _Step2State extends State<Step2Guardian> {
 
     final d = widget.draft;
     d.guardianName = _name.text.trim().isEmpty ? null : _name.text.trim();
-    d.guardianPhone = _phone.text.trim().isEmpty ? null : _phone.text.trim();
+    d.guardianPhone = _phone.text.trim().isEmpty
+        ? null
+        : normalizePhone(_phone.text);
     d.guardianDeviceUid = _uid.text.trim().isEmpty ? null : _uid.text.trim();
     d.guardianDocType = _selectedDocType;
     d.guardianDocNumber = _docNumber.text.trim().isEmpty
@@ -439,7 +547,7 @@ class _Step2State extends State<Step2Guardian> {
       d.guardian2Name = _name2.text.trim();
       d.guardian2Phone = _phone2.text.trim().isEmpty
           ? null
-          : _phone2.text.trim();
+          : normalizePhone(_phone2.text);
       d.guardian2DeviceUid = _uid2.text.trim().isEmpty
           ? null
           : _uid2.text.trim();
@@ -510,14 +618,20 @@ class _Step2State extends State<Step2Guardian> {
     };
 
     final currentRel1 = d.guardianRelationship ?? '01';
+    final summary = openSummary(s, _summary, _fieldErrors);
 
     return Column(
       children: [
         Expanded(
           child: ListView(
+            controller: _scroll,
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
             children: [
               _NoticeBanner(requiredForMinor: widget.requiredForMinor),
+              if (summary != null) ...[
+                const SizedBox(height: 16),
+                _ErrorBanner(message: summary),
+              ],
               const SizedBox(height: 20),
 
               Row(
@@ -635,6 +749,10 @@ class _Step2State extends State<Step2Guardian> {
                             prefixIcon: Icons.person_outline,
                             requiredField: true,
                             keyboardType: TextInputType.name,
+                            errorText: _fieldErrors[_GuardianField.name],
+                            focusNode: _focus[_GuardianField.name],
+                            onChanged: (_) =>
+                                _clearFieldError(_GuardianField.name),
                           ),
                           const SizedBox(height: 12),
                           _RelChipSelector(
@@ -647,6 +765,7 @@ class _Step2State extends State<Step2Guardian> {
                               if (v != '05') {
                                 _relOther1.clear();
                                 d.guardianRelationshipOther = null;
+                                _fieldErrors.remove(_GuardianField.relOther);
                               }
                             }),
                           ),
@@ -663,6 +782,10 @@ class _Step2State extends State<Step2Guardian> {
                               prefixIcon: Icons.family_restroom_outlined,
                               requiredField: true,
                               keyboardType: TextInputType.text,
+                              errorText: _fieldErrors[_GuardianField.relOther],
+                              focusNode: _focus[_GuardianField.relOther],
+                              onChanged: (_) =>
+                                  _clearFieldError(_GuardianField.relOther),
                             ),
                           ],
                           const SizedBox(height: 12),
@@ -673,6 +796,10 @@ class _Step2State extends State<Step2Guardian> {
                             prefixIcon: Icons.phone_outlined,
                             requiredField: true,
                             keyboardType: TextInputType.phone,
+                            errorText: _fieldErrors[_GuardianField.phone],
+                            focusNode: _focus[_GuardianField.phone],
+                            onChanged: (_) =>
+                                _clearFieldError(_GuardianField.phone),
                           ),
                           const SizedBox(height: 12),
                           _DocTypeSelector(
@@ -691,6 +818,10 @@ class _Step2State extends State<Step2Guardian> {
                             prefixIcon: Icons.badge_outlined,
                             requiredField: true,
                             keyboardType: TextInputType.number,
+                            errorText: _fieldErrors[_GuardianField.docNumber],
+                            focusNode: _focus[_GuardianField.docNumber],
+                            onChanged: (_) =>
+                                _clearFieldError(_GuardianField.docNumber),
                           ),
                           const SizedBox(height: 16),
                           _CentredFormSectionHeader(
@@ -703,20 +834,31 @@ class _Step2State extends State<Step2Guardian> {
                             controller: _uid,
                             scanning: _scanning,
                             onScan: _scanNfc,
-                            onChanged: () => setState(() {}),
+                            onChanged: () => setState(
+                              () => _fieldErrors.remove(_GuardianField.uid),
+                            ),
+                            errorText: _fieldErrors[_GuardianField.uid],
+                            focusNode: _focus[_GuardianField.uid],
                           ),
                           const SizedBox(height: 16),
                           _AuthSection(
                             accepted: _authAccepted,
                             emailController: _email,
+                            emailErrorText: _fieldErrors[_GuardianField.email],
+                            emailFocusNode: _focus[_GuardianField.email],
+                            onEmailChanged: () =>
+                                _clearFieldError(_GuardianField.email),
                             emailRequired: false,
                             signatureStrokes: _signatureStrokes,
                             currentStroke: _currentStroke,
-                            onAcceptedChanged: (v) =>
-                                setState(() => _authAccepted = v),
+                            onAcceptedChanged: (v) => setState(() {
+                              _authAccepted = v;
+                              if (v) _fieldErrors.remove(_GuardianField.auth);
+                            }),
                             onPrivacyTap: _showPrivacyPolicy,
                             onSignatureStart: (offset) {
                               setState(() {
+                                _fieldErrors.remove(_GuardianField.signature);
                                 _currentStroke = [offset];
                                 _signatureStrokes.add(_currentStroke!);
                               });
@@ -758,11 +900,15 @@ class _Step2State extends State<Step2Guardian> {
                     if (v != '05') {
                       _relOther2.clear();
                       widget.draft.guardian2RelationshipOther = null;
+                      _fieldErrors.remove(_GuardianField.relOther2);
                     }
                   }),
                   onRemove: () {
                     setState(() {
                       _hasGuardian2 = false;
+                      _fieldErrors.removeWhere(
+                        (f, _) => f.index >= _GuardianField.relOther2.index,
+                      );
                       _name2.clear();
                       _phone2.clear();
                       _docNumber2.clear();
@@ -788,10 +934,14 @@ class _Step2State extends State<Step2Guardian> {
                     });
                   },
                   onScanNfc: _scanNfc2,
-                  onAuthChanged: (v) => setState(() => _auth2Accepted = v),
+                  onAuthChanged: (v) => setState(() {
+                    _auth2Accepted = v;
+                    if (v) _fieldErrors.remove(_GuardianField.auth2);
+                  }),
                   onPrivacyTap: _showPrivacyPolicy,
                   onSignatureStart: (offset) {
                     setState(() {
+                      _fieldErrors.remove(_GuardianField.signature2);
                       _currentStroke2 = [offset];
                       _signatureStrokes2.add(_currentStroke2!);
                     });
@@ -809,12 +959,10 @@ class _Step2State extends State<Step2Guardian> {
                     });
                   },
                   onNfcFieldChanged: () => setState(() {}),
+                  fieldErrors: _fieldErrors,
+                  focusNodes: _focus,
+                  onFieldEdited: _clearFieldError,
                 ),
-              ],
-
-              if (_err != null) ...[
-                const SizedBox(height: 16),
-                _ErrorBanner(message: _err!),
               ],
             ],
           ),
@@ -1014,10 +1162,16 @@ class _AuthSection extends StatelessWidget {
     required this.onSignatureEnd,
     required this.onClearSignature,
     this.emailRequired = false,
+    this.emailErrorText,
+    this.emailFocusNode,
+    this.onEmailChanged,
   });
 
   final bool accepted;
   final TextEditingController emailController;
+  final String? emailErrorText;
+  final FocusNode? emailFocusNode;
+  final VoidCallback? onEmailChanged;
   final List<List<Offset>> signatureStrokes;
   final List<Offset>? currentStroke;
   final ValueChanged<bool> onAcceptedChanged;
@@ -1060,6 +1214,9 @@ class _AuthSection extends StatelessWidget {
             hint: s.emailHint,
             prefixIcon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
+            errorText: emailErrorText,
+            focusNode: emailFocusNode,
+            onChanged: (_) => onEmailChanged?.call(),
           ),
           const SizedBox(height: 16),
 
@@ -1539,28 +1696,31 @@ class _ErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline, color: AppColors.error, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.error,
-                fontWeight: FontWeight.w500,
+    return validationLiveRegion(
+      context,
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.error.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.error,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1693,12 +1853,16 @@ class _NfcField extends StatelessWidget {
     required this.scanning,
     required this.onScan,
     required this.onChanged,
+    this.errorText,
+    this.focusNode,
   });
 
   final TextEditingController controller;
   final bool scanning;
   final VoidCallback onScan;
   final VoidCallback onChanged;
+  final String? errorText;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -1716,6 +1880,7 @@ class _NfcField extends StatelessWidget {
             Expanded(
               child: TextField(
                 controller: controller,
+                focusNode: focusNode,
                 style: const TextStyle(
                   fontSize: 14,
                   fontFamily: 'monospace',
@@ -1760,6 +1925,22 @@ class _NfcField extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                     borderSide: const BorderSide(
                       color: AppColors.primary,
+                      width: 2,
+                    ),
+                  ),
+                  errorText: errorText,
+                  errorMaxLines: 3,
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: AppColors.error,
+                      width: 1.5,
+                    ),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: AppColors.error,
                       width: 2,
                     ),
                   ),
@@ -1848,6 +2029,9 @@ class _Guardian2Section extends StatelessWidget {
     required this.onSignatureEnd,
     required this.onClearSignature,
     required this.onNfcFieldChanged,
+    required this.fieldErrors,
+    required this.focusNodes,
+    required this.onFieldEdited,
   });
 
   final TextEditingController nameCtrl;
@@ -1874,6 +2058,9 @@ class _Guardian2Section extends StatelessWidget {
   final VoidCallback onSignatureEnd;
   final VoidCallback onClearSignature;
   final VoidCallback onNfcFieldChanged;
+  final Map<_GuardianField, String> fieldErrors;
+  final Map<_GuardianField, FocusNode> focusNodes;
+  final ValueChanged<_GuardianField> onFieldEdited;
 
   @override
   Widget build(BuildContext context) {
@@ -1977,6 +2164,9 @@ class _Guardian2Section extends StatelessWidget {
                     prefixIcon: Icons.family_restroom_outlined,
                     requiredField: true,
                     keyboardType: TextInputType.text,
+                    errorText: fieldErrors[_GuardianField.relOther2],
+                    focusNode: focusNodes[_GuardianField.relOther2],
+                    onChanged: (_) => onFieldEdited(_GuardianField.relOther2),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -1987,6 +2177,9 @@ class _Guardian2Section extends StatelessWidget {
                   prefixIcon: Icons.phone_outlined,
                   requiredField: true,
                   keyboardType: TextInputType.phone,
+                  errorText: fieldErrors[_GuardianField.phone2],
+                  focusNode: focusNodes[_GuardianField.phone2],
+                  onChanged: (_) => onFieldEdited(_GuardianField.phone2),
                 ),
                 const SizedBox(height: 12),
                 _DocTypeSelector(
@@ -2003,6 +2196,9 @@ class _Guardian2Section extends StatelessWidget {
                   prefixIcon: Icons.badge_outlined,
                   requiredField: true,
                   keyboardType: TextInputType.number,
+                  errorText: fieldErrors[_GuardianField.docNumber2],
+                  focusNode: focusNodes[_GuardianField.docNumber2],
+                  onChanged: (_) => onFieldEdited(_GuardianField.docNumber2),
                 ),
                 const SizedBox(height: 16),
                 _CentredFormSectionHeader(
@@ -2020,6 +2216,9 @@ class _Guardian2Section extends StatelessWidget {
                 _AuthSection(
                   accepted: authAccepted,
                   emailController: emailCtrl,
+                  emailErrorText: fieldErrors[_GuardianField.email2],
+                  emailFocusNode: focusNodes[_GuardianField.email2],
+                  onEmailChanged: () => onFieldEdited(_GuardianField.email2),
                   emailRequired: false,
                   signatureStrokes: signatureStrokes,
                   currentStroke: currentStroke,

@@ -27,16 +27,18 @@ class FormSectionHeader extends StatelessWidget {
 }
 
 class LabeledTextField extends StatelessWidget {
-  const LabeledTextField({super.key, required this.label, required this.controller, this.hint, this.helper, this.prefixIcon, this.suffix, this.requiredField = false, this.keyboardType = TextInputType.text, this.maxLines = 1, this.onChanged});
+  const LabeledTextField({super.key, required this.label, required this.controller, this.hint, this.helper, this.prefixIcon, this.suffix, this.requiredField = false, this.keyboardType = TextInputType.text, this.maxLines = 1, this.onChanged, this.errorText, this.focusNode});
   final String label; final String? hint; final String? helper; final TextEditingController controller;
   final IconData? prefixIcon; final Widget? suffix; final bool requiredField; final TextInputType keyboardType; final int maxLines; final ValueChanged<String>? onChanged;
+  /// Shown under the field, with a red border, while it is not null.
+  final String? errorText; final FocusNode? focusNode;
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _FieldLabel(label: label, required_: requiredField),
       const SizedBox(height: 5),
       TextField(
-        controller: controller, keyboardType: keyboardType, maxLines: maxLines, onChanged: onChanged,
+        controller: controller, focusNode: focusNode, keyboardType: keyboardType, maxLines: maxLines, onChanged: onChanged,
         style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
         decoration: InputDecoration(
           hintText: hint, counterText: '', hintStyle: const TextStyle(fontSize: 13, color: AppColors.disabled),
@@ -45,6 +47,9 @@ class LabeledTextField extends StatelessWidget {
           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFB0B8C4), width: 1.5)),
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+          errorText: errorText, errorMaxLines: 4,
+          errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.error, width: 1.5)),
+          focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.error, width: 2)),
         ),
       ),
       if (helper != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(helper!, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary))),
