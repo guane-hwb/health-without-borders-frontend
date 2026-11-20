@@ -33,6 +33,7 @@ class AddConsultationScreen extends StatefulWidget {
 
 class _AddConsultationScreenState extends State<AddConsultationScreen> {
   PatientFullRecord? _patient;
+  MedicalHistoryItem? _createdConsultation;
   bool _scanning = false;
   String? _scanError;
   bool _isSaving = false;
@@ -177,7 +178,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   // ── Save ──────────────────────────────────────────────────────────────────
 
   Future<void> _save() async {
-    if (_patient == null) return;
+    if (_patient == null || _isSaving) return;
     final s = AppStrings.of(context);
     final isEs = s.isEs;
 
@@ -331,7 +332,8 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
     try {
       final scope = AppScope.of(context);
-      final currentUser = scope.authRepository.currentUser;
+      var currentUser = scope.authRepository.currentUser;
+      currentUser ??= await scope.authRepository.restoreSession();
 
       await scope.localDatabase.savePatient(
         updatedRecord,
@@ -343,27 +345,29 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
         guardian: true,
       );
 
+      _createdConsultation = newConsultation;
+
+      if (!mounted) return;
+
       scope.syncEngine.syncAll().ignore();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(s.consultationSaved),
-            backgroundColor: AppColors.success,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(s.consultationSaved),
+          backgroundColor: AppColors.success,
+          duration: const Duration(seconds: 2),
+        ),
+      );
 
-        if (widget.returnToProfile) {
-          Navigator.of(context).pop(newConsultation);
-          return;
-        }
-
-        setState(() {
-          _saved = true;
-          _isSaving = false;
-        });
+      if (widget.returnToProfile) {
+        Navigator.of(context).pop(newConsultation);
+        return;
       }
+
+      setState(() {
+        _saved = true;
+        _isSaving = false;
+      });
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
@@ -380,33 +384,41 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    return Scaffold(
-      backgroundColor: AppColors.backgroundLight,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                SharedReadNfcHeader(
-                  title: s.addConsultation,
-                  onBack: () => Navigator.of(context).pop(),
-                ),
-                Expanded(
-                  child: _patient == null
-                      ? _buildScanStep()
-                      : _saved
-                      ? _buildSuccessStep()
-                      : _buildFormStep(),
-                ),
-              ],
-            ),
-            const Positioned(
-              left: 116,
-              right: 116,
-              bottom: 14,
-              child: ScreenBottomHandle(),
-            ),
-          ],
+    return PopScope<MedicalHistoryItem>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.of(context).pop(_createdConsultation);
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.backgroundLight,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  SharedReadNfcHeader(
+                    title: s.addConsultation,
+                    onBack: () =>
+                        Navigator.of(context).pop(_createdConsultation),
+                  ),
+                  Expanded(
+                    child: _patient == null
+                        ? _buildScanStep()
+                        : _saved
+                        ? _buildSuccessStep()
+                        : _buildFormStep(),
+                  ),
+                ],
+              ),
+              const Positioned(
+                left: 116,
+                right: 116,
+                bottom: 14,
+                child: ScreenBottomHandle(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -996,7 +1008,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             width: double.infinity,
             height: 46,
             child: OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(context).pop(_createdConsultation),
               style: OutlinedButton.styleFrom(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),

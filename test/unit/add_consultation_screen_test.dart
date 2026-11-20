@@ -99,6 +99,7 @@ AppScope _defaultScope({
   when(
     () => auth.sessionNotifier,
   ).thenReturn(ValueNotifier<UserSession?>(null));
+  when(() => auth.restoreSession()).thenAnswer((_) async => null);
 
   final user = _MockUserRepository();
   final resolvedRepo = repo ?? _MockPatientRepository();
