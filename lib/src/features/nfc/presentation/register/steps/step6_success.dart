@@ -5,6 +5,27 @@ import '../../../../../design/tokens/app_colors.dart';
 import '../../../domain/patient_record.dart';
 import '../../../../../core/i18n/app_strings.dart';
 
+/// A device a registration writes at the end. With two guardians each one
+/// has its number; with one, it has none.
+enum RegisterDevice { patient, guardian, guardian1, guardian2 }
+
+/// Why a device was left unwritten.
+enum DeviceWriteFailure {
+  sessionExpired,
+  noKey,
+  invalidKey,
+  notCompleted,
+  needsNtag216,
+}
+
+/// A device left unwritten at the end of a registration, and why.
+class UnwrittenDevice {
+  const UnwrittenDevice(this.device, this.failure);
+
+  final RegisterDevice device;
+  final DeviceWriteFailure failure;
+}
+
 class Step6Success extends StatelessWidget {
   const Step6Success({
     super.key,
@@ -16,22 +37,32 @@ class Step6Success extends StatelessWidget {
     this.lastVaccineTime,
     this.canAddConsultation = true,
     this.sealed = false,
+    this.unwritten = const <UnwrittenDevice>[],
     this.onGoHome,
   });
 
   final PatientFullRecord patient;
   final VoidCallback onAddConsultation;
   final VoidCallback onAddVaccine;
+
+  /// Writes the devices: from the hub, all of them; from the final screen
+  /// with [unwritten] devices, those again.
   final VoidCallback onFinish;
   final String? lastConsultationTime;
   final String? lastVaccineTime;
   final bool canAddConsultation;
 
-  /// When true the chips have already been written: show the sealed
-  /// confirmation and a single "go home" action instead of the hub actions.
+  /// When true every device has been written: show the sealed confirmation
+  /// and a single "go home" action instead of the hub actions. Never together
+  /// with [unwritten] devices.
   final bool sealed;
 
-  /// Called by the "go home" button on the final (sealed) screen.
+  /// When not empty the write ended with these devices unwritten: show a
+  /// warning with a row for each and why, "write now" ([onFinish]) and
+  /// "write later from the profile" ([onGoHome]). They stay pending to write.
+  final List<UnwrittenDevice> unwritten;
+
+  /// Called by the "go home" button on the final screen.
   final VoidCallback? onGoHome;
 
   @override
@@ -41,20 +72,34 @@ class Step6Success extends StatelessWidget {
 
     final hasConsultations = patient.medicalHistory.isNotEmpty;
     final hasVaccines = patient.vaccinationRecord.isNotEmpty;
+    final bool notAllWritten = unwritten.isNotEmpty;
+    final Color warning = Colors.orange.shade800;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
       children: [
-        // ── Green check + patient info ──
+        // ── Status + patient info ──
+        // The green check only once every device is written: on the hub,
+        // before writing, or with a device left unwritten it reads as done.
         Center(
           child: Container(
             width: 80,
             height: 80,
-            decoration: const BoxDecoration(
-              color: AppColors.success,
+            decoration: BoxDecoration(
+              color: sealed
+                  ? AppColors.success
+                  : (notAllWritten ? warning : AppColors.primary),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.check, size: 44, color: AppColors.white),
+            child: Icon(
+              sealed
+                  ? Icons.check
+                  : (notAllWritten
+                        ? Icons.warning_amber_rounded
+                        : Icons.phone_android),
+              size: 44,
+              color: AppColors.white,
+            ),
           ),
         ),
         const SizedBox(height: 14),
@@ -83,7 +128,7 @@ class Step6Success extends StatelessWidget {
 
         const SizedBox(height: 22),
 
-        // ── NFC status: sealed (final) vs pending (hub) ──
+        // ── NFC status: sealed, unwritten (final) or pending (hub) ──
         if (sealed)
           _ActivityRow(
             icon: Icons.nfc,
@@ -96,7 +141,16 @@ class Step6Success extends StatelessWidget {
                 ? 'Cifrado AES-256-GCM · Solo legible por la app'
                 : 'AES-256-GCM Encryption · Read-only by the app',
           )
-        else
+        else if (notAllWritten) ...<Widget>[
+          for (final UnwrittenDevice device in unwritten)
+            _ActivityRow(
+              icon: Icons.nfc,
+              iconColor: warning,
+              bgColor: warning.withValues(alpha: 0.1),
+              title: _notWrittenTitle(s, device.device),
+              subtitle: _failureReason(s, device.failure),
+            ),
+        ] else
           _ActivityRow(
             icon: Icons.nfc,
             iconColor: AppColors.textSecondary,
@@ -104,9 +158,7 @@ class Step6Success extends StatelessWidget {
             title: isEs
                 ? 'Pendiente de grabar en el dispositivo NFC'
                 : 'Pending write to the NFC device',
-            subtitle: isEs
-                ? 'Toca "Finalizar" y acerca los dispositivos para sellar'
-                : 'Tap "Finish" and bring the devices to seal the data',
+            subtitle: s.writeDevicesHint,
           ),
         const SizedBox(height: 10),
 
@@ -115,7 +167,7 @@ class Step6Success extends StatelessWidget {
           icon: Icons.save_outlined,
           iconColor: AppColors.success,
           bgColor: AppColors.success.withValues(alpha: 0.1),
-          title: s.patientSavedSynced.split(' y ')[0],
+          title: s.patientSavedOnPhone,
           subtitle: isEs
               ? 'Listo para sincronizar cuando haya conexión'
               : 'Ready to synchronize when connection is available',
@@ -178,62 +230,27 @@ class Step6Success extends StatelessWidget {
               ),
             ),
           )
-        else ...[
-          if (canAddConsultation) ...[
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: onAddConsultation,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-                icon: const Icon(
-                  Icons.medical_services_outlined,
-                  color: AppColors.white,
-                  size: 22,
-                ),
-                label: Text(
-                  hasConsultations
-                      ? (isEs
-                            ? 'Añadir otra consulta'
-                            : 'Add another consultation')
-                      : s.addConsultation,
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
+        else if (notAllWritten) ...[
+          // ── Grabar ahora (only what is missing) ──
           SizedBox(
             width: double.infinity,
-            height: 50,
+            height: 48,
             child: ElevatedButton.icon(
-              onPressed: onAddVaccine,
+              onPressed: onFinish,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.secondary,
+                backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
                 elevation: 0,
               ),
               icon: const Icon(
-                Icons.vaccines_outlined,
+                Icons.contactless_outlined,
                 color: AppColors.white,
-                size: 22,
+                size: 20,
               ),
               label: Text(
-                hasVaccines
-                    ? (isEs ? 'Añadir otra vacuna' : 'Add another vaccine')
-                    : s.addVaccineButton,
+                s.writeNow,
                 style: const TextStyle(
                   color: AppColors.white,
                   fontSize: 15,
@@ -243,27 +260,53 @@ class Step6Success extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-
-          // ── Finalizar ──
           SizedBox(
             width: double.infinity,
             height: 48,
+            child: OutlinedButton.icon(
+              onPressed: onGoHome,
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.primary, width: 1.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(
+                Icons.home_outlined,
+                color: AppColors.primary,
+                size: 20,
+              ),
+              label: Text(
+                s.writeLaterFromProfile,
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ] else ...[
+          // ── Grabar dispositivos y terminar: the main action, first ──
+          SizedBox(
+            width: double.infinity,
+            height: 50,
             child: ElevatedButton.icon(
               onPressed: onFinish,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.success,
+                backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
                 elevation: 0,
               ),
               icon: const Icon(
-                Icons.check_circle_outline,
+                Icons.contactless_outlined,
                 color: AppColors.white,
-                size: 20,
+                size: 22,
               ),
               label: Text(
-                isEs ? 'Finalizar' : 'Finish',
+                s.writeDevicesAndFinish,
                 style: const TextStyle(
                   color: AppColors.white,
                   fontSize: 15,
@@ -286,10 +329,89 @@ class Step6Success extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 14),
+          if (canAddConsultation) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton.icon(
+                onPressed: onAddConsultation,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.primary, width: 1.5),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(
+                  Icons.medical_services_outlined,
+                  color: AppColors.primary,
+                  size: 22,
+                ),
+                label: Text(
+                  hasConsultations
+                      ? (isEs
+                            ? 'Añadir otra consulta'
+                            : 'Add another consultation')
+                      : s.addConsultation,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: onAddVaccine,
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.secondary, width: 1.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(
+                Icons.vaccines_outlined,
+                color: AppColors.secondary,
+                size: 22,
+              ),
+              label: Text(
+                hasVaccines
+                    ? (isEs ? 'Añadir otra vacuna' : 'Add another vaccine')
+                    : s.addVaccineButton,
+                style: const TextStyle(
+                  color: AppColors.secondary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
         ],
       ],
     );
   }
+
+  static String _notWrittenTitle(AppStrings s, RegisterDevice device) =>
+      switch (device) {
+        RegisterDevice.patient => s.patientDeviceNotWritten,
+        RegisterDevice.guardian => s.guardianDeviceNotWritten,
+        RegisterDevice.guardian1 => s.guardianDeviceNNotWritten(1),
+        RegisterDevice.guardian2 => s.guardianDeviceNNotWritten(2),
+      };
+
+  static String _failureReason(AppStrings s, DeviceWriteFailure failure) =>
+      switch (failure) {
+        DeviceWriteFailure.sessionExpired => s.writeFailedSessionExpired,
+        DeviceWriteFailure.noKey => s.writeFailedNoKey,
+        DeviceWriteFailure.invalidKey => s.writeFailedInvalidKey,
+        DeviceWriteFailure.notCompleted => s.writeFailedNotCompleted,
+        DeviceWriteFailure.needsNtag216 => s.writeFailedNeedsNtag216,
+      };
 
   static String _formatNow(bool isEs) {
     final n = DateTime.now();

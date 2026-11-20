@@ -55,6 +55,7 @@ class Step2Guardian extends StatefulWidget {
     required this.onBack,
     required this.onContinue,
     this.readDevice,
+    this.systemBack,
   });
 
   final RegisterDraft draft;
@@ -65,6 +66,10 @@ class Step2Guardian extends StatefulWidget {
   /// Reads a guardian device's UID. Returns null when the device was refused
   /// (the caller has said why). Defaults to reading the UID only.
   final Future<String?> Function()? readDevice;
+
+  /// Fires when the system back leaves this step: what was entered is kept
+  /// in the draft, as "Atrás" keeps it.
+  final Listenable? systemBack;
 
   @override
   State<Step2Guardian> createState() => _Step2State();
@@ -131,10 +136,12 @@ class _Step2State extends State<Step2Guardian> {
     _signatureStrokes2 = d.guardian2SignatureStrokes
         .map((stroke) => List<Offset>.from(stroke))
         .toList();
+    widget.systemBack?.addListener(_commitToDraft);
   }
 
   @override
   void dispose() {
+    widget.systemBack?.removeListener(_commitToDraft);
     _name.dispose();
     _phone.dispose();
     _uid.dispose();

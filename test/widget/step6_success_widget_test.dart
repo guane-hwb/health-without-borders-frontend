@@ -66,7 +66,9 @@ void main() {
   }
 
   group('Step6Success · elementos siempre presentes', () {
-    testWidgets('muestra ícono de check verde', (tester) async {
+    // The hub comes before any device is written: the green check made it
+    // read as the end.
+    testWidgets('en el hub no muestra el check verde de éxito', (tester) async {
       configureMobileScreenSize(tester);
       await tester.pumpWidget(
         _wrap(
@@ -80,7 +82,32 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.byIcon(Icons.check), findsNothing);
+      expect(find.byIcon(Icons.phone_android), findsOneWidget);
+    });
+
+    testWidgets('sellado (todo grabado) muestra el check verde', (
+      tester,
+    ) async {
+      configureMobileScreenSize(tester);
+      await tester.pumpWidget(
+        _wrap(
+          Step6Success(
+            patient: _makePatient(),
+            onAddConsultation: () {},
+            onAddVaccine: () {},
+            onFinish: () {},
+            sealed: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
       expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(
+        find.text('Datos de emergencia sellados en el dispositivo NFC'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('muestra el nombre completo del paciente', (tester) async {
@@ -153,7 +180,9 @@ void main() {
       expect(find.byIcon(Icons.save_outlined), findsOneWidget);
     });
 
-    testWidgets('muestra botón Finalizar siempre', (tester) async {
+    testWidgets('muestra botón Grabar dispositivos y terminar siempre', (
+      tester,
+    ) async {
       configureMobileScreenSize(tester);
       await tester.pumpWidget(
         _wrap(
@@ -167,7 +196,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final finishBtn = find.byIcon(Icons.check_circle_outline);
+      final finishBtn = find.byIcon(Icons.contactless_outlined);
       await tester.ensureVisible(finishBtn);
       expect(finishBtn, findsOneWidget);
     });
@@ -194,7 +223,10 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.text('Toca "Finalizar" y acerca los dispositivos para sellar'),
+        find.text(
+          'Toque «Grabar dispositivos y terminar» y acerque los dispositivos '
+          'al teléfono.',
+        ),
         findsOneWidget,
       );
     });
@@ -219,12 +251,14 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.text('Tap "Finish" and bring the devices to seal the data'),
+        find.text(
+          'Tap "Write devices and finish" and bring the devices to the phone.',
+        ),
         findsOneWidget,
       );
     });
 
-    testWidgets('en español el botón finalizar dice "Finalizar"', (
+    testWidgets('en español el botón dice "Grabar dispositivos y terminar"', (
       tester,
     ) async {
       configureMobileScreenSize(tester);
@@ -241,12 +275,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final textFinder = find.text('Finalizar');
+      final textFinder = find.text('Grabar dispositivos y terminar');
       await tester.ensureVisible(textFinder);
       expect(textFinder, findsOneWidget);
+      expect(find.text('Finalizar'), findsNothing);
     });
 
-    testWidgets('en inglés el botón finalizar dice "Finish"', (tester) async {
+    testWidgets('en inglés el botón dice "Write devices and finish"', (
+      tester,
+    ) async {
       configureMobileScreenSize(tester);
       await tester.pumpWidget(
         _wrap(
@@ -261,9 +298,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final textFinder = find.text('Finish');
+      final textFinder = find.text('Write devices and finish');
       await tester.ensureVisible(textFinder);
       expect(textFinder, findsOneWidget);
+      expect(find.text('Finish'), findsNothing);
     });
 
     testWidgets('en español pie de página muestra texto de cola ES', (
@@ -728,7 +766,9 @@ void main() {
       expect(called, isTrue);
     });
 
-    testWidgets('tap en botón Finalizar dispara onFinish', (tester) async {
+    testWidgets('tap en botón Grabar dispositivos y terminar dispara onFinish', (
+      tester,
+    ) async {
       configureMobileScreenSize(tester);
       var called = false;
 
@@ -745,7 +785,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final btnFinder = find.byIcon(Icons.check_circle_outline);
+      final btnFinder = find.byIcon(Icons.contactless_outlined);
       await tester.ensureVisible(btnFinder);
       await tester.tap(btnFinder);
       await tester.pump();
@@ -816,8 +856,57 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Toca "Finalizar" y acerca los dispositivos para sellar'),
+        find.text(
+          'Toque «Grabar dispositivos y terminar» y acerque los dispositivos '
+          'al teléfono.',
+        ),
         findsOneWidget,
+      );
+    });
+
+    // The title used to be patientSavedSynced cut at ' y ': in English the
+    // cut never happened and it read "saved locally and synced to cloud".
+    testWidgets('fila de guardado dice "Paciente guardado en este teléfono"', (
+      tester,
+    ) async {
+      configureMobileScreenSize(tester);
+      await tester.pumpWidget(
+        _wrap(
+          Step6Success(
+            patient: _makePatient(),
+            onAddConsultation: () {},
+            onAddVaccine: () {},
+            onFinish: () {},
+          ),
+          locale: 'es',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Paciente guardado en este teléfono'), findsOneWidget);
+    });
+
+    testWidgets('fila de guardado en EN dice "Patient saved on this phone"', (
+      tester,
+    ) async {
+      configureMobileScreenSize(tester);
+      await tester.pumpWidget(
+        _wrap(
+          Step6Success(
+            patient: _makePatient(),
+            onAddConsultation: () {},
+            onAddVaccine: () {},
+            onFinish: () {},
+          ),
+          locale: 'en',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Patient saved on this phone'), findsOneWidget);
+      expect(
+        find.text('Patient saved locally and synced to cloud'),
+        findsNothing,
       );
     });
 
@@ -1008,9 +1097,131 @@ void main() {
       await tester.ensureVisible(vaccineBtn);
       expect(vaccineBtn, findsOneWidget);
 
-      final finishBtn = find.text('Finalizar');
+      final finishBtn = find.text('Grabar dispositivos y terminar');
       await tester.ensureVisible(finishBtn);
       expect(finishBtn, findsOneWidget);
+
+      // Writing is the main action and the first one.
+      expect(
+        find.ancestor(of: finishBtn, matching: find.byType(ElevatedButton)),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(of: consultBtn, matching: find.byType(ElevatedButton)),
+        findsNothing,
+      );
+      expect(
+        find.ancestor(of: vaccineBtn, matching: find.byType(ElevatedButton)),
+        findsNothing,
+      );
+      final double finishY = tester.getTopLeft(finishBtn).dy;
+      expect(finishY, lessThan(tester.getTopLeft(consultBtn).dy));
+      expect(finishY, lessThan(tester.getTopLeft(vaccineBtn).dy));
+    });
+  });
+
+  group('Step6Success · pantalla final con dispositivos sin grabar', () {
+    const List<UnwrittenDevice> unwritten = <UnwrittenDevice>[
+      UnwrittenDevice(RegisterDevice.patient, DeviceWriteFailure.noKey),
+      UnwrittenDevice(
+        RegisterDevice.guardian2,
+        DeviceWriteFailure.needsNtag216,
+      ),
+    ];
+
+    Widget finalScreen({
+      String locale = 'es',
+      VoidCallback? onFinish,
+      VoidCallback? onGoHome,
+    }) => _wrap(
+      Step6Success(
+        patient: _makePatient(),
+        onAddConsultation: () {},
+        onAddVaccine: () {},
+        onFinish: onFinish ?? () {},
+        onGoHome: onGoHome ?? () {},
+        unwritten: unwritten,
+      ),
+      locale: locale,
+    );
+
+    testWidgets(
+      'advertencia en vez del check, una fila por dispositivo con su motivo',
+      (tester) async {
+        configureMobileScreenSize(tester);
+        await tester.pumpWidget(finalScreen());
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.check), findsNothing);
+        expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+        expect(
+          find.text('Datos de emergencia sellados en el dispositivo NFC'),
+          findsNothing,
+        );
+        expect(
+          find.text('Dispositivo del paciente: no grabado'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('No hay clave NFC disponible en este teléfono.'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Dispositivo del cuidador 2: no grabado'),
+          findsOneWidget,
+        );
+        expect(
+          find.text(
+            'Se omitió: los datos no caben en un NTAG215; se requiere un '
+            'dispositivo NTAG216.',
+          ),
+          findsOneWidget,
+        );
+        // Not the hub's actions.
+        expect(find.text('Grabar dispositivos y terminar'), findsNothing);
+        expect(find.text('Agregar vacuna'), findsNothing);
+      },
+    );
+
+    testWidgets('en inglés nombra los dispositivos sin grabar', (tester) async {
+      configureMobileScreenSize(tester);
+      await tester.pumpWidget(finalScreen(locale: 'en'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Patient device: not written'), findsOneWidget);
+      expect(find.text('Guardian device 2: not written'), findsOneWidget);
+      expect(find.text('Write now'), findsOneWidget);
+      expect(find.text('Write later from the profile'), findsOneWidget);
+    });
+
+    testWidgets('"Grabar ahora" llama a onFinish', (tester) async {
+      configureMobileScreenSize(tester);
+      var writes = 0;
+      await tester.pumpWidget(finalScreen(onFinish: () => writes++));
+      await tester.pumpAndSettle();
+
+      final Finder writeNow = find.text('Grabar ahora');
+      await tester.ensureVisible(writeNow);
+      await tester.tap(writeNow);
+      await tester.pump();
+
+      expect(writes, 1);
+    });
+
+    testWidgets('"Grabar luego desde el perfil" llama a onGoHome', (
+      tester,
+    ) async {
+      configureMobileScreenSize(tester);
+      var homes = 0;
+      await tester.pumpWidget(finalScreen(onGoHome: () => homes++));
+      await tester.pumpAndSettle();
+
+      final Finder later = find.text('Grabar luego desde el perfil');
+      await tester.ensureVisible(later);
+      await tester.tap(later);
+      await tester.pump();
+
+      expect(homes, 1);
     });
   });
 }
