@@ -35,6 +35,7 @@ class AddConsultationScreen extends StatefulWidget {
 
 class _AddConsultationScreenState extends State<AddConsultationScreen> {
   PatientFullRecord? _patient;
+  MedicalHistoryItem? _createdConsultation;
   bool _scanning = false;
   String? _scanError;
   bool _isSaving = false;
@@ -109,6 +110,14 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     setState(() => _prescriptions.removeAt(index).dispose());
   }
 
+  bool _hasValidDocumentNumber(String? rawDoc) {
+    final doc = rawDoc?.trim() ?? '';
+    if (doc.isEmpty || doc == '0') return false;
+    if (RegExp(r'^10{5,}\d+$').hasMatch(doc)) return false;
+    if (RegExp(r'^(\d)\1{5,}$').hasMatch(doc)) return false;
+    return true;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -127,9 +136,8 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
           _practitionerDocType = user.documentType;
         }
         if (_practitionerDocCtrl.text.isEmpty &&
-            user.documentNumber != null &&
-            user.documentNumber!.isNotEmpty) {
-          _practitionerDocCtrl.text = user.documentNumber!;
+            _hasValidDocumentNumber(user.documentNumber)) {
+          _practitionerDocCtrl.text = user.documentNumber!.trim();
         }
         if (_practitionerNameCtrl.text.isEmpty && user.fullName.isNotEmpty) {
           _practitionerNameCtrl.text = user.fullName;
@@ -172,7 +180,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       title: s.discardWrittenTitle,
       message: s.discardConsultationMsg,
     );
-    if (discard && mounted) Navigator.of(context).pop();
+    if (discard && mounted) Navigator.of(context).pop(_createdConsultation);
   }
 
   void _onHistoryChanged() => setState(() {});
@@ -229,7 +237,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   // ── Save ──────────────────────────────────────────────────────────────────
 
   Future<void> _save() async {
-    if (_patient == null) return;
+    if (_patient == null || _isSaving) return;
     final s = AppStrings.of(context);
     final isEs = s.isEs;
 
@@ -287,7 +295,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     final PractitionerInfo? practitioner = practName.isNotEmpty
         ? PractitionerInfo(
             documentType: _practitionerDocType,
-            documentNumber: practDoc.isEmpty ? '0' : practDoc,
+            documentNumber: practDoc,
             name: practName,
           )
         : null;
@@ -383,7 +391,8 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
     try {
       final scope = AppScope.of(context);
-      final currentUser = scope.authRepository.currentUser;
+      var currentUser = scope.authRepository.currentUser;
+      currentUser ??= await scope.authRepository.restoreSession();
 
       await scope.localDatabase.savePatient(
         updatedRecord,
@@ -397,25 +406,27 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
       scope.syncEngine.syncAll().ignore();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(s.consultationSaved),
-            backgroundColor: AppColors.success,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+      _createdConsultation = newConsultation;
 
-        if (widget.returnToProfile) {
-          Navigator.of(context).pop(newConsultation);
-          return;
-        }
+      if (!mounted) return;
 
-        setState(() {
-          _saved = true;
-          _isSaving = false;
-        });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(s.consultationSaved),
+          backgroundColor: AppColors.success,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      if (widget.returnToProfile) {
+        Navigator.of(context).pop(newConsultation);
+        return;
       }
+
+      setState(() {
+        _saved = true;
+        _isSaving = false;
+      });
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
@@ -437,10 +448,14 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     return ListenableBuilder(
       listenable: _textEdits,
       builder: (BuildContext context, Widget? child) => PopScope<Object?>(
-        canPop: !_hasUnsavedChanges,
+        canPop: !_hasUnsavedChanges && _createdConsultation == null,
         onPopInvokedWithResult: (bool didPop, Object? result) async {
           if (didPop) return;
-          await _confirmLeave();
+          if (_hasUnsavedChanges) {
+            await _confirmLeave();
+          } else {
+            Navigator.of(context).pop(_createdConsultation);
+          }
         },
         child: child!,
       ),
@@ -747,6 +762,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                       s.documentNumberLabel,
                       _practitionerDocCtrl,
                       Icons.badge,
+                      keyboardType: TextInputType.number,
                     ),
                   ),
                 ],
@@ -1061,7 +1077,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             width: double.infinity,
             height: 46,
             child: OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(context).pop(_createdConsultation),
               style: OutlinedButton.styleFrom(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1081,8 +1097,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   Widget _textField(
     String label,
     TextEditingController ctrl,
-    IconData icon,
-  ) => Column(
+    IconData icon, {
+    TextInputType? keyboardType,
+  }) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(
@@ -1092,6 +1109,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       const SizedBox(height: 4),
       TextField(
         controller: ctrl,
+        keyboardType: keyboardType,
         style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(
           isDense: true,

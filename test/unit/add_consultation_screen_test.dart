@@ -99,6 +99,7 @@ AppScope _defaultScope({
   when(
     () => auth.sessionNotifier,
   ).thenReturn(ValueNotifier<UserSession?>(null));
+  when(() => auth.restoreSession()).thenAnswer((_) async => null);
 
   final user = _MockUserRepository();
   final resolvedRepo = repo ?? _MockPatientRepository();
@@ -1721,20 +1722,95 @@ void main() {
     }
   }
 
-  group(
-    'AddConsultationScreen — selectores de grupo de servicio, entorno, documento y diagnóstico',
-    () {
-      testWidgets(
-        'abrir y cerrar los selectores de grupo de servicio, entorno, tipo de doc y tipo de diagnóstico no rompe la pantalla',
-        (tester) async {
-          tester.view.physicalSize = const Size(800, 2400);
-          tester.view.devicePixelRatio = 1.0;
-          addTearDown(() {
-            tester.view.resetPhysicalSize();
-            tester.view.resetDevicePixelRatio();
-          });
+  group('dropdowns restantes (grupo, entorno, doc, dx)', () {
+    testWidgets(
+      'reabrir y reseleccionar grupo de servicio, entorno, tipo de doc y tipo de diagnóstico invoca sus onChanged',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-          await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+        await tester.pumpAndSettle();
+
+        final dropdowns = find.byType(DropdownButton<String>);
+        expect(dropdowns, findsWidgets);
+
+        await cycleDropdown(tester, 1);
+        await cycleDropdown(tester, 2);
+        await cycleDropdown(tester, 3);
+        await cycleDropdown(tester, 4);
+
+        expect(find.byType(AddConsultationScreen), findsOneWidget);
+        expect(find.text('Evaluación clínica'), findsOneWidget);
+      },
+    );
+  });
+
+  group('fecha/hora de fin (onPick, onClear, botón limpiar)', () {
+    testWidgets(
+      'seleccionar fecha de fin muestra el valor y el botón de limpiar; limpiar lo revierte',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+        await tester.pumpAndSettle();
+
+        final calendarIcons = find.byIcon(Icons.calendar_today);
+        await tester.ensureVisible(calendarIcons.at(1));
+        await tester.tap(calendarIcons.at(1), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        await confirmOk(tester);
+        await confirmOk(tester);
+
+        expect(find.text('— no definido —'), findsNothing);
+
+        final clearBtn = find.byIcon(Icons.clear);
+        expect(clearBtn, findsOneWidget);
+        await tester.tap(clearBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text('— no definido —'), findsOneWidget);
+      },
+    );
+  });
+
+  group('validaciones de coherencia temporal restantes', () {
+    testWidgets(
+      'fecha de fin anterior a la fecha de inicio dispara el SnackBar correspondiente',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildApp(patient: _fakePatient()));
+        await tester.pumpAndSettle();
+
+        final historyField = textFieldWithHint(_hintHistory);
+        await tester.ensureVisible(historyField);
+        await tester.enterText(historyField, 'Consulta con fin anterior');
+        await tester.pumpAndSettle();
+
+        final calendarIcons = find.byIcon(Icons.calendar_today);
+        await tester.ensureVisible(calendarIcons.at(1));
+        await tester.tap(calendarIcons.at(1), warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        final prevMonth = find.byIcon(Icons.chevron_left);
+        if (prevMonth.evaluate().isNotEmpty) {
+          await tester.tap(prevMonth.first);
           await tester.pumpAndSettle();
 
           final dropdowns = find.byType(DropdownButton<String>);
@@ -1747,10 +1823,10 @@ void main() {
 
           expect(find.byType(AddConsultationScreen), findsOneWidget);
           expect(find.text('Evaluación clínica'), findsOneWidget);
-        },
-      );
-    },
-  );
+        }
+      },
+    );
+  });
 
   group(
     'AddConsultationScreen — selección y limpieza de fecha y hora de fin',

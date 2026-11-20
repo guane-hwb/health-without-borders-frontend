@@ -668,7 +668,11 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
             AddConsultationScreen(patient: _draft, returnToProfile: true),
       ),
     );
-    if (result != null) _addConsultation(result);
+    if (!mounted) return;
+    if (result != null) {
+      _addConsultation(result);
+      await _loadChipStatus(AppScope.of(context).localDatabase);
+    }
   }
 
   Future<void> _navigateAddVaccine() async {
