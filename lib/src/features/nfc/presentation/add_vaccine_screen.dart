@@ -11,6 +11,7 @@ import '../../../core/nfc/nfc_service.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_error_codes.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/widgets/discard_changes_dialog.dart';
 import '../../../shared/widgets/form_widgets.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
@@ -29,6 +30,12 @@ class _VaccineEntry {
 
   bool get isValid =>
       nameCtrl.text.trim().isNotEmpty && cvxCtrl.text.trim().isNotEmpty;
+
+  /// Whether anything was typed or chosen in this entry.
+  bool get hasInput =>
+      nameCtrl.text.trim().isNotEmpty ||
+      cvxCtrl.text.trim().isNotEmpty ||
+      dose != 1;
 
   void dispose() {
     nameCtrl.dispose();
@@ -68,10 +75,14 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   final _atCtrl = TextEditingController();
   String _status = 'completed';
 
+  /// The day the form opened on; see [_hasUnsavedChanges].
+  late String _openedOn;
+
   @override
   void initState() {
     super.initState();
     _patient = widget.patient;
+    _openedOn = _formattedDate;
   }
 
   @override
@@ -94,6 +105,26 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
       _entries.every((e) => e.isValid) &&
       _byCtrl.text.trim().isNotEmpty &&
       _atCtrl.text.trim().isNotEmpty;
+
+  /// Something written or chosen that leaving now would lose. Once the
+  /// vaccines are saved, nothing is.
+  bool get _hasUnsavedChanges =>
+      !_saved &&
+      (_formattedDate != _openedOn ||
+          _byCtrl.text.trim().isNotEmpty ||
+          _atCtrl.text.trim().isNotEmpty ||
+          _status != 'completed' ||
+          _entries.any((_VaccineEntry e) => e.hasInput));
+
+  Future<void> _confirmLeave() async {
+    final s = AppStrings.of(context);
+    final bool discard = await confirmDiscardChanges(
+      context,
+      title: s.discardWrittenTitle,
+      message: s.discardVaccineMsg,
+    );
+    if (discard && mounted) Navigator.of(context).pop();
+  }
 
   void _addEntry() {
     setState(() => _entries.add(_VaccineEntry()));
@@ -248,33 +279,40 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final titleText = s.addVaccine;
-    return Scaffold(
-      backgroundColor: AppColors.backgroundLight,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                SharedReadNfcHeader(
-                  title: titleText,
-                  onBack: () => Navigator.of(context).pop(),
-                ),
-                Expanded(
-                  child: _patient == null
-                      ? _buildScanStep()
-                      : _saved
-                      ? _buildSuccessStep()
-                      : _buildFormStep(),
-                ),
-              ],
-            ),
-            const Positioned(
-              left: 116,
-              right: 116,
-              bottom: 14,
-              child: ScreenBottomHandle(),
-            ),
-          ],
+    return PopScope<Object?>(
+      canPop: !_hasUnsavedChanges,
+      onPopInvokedWithResult: (bool didPop, Object? result) async {
+        if (didPop) return;
+        await _confirmLeave();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.backgroundLight,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  SharedReadNfcHeader(
+                    title: titleText,
+                    onBack: () => Navigator.of(context).maybePop(),
+                  ),
+                  Expanded(
+                    child: _patient == null
+                        ? _buildScanStep()
+                        : _saved
+                        ? _buildSuccessStep()
+                        : _buildFormStep(),
+                  ),
+                ],
+              ),
+              const Positioned(
+                left: 116,
+                right: 116,
+                bottom: 14,
+                child: ScreenBottomHandle(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -870,6 +908,7 @@ class _AddVaccineScreenState extends State<AddVaccineScreen> {
                     ..clear()
                     ..add(_VaccineEntry());
                   _date = DateTime.now();
+                  _openedOn = _formattedDate;
                   _byCtrl.clear();
                   _atCtrl.clear();
                   _status = 'completed';

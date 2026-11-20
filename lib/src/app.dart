@@ -108,12 +108,16 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
 
   void _onSessionExpired() {
     if (!_authRepository.sessionExpired.value) return;
+    // Raised while currentUser still names whose session it was.
+    final String? expiredUserId = _authRepository.currentUser?.id;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _navigatorKey.currentState?.pushAndRemoveUntil(
-        MaterialPageRoute<void>(
-          builder: (_) => const LoginScreen(showSessionExpired: true),
+      final NavigatorState? navigator = _navigatorKey.currentState;
+      if (navigator == null) return;
+      unawaited(
+        reauthenticateOverCurrentScreen(
+          navigator,
+          expiredUserId: expiredUserId,
         ),
-        (Route<dynamic> route) => false,
       );
     });
   }

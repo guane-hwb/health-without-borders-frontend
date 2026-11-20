@@ -285,29 +285,8 @@ void main() {
         },
       );
 
-      testWidgets('cancels closing when clicking Cancel in unsaved dialog', (
-        tester,
-      ) async {
-        await _pumpSheet(tester, address: baseAddress, onConfirm: (_) {});
-
-        final streetFieldFinder = find.byType(TextField).at(0);
-        await tester.enterText(streetFieldFinder, 'Calle Cambiada');
-        await tester.pump();
-
-        await tester.tap(find.byIcon(Icons.close_rounded));
-        await tester.pumpAndSettle();
-
-        expect(find.byType(AlertDialog), findsOneWidget);
-
-        await tester.tap(find.text('Cancelar'));
-        await tester.pumpAndSettle();
-
-        expect(find.byType(EditAddressSheet), findsOneWidget);
-        expect(find.byType(AlertDialog), findsNothing);
-      });
-
       testWidgets(
-        'confirms exit and closes sheet when clicking Exit in unsaved dialog',
+        'cancels closing when clicking Keep editing in unsaved dialog',
         (tester) async {
           await _pumpSheet(tester, address: baseAddress, onConfirm: (_) {});
 
@@ -318,7 +297,29 @@ void main() {
           await tester.tap(find.byIcon(Icons.close_rounded));
           await tester.pumpAndSettle();
 
-          await tester.tap(find.text('Salir'));
+          expect(find.byType(AlertDialog), findsOneWidget);
+
+          await tester.tap(find.text('Seguir editando'));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(EditAddressSheet), findsOneWidget);
+          expect(find.byType(AlertDialog), findsNothing);
+        },
+      );
+
+      testWidgets(
+        'confirms exit and closes sheet when clicking Discard in unsaved dialog',
+        (tester) async {
+          await _pumpSheet(tester, address: baseAddress, onConfirm: (_) {});
+
+          final streetFieldFinder = find.byType(TextField).at(0);
+          await tester.enterText(streetFieldFinder, 'Calle Cambiada');
+          await tester.pump();
+
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.text('Descartar'));
           await tester.pumpAndSettle();
 
           expect(find.byType(EditAddressSheet), findsNothing);

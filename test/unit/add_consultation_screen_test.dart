@@ -140,13 +140,20 @@ AppScope _scopeWithSave() {
   return _defaultScope(db: db, sync: sync);
 }
 
+/// [pushed] opens the screen over another route, as the profile does, so the
+/// back arrow and the system back can leave it ('Abrir' opens it).
 Widget _buildApp({
   PatientFullRecord? patient,
   bool returnToProfile = false,
   AppScope? scope,
   String locale = 'es',
+  bool pushed = false,
 }) {
   final s = scope ?? _defaultScope();
+  final Widget screen = AddConsultationScreen(
+    patient: patient,
+    returnToProfile: returnToProfile,
+  );
   return AppScope(
     authRepository: s.authRepository,
     userRepository: s.userRepository,
@@ -162,13 +169,46 @@ Widget _buildApp({
       locale: locale,
       setLocale: (_) {},
       child: MaterialApp(
-        home: AddConsultationScreen(
-          patient: patient,
-          returnToProfile: returnToProfile,
-        ),
+        home: pushed
+            ? Builder(
+                builder: (BuildContext context) => Scaffold(
+                  body: TextButton(
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).push(MaterialPageRoute<Object?>(builder: (_) => screen)),
+                    child: const Text('Abrir'),
+                  ),
+                ),
+              )
+            : screen,
       ),
     ),
   );
+}
+
+Future<void> _openPushed(
+  WidgetTester tester, {
+  bool returnToProfile = true,
+  AppScope? scope,
+}) async {
+  await tester.pumpWidget(
+    _buildApp(
+      patient: _fakePatient(),
+      returnToProfile: returnToProfile,
+      scope: scope,
+      pushed: true,
+    ),
+  );
+  await tester.tap(find.text('Abrir'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _typeInto(WidgetTester tester, String hint, String text) async {
+  final field = textFieldWithHint(hint);
+  await tester.ensureVisible(field);
+  await tester.pump();
+  await tester.enterText(field, text);
+  await tester.pump();
 }
 
 Finder _guardarButtonFinder() =>
@@ -1478,23 +1518,7 @@ void main() {
     testWidgets('botón de volver en el header desapila la pantalla', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => _buildApp(patient: _fakePatient()),
-                ),
-              ),
-              child: const Text('Ir a consulta'),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Ir a consulta'));
-      await tester.pumpAndSettle();
+      await _openPushed(tester);
 
       expect(find.byType(AddConsultationScreen), findsOneWidget);
 
@@ -1947,5 +1971,113 @@ void main() {
         await tester.pumpAndSettle();
       },
     );
+  });
+
+  group('Salir con algo escrito', () {
+    const String title = '¿Descartar lo escrito?';
+    const String message = 'Lo que escribió en esta consulta se perderá.';
+
+    testWidgets('con «Enfermedad actual» escrita, la flecha pregunta y '
+        '«Seguir editando» conserva lo escrito', (tester) async {
+      await _openPushed(tester);
+      await _typeInto(tester, _hintHistory, 'Fiebre de 3 días');
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsOneWidget);
+      expect(find.text(message), findsOneWidget);
+
+      await tester.tap(find.text('Seguir editando'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsNothing);
+      expect(find.byType(AddConsultationScreen), findsOneWidget);
+      expect(find.text('Fiebre de 3 días'), findsOneWidget);
+    });
+
+    testWidgets('lo escrito en un campo que no redibuja el formulario también '
+        'detiene el retroceso del sistema, y «Descartar» sale', (tester) async {
+      await _openPushed(tester);
+      await _typeInto(tester, _hintPhysical, 'T: 38.2°C');
+
+      expect(await tester.binding.handlePopRoute(), isTrue);
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsOneWidget);
+      expect(find.byType(AddConsultationScreen), findsOneWidget);
+
+      await tester.tap(find.text('Descartar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AddConsultationScreen), findsNothing);
+      expect(find.text('Abrir'), findsOneWidget);
+    });
+
+    testWidgets('un medicamento escrito también pregunta', (tester) async {
+      tester.view.physicalSize = const Size(800, 2600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      await _openPushed(tester);
+
+      final addBtn = find.text('Agregar medicamento');
+      await tester.ensureVisible(addBtn);
+      await tester.tap(addBtn);
+      await tester.pumpAndSettle();
+      await _typeInto(tester, 'Amoxicilina 250mg/5ml', 'Amoxicilina');
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsOneWidget);
+    });
+
+    testWidgets('sin cambios, la flecha sale sin preguntar', (tester) async {
+      await _openPushed(tester);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsNothing);
+      expect(find.byType(AddConsultationScreen), findsNothing);
+      expect(find.text('Abrir'), findsOneWidget);
+    });
+
+    testWidgets('tras guardar con éxito vuelve al perfil sin preguntar', (
+      tester,
+    ) async {
+      await _openPushed(tester, scope: _scopeWithSave());
+      await _typeInto(tester, _hintHistory, 'Control');
+
+      await _tapGuardar(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsNothing);
+      expect(find.byType(AddConsultationScreen), findsNothing);
+      expect(find.text('Abrir'), findsOneWidget);
+    });
+
+    testWidgets('en el paso de éxito, la flecha sale sin preguntar', (
+      tester,
+    ) async {
+      await _openPushed(
+        tester,
+        returnToProfile: false,
+        scope: _scopeWithSave(),
+      );
+      await _typeInto(tester, _hintHistory, 'Control');
+      await _tapGuardar(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Consulta guardada exitosamente'), findsWidgets);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsNothing);
+      expect(find.byType(AddConsultationScreen), findsNothing);
+    });
   });
 }
