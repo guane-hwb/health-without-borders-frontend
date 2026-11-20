@@ -13,10 +13,15 @@ class Step4Background extends StatefulWidget {
     required this.draft,
     required this.onBack,
     required this.onContinue,
+    this.systemBack,
   });
   final RegisterDraft draft;
   final VoidCallback onBack;
   final VoidCallback onContinue;
+
+  /// Fires when the system back leaves this step: what was typed is kept in
+  /// the draft, as "Atrás" keeps it.
+  final Listenable? systemBack;
   @override
   State<Step4Background> createState() => _Step4State();
 }
@@ -27,16 +32,33 @@ class _Step4State extends State<Step4Background> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    widget.systemBack?.addListener(_keepPersonalHistory);
+  }
+
+  @override
   void dispose() {
+    widget.systemBack?.removeListener(_keepPersonalHistory);
     _personal.dispose();
     super.dispose();
   }
 
-  void _save() {
-    final d = widget.draft;
+  /// "Antecedentes personales" lives in its field until saved to the draft:
+  /// on "Continuar" and on going back alike.
+  void _keepPersonalHistory() {
     final text = _personal.text.trim();
-    d.personalHistory = text.isEmpty ? null : text;
+    widget.draft.personalHistory = text.isEmpty ? null : text;
+  }
+
+  void _save() {
+    _keepPersonalHistory();
     widget.onContinue();
+  }
+
+  void _back() {
+    _keepPersonalHistory();
+    widget.onBack();
   }
 
   Future<void> _addChronicCondition() async {
@@ -288,7 +310,7 @@ class _Step4State extends State<Step4Background> {
                 child: SizedBox(
                   height: 48,
                   child: OutlinedButton.icon(
-                    onPressed: widget.onBack,
+                    onPressed: _back,
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(
                         color: Color(0xFFB0B8C4),
