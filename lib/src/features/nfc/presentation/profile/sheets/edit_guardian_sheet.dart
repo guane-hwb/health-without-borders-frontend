@@ -105,6 +105,10 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
 
     _nameCtrl.addListener(_onFieldChanged);
     _docNumberCtrl.addListener(_onFieldChanged);
+    // Also the fields only _hasUnsavedChanges reads: the barrier and the
+    // system back read canPop from the last build.
+    _phoneCtrl.addListener(_onFieldChanged);
+    _relOtherCtrl.addListener(_onFieldChanged);
   }
 
   void _onFieldChanged() {
@@ -115,6 +119,8 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
   void dispose() {
     _nameCtrl.removeListener(_onFieldChanged);
     _docNumberCtrl.removeListener(_onFieldChanged);
+    _phoneCtrl.removeListener(_onFieldChanged);
+    _relOtherCtrl.removeListener(_onFieldChanged);
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _docNumberCtrl.dispose();
@@ -156,7 +162,7 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         title: Text(
-          s.unsyncedChangesTitle,
+          s.discardSheetTitle,
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
@@ -164,17 +170,20 @@ class _EditGuardianSheetState extends State<EditGuardianSheet> {
           ),
         ),
         content: Text(
-          s.exitWithoutSyncMsg,
+          s.discardSheetMsg,
           style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text(s.cancel),
+            child: Text(s.keepEditing),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(s.exit, style: const TextStyle(color: AppColors.error)),
+            child: Text(
+              s.discard,
+              style: const TextStyle(color: AppColors.error),
+            ),
           ),
         ],
       ),

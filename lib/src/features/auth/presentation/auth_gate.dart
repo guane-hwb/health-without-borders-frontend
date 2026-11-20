@@ -7,7 +7,6 @@ import '../../../shared/widgets/hwb_logo.dart';
 import '../../home/presentation/home_screen.dart';
 import '../data/auth_repository.dart';
 import '../domain/user_session.dart';
-import 'lock_gate.dart';
 import 'login_screen.dart';
 
 class AuthGate extends StatefulWidget {
@@ -23,6 +22,13 @@ class _AuthGateState extends State<AuthGate> {
   late final Future<UserSession?> _restore = widget.authRepository
       .restoreSession();
 
+  /// The lock screen is painted by the app above its Navigator (`LockLayer`),
+  /// not here. Until the first unlock this route only holds a blank page
+  /// under it (no spinner turning behind the lock), so a restored session
+  /// builds nothing of the user's before the password; from then on it keeps
+  /// [HomeScreen], and later locks leave it where it is, with its state.
+  bool _unlockedOnce = false;
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<UserSession?>(
@@ -37,12 +43,10 @@ class _AuthGateState extends State<AuthGate> {
         return ValueListenableBuilder<bool>(
           valueListenable: widget.authRepository.isLocalLocked,
           builder: (context, isLocked, _) {
-            if (isLocked) {
-              return LockScreen(
-                authRepository: widget.authRepository,
-                onUnlocked: () => widget.authRepository.setLocalLocked(false),
-              );
+            if (isLocked && !_unlockedOnce) {
+              return const ColoredBox(color: AppColors.background);
             }
+            _unlockedOnce = true;
             return const HomeScreen();
           },
         );
