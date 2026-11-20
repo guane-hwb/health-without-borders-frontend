@@ -1698,7 +1698,7 @@ void main() {
     }
   }
 
-  group('COBERTURA 100%: dropdowns restantes (grupo, entorno, doc, dx)', () {
+  group('dropdowns restantes (grupo, entorno, doc, dx)', () {
     testWidgets(
       'reabrir y reseleccionar grupo de servicio, entorno, tipo de doc y tipo de diagnóstico invoca sus onChanged',
       (tester) async {
@@ -1726,7 +1726,7 @@ void main() {
     );
   });
 
-  group('COBERTURA 100%: fecha/hora de fin (onPick, onClear, botón limpiar)', () {
+  group('fecha/hora de fin (onPick, onClear, botón limpiar)', () {
     testWidgets(
       'seleccionar fecha de fin muestra el valor y el botón de limpiar; limpiar lo revierte',
       (tester) async {
@@ -1760,7 +1760,7 @@ void main() {
     );
   });
 
-  group('COBERTURA 100%: validaciones de coherencia temporal restantes', () {
+  group('validaciones de coherencia temporal restantes', () {
     testWidgets(
       'fecha de fin anterior a la fecha de inicio dispara el SnackBar correspondiente',
       (tester) async {
