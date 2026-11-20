@@ -44,6 +44,8 @@ class FakeUserRepository extends Fake implements UserRepository {
 
   @override
   Future<UserSession> createUser({
+    String? documentNumber,
+    String? documentType,
     required String email,
     required String fullName,
     String? organizationId,
@@ -110,6 +112,8 @@ class FakeAuthRepository extends Fake implements AuthRepository {
 class FakeUserRepositoryWithError extends FakeUserRepository {
   @override
   Future<UserSession> createUser({
+    String? documentNumber,
+    String? documentType,
     required String email,
     required String fullName,
     String? organizationId,
@@ -814,8 +818,9 @@ void main() {
 
         final textFields = find.byType(TextField);
         await tester.enterText(textFields.at(0), 'Test Crash');
-        await tester.enterText(textFields.at(1), 'crash@test.com');
-        await tester.enterText(textFields.at(2), 'securePass99');
+        await tester.enterText(textFields.at(1), '1098765432');
+        await tester.enterText(textFields.at(2), 'crash@test.com');
+        await tester.enterText(textFields.at(3), 'securePass99');
 
         final s = AppStrings.forTesting('es');
         await tester.tap(
@@ -890,11 +895,12 @@ void main() {
       await tester.pumpAndSettle();
 
       final textFields = find.byType(TextField);
-      expect(textFields, findsNWidgets(3));
+      expect(textFields, findsNWidgets(4));
 
       await tester.enterText(textFields.at(0), 'Nuevo Medico');
-      await tester.enterText(textFields.at(1), 'medico@test.com');
-      await tester.enterText(textFields.at(2), 'password123');
+      await tester.enterText(textFields.at(1), '1098765432');
+      await tester.enterText(textFields.at(2), 'medico@test.com');
+      await tester.enterText(textFields.at(3), 'password123');
 
       final s = AppStrings.forTesting('es');
       await tester.tap(find.text(s.roleNurse));
@@ -921,8 +927,9 @@ void main() {
 
       final textFields = find.byType(TextField);
       await tester.enterText(textFields.at(0), 'Error User');
-      await tester.enterText(textFields.at(1), 'error@test.com');
-      await tester.enterText(textFields.at(2), 'password');
+      await tester.enterText(textFields.at(1), '1098765432');
+      await tester.enterText(textFields.at(2), 'error@test.com');
+      await tester.enterText(textFields.at(3), 'password');
 
       final s = AppStrings.forTesting('es');
       await tester.tap(
@@ -1100,8 +1107,9 @@ void main() {
 
         final fields = find.byType(TextField);
         await tester.enterText(fields.at(0), 'Pedro');
-        await tester.enterText(fields.at(1), 'pedro@test.com');
-        await tester.enterText(fields.at(2), '12345');
+        await tester.enterText(fields.at(1), '1098765432');
+        await tester.enterText(fields.at(2), 'pedro@test.com');
+        await tester.enterText(fields.at(3), '12345');
         await tester.pumpAndSettle();
 
         await tester.tap(createBtn);

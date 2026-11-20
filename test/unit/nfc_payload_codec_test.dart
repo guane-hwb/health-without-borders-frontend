@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:cbor/cbor.dart' as cbor;
 import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_keyring.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
 
 const String _validHexKey =
@@ -213,6 +214,52 @@ void main() {
         expect(result, isNull);
       },
     );
+  });
+
+  group('NfcPayloadCodec — seal/open de un plaintext ya preparado', () {
+    const String key =
+        '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
+    final Uint8List plaintext = Uint8List.fromList(
+      List<int>.generate(90, (int i) => i * 7 % 256),
+    );
+
+    test('versión 0: sin cabecera, 28 B de sobrecarga, ida y vuelta', () async {
+      final codec = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring.single(key),
+      );
+
+      final sealed = await codec.seal(plaintext);
+      final opened = await codec.open(sealed);
+
+      expect(sealed.length, codec.sealedSize(plaintext.length));
+      expect(sealed.length, plaintext.length + 28);
+      expect(opened!.plaintext, plaintext);
+      expect(opened.keyVersion, 0);
+      expect(opened.hadHeader, isFalse);
+    });
+
+    test('versión 1: cabecera HW y datos asociados', () async {
+      final codec = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring.single(key, version: 1),
+      );
+      final aad = Uint8List.fromList(<int>[1, 2, 3]);
+
+      final sealed = await codec.seal(plaintext, extraAad: aad);
+
+      expect(sealed.length, codec.sealedSize(plaintext.length));
+      expect(sealed.sublist(0, 3), <int>[0x48, 0x57, 1]);
+      expect((await codec.open(sealed, extraAad: aad))!.keyVersion, 1);
+      expect(await codec.open(sealed), isNull);
+    });
+
+    test('open de algo que no se abre devuelve null', () async {
+      final codec = NfcPayloadCodec.fromKeyring(
+        keyring: NfcKeyring.single(key),
+      );
+
+      expect(await codec.open(Uint8List(10)), isNull);
+      expect(await codec.open(Uint8List(60)), isNull);
+    });
   });
 
   group('NfcPayloadCodec — estimateSize', () {

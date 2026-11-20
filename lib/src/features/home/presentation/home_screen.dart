@@ -195,7 +195,12 @@ class HomeScreen extends StatelessWidget {
     final scope = AppScope.of(context);
     final user = scope.currentUser;
     if (user == null) {
+      final ModalRoute<Object?>? route = ModalRoute.of(context);
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Under another screen, replacing the top route would drop that
+        // screen (a form, or the password asked again after an expired
+        // session, see reauthenticateOverCurrentScreen) without asking.
+        if (!context.mounted || route?.isCurrent == false) return;
         Navigator.of(context).pushReplacementNamed(AppRoutes.login);
       });
       return const SizedBox.shrink();

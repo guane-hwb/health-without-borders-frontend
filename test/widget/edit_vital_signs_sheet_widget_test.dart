@@ -14,7 +14,12 @@ Widget _wrap({
   String? bloodType,
   double? previousWeight,
   double? previousHeight,
-  void Function({String? bloodType, double? weight, double? height})? onConfirm,
+  void Function({
+    String? bloodType,
+    double? weight,
+    double? height,
+    bool isBloodTypeCertified,
+  })? onConfirm,
 }) {
   return AppLocale(
     locale: locale,
@@ -29,7 +34,12 @@ Widget _wrap({
           previousHeight: previousHeight,
           onConfirm:
               onConfirm ??
-              ({String? bloodType, double? weight, double? height}) {},
+              ({
+                String? bloodType,
+                double? weight,
+                double? height,
+                bool isBloodTypeCertified = false,
+              }) {},
         ),
       ),
     ),
@@ -230,7 +240,12 @@ void main() {
             weight: 72.5,
             height: 170.0,
             bloodType: 'O+',
-            onConfirm: ({String? bloodType, double? weight, double? height}) {
+            onConfirm: ({
+              String? bloodType,
+              double? weight,
+              double? height,
+              bool isBloodTypeCertified = false,
+            }) {
               confirmedWeight = weight;
               confirmedHeight = height;
               confirmedBloodType = bloodType;
@@ -259,7 +274,12 @@ void main() {
 
         await tester.pumpWidget(
           _wrap(
-            onConfirm: ({String? bloodType, double? weight, double? height}) {
+            onConfirm: ({
+              String? bloodType,
+              double? weight,
+              double? height,
+              bool isBloodTypeCertified = false,
+            }) {
               confirmedWeight = weight;
               confirmedBloodType = bloodType;
             },
@@ -293,7 +313,12 @@ void main() {
 
         await tester.pumpWidget(
           _wrap(
-            onConfirm: ({String? bloodType, double? weight, double? height}) {
+            onConfirm: ({
+              String? bloodType,
+              double? weight,
+              double? height,
+              bool isBloodTypeCertified = false,
+            }) {
               confirmedWeight = weight;
               confirmedHeight = height;
               confirmedBloodType = bloodType;
@@ -320,7 +345,12 @@ void main() {
       String? selectedBlood;
       await tester.pumpWidget(
         _wrap(
-          onConfirm: ({String? bloodType, double? weight, double? height}) {
+          onConfirm: ({
+            String? bloodType,
+            double? weight,
+            double? height,
+            bool isBloodTypeCertified = false,
+          }) {
             selectedBlood = bloodType;
           },
         ),
@@ -346,7 +376,12 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           bloodType: 'AB+',
-          onConfirm: ({String? bloodType, double? weight, double? height}) {
+          onConfirm: ({
+            String? bloodType,
+            double? weight,
+            double? height,
+            bool isBloodTypeCertified = false,
+          }) {
             selectedBlood = bloodType;
           },
         ),
@@ -580,7 +615,7 @@ void main() {
         expect(find.byType(AlertDialog), findsOneWidget);
       });
 
-      testWidgets('cancels closing when clicking Cancel in unsaved dialog', (
+      testWidgets('Keep editing in the unsaved dialog cancels closing', (
         tester,
       ) async {
         await tester.pumpWidget(_wrap(weight: 70.0));
@@ -594,7 +629,7 @@ void main() {
 
         expect(find.byType(AlertDialog), findsOneWidget);
 
-        await tester.tap(find.text('Cancelar'));
+        await tester.tap(find.text('Seguir editando'));
         await tester.pumpAndSettle();
 
         expect(find.byType(EditVitalSignsSheet), findsOneWidget);
@@ -602,7 +637,7 @@ void main() {
       });
 
       testWidgets(
-        'confirms exit and closes sheet when clicking Exit in unsaved dialog',
+        'confirms exit and closes sheet when clicking Discard in unsaved dialog',
         (tester) async {
           await tester.pumpWidget(
             AppLocale(
@@ -621,6 +656,7 @@ void main() {
                                 String? bloodType,
                                 double? weight,
                                 double? height,
+                                bool isBloodTypeCertified = false,
                               }) {},
                         ),
                       ),
@@ -642,7 +678,7 @@ void main() {
           await tester.tap(find.byIcon(Icons.close_rounded));
           await tester.pumpAndSettle();
 
-          await tester.tap(find.text('Salir'));
+          await tester.tap(find.text('Descartar'));
           await tester.pumpAndSettle();
 
           expect(find.byType(EditVitalSignsSheet), findsNothing);

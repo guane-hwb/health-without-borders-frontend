@@ -101,7 +101,12 @@ class PatientDraftController extends ChangeNotifier {
 
   // ── Signos vitales / dirección ──────────────────────────────────────────
 
-  void updateVitalSigns({double? weight, double? height, String? bloodType}) {
+  void updateVitalSigns({
+    double? weight,
+    double? height,
+    String? bloodType,
+    bool isBloodTypeCertified = false,
+  }) {
     final info = _draft.patientInfo;
     _replacePatientInfo(
       PatientInfo(
@@ -120,6 +125,7 @@ class PatientDraftController extends ChangeNotifier {
         disabilityCategory: info.disabilityCategory,
         address: info.address,
         bloodType: bloodType,
+        isBloodTypeCertified: bloodType != null ? isBloodTypeCertified : false,
         weight: weight ?? info.weight,
         height: height ?? info.height,
       ),

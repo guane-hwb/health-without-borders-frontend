@@ -87,6 +87,7 @@ class ProfileTabSummary extends StatelessWidget {
         dg1.name != og1.name ||
         dg1.phone != og1.phone ||
         dg1.relationship != og1.relationship ||
+        dg1.relationshipOther != og1.relationshipOther ||
         dg1.docType != og1.docType ||
         dg1.docNumber != og1.docNumber ||
         dg1.documentType != og1.documentType ||
@@ -102,6 +103,7 @@ class ProfileTabSummary extends StatelessWidget {
         dg2.name != og2.name ||
         dg2.phone != og2.phone ||
         dg2.relationship != og2.relationship ||
+        dg2.relationshipOther != og2.relationshipOther ||
         dg2.docType != og2.docType ||
         dg2.docNumber != og2.docNumber ||
         dg2.documentType != og2.documentType ||
@@ -845,7 +847,7 @@ class _GuardianContent extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${_relLabel(context, guardian.relationship)} · ${guardian.phone.isEmpty ? '—' : guardian.phone}',
+                    '${_relLabel(context, guardian)} · ${guardian.phone.isEmpty ? '—' : guardian.phone}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,
@@ -902,14 +904,21 @@ class _GuardianContent extends StatelessWidget {
     );
   }
 
-  String _relLabel(BuildContext context, String r) {
+  String _relLabel(BuildContext context, GuardianInfo g) {
     final s = AppStrings.of(context);
+    if (g.relationship == '05') {
+      final otherLabel = s.isEs ? 'Otro' : 'Other';
+      final detail = g.relationshipOther?.trim();
+      return (detail != null && detail.isNotEmpty)
+          ? '$otherLabel ($detail)'
+          : otherLabel;
+    }
     return {
           '01': s.relParents,
           '02': s.relSiblings,
           '03': s.relUncles,
           '04': s.relGrandparents,
-        }[r] ??
-        r;
+        }[g.relationship] ??
+        g.relationship;
   }
 }

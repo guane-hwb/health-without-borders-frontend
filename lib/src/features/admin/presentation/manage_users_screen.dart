@@ -152,18 +152,21 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       builder: (_) => _UserFormSheet(
         title: s.createUserTitle,
         creatorRole: currentRole,
-        onSubmit: (email, name, role, password) async {
-          await AppScope.of(context).userRepository.createUser(
-            email: email,
-            fullName: name,
-            role: role,
-            password: password,
-          );
-          if (mounted) {
-            Navigator.of(context).pop();
-            await _load();
-          }
-        },
+        onSubmit:
+            (email, name, documentType, documentNumber, role, password) async {
+              await AppScope.of(context).userRepository.createUser(
+                email: email,
+                fullName: name,
+                documentType: documentType,
+                documentNumber: documentNumber,
+                role: role,
+                password: password,
+              );
+              if (mounted) {
+                Navigator.of(context).pop();
+                await _load();
+              }
+            },
       ),
     );
   }
@@ -1010,6 +1013,8 @@ class _UserFormSheet extends StatefulWidget {
   final Future<void> Function(
     String email,
     String name,
+    String documentType,
+    String documentNumber,
     String role,
     String password,
   )
@@ -1022,7 +1027,9 @@ class _UserFormSheet extends StatefulWidget {
 class _UserFormSheetState extends State<_UserFormSheet> {
   final _emailCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
+  final _docNumberCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  String _docType = 'CC';
   late String _role;
   bool _saving = false;
   bool _obscurePass = true;
@@ -1045,6 +1052,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   void dispose() {
     _emailCtrl.dispose();
     _nameCtrl.dispose();
+    _docNumberCtrl.dispose();
     _passCtrl.dispose();
     super.dispose();
   }
@@ -1052,7 +1060,9 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final isEs = s.isEs;
     final roleOptions = _getRoleOptions(s);
+    final docTypes = {'CC': s.docTypeCC, 'CE': s.docTypeCE};
 
     return Padding(
       padding: EdgeInsets.only(
@@ -1092,6 +1102,24 @@ class _UserFormSheetState extends State<_UserFormSheet> {
               textCapitalization: TextCapitalization.words,
               style: const TextStyle(fontSize: 14),
               decoration: _inputDeco(hint: '', icon: Icons.person),
+            ),
+            const SizedBox(height: 12),
+            _DocTypeSelector(
+              label: s.documentTypeLabel,
+              value: _docType,
+              options: docTypes,
+              onChanged: (v) => setState(() => _docType = v),
+            ),
+            const SizedBox(height: 12),
+            _fieldLabel(isEs ? 'Número de documento' : 'Document number'),
+            TextField(
+              controller: _docNumberCtrl,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(fontSize: 14),
+              decoration: _inputDeco(
+                hint: 'Ej. 1098765432',
+                icon: Icons.badge_outlined,
+              ),
             ),
             const SizedBox(height: 12),
             _fieldLabel(s.userFormEmailLabel),
@@ -1231,8 +1259,9 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   Future<void> _submit(AppStrings s) async {
     final email = _emailCtrl.text.trim();
     final name = _nameCtrl.text.trim();
+    final docNumber = _docNumberCtrl.text.trim();
     final pass = _passCtrl.text;
-    if (email.isEmpty || name.isEmpty || pass.isEmpty) {
+    if (email.isEmpty || name.isEmpty || docNumber.isEmpty || pass.isEmpty) {
       setState(() => _error = s.userFormRequiredFieldsError);
       return;
     }
@@ -1245,7 +1274,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       _error = null;
     });
     try {
-      await widget.onSubmit(email, name, _role, pass);
+      await widget.onSubmit(email, name, _docType, docNumber, _role, pass);
     } on ApiException catch (_) {
       if (mounted) {
         setState(() {
@@ -1261,5 +1290,153 @@ class _UserFormSheetState extends State<_UserFormSheet> {
         });
       }
     }
+  }
+}
+
+class _DocTypeSelector extends StatefulWidget {
+  const _DocTypeSelector({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final Map<String, String> options;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_DocTypeSelector> createState() => _DocTypeSelectorState();
+}
+
+class _DocTypeSelectorState extends State<_DocTypeSelector> {
+  final MenuController _menuController = MenuController();
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedLabel = widget.options[widget.value] ?? '';
+    const itemHeight = 48.0;
+    final calculatedHeight = (widget.options.length * itemHeight).clamp(
+      itemHeight,
+      250.0,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text(
+            widget.label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            return MenuAnchor(
+              controller: _menuController,
+              style: MenuStyle(
+                fixedSize: WidgetStateProperty.all(
+                  Size(constraints.maxWidth, calculatedHeight),
+                ),
+                maximumSize: WidgetStateProperty.all(
+                  Size(constraints.maxWidth, calculatedHeight),
+                ),
+                backgroundColor: WidgetStateProperty.all(AppColors.white),
+                elevation: WidgetStateProperty.all(4),
+                shape: WidgetStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              builder: (context, controller, child) {
+                return InkWell(
+                  onTap: () {
+                    if (controller.isOpen) {
+                      controller.close();
+                    } else {
+                      controller.open();
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: AppColors.white,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.credit_card_outlined,
+                                size: 18,
+                                color: AppColors.secondary,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  selectedLabel,
+                                  style: const TextStyle(fontSize: 14),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          Icons.expand_more,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              menuChildren: widget.options.entries.map((e) {
+                return SizedBox(
+                  width: constraints.maxWidth,
+                  height: itemHeight,
+                  child: MenuItemButton(
+                    onPressed: () {
+                      widget.onChanged(e.key);
+                      _menuController.close();
+                    },
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.credit_card_outlined,
+                          size: 18,
+                          color: AppColors.secondary,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            e.value,
+                            style: const TextStyle(fontSize: 14),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+      ],
+    );
   }
 }

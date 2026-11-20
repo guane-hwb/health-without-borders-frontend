@@ -16,6 +16,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:health_without_borders_frontend/src/core/nfc/retired_device_hash.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_write_metric.dart';
 import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 
@@ -1688,6 +1689,7 @@ void main() {
           tables,
           containsAll(<String>['retired_devices', 'retired_devices_cursor']),
         );
+        expect(tables, contains('nfc_write_metrics'));
 
         final emergencyColumns = (await raw.rawQuery(
           'PRAGMA table_info(emergency_access_log)',
@@ -2156,6 +2158,95 @@ void main() {
         );
       },
     );
+  });
+
+  group('Métricas de escritura NFC (nativo)', () {
+    NfcWriteMetric metric({int messageBytes = 173, String role = 'patient'}) =>
+        NfcWriteMetric(
+          deviceRole: role,
+          payloadFormat: kCurrentNfcPayloadFormat,
+          keyVersion: 0,
+          payloadBytes: messageBytes - 29,
+          messageBytes: messageBytes,
+          chipCapacity: 492,
+          writtenAt: DateTime.utc(2026, 11, 17, 21),
+        );
+
+    test('registra la escritura y queda pendiente, en orden', () async {
+      final db = LocalDatabase.instance;
+
+      await db.recordNfcWriteMetric(metric(messageBytes: 173));
+      await db.recordNfcWriteMetric(
+        metric(messageBytes: 704, role: 'guardian'),
+      );
+
+      final pending = await db.pendingNfcWriteMetrics();
+      expect(pending, hasLength(2));
+      expect(pending.first['message_bytes'], 173);
+      expect(pending.first['device_role'], 'patient');
+      expect(pending.last['device_role'], 'guardian');
+      expect(pending.first['written_at'], '2026-11-17T21:00:00.000Z');
+      expect(pending.first.containsKey('device_uid'), isFalse);
+    });
+
+    test('borra sólo lo que el servidor aceptó', () async {
+      final db = LocalDatabase.instance;
+      await db.recordNfcWriteMetric(metric(messageBytes: 100));
+      await db.recordNfcWriteMetric(metric(messageBytes: 200));
+      final first = (await db.pendingNfcWriteMetrics()).first['id']! as int;
+
+      await db.deleteNfcWriteMetrics(<int>[first]);
+
+      final pending = await db.pendingNfcWriteMetrics();
+      expect(pending, hasLength(1));
+      expect(pending.single['message_bytes'], 200);
+    });
+
+    test('borrar una lista vacía no toca nada', () async {
+      final db = LocalDatabase.instance;
+      await db.recordNfcWriteMetric(metric());
+
+      await db.deleteNfcWriteMetrics(<int>[]);
+
+      expect(await db.pendingNfcWriteMetrics(), hasLength(1));
+    });
+
+    test(
+      'sin sincronizar nunca guarda más del tope: quedan las últimas',
+      () async {
+        final db = LocalDatabase.instance;
+        const extra = 5;
+        for (
+          var i = 0;
+          i < LocalDatabase.maxPendingNfcWriteMetrics + extra;
+          i++
+        ) {
+          await db.recordNfcWriteMetric(metric(messageBytes: 100 + i));
+        }
+
+        final pending = await db.pendingNfcWriteMetrics();
+        expect(pending, hasLength(LocalDatabase.maxPendingNfcWriteMetrics));
+        expect(pending.first['message_bytes'], 100 + extra);
+      },
+    );
+
+    test('la versión Web no guarda métricas: no escribe chips', () async {
+      final webBackend = <String, String>{};
+      final db = LocalDatabase.forTesting(
+        secureStorage: mockStorage,
+        forceWeb: true,
+        webGet: (key) async => webBackend[key],
+        webSet: (key, value) async => webBackend[key] = value,
+        webRemove: (key) async => webBackend.remove(key),
+        webList: (prefix) async =>
+            webBackend.entries.where((e) => e.key.startsWith(prefix)).toList(),
+      );
+
+      await db.recordNfcWriteMetric(metric());
+
+      expect(await db.pendingNfcWriteMetrics(), isEmpty);
+      expect(webBackend, isEmpty);
+    });
   });
 
   group('Versiones de llave NFC observadas (nativo)', () {
@@ -4714,6 +4805,137 @@ void main() {
 
       await expectLater(db.dismissSyncNotice('p-web'), completes);
     });
+  });
+
+  group('Conteo de registros huérfanos y validación de ownerUserId en nativo', () {
+    test(
+      'getOrphanedEmergencyLogCount cuenta logs sin dueño y pendientes (nativo y web)',
+      () async {
+        // ── Ruta nativa ──
+        final nativeDb = LocalDatabase.instance;
+        await nativeDb.clearAll();
+        final raw = await rawConnection();
+        await raw.delete('emergency_access_log');
+
+        await nativeDb.logEmergencyAccess(patientUid: '04:ORPH-1');
+        await nativeDb.logEmergencyAccess(
+          patientUid: '04:OWNED-1',
+          ownerUserId: 'u1',
+        );
+
+        expect(await nativeDb.getOrphanedEmergencyLogCount(), equals(1));
+
+        final pendingNative = await nativeDb.pendingEmergencyAccessLogs();
+        final orphanId =
+            pendingNative.firstWhere(
+                  (r) => r['patient_uid'] == '04:ORPH-1',
+                )['id']
+                as int;
+        await nativeDb.markEmergencyLogsSynced(<int>[orphanId]);
+        expect(await nativeDb.getOrphanedEmergencyLogCount(), equals(0));
+
+        // ── Ruta Web ──
+        final webBackend = <String, String>{};
+        final webDb = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        await webDb.logEmergencyAccess(patientUid: '04:W-ORPH-1');
+        await webDb.logEmergencyAccess(
+          patientUid: '04:W-OWNED-1',
+          ownerUserId: 'u1',
+        );
+
+        expect(await webDb.getOrphanedEmergencyLogCount(), equals(1));
+      },
+    );
+
+    test(
+      'getOrphanedPendingCount cuenta pacientes sin dueño y pendientes (nativo y web)',
+      () async {
+        // ── Ruta nativa ──
+        final nativeDb = LocalDatabase.instance;
+        await nativeDb.clearAll();
+        final raw = await rawConnection();
+
+        await raw.insert('local_patients', <String, Object?>{
+          'patient_id': 'n-orphan-1',
+          'device_uid': 'dev-orphan-1',
+          'patient_name': 'Orphan N.',
+          'record_json': '{"patientId":"n-orphan-1"}',
+          'is_synced': 0,
+          'owner_user_id': null,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+        await nativeDb.savePatient(
+          _buildRecord(patientId: 'n-owned-1'),
+          ownerUserId: 'u1',
+        );
+
+        expect(await nativeDb.getOrphanedPendingCount(), equals(1));
+
+        // ── Ruta Web ──
+        final webBackend = <String, String>{};
+        final webDb = LocalDatabase.forTesting(
+          secureStorage: mockStorage,
+          forceWeb: true,
+          webGet: (k) async => webBackend[k],
+          webSet: (k, v) async => webBackend[k] = v,
+          webList: (prefix) async => webBackend.entries
+              .where((e) => e.key.startsWith(prefix))
+              .toList(),
+        );
+
+        webBackend['hwb_web_patient::w-orphan-1'] =
+            jsonEncode(<String, Object?>{
+              'patient_id': 'w-orphan-1',
+              'device_uid': 'dev-w-orphan',
+              'patient_name': 'Orphan W.',
+              'record_json': '{"patientId":"w-orphan-1"}',
+              'is_synced': 0,
+              'owner_user_id': null,
+              'created_at': DateTime.now().toIso8601String(),
+            });
+        await webDb.savePatient(
+          _buildRecord(patientId: 'w-owned-1'),
+          ownerUserId: 'u1',
+        );
+
+        expect(await webDb.getOrphanedPendingCount(), equals(1));
+      },
+    );
+
+    test(
+      'nativo: savePatient sin ownerUserId ni registro previo lanza ArgumentError',
+      () async {
+        final nativeDb = LocalDatabase.instance;
+        await nativeDb.clearAll();
+
+        await expectLater(
+          nativeDb.savePatient(
+            _buildRecord(patientId: 'native-no-owner'),
+            ownerUserId: null,
+          ),
+          throwsArgumentError,
+        );
+
+        await expectLater(
+          nativeDb.savePatient(
+            _buildRecord(patientId: 'native-blank-owner'),
+            ownerUserId: '   ',
+          ),
+          throwsArgumentError,
+        );
+
+        expect(await nativeDb.getAllRecords(), isEmpty);
+      },
+    );
   });
 }
 

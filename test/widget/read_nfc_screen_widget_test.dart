@@ -1,5 +1,7 @@
 // test/widget/read_nfc_screen_widget_test.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -332,9 +334,12 @@ void main() {
     );
   }
 
+  /// With [overHome], the screen is pushed over a first route, as the home
+  /// screen does in the app.
   Future<void> reachOfflineGate(
     WidgetTester tester, {
     required TriageSummary triage,
+    bool overHome = false,
   }) async {
     fakeAuth.nfcKey = 'secret-key';
     fakeRepo.throwNonApiError = true;
@@ -347,11 +352,21 @@ void main() {
 
     await tester.pumpWidget(
       _buildTestableWidget(
-        child: const ReadNfcScreen(),
+        child: overHome ? const SizedBox.shrink() : const ReadNfcScreen(),
         repo: fakeRepo,
         authRepo: fakeAuth,
       ),
     );
+    if (overHome) {
+      unawaited(
+        tester
+            .state<NavigatorState>(find.byType(Navigator))
+            .push(
+              MaterialPageRoute<void>(builder: (_) => const ReadNfcScreen()),
+            ),
+      );
+      await tester.pumpAndSettle();
+    }
     await tester.pump();
 
     await tester.tap(find.byIcon(Icons.wifi));
@@ -1020,94 +1035,113 @@ void main() {
         expect(find.byIcon(Icons.check_circle), findsNothing);
       },
     );
+
+    testWidgets(
+      'Con el atrás del sistema desde el acceso de emergencia de un menor, '
+      'vuelve al paso 1 y ningún acceso queda registrado sin el UID del '
+      'paciente',
+      (tester) async {
+        await reachOfflineGate(
+          tester,
+          triage: makeTriage(minor: true),
+          overHome: true,
+        );
+
+        Future<void> confirmEmergencyAccess() async {
+          await tester.tap(find.text('Acceso de emergencia'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Continuar'));
+          await tester.pumpAndSettle();
+          final profile = tester.widget<PatientProfileScreen>(
+            find.byType(PatientProfileScreen),
+          );
+          expect(profile.patient.deviceUid, 'HWB-PATIENT-GATE');
+        }
+
+        await confirmEmergencyAccess();
+
+        // The system back (Android back button or gesture, iOS edge swipe)
+        // pops only the profile; its own back arrow pops to the first route.
+        expect(await tester.binding.handlePopRoute(), isTrue);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(PatientProfileScreen), findsNothing);
+        expect(find.text('Acceso de emergencia'), findsNothing);
+        expect(find.text('Acerque el dispositivo NFC'), findsOneWidget);
+
+        // Another emergency access reads the patient device again first.
+        await tester.tap(find.byIcon(Icons.wifi));
+        await tester.pumpAndSettle();
+        await confirmEmergencyAccess();
+
+        final List<dynamic> loggedUids = verify(
+          () => mockDb.logEmergencyAccess(
+            patientUid: captureAny(named: 'patientUid'),
+            patientName: any(named: 'patientName'),
+            userId: any(named: 'userId'),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+          ),
+        ).captured;
+        expect(loggedUids, <String>['HWB-PATIENT-GATE', 'HWB-PATIENT-GATE']);
+      },
+    );
   });
 
-  group(
-    'ReadNfcScreen — Cobertura 100% (Offline Gate, Emergency & Retired Variants)',
-    () {
-      testWidgets(
-        'Muestra razones de retiro por dispositivo dañado y reemplazado en 410',
-        (tester) async {
-          fakeRepo.throwRetired410 = true;
+  group('ReadNfcScreen — motivos de retiro y expiración de sesión offline', () {
+    testWidgets(
+      'Muestra razones de retiro por dispositivo dañado y reemplazado en 410',
+      (tester) async {
+        fakeRepo.throwRetired410 = true;
 
-          fakeRepo.retiredReason = 'damaged';
-          await tester.pumpWidget(
-            _buildTestableWidget(
-              child: const ReadNfcScreen(),
-              repo: fakeRepo,
-              authRepo: fakeAuth,
-            ),
-          );
-          await tester.pump();
-          await tester.enterText(find.byType(TextField), 'HWB-DAMAGED');
-          await tester.tap(find.byType(OutlinedButton));
-          await tester.pumpAndSettle();
+        fakeRepo.retiredReason = 'damaged';
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: const ReadNfcScreen(),
+            repo: fakeRepo,
+            authRepo: fakeAuth,
+          ),
+        );
+        await tester.pump();
+        await tester.enterText(find.byType(TextField), 'HWB-DAMAGED');
+        await tester.tap(find.byType(OutlinedButton));
+        await tester.pumpAndSettle();
 
-          expect(find.textContaining('dañado'), findsOneWidget);
+        expect(find.textContaining('dañado'), findsOneWidget);
 
-          fakeRepo.retiredReason = 'replaced';
-          await tester.tap(find.byType(OutlinedButton));
-          await tester.pumpAndSettle();
+        fakeRepo.retiredReason = 'replaced';
+        await tester.tap(find.byType(OutlinedButton));
+        await tester.pumpAndSettle();
 
-          expect(find.textContaining('reemplazado'), findsOneWidget);
-        },
-      );
+        expect(find.textContaining('reemplazado'), findsOneWidget);
+      },
+    );
 
-      testWidgets(
-        'Muestra error cuando la sesión NFC expiró y ocurre un error offline',
-        (tester) async {
-          fakeRepo.throwNonApiError = true;
-          fakeAuth.isSessionExpiredFlag = true;
-          fakeAuth.nfcKey = null;
+    testWidgets(
+      'Muestra error cuando la sesión NFC expiró y ocurre un error offline',
+      (tester) async {
+        fakeRepo.throwNonApiError = true;
+        fakeAuth.isSessionExpiredFlag = true;
+        fakeAuth.nfcKey = null;
 
-          NfcService.overrideReadDeviceUid = () async => 'HWB-EXPIRED-OFFLINE';
+        NfcService.overrideReadDeviceUid = () async => 'HWB-EXPIRED-OFFLINE';
 
-          await tester.pumpWidget(
-            _buildTestableWidget(
-              child: const ReadNfcScreen(),
-              repo: fakeRepo,
-              authRepo: fakeAuth,
-            ),
-          );
-          await tester.pump();
+        await tester.pumpWidget(
+          _buildTestableWidget(
+            child: const ReadNfcScreen(),
+            repo: fakeRepo,
+            authRepo: fakeAuth,
+          ),
+        );
+        await tester.pump();
 
-          await tester.tap(find.byIcon(Icons.wifi));
-          await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.wifi));
+        await tester.pumpAndSettle();
 
-          expect(find.textContaining('su sesión expiró'), findsOneWidget);
-        },
-      );
-
-      testWidgets(
-        'Acceso de emergencia abre diálogo y registra en BD local al confirmar',
-        (tester) async {
-          fakeRepo.throwNonApiError = true;
-          fakeAuth.nfcKey = 'secret-key';
-
-          await tester.pumpWidget(
-            _buildTestableWidget(
-              child: const ReadNfcScreen(),
-              repo: fakeRepo,
-              authRepo: fakeAuth,
-            ),
-          );
-          await tester.pump();
-
-          final emergencyBtnFinder = find.text('Acceso de emergencia');
-          if (emergencyBtnFinder.evaluate().isNotEmpty) {
-            await tester.tap(emergencyBtnFinder);
-            await tester.pumpAndSettle();
-
-            expect(find.byType(AlertDialog), findsOneWidget);
-            await tester.tap(find.text('Cancelar'));
-            await tester.pumpAndSettle();
-
-            expect(find.byType(AlertDialog), findsNothing);
-          }
-        },
-      );
-    },
-  );
+        expect(find.textContaining('su sesión expiró'), findsOneWidget);
+      },
+    );
+  });
 
   group('ReadNfcScreen — Lectura real de chip (overrideReadHwbChip)', () {
     testWidgets(
@@ -1444,166 +1478,175 @@ void main() {
       },
     );
   });
+  group(
+    'ReadNfcScreen — verificación de cuidador offline y flujo de acceso de emergencia',
+    () {
+      testWidgets(
+        'Muestra el texto del cuidador offline en inglés cuando locale es "en"',
+        (tester) async {
+          fakeAuth.nfcKey = 'secret-key';
+          fakeRepo.throwNonApiError = true;
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // Cobertura del 100%: Ramas restantes en read_nfc_screen.dart
-  // ══════════════════════════════════════════════════════════════════════════
-  group('ReadNfcScreen — Cobertura 100% de líneas faltantes', () {
-    testWidgets(
-      'Muestra el texto del cuidador offline en inglés cuando locale es "en"',
-      (tester) async {
-        fakeAuth.nfcKey = 'secret-key';
-        fakeRepo.throwNonApiError = true;
+          final triageMinor = TriageSummary(
+            firstName: 'Ana',
+            lastName: 'Gómez',
+            dob: '${DateTime.now().year - 10}-01-01',
+            biologicalSex: 'F',
+            bloodType: 'O+',
+            documentType: 'CC',
+            documentNumber: '12345',
+            guardianPhone: '3000000000',
+            guardianDeviceUid: 'HWB-GUARDIAN-01',
+            chronicConditions: '',
+            allergies: const <TriageAllergy>[],
+          );
 
-        final triageMinor = TriageSummary(
-          firstName: 'Ana',
-          lastName: 'Gómez',
-          dob: '${DateTime.now().year - 10}-01-01',
-          biologicalSex: 'F',
-          bloodType: 'O+',
-          documentType: 'CC',
-          documentNumber: '12345',
-          guardianPhone: '3000000000',
-          guardianDeviceUid: 'HWB-GUARDIAN-01',
-          chronicConditions: '',
-          allergies: const <TriageAllergy>[],
-        );
+          ReadNfcScreen.overrideReadHwbChip =
+              ({required String alertMessage}) async => HwbChipReadResult(
+                uid: 'HWB-PATIENT-GATE',
+                kind: HwbChipKind.triage,
+                triage: triageMinor,
+              );
 
-        ReadNfcScreen.overrideReadHwbChip =
-            ({required String alertMessage}) async => HwbChipReadResult(
-              uid: 'HWB-PATIENT-GATE',
-              kind: HwbChipKind.triage,
-              triage: triageMinor,
-            );
+          await tester.pumpWidget(
+            _buildTestableWidget(
+              child: const ReadNfcScreen(),
+              repo: fakeRepo,
+              authRepo: fakeAuth,
+              locale: 'en',
+            ),
+          );
+          await tester.pump();
 
-        await tester.pumpWidget(
-          _buildTestableWidget(
-            child: const ReadNfcScreen(),
-            repo: fakeRepo,
-            authRepo: fakeAuth,
-            locale: 'en',
-          ),
-        );
-        await tester.pump();
+          await tester.tap(find.byIcon(Icons.wifi));
+          await tester.pumpAndSettle();
 
-        await tester.tap(find.byIcon(Icons.wifi));
-        await tester.pumpAndSettle();
+          expect(
+            find.textContaining('is a minor. The guardian device is required'),
+            findsOneWidget,
+          );
+        },
+      );
+      testWidgets(
+        'Acceso de emergencia: al presionar Cancelar en el diálogo no navega y cierra el diálogo',
+        (tester) async {
+          fakeAuth.nfcKey = 'secret-key';
+          fakeRepo.throwNonApiError = true;
 
-        expect(
-          find.textContaining('is a minor. The guardian device is required'),
-          findsOneWidget,
-        );
-      },
-    );
-    testWidgets(
-      'Acceso de emergencia: al presionar Cancelar en el diálogo no navega y cierra el diálogo',
-      (tester) async {
-        fakeAuth.nfcKey = 'secret-key';
-        fakeRepo.throwNonApiError = true;
+          final triageMinor = TriageSummary(
+            firstName: 'Carlos',
+            lastName: 'Pérez',
+            dob: '${DateTime.now().year - 10}-01-01',
+            biologicalSex: 'M',
+            bloodType: 'A+',
+            documentType: 'CC',
+            documentNumber: '54321',
+            guardianPhone: '3000000000',
+            guardianDeviceUid: 'HWB-GUARDIAN-02',
+            chronicConditions: '',
+            allergies: const <TriageAllergy>[],
+          );
 
-        final triageMinor = TriageSummary(
-          firstName: 'Carlos',
-          lastName: 'Pérez',
-          dob: '${DateTime.now().year - 10}-01-01',
-          biologicalSex: 'M',
-          bloodType: 'A+',
-          documentType: 'CC',
-          documentNumber: '54321',
-          guardianPhone: '3000000000',
-          guardianDeviceUid: 'HWB-GUARDIAN-02',
-          chronicConditions: '',
-          allergies: const <TriageAllergy>[],
-        );
+          ReadNfcScreen.overrideReadHwbChip =
+              ({required String alertMessage}) async => HwbChipReadResult(
+                uid: 'HWB-PATIENT-GATE-2',
+                kind: HwbChipKind.triage,
+                triage: triageMinor,
+              );
 
-        ReadNfcScreen.overrideReadHwbChip =
-            ({required String alertMessage}) async => HwbChipReadResult(
-              uid: 'HWB-PATIENT-GATE-2',
-              kind: HwbChipKind.triage,
-              triage: triageMinor,
-            );
+          await tester.pumpWidget(
+            _buildTestableWidget(
+              child: const ReadNfcScreen(),
+              repo: fakeRepo,
+              authRepo: fakeAuth,
+            ),
+          );
+          await tester.pump();
 
-        await tester.pumpWidget(
-          _buildTestableWidget(
-            child: const ReadNfcScreen(),
-            repo: fakeRepo,
-            authRepo: fakeAuth,
-          ),
-        );
-        await tester.pump();
+          await tester.tap(find.byIcon(Icons.wifi));
+          await tester.pumpAndSettle();
 
-        await tester.tap(find.byIcon(Icons.wifi));
-        await tester.pumpAndSettle();
+          await tester.tap(find.text('Acceso de emergencia'));
+          await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Acceso de emergencia'));
-        await tester.pumpAndSettle();
+          expect(find.byType(AlertDialog), findsOneWidget);
 
-        expect(find.byType(AlertDialog), findsOneWidget);
+          await tester.tap(find.text('Cancelar'));
+          await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Cancelar'));
-        await tester.pumpAndSettle();
+          expect(find.byType(AlertDialog), findsNothing);
+          verifyNever(
+            () => mockDb.logEmergencyAccess(
+              patientUid: any(named: 'patientUid'),
+              patientName: any(named: 'patientName'),
+              userId: any(named: 'userId'),
+              ownerUserId: any(named: 'ownerUserId'),
+              organizationId: any(named: 'organizationId'),
+            ),
+          );
+          expect(find.byType(PatientProfileScreen), findsNothing);
+        },
+      );
 
-        expect(find.byType(AlertDialog), findsNothing);
-      },
-    );
+      testWidgets(
+        'Acceso de emergencia: registra correctamente en la BD local cuando currentUser es nulo',
+        (tester) async {
+          fakeAuth.nfcKey = 'secret-key';
+          fakeAuth.mockUser = null;
+          fakeRepo.throwNonApiError = true;
 
-    testWidgets(
-      'Acceso de emergencia: registra correctamente en la BD local cuando currentUser es nulo',
-      (tester) async {
-        fakeAuth.nfcKey = 'secret-key';
-        fakeAuth.mockUser = null;
-        fakeRepo.throwNonApiError = true;
+          final triageMinor = TriageSummary(
+            firstName: 'Pedro',
+            lastName: 'Mendoza',
+            dob: '${DateTime.now().year - 8}-01-01',
+            biologicalSex: 'M',
+            bloodType: 'B+',
+            documentType: 'CC',
+            documentNumber: '99999',
+            guardianPhone: '3000000000',
+            guardianDeviceUid: 'HWB-GUARDIAN-03',
+            chronicConditions: '',
+            allergies: const <TriageAllergy>[],
+          );
 
-        final triageMinor = TriageSummary(
-          firstName: 'Pedro',
-          lastName: 'Mendoza',
-          dob: '${DateTime.now().year - 8}-01-01',
-          biologicalSex: 'M',
-          bloodType: 'B+',
-          documentType: 'CC',
-          documentNumber: '99999',
-          guardianPhone: '3000000000',
-          guardianDeviceUid: 'HWB-GUARDIAN-03',
-          chronicConditions: '',
-          allergies: const <TriageAllergy>[],
-        );
+          ReadNfcScreen.overrideReadHwbChip =
+              ({required String alertMessage}) async => HwbChipReadResult(
+                uid: 'HWB-PATIENT-GATE-3',
+                kind: HwbChipKind.triage,
+                triage: triageMinor,
+              );
 
-        ReadNfcScreen.overrideReadHwbChip =
-            ({required String alertMessage}) async => HwbChipReadResult(
-              uid: 'HWB-PATIENT-GATE-3',
-              kind: HwbChipKind.triage,
-              triage: triageMinor,
-            );
+          await tester.pumpWidget(
+            _buildTestableWidget(
+              child: const ReadNfcScreen(),
+              repo: fakeRepo,
+              authRepo: fakeAuth,
+            ),
+          );
+          await tester.pump();
 
-        await tester.pumpWidget(
-          _buildTestableWidget(
-            child: const ReadNfcScreen(),
-            repo: fakeRepo,
-            authRepo: fakeAuth,
-          ),
-        );
-        await tester.pump();
+          await tester.tap(find.byIcon(Icons.wifi));
+          await tester.pumpAndSettle();
 
-        await tester.tap(find.byIcon(Icons.wifi));
-        await tester.pumpAndSettle();
+          await tester.tap(find.text('Acceso de emergencia'));
+          await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Acceso de emergencia'));
-        await tester.pumpAndSettle();
+          await tester.tap(find.text('Continuar'));
+          await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Continuar'));
-        await tester.pumpAndSettle();
-
-        verify(
-          () => mockDb.logEmergencyAccess(
-            patientUid: 'HWB-PATIENT-GATE-3',
-            patientName: 'Pedro Mendoza',
-            userId: null,
-            ownerUserId: null,
-            organizationId: null,
-          ),
-        ).called(1);
-      },
-    );
-  });
+          verify(
+            () => mockDb.logEmergencyAccess(
+              patientUid: 'HWB-PATIENT-GATE-3',
+              patientName: 'Pedro Mendoza',
+              userId: null,
+              ownerUserId: null,
+              organizationId: null,
+            ),
+          ).called(1);
+        },
+      );
+    },
+  );
 
   group('ReadNfcScreen — Servicio de payload real y casos restantes', () {
     test('createPayloadService construye el servicio sin tocar la radio', () {

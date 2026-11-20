@@ -11,6 +11,8 @@ class UserSession {
     required this.role,
     required this.organizationId,
     this.organizationName,
+    this.documentType = 'CC',
+    this.documentNumber,
     this.isActive = true,
     this.mustChangePassword = false,
   });
@@ -23,6 +25,9 @@ class UserSession {
         ? rawName.trim()
         : _humanizeEmail(email);
 
+    final rawDocType = json['document_type']?.toString().trim();
+    final rawDocNum = json['document_number']?.toString().trim();
+
     return UserSession(
       id: json['id']?.toString() ?? '',
       email: email,
@@ -30,6 +35,12 @@ class UserSession {
       role: _parseRole(json['role']?.toString()),
       organizationId: json['organization_id']?.toString() ?? '',
       organizationName: json['organization_name']?.toString(),
+      documentType: (rawDocType != null && rawDocType.isNotEmpty)
+          ? rawDocType
+          : 'CC',
+      documentNumber: (rawDocNum != null && rawDocNum.isNotEmpty)
+          ? rawDocNum
+          : null,
       isActive: json['is_active'] as bool? ?? true,
       mustChangePassword: json['must_change_password'] == true,
     );
@@ -41,19 +52,27 @@ class UserSession {
   final UserRole role;
   final String organizationId;
   final String? organizationName;
+  final String documentType;
+  final String? documentNumber;
   final bool isActive;
 
   /// The password was set by an administrator (a new account, or a reset):
   /// the user has to choose their own before using the app.
   final bool mustChangePassword;
 
-  UserSession copyWith({bool? mustChangePassword}) => UserSession(
+  UserSession copyWith({
+    bool? mustChangePassword,
+    String? documentType,
+    String? documentNumber,
+  }) => UserSession(
     id: id,
     email: email,
     fullName: fullName,
     role: role,
     organizationId: organizationId,
     organizationName: organizationName,
+    documentType: documentType ?? this.documentType,
+    documentNumber: documentNumber ?? this.documentNumber,
     isActive: isActive,
     mustChangePassword: mustChangePassword ?? this.mustChangePassword,
   );
@@ -70,6 +89,8 @@ class UserSession {
     'role': role.wireValue,
     'organization_id': organizationId,
     'organization_name': organizationName,
+    'document_type': documentType,
+    if (documentNumber != null) 'document_number': documentNumber,
     'is_active': isActive,
     'must_change_password': mustChangePassword,
   };

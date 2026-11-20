@@ -592,10 +592,6 @@ void main() {
     );
   });
 
-  // =========================================================================
-  // ADDITIONAL TESTS FOR 100% CODE COVERAGE IN ADD_MEDICATION_SHEET.DART
-  // =========================================================================
-
   group(
     'AddMedicationSheet – Unsaved Changes Dialog & Navigation Handlers',
     () {
@@ -633,9 +629,9 @@ void main() {
         },
       );
 
-      testWidgets('cancels dismissal when clicking Cancel in unsaved dialog', (
-        tester,
-      ) async {
+      testWidgets(
+        'cancels dismissal when clicking Keep editing in unsaved dialog',
+        (tester) async {
         await tester.pumpWidget(_buildViaBottomSheet(onAdd: (_) {}));
         await _openSheet(tester);
 
@@ -647,14 +643,15 @@ void main() {
 
         expect(find.byType(AlertDialog), findsOneWidget);
 
-        await tester.tap(find.text('Cancelar'));
+          await tester.tap(find.text('Seguir editando'));
         await tester.pumpAndSettle();
 
         expect(find.byType(AddMedicationSheet), findsOneWidget);
         expect(find.byType(AlertDialog), findsNothing);
-      });
+        },
+      );
 
-      testWidgets('dismisses sheet when clicking Exit in unsaved dialog', (
+      testWidgets('dismisses sheet when clicking Discard in unsaved dialog', (
         tester,
       ) async {
         await tester.pumpWidget(_buildViaBottomSheet(onAdd: (_) {}));
@@ -666,7 +663,7 @@ void main() {
         await tester.tap(find.byIcon(Icons.close_rounded));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Salir'));
+        await tester.tap(find.text('Descartar'));
         await tester.pumpAndSettle();
 
         expect(find.byType(AddMedicationSheet), findsNothing);

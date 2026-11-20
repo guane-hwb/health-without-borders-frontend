@@ -80,13 +80,19 @@ class UserRepository {
   Future<UserSession> createUser({
     required String email,
     required String fullName,
-    required String role, // "doctor" | "nurse" | "org_admin"
+    String? documentType,
+    String? documentNumber,
+    required String role,
     required String password,
-    String? organizationId, // only needed by superadmin
+    String? organizationId,
   }) async {
     final body = <String, dynamic>{
       'email': email,
       'full_name': fullName,
+      if (documentType != null && documentType.trim().isNotEmpty)
+        'document_type': documentType.trim(),
+      if (documentNumber != null && documentNumber.trim().isNotEmpty)
+        'document_number': documentNumber.trim(),
       'role': role,
       'password': password,
       'organization_id': organizationId,
@@ -98,7 +104,6 @@ class UserRepository {
     );
     return UserSession.fromJson(data);
   }
-
   // ── GET /api/v1/organizations/ ────────────────────────────────────────────
   // superadmin only.
 

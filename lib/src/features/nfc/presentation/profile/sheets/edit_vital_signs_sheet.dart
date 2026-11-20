@@ -12,6 +12,7 @@ class EditVitalSignsSheet extends StatefulWidget {
     this.weight,
     this.height,
     this.bloodType,
+    this.isBloodTypeCertified = false,
     this.previousWeight,
     this.previousHeight,
     required this.onConfirm,
@@ -20,9 +21,15 @@ class EditVitalSignsSheet extends StatefulWidget {
   final double? weight;
   final double? height;
   final String? bloodType;
+  final bool isBloodTypeCertified;
   final double? previousWeight;
   final double? previousHeight;
-  final void Function({double? weight, double? height, String? bloodType})
+  final void Function({
+    double? weight,
+    double? height,
+    String? bloodType,
+    bool isBloodTypeCertified,
+  })
   onConfirm;
 
   @override
@@ -38,6 +45,9 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
   late final String _initialWeightText;
   late final String _initialHeightText;
   late final String? _initialBloodType;
+
+  late bool _isCertified;
+  late final bool _isLocked;
 
   static const _bloodTypeOptions = {
     'O+': 'O+',
@@ -60,7 +70,17 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
     _weightCtrl = TextEditingController(text: _initialWeightText);
     _heightCtrl = TextEditingController(text: _initialHeightText);
     _selectedBloodType = _initialBloodType;
+
+    _isCertified = widget.isBloodTypeCertified;
+    _isLocked =
+        widget.isBloodTypeCertified &&
+        (widget.bloodType?.trim().isNotEmpty ?? false);
+    // The barrier and the system back read canPop from the last build.
+    _weightCtrl.addListener(_onFieldChanged);
+    _heightCtrl.addListener(_onFieldChanged);
   }
+
+  void _onFieldChanged() => setState(() {});
 
   @override
   void dispose() {
@@ -73,8 +93,9 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
     final weightChanged = _weightCtrl.text.trim() != _initialWeightText;
     final heightChanged = _heightCtrl.text.trim() != _initialHeightText;
     final bloodTypeChanged = _selectedBloodType != _initialBloodType;
+    final certChanged = _isCertified != widget.isBloodTypeCertified;
 
-    return weightChanged || heightChanged || bloodTypeChanged;
+    return weightChanged || heightChanged || bloodTypeChanged || certChanged;
   }
 
   Future<bool> _onWillPop() async {
@@ -86,7 +107,7 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         title: Text(
-          s.unsyncedChangesTitle,
+          s.discardSheetTitle,
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
@@ -94,17 +115,20 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
           ),
         ),
         content: Text(
-          s.exitWithoutSyncMsg,
+          s.discardSheetMsg,
           style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text(s.cancel),
+            child: Text(s.keepEditing),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(s.exit, style: const TextStyle(color: AppColors.error)),
+            child: Text(
+              s.discard,
+              style: const TextStyle(color: AppColors.error),
+            ),
           ),
         ],
       ),
@@ -148,7 +172,12 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
       }
     }
 
-    widget.onConfirm(weight: w, height: h, bloodType: _selectedBloodType);
+    widget.onConfirm(
+      weight: w,
+      height: h,
+      bloodType: _selectedBloodType,
+      isBloodTypeCertified: _selectedBloodType != null ? _isCertified : false,
+    );
     Navigator.of(context).pop();
   }
 
@@ -364,51 +393,133 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
 
                 const SizedBox(height: 20),
 
-                _FieldLabel(label: s.bloodType),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _bloodTypeOptions.entries.map((e) {
-                    final selected = e.key == _selectedBloodType;
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedBloodType = selected ? null : e.key;
-                        });
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
+                Row(
+                  children: [
+                    _FieldLabel(label: s.bloodType),
+                    if (_isLocked) ...[
+                      const SizedBox(width: 8),
+                      Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 8,
+                          horizontal: 8,
+                          vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: selected ? AppColors.primary : AppColors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: selected
-                                ? AppColors.primary
-                                : const Color(0xFFB0B8C4),
-                            width: selected ? 2 : 1.5,
-                          ),
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Text(
-                          e.value,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: selected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: selected
-                                ? AppColors.white
-                                : AppColors.textPrimary,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.lock_outline,
+                              size: 12,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              s.isEs ? 'Certificado' : 'Certified',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    );
-                  }).toList(),
+                    ],
+                  ],
                 ),
+                const SizedBox(height: 8),
+                IgnorePointer(
+                  ignoring: _isLocked,
+                  child: Opacity(
+                    opacity: _isLocked ? 0.55 : 1.0,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _bloodTypeOptions.entries.map((e) {
+                        final selected = e.key == _selectedBloodType;
+                        return GestureDetector(
+                          onTap: _isLocked
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _selectedBloodType = selected
+                                        ? null
+                                        : e.key;
+                                    if (_selectedBloodType == null) {
+                                      _isCertified = false;
+                                    }
+                                  });
+                                },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? AppColors.primary
+                                  : AppColors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: selected
+                                    ? AppColors.primary
+                                    : const Color(0xFFB0B8C4),
+                                width: selected ? 2 : 1.5,
+                              ),
+                            ),
+                            child: Text(
+                              e.value,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: selected
+                                    ? AppColors.white
+                                    : AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+                if (_isLocked) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    s.isEs
+                        ? 'Verificado con certificado/examen. No se puede modificar.'
+                        : 'Verified with certificate/lab test. Cannot be edited.',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ] else if (_selectedBloodType != null) ...[
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    activeColor: AppColors.primary,
+                    value: _isCertified,
+                    onChanged: (v) => setState(() => _isCertified = v ?? false),
+                    title: Text(
+                      s.isEs
+                          ? 'El cuidador mostró certificado/examen (bloquear edición)'
+                          : 'Caregiver showed certificate/test (lock editing)',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 24),
 

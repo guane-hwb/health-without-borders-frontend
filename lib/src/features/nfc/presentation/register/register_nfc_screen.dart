@@ -49,6 +49,22 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   String? _lastConsultationTime;
   String? _lastVaccineTime;
 
+  /// The devices the last write left unwritten, and why. Empty once all are.
+  List<UnwrittenDevice> _unwritten = const <UnwrittenDevice>[];
+
+  /// What the patient-data step has typed but not yet saved to the draft.
+  final UnsavedInputProbe _patientDataInput = UnsavedInputProbe();
+
+  /// Tells the step on screen that the system back is leaving it, so it keeps
+  /// what was entered, as its own "Atrás" does.
+  final _SystemBack _systemBack = _SystemBack();
+
+  @override
+  void dispose() {
+    _systemBack.dispose();
+    super.dispose();
+  }
+
   bool get _isMinor {
     final dob = _draft.dob;
     if (dob == null) return true;
@@ -74,15 +90,50 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   }
 
   Future<void> _handleSystemPop() async {
-    if (_savedRecord != null || _step >= 4) {
+    if (_step >= 5) {
       Navigator.of(context).pop();
       return;
     }
 
+    if (_step == 4) {
+      await _confirmLeaveHub();
+      return;
+    }
+
     if (_step > 0) {
+      _systemBack.notify();
       setState(() => _step--);
     } else {
       await _goToHomeDirectly();
+    }
+  }
+
+  /// The hub after "Confirmar" is not the end: the record is on this phone,
+  /// but no device has its data yet. Leaving asks first and offers to write.
+  Future<void> _confirmLeaveHub() async {
+    final s = AppStrings.of(context);
+    final bool? writeNow = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.devicesNotWrittenTitle),
+        content: Text(s.devicesNotWrittenBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s.leaveWithoutWriting),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(s.writeNow),
+          ),
+        ],
+      ),
+    );
+    if (writeNow == null || !mounted) return;
+    if (writeNow) {
+      await _finalize();
+    } else {
+      Navigator.of(context).pop();
     }
   }
 
@@ -94,7 +145,11 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
 
-    if (_draft.firstName.isEmpty && _draft.documentNumber.isEmpty) {
+    // What the patient-data step shows is in the draft only after
+    // "Continuar": ask about it too.
+    if (_draft.firstName.isEmpty &&
+        _draft.documentNumber.isEmpty &&
+        !_patientDataInput.hasUnsavedInput) {
       return true;
     }
 
@@ -301,13 +356,40 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
   @visibleForTesting
   Future<void> finalizeForTest() => _finalize();
 
-  Future<void> _finalize() async {
+  /// "Grabar ahora" on the final screen: only the devices still unwritten.
+  Future<void> _writeUnwrittenDevices() => _finalize(
+    only: <RegisterDevice>{
+      for (final UnwrittenDevice unwritten in _unwritten) unwritten.device,
+    },
+  );
+
+  /// Writes the patient's devices, or with [only] just those, and goes to the
+  /// final screen, which says which were left unwritten and why.
+  Future<void> _finalize({Set<RegisterDevice>? only}) async {
     final scope = AppScope.of(context);
     final record = _savedRecord;
     if (record == null) {
       await _goToHomeDirectly();
       return;
     }
+
+    final guardian1Uid = (record.guardianInfo.deviceUid ?? '').trim();
+    final guardian2Uid = (record.guardian2Info?.deviceUid ?? '').trim();
+    final hasTwoGuardians = guardian1Uid.isNotEmpty && guardian2Uid.isNotEmpty;
+    final RegisterDevice guardian1 = hasTwoGuardians
+        ? RegisterDevice.guardian1
+        : RegisterDevice.guardian;
+    final List<RegisterDevice> devices = <RegisterDevice>[
+      RegisterDevice.patient,
+      if (guardian1Uid.isNotEmpty) guardian1,
+      if (guardian2Uid.isNotEmpty) RegisterDevice.guardian2,
+    ].where((RegisterDevice d) => only == null || only.contains(d)).toList();
+
+    List<UnwrittenDevice> noneWritten(
+      DeviceWriteFailure why,
+    ) => <UnwrittenDevice>[
+      for (final RegisterDevice device in devices) UnwrittenDevice(device, why),
+    ];
 
     final keyring = await scope.authRepository.getNfcKeyring();
     if (!mounted) return;
@@ -332,7 +414,13 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
                   : 'No NFC key available: the record was saved, but the '
                         'devices were not written.'),
       );
-      _completeFinalize();
+      _completeFinalize(
+        noneWritten(
+          expired
+              ? DeviceWriteFailure.sessionExpired
+              : DeviceWriteFailure.noKey,
+        ),
+      );
       return;
     }
 
@@ -349,7 +437,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
             : 'The NFC key is invalid: the record was saved, but the devices '
                   'were not written. Contact your administrator.',
       );
-      _completeFinalize();
+      _completeFinalize(noneWritten(DeviceWriteFailure.invalidKey));
       return;
     }
     final s = AppStrings.of(context);
@@ -357,29 +445,44 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
 
     NfcPayloadService makeService() =>
         RegisterNfcScreen.overrideServiceBuilder?.call(codec) ??
-        NfcPayloadService(codec: codec);
+        NfcPayloadService(
+          codec: codec,
+          onWritten: scope.localDatabase.recordNfcWriteMetric,
+        );
 
-    final patientOk = await showNfcGuidedWrite(
-      context,
-      title: isEs ? 'Dispositivo del paciente' : 'Patient device',
-      instruction: isEs
-          ? 'Acerque el dispositivo del paciente al teléfono'
-          : 'Bring the patient device to the phone',
-      write: () => makeService().writeTriagePayload(
-        NfcTriagePayload.buildPatientPayload(record: record),
-        expectedUid: record.deviceUid,
-      ),
-    );
-    if (!mounted) return;
-    if (patientOk) {
-      await scope.localDatabase.clearChipsDirty(
-        record.patientId,
-        patient: true,
+    final List<UnwrittenDevice> unwritten = <UnwrittenDevice>[];
+
+    if (devices.contains(RegisterDevice.patient)) {
+      final patientOk = await showNfcGuidedWrite(
+        context,
+        title: isEs ? 'Dispositivo del paciente' : 'Patient device',
+        instruction: isEs
+            ? 'Acerque el dispositivo del paciente al teléfono'
+            : 'Bring the patient device to the phone',
+        write: () => makeService().writeTriagePayload(
+          NfcTriagePayload.buildPatientPayload(record: record),
+          expectedUid: record.deviceUid,
+        ),
       );
       if (!mounted) return;
+      if (patientOk) {
+        await scope.localDatabase.clearChipsDirty(
+          record.patientId,
+          patient: true,
+        );
+        if (!mounted) return;
+      } else {
+        unwritten.add(
+          const UnwrittenDevice(
+            RegisterDevice.patient,
+            DeviceWriteFailure.notCompleted,
+          ),
+        );
+      }
     }
 
-    Future<void> writeGuardianCard({
+    /// Writes one guardian device: null once written, else why it was not.
+    Future<DeviceWriteFailure?> writeGuardianCard({
       required String expectedUid,
       required String title,
       required String instruction,
@@ -425,7 +528,8 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           ),
         );
 
-        if (useLargerCard != true || !mounted) return;
+        if (useLargerCard != true) return DeviceWriteFailure.needsNtag216;
+        if (!mounted) return DeviceWriteFailure.notCompleted;
       }
 
       final ok = await showNfcGuidedWrite(
@@ -438,21 +542,11 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           patientId: record.patientId,
         ),
       );
-      if (!mounted) return;
-      if (ok) {
-        await scope.localDatabase.clearChipsDirty(
-          record.patientId,
-          guardian: true,
-        );
-      }
+      return ok ? null : DeviceWriteFailure.notCompleted;
     }
 
-    final guardian1Uid = (record.guardianInfo.deviceUid ?? '').trim();
-    final guardian2Uid = (record.guardian2Info?.deviceUid ?? '').trim();
-    final hasTwoGuardians = guardian1Uid.isNotEmpty && guardian2Uid.isNotEmpty;
-
-    if (guardian1Uid.isNotEmpty) {
-      await writeGuardianCard(
+    if (devices.contains(guardian1)) {
+      final DeviceWriteFailure? failure = await writeGuardianCard(
         expectedUid: guardian1Uid,
         title: hasTwoGuardians
             ? (isEs ? 'Dispositivo del cuidador 1' : 'Guardian device 1')
@@ -466,10 +560,11 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
                   : 'Bring the guardian device to the phone'),
       );
       if (!mounted) return;
+      if (failure != null) unwritten.add(UnwrittenDevice(guardian1, failure));
     }
 
-    if (guardian2Uid.isNotEmpty) {
-      await writeGuardianCard(
+    if (devices.contains(RegisterDevice.guardian2)) {
+      final DeviceWriteFailure? failure = await writeGuardianCard(
         expectedUid: guardian2Uid,
         title: isEs ? 'Dispositivo del cuidador 2' : 'Guardian device 2',
         instruction: isEs
@@ -477,9 +572,28 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
             : 'Bring guardian device 2 to the phone',
       );
       if (!mounted) return;
+      if (failure != null) {
+        unwritten.add(UnwrittenDevice(RegisterDevice.guardian2, failure));
+      }
     }
 
-    _completeFinalize();
+    // One mark covers every guardian device: clear it only once none is left
+    // unwritten, or the one still blank would stop showing as pending.
+    final bool triedGuardians = devices.any(
+      (RegisterDevice d) => d != RegisterDevice.patient,
+    );
+    final bool guardiansLeft = unwritten.any(
+      (UnwrittenDevice u) => u.device != RegisterDevice.patient,
+    );
+    if (triedGuardians && !guardiansLeft) {
+      await scope.localDatabase.clearChipsDirty(
+        record.patientId,
+        guardian: true,
+      );
+      if (!mounted) return;
+    }
+
+    _completeFinalize(unwritten);
   }
 
   /// Reads the device about to be this new patient's guardian device. Each
@@ -530,10 +644,16 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     );
   }
 
-  void _completeFinalize() {
+  /// Goes to the final screen: sealed only if [unwritten] is empty.
+  void _completeFinalize(List<UnwrittenDevice> unwritten) {
     final scope = AppScope.of(context);
     unawaited(scope.syncEngine.syncAll());
-    if (mounted) setState(() => _step = 5);
+    if (mounted) {
+      setState(() {
+        _unwritten = unwritten;
+        _step = 5;
+      });
+    }
   }
 
   String _formatTimeNow(BuildContext context) {
@@ -551,7 +671,8 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
     final s = AppStrings.of(context);
     final onSuccess = _step >= 4;
 
-    final canPopDirectly = _savedRecord != null || _step >= 5;
+    // On the hub (4) the devices are not written yet: ask before leaving.
+    final canPopDirectly = _step >= 5;
 
     return PopScope(
       canPop: canPopDirectly,
@@ -595,6 +716,7 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           draft: _draft,
           onBack: _stepBack,
           onContinue: _next,
+          unsavedInput: _patientDataInput,
         );
       case 1:
         return Step2Guardian(
@@ -603,12 +725,14 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           onBack: _stepBack,
           onContinue: _next,
           readDevice: _readNewGuardianDevice,
+          systemBack: _systemBack,
         );
       case 2:
         return Step4Background(
           draft: _draft,
           onBack: _stepBack,
           onContinue: _next,
+          systemBack: _systemBack,
         );
       case 3:
         return Step5Review(
@@ -628,13 +752,16 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
           canAddConsultation: role?.canAddConsultation ?? true,
         );
       case 5:
+        // "Sellados" only when every device was written; otherwise the
+        // devices left unwritten, why, and "Grabar ahora" for just those.
         return Step6Success(
           patient: _savedRecord!,
-          sealed: true,
+          sealed: _unwritten.isEmpty,
+          unwritten: _unwritten,
           onGoHome: _goToHomeDirectly,
           onAddConsultation: () {},
           onAddVaccine: () {},
-          onFinish: () {},
+          onFinish: _writeUnwrittenDevices,
           lastConsultationTime: _lastConsultationTime,
           lastVaccineTime: _lastVaccineTime,
         );
@@ -642,6 +769,10 @@ class _RegisterNfcScreenState extends State<RegisterNfcScreen> {
         return const SizedBox.shrink();
     }
   }
+}
+
+class _SystemBack extends ChangeNotifier {
+  void notify() => notifyListeners();
 }
 
 class _WizardHeader extends StatelessWidget {

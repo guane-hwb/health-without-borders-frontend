@@ -793,10 +793,14 @@ class AuthRepository implements TokenProvider {
   }
 
   Future<void> _invalidateSession() async {
+    // Raised before the session goes, while currentUser still names whose it
+    // was: the app asks that person for the password again over the open
+    // screen, and by the time anything rebuilds for the null session (Home
+    // sends a signed-out Home to the login) that prompt is already on top.
+    _sessionExpired.value = true;
     await clearSession();
     if (_isWeb) await wipeLocalPhi(force: true);
     _sessionWindowClosed.value = false;
-    _sessionExpired.value = true;
   }
 
   bool get hasToken => _cachedToken?.isNotEmpty == true;

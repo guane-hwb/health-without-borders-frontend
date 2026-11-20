@@ -1,4 +1,5 @@
 // lib/src/features/nfc/presentation/add_consultation_screen.dart
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -9,6 +10,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_error_codes.dart';
 import '../../../core/utils/clinical_time.dart';
 import '../../../design/tokens/app_colors.dart';
+import '../../../shared/widgets/discard_changes_dialog.dart';
 import '../../../shared/widgets/screen_bottom_handle.dart';
 import '../domain/patient_record.dart';
 import 'shared_read_nfc_header.dart';
@@ -33,6 +35,7 @@ class AddConsultationScreen extends StatefulWidget {
 
 class _AddConsultationScreenState extends State<AddConsultationScreen> {
   PatientFullRecord? _patient;
+  MedicalHistoryItem? _createdConsultation;
   bool _scanning = false;
   String? _scanError;
   bool _isSaving = false;
@@ -49,6 +52,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   String _practitionerDocType = 'CC';
   final _practitionerDocCtrl = TextEditingController();
   final _practitionerNameCtrl = TextEditingController();
+  bool _practitionerPrefilled = false;
 
   // ── Provider (Res. 866 Elem. 16) ─────────────────────────────────────────
   final _providerRepsCtrl = TextEditingController();
@@ -73,6 +77,24 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   // ── Prescriptions (MedicationRequestRDA) ─────────────────────────────────
   final List<_PrescriptionDraft> _prescriptions = <_PrescriptionDraft>[];
 
+  // ── Leaving with something written ───────────────────────────────────────
+  /// The fields typed into, which [_formValues] compares with the choices.
+  late final List<TextEditingController> _textFields = <TextEditingController>[
+    _practitionerDocCtrl,
+    _practitionerNameCtrl,
+    _providerRepsCtrl,
+    _providerNameCtrl,
+    _payerNameCtrl,
+    _historyCtrl,
+    _physicalExamCtrl,
+    _systemsCtrl,
+    _treatmentCtrl,
+  ];
+  late final Listenable _textEdits = Listenable.merge(_textFields);
+
+  /// How the form opened, once the practitioner and the payer were filled in.
+  List<Object?>? _initialForm;
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +110,14 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     setState(() => _prescriptions.removeAt(index).dispose());
   }
 
+  bool _hasValidDocumentNumber(String? rawDoc) {
+    final doc = rawDoc?.trim() ?? '';
+    if (doc.isEmpty || doc == '0') return false;
+    if (RegExp(r'^10{5,}\d+$').hasMatch(doc)) return false;
+    if (RegExp(r'^(\d)\1{5,}$').hasMatch(doc)) return false;
+    return true;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -96,6 +126,61 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       final isEs = s.isEs;
       _payerNameCtrl.text = isEs ? 'No asegurado' : 'Uninsured';
     }
+
+    if (!_practitionerPrefilled) {
+      _practitionerPrefilled = true;
+      final user = AppScope.of(context).authRepository.currentUser;
+      if (user != null) {
+        const validDocTypes = {'CC', 'CE', 'PA', 'TI', 'RC', 'MS'};
+        if (validDocTypes.contains(user.documentType)) {
+          _practitionerDocType = user.documentType;
+        }
+        if (_practitionerDocCtrl.text.isEmpty &&
+            _hasValidDocumentNumber(user.documentNumber)) {
+          _practitionerDocCtrl.text = user.documentNumber!.trim();
+        }
+        if (_practitionerNameCtrl.text.isEmpty && user.fullName.isNotEmpty) {
+          _practitionerNameCtrl.text = user.fullName;
+        }
+        if (_providerNameCtrl.text.isEmpty &&
+            user.organizationName != null &&
+            user.organizationName!.trim().isNotEmpty) {
+          _providerNameCtrl.text = user.organizationName!.trim();
+        }
+      }
+    }
+    _initialForm ??= _formValues();
+  }
+
+  /// Everything the clinician can write or choose, to compare with
+  /// [_initialForm].
+  List<Object?> _formValues() => <Object?>[
+    _startDateTime,
+    _endDateTime,
+    _careModality,
+    _serviceGroup,
+    _careEnvironment,
+    _practitionerDocType,
+    _diagnosisType,
+    _dischargeDisposition,
+    for (final TextEditingController c in _textFields) c.text.trim(),
+  ];
+
+  /// Something written or chosen that leaving now would lose. Once the
+  /// consultation is saved, nothing is.
+  bool get _hasUnsavedChanges =>
+      !_saved &&
+      (_prescriptions.any((_PrescriptionDraft p) => p.hasText) ||
+          !listEquals(_formValues(), _initialForm));
+
+  Future<void> _confirmLeave() async {
+    final s = AppStrings.of(context);
+    final bool discard = await confirmDiscardChanges(
+      context,
+      title: s.discardWrittenTitle,
+      message: s.discardConsultationMsg,
+    );
+    if (discard && mounted) Navigator.of(context).pop(_createdConsultation);
   }
 
   void _onHistoryChanged() => setState(() {});
@@ -152,7 +237,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   // ── Save ──────────────────────────────────────────────────────────────────
 
   Future<void> _save() async {
-    if (_patient == null) return;
+    if (_patient == null || _isSaving) return;
     final s = AppStrings.of(context);
     final isEs = s.isEs;
 
@@ -210,7 +295,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
     final PractitionerInfo? practitioner = practName.isNotEmpty
         ? PractitionerInfo(
             documentType: _practitionerDocType,
-            documentNumber: practDoc.isEmpty ? '0' : practDoc,
+            documentNumber: practDoc,
             name: practName,
           )
         : null;
@@ -306,7 +391,8 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
     try {
       final scope = AppScope.of(context);
-      final currentUser = scope.authRepository.currentUser;
+      var currentUser = scope.authRepository.currentUser;
+      currentUser ??= await scope.authRepository.restoreSession();
 
       await scope.localDatabase.savePatient(
         updatedRecord,
@@ -320,25 +406,27 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
 
       scope.syncEngine.syncAll().ignore();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(s.consultationSaved),
-            backgroundColor: AppColors.success,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+      _createdConsultation = newConsultation;
 
-        if (widget.returnToProfile) {
-          Navigator.of(context).pop(newConsultation);
-          return;
-        }
+      if (!mounted) return;
 
-        setState(() {
-          _saved = true;
-          _isSaving = false;
-        });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(s.consultationSaved),
+          backgroundColor: AppColors.success,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      if (widget.returnToProfile) {
+        Navigator.of(context).pop(newConsultation);
+        return;
       }
+
+      setState(() {
+        _saved = true;
+        _isSaving = false;
+      });
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
@@ -355,33 +443,50 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    return Scaffold(
-      backgroundColor: AppColors.backgroundLight,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                SharedReadNfcHeader(
-                  title: s.addConsultation,
-                  onBack: () => Navigator.of(context).pop(),
-                ),
-                Expanded(
-                  child: _patient == null
-                      ? _buildScanStep()
-                      : _saved
-                      ? _buildSuccessStep()
-                      : _buildFormStep(),
-                ),
-              ],
-            ),
-            const Positioned(
-              left: 116,
-              right: 116,
-              bottom: 14,
-              child: ScreenBottomHandle(),
-            ),
-          ],
+    // Typing in most fields does not rebuild the form; the guard must still
+    // see it, so it listens to the fields itself.
+    return ListenableBuilder(
+      listenable: _textEdits,
+      builder: (BuildContext context, Widget? child) => PopScope<Object?>(
+        canPop: !_hasUnsavedChanges && _createdConsultation == null,
+        onPopInvokedWithResult: (bool didPop, Object? result) async {
+          if (didPop) return;
+          if (_hasUnsavedChanges) {
+            await _confirmLeave();
+          } else {
+            Navigator.of(context).pop(_createdConsultation);
+          }
+        },
+        child: child!,
+      ),
+      child: Scaffold(
+        backgroundColor: AppColors.backgroundLight,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  SharedReadNfcHeader(
+                    title: s.addConsultation,
+                    onBack: () => Navigator.of(context).maybePop(),
+                  ),
+                  Expanded(
+                    child: _patient == null
+                        ? _buildScanStep()
+                        : _saved
+                        ? _buildSuccessStep()
+                        : _buildFormStep(),
+                  ),
+                ],
+              ),
+              const Positioned(
+                left: 116,
+                right: 116,
+                bottom: 14,
+                child: ScreenBottomHandle(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -657,6 +762,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
                       s.documentNumberLabel,
                       _practitionerDocCtrl,
                       Icons.badge,
+                      keyboardType: TextInputType.number,
                     ),
                   ),
                 ],
@@ -971,7 +1077,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
             width: double.infinity,
             height: 46,
             child: OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(context).pop(_createdConsultation),
               style: OutlinedButton.styleFrom(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -991,8 +1097,9 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
   Widget _textField(
     String label,
     TextEditingController ctrl,
-    IconData icon,
-  ) => Column(
+    IconData icon, {
+    TextInputType? keyboardType,
+  }) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(
@@ -1002,6 +1109,7 @@ class _AddConsultationScreenState extends State<AddConsultationScreen> {
       const SizedBox(height: 4),
       TextField(
         controller: ctrl,
+        keyboardType: keyboardType,
         style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(
           isDense: true,
@@ -1427,6 +1535,16 @@ class _PrescriptionDraft {
   final durationCtrl = TextEditingController();
   final routeCtrl = TextEditingController();
   final notesCtrl = TextEditingController();
+
+  /// Whether anything was typed into this row.
+  bool get hasText => <TextEditingController>[
+    nameCtrl,
+    dosageCtrl,
+    frequencyCtrl,
+    durationCtrl,
+    routeCtrl,
+    notesCtrl,
+  ].any((TextEditingController c) => c.text.trim().isNotEmpty);
 
   void dispose() {
     nameCtrl.dispose();
