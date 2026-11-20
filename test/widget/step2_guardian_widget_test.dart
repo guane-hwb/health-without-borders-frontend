@@ -450,34 +450,62 @@ void main() {
     });
   });
 
-  group('NFC y Cobertura Extendida de Cuidador 1 y Cuidador 2 (100% Cobertura)', () {
-    testWidgets('25. Escaneo NFC Exitoso para Cuidador 1', (tester) async {
-      resizeViewport(tester);
-      NfcService.overrideReadDeviceUid = () async => 'NFC-GUARD-001';
+  group(
+    'Step2Guardian — escaneo NFC, firmas biométricas y formularios de Cuidador 1 y 2',
+    () {
+      testWidgets('25. Escaneo NFC Exitoso para Cuidador 1', (tester) async {
+        resizeViewport(tester);
+        NfcService.overrideReadDeviceUid = () async => 'NFC-GUARD-001';
 
-      await tester.pumpWidget(buildSubject());
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(buildSubject());
+        await tester.pumpAndSettle();
 
-      final scanBtn = find
-          .descendant(
-            of: find.byType(ElevatedButton),
-            matching: find.byIcon(Icons.nfc),
-          )
-          .first;
+        final scanBtn = find
+            .descendant(
+              of: find.byType(ElevatedButton),
+              matching: find.byIcon(Icons.nfc),
+            )
+            .first;
 
-      await tester.ensureVisible(scanBtn);
-      await tester.tap(scanBtn);
-      await tester.pumpAndSettle();
+        await tester.ensureVisible(scanBtn);
+        await tester.tap(scanBtn);
+        await tester.pumpAndSettle();
 
-      expect(find.textContaining('NFC-GUARD-001'), findsWidgets);
-    });
+        expect(find.textContaining('NFC-GUARD-001'), findsWidgets);
+      });
 
-    testWidgets(
-      '26. Escaneo NFC lanza NfcNotAvailableException en Cuidador 1',
-      (tester) async {
+      testWidgets(
+        '26. Escaneo NFC lanza NfcNotAvailableException en Cuidador 1',
+        (tester) async {
+          resizeViewport(tester);
+          NfcService.overrideReadDeviceUid = () async =>
+              throw NfcNotAvailableException();
+
+          await tester.pumpWidget(buildSubject());
+          await tester.pumpAndSettle();
+
+          final scanBtn = find
+              .descendant(
+                of: find.byType(ElevatedButton),
+                matching: find.byIcon(Icons.nfc),
+              )
+              .first;
+
+          await tester.ensureVisible(scanBtn);
+          await tester.tap(scanBtn);
+          await tester.pump();
+          await tester.pump(const Duration(seconds: 1));
+
+          expect(find.byType(SnackBar), findsOneWidget);
+        },
+      );
+
+      testWidgets('27. Escaneo NFC lanza excepción genérica en Cuidador 1', (
+        tester,
+      ) async {
         resizeViewport(tester);
         NfcService.overrideReadDeviceUid = () async =>
-            throw NfcNotAvailableException();
+            throw Exception('NFC Fail');
 
         await tester.pumpWidget(buildSubject());
         await tester.pumpAndSettle();
@@ -495,301 +523,183 @@ void main() {
         await tester.pump(const Duration(seconds: 1));
 
         expect(find.byType(SnackBar), findsOneWidget);
-      },
-    );
+      });
 
-    testWidgets('27. Escaneo NFC lanza excepción genérica en Cuidador 1', (
-      tester,
-    ) async {
-      resizeViewport(tester);
-      NfcService.overrideReadDeviceUid = () async =>
-          throw Exception('NFC Fail');
-
-      await tester.pumpWidget(buildSubject());
-      await tester.pumpAndSettle();
-
-      final scanBtn = find
-          .descendant(
-            of: find.byType(ElevatedButton),
-            matching: find.byIcon(Icons.nfc),
-          )
-          .first;
-
-      await tester.ensureVisible(scanBtn);
-      await tester.tap(scanBtn);
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 1));
-
-      expect(find.byType(SnackBar), findsOneWidget);
-    });
-
-    testWidgets(
-      '28. Escaneo NFC Exitoso, Error No Disponible y Genérico en Cuidador 2',
-      (tester) async {
-        resizeViewport(tester);
-        await tester.pumpWidget(buildSubject());
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.text('Agregar'));
-        await tester.pumpAndSettle();
-
-        // 1. Escaneo exitoso G2
-        NfcService.overrideReadDeviceUid = () async => 'NFC-GUARD-002';
-        final scanBtnG2 = find
-            .descendant(
-              of: find.byType(ElevatedButton),
-              matching: find.byIcon(Icons.nfc),
-            )
-            .last;
-
-        await tester.ensureVisible(scanBtnG2);
-        await tester.tap(scanBtnG2);
-        await tester.pumpAndSettle();
-
-        expect(find.textContaining('NFC-GUARD-002'), findsWidgets);
-
-        // 2. Error NfcNotAvailableException G2
-        NfcService.overrideReadDeviceUid = () async =>
-            throw NfcNotAvailableException();
-        await tester.tap(scanBtnG2);
-        await tester.pump();
-        await tester.pump(const Duration(seconds: 1));
-        expect(find.byType(SnackBar), findsAtLeastNWidgets(1));
-
-        // 3. Error Genérico G2
-        NfcService.overrideReadDeviceUid = () async =>
-            throw Exception('NFC2 Fail');
-        await tester.tap(scanBtnG2);
-        await tester.pump();
-        await tester.pump(const Duration(seconds: 1));
-        expect(find.byType(SnackBar), findsAtLeastNWidgets(1));
-      },
-    );
-
-    testWidgets(
-      '29. Dibujado de firma biométrica en Canvas, generación de Base64 y borrado',
-      (tester) async {
-        resizeViewport(tester);
-        bool continueCalled = false;
-
-        final draft = RegisterDraft()
-          ..guardianName = 'Ana María García'
-          ..guardianPhone = '3158492041'
-          ..guardianDocNumber = '52384912'
-          ..guardianDocType = 'CC'
-          ..guardianDeviceUid = 'HWB041A2CDE'
-          ..guardianSignatureStrokes = [
-            [const Offset(10, 10), const Offset(50, 50)],
-          ];
-
-        await tester.pumpWidget(
-          buildSubject(
-            draft: draft,
-            requiredForMinor: false,
-            onContinue: () => continueCalled = true,
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        // 1. Checkbox de autorización
-        final checkbox = find.byType(Checkbox).first;
-        await tester.ensureVisible(checkbox);
-        await tester.tap(checkbox);
-        await tester.pumpAndSettle();
-
-        // 2. Invocar la lógica de guardado mediante saveForTest
-        final dynamic state = tester.state(find.byType(Step2Guardian));
-        await tester.runAsync(() async {
-          await state.saveForTest();
-        });
-        await tester.pumpAndSettle();
-
-        // 3. Confirmar que la firma y los datos pasaron la validación y llamaron a onContinue
-        expect(continueCalled, isTrue);
-        expect(find.byIcon(Icons.error_outline), findsNothing);
-
-        // 4. Probar la función de limpiar firma
-        final clearBtn = find.text('Limpiar firma').first;
-        await tester.ensureVisible(clearBtn);
-        await tester.tap(clearBtn);
-        await tester.pumpAndSettle();
-      },
-    );
-
-    testWidgets(
-      '30. Cuidador 2 completo: firma biométrica, dropdowns, selección de chip y asignación a RegisterDraft',
-      (tester) async {
-        resizeViewport(tester);
-
-        final draft = RegisterDraft()
-          ..guardianName = 'Ana Garcia'
-          ..guardianPhone = '3001234567'
-          ..guardianDocNumber = '123456789'
-          ..guardianDeviceUid = 'HWB041A2CDE'
-          ..guardianEmail = 'ana@example.com'
-          ..guardianAuthAccepted = true
-          ..guardianSignatureStrokes = [
-            [const Offset(10, 10), const Offset(50, 50)],
-          ];
-
-        await tester.pumpWidget(buildSubject(draft: draft));
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.text('Agregar'));
-        await tester.pumpAndSettle();
-
-        final s = AppStrings.forTesting('es');
-
-        final name2Input = find
-            .widgetWithText(TextField, s.guardianFullNameHint)
-            .last;
-        await tester.ensureVisible(name2Input);
-        await tester.enterText(name2Input, 'Carlos López');
-
-        final phone2Input = find
-            .widgetWithText(TextField, s.guardianPhoneHint)
-            .last;
-        await tester.ensureVisible(phone2Input);
-        await tester.enterText(phone2Input, '3109876543');
-
-        final doc2Input = find.widgetWithText(TextField, 'Ej. 1234567890').last;
-        await tester.ensureVisible(doc2Input);
-        await tester.enterText(doc2Input, '9876543210');
-
-        final email2Input = find.widgetWithText(TextField, s.emailHint).last;
-        await tester.ensureVisible(email2Input);
-        await tester.enterText(email2Input, 'carlos@example.com');
-
-        final chipHermanos = find.text(s.relSiblings).last;
-        await tester.ensureVisible(chipHermanos);
-        await tester.tap(chipHermanos);
-        await tester.pumpAndSettle();
-
-        FocusManager.instance.primaryFocus?.unfocus();
-        await tester.pumpAndSettle();
-
-        final dynamic state = tester.state(find.byType(Step2Guardian));
-
-        await tester.runAsync(() async {
-          await state.saveForTest();
-        });
-        await tester.pumpAndSettle();
-
-        expect(draft.guardian2Name, equals('Carlos López'));
-        expect(draft.guardian2Phone, equals('3109876543'));
-        expect(draft.guardian2DocNumber, equals('9876543210'));
-        expect(draft.guardian2Relationship, equals('02'));
-
-        final clearBtns = find.text('Limpiar firma');
-        if (clearBtns.evaluate().isNotEmpty) {
-          await tester.ensureVisible(clearBtns.last);
-          await tester.tap(clearBtns.last);
+      testWidgets(
+        '28. Escaneo NFC Exitoso, Error No Disponible y Genérico en Cuidador 2',
+        (tester) async {
+          resizeViewport(tester);
+          await tester.pumpWidget(buildSubject());
           await tester.pumpAndSettle();
-        }
-      },
-    );
 
-    testWidgets('31. Cambio de Dropdown de tipo de documento', (tester) async {
-      resizeViewport(tester);
-      await tester.pumpWidget(buildSubject());
-      await tester.pumpAndSettle();
+          await tester.tap(find.text('Agregar'));
+          await tester.pumpAndSettle();
 
-      final s = AppStrings.forTesting('es');
-      final selector = find.text(s.docTypeCC).first;
-      await tester.ensureVisible(selector);
-      await tester.tap(selector);
-      await tester.pumpAndSettle();
+          // 1. Escaneo exitoso G2
+          NfcService.overrideReadDeviceUid = () async => 'NFC-GUARD-002';
+          final scanBtnG2 = find
+              .descendant(
+                of: find.byType(ElevatedButton),
+                matching: find.byIcon(Icons.nfc),
+              )
+              .last;
 
-      final ceItem = find.text(s.docTypeCE).last;
-      await tester.tap(ceItem);
-      await tester.pumpAndSettle();
-    });
+          await tester.ensureVisible(scanBtnG2);
+          await tester.tap(scanBtnG2);
+          await tester.pumpAndSettle();
 
-    testWidgets(
-      '32. Renderizado del Modal de Políticas de Privacidad en Inglés',
-      (tester) async {
-        resizeViewport(tester);
-        await tester.pumpWidget(buildSubject(locale: 'en'));
-        await tester.pumpAndSettle();
+          expect(find.textContaining('NFC-GUARD-002'), findsWidgets);
 
-        final privacyLink = find.text('privacy policy');
-        await tester.ensureVisible(privacyLink.first);
-        await tester.tap(privacyLink.first, warnIfMissed: false);
-        await tester.pumpAndSettle();
+          // 2. Error NfcNotAvailableException G2
+          NfcService.overrideReadDeviceUid = () async =>
+              throw NfcNotAvailableException();
+          await tester.tap(scanBtnG2);
+          await tester.pump();
+          await tester.pump(const Duration(seconds: 1));
+          expect(find.byType(SnackBar), findsAtLeastNWidgets(1));
 
-        expect(find.text('Privacy Policy'), findsWidgets);
-      },
-    );
+          // 3. Error Genérico G2
+          NfcService.overrideReadDeviceUid = () async =>
+              throw Exception('NFC2 Fail');
+          await tester.tap(scanBtnG2);
+          await tester.pump();
+          await tester.pump(const Duration(seconds: 1));
+          expect(find.byType(SnackBar), findsAtLeastNWidgets(1));
+        },
+      );
 
-    testWidgets('33. Interacción con el texto del Checkbox de Autorización', (
-      tester,
-    ) async {
-      resizeViewport(tester);
-      await tester.pumpWidget(buildSubject());
-      await tester.pumpAndSettle();
+      testWidgets(
+        '29. Guardar con firma genera el Base64 y "Limpiar firma" lo borra',
+        (tester) async {
+          resizeViewport(tester);
+          bool continueCalled = false;
 
-      final checkbox = find.byType(Checkbox).first;
-      await tester.ensureVisible(checkbox);
-      await tester.tap(checkbox);
-      await tester.pumpAndSettle();
+          final draft = RegisterDraft()
+            ..guardianName = 'Ana María García'
+            ..guardianPhone = '3158492041'
+            ..guardianDocNumber = '52384912'
+            ..guardianDocType = 'CC'
+            ..guardianDeviceUid = 'HWB041A2CDE'
+            ..guardianSignatureStrokes = [
+              [const Offset(10, 10), const Offset(50, 50)],
+            ];
 
-      final checkboxWidget = tester.widget<Checkbox>(checkbox);
-      expect(checkboxWidget.value, isTrue);
-    });
+          await tester.pumpWidget(
+            buildSubject(
+              draft: draft,
+              requiredForMinor: false,
+              onContinue: () => continueCalled = true,
+            ),
+          );
+          await tester.pumpAndSettle();
 
-    testWidgets(
-      '34. Cambio manual en input de texto NFC de Cuidador 1 y Cuidador 2 activa onChanged()',
-      (tester) async {
-        resizeViewport(tester);
-        await tester.pumpWidget(buildSubject());
-        await tester.pumpAndSettle();
+          // 1. Checkbox de autorización
+          final checkbox = find.byType(Checkbox).first;
+          await tester.ensureVisible(checkbox);
+          await tester.tap(checkbox);
+          await tester.pumpAndSettle();
 
-        // Cuidador 1 NFC onChanged
-        final uidFieldG1 = tester
-            .widgetList<TextField>(find.byType(TextField))
-            .elementAt(2);
-        await tester.enterText(find.byWidget(uidFieldG1), 'MANUAL-UID-01');
-        await tester.pumpAndSettle();
+          // 2. Invocar la lógica de guardado mediante saveForTest
+          final dynamic state = tester.state(find.byType(Step2Guardian));
+          await tester.runAsync(() async {
+            await state.saveForTest();
+          });
+          await tester.pumpAndSettle();
 
-        expect(find.textContaining('MANUAL-UID-01'), findsWidgets);
+          // 3. Confirmar que la firma y los datos pasaron la validación y llamaron a onContinue
+          expect(continueCalled, isTrue);
+          expect(find.byIcon(Icons.error_outline), findsNothing);
+          expect(draft.guardianSignatureBase64, isNotNull);
 
-        // Habilitar Cuidador 2 y cambiar NFC manualmente
-        await tester.tap(find.text('Agregar'));
-        await tester.pumpAndSettle();
+          // 4. Probar la función de limpiar firma
+          final clearBtn = find.text('Limpiar firma').first;
+          await tester.ensureVisible(clearBtn);
+          await tester.tap(clearBtn);
+          await tester.pumpAndSettle();
 
-        final uidFieldG2 = tester
-            .widgetList<TextField>(find.byType(TextField))
-            .elementAt(8);
-        await tester.enterText(find.byWidget(uidFieldG2), 'MANUAL-UID-02');
-        await tester.pumpAndSettle();
+          expect(draft.guardianSignatureBase64, isNull);
+          expect(draft.guardianSignatureStrokes, isEmpty);
+        },
+      );
 
-        expect(find.textContaining('MANUAL-UID-02'), findsWidgets);
-      },
-    );
+      testWidgets(
+        '30. Cuidador 2 completo: firma biométrica, dropdowns, selección de chip y asignación a RegisterDraft',
+        (tester) async {
+          resizeViewport(tester);
 
-    testWidgets(
-      '35. Cambio de parentesco mediante Chips en Cuidador 1 dispara la función de actualización',
-      (tester) async {
-        resizeViewport(tester);
-        final draft = RegisterDraft();
-        await tester.pumpWidget(buildSubject(draft: draft));
-        await tester.pumpAndSettle();
+          final draft = RegisterDraft()
+            ..guardianName = 'Ana Garcia'
+            ..guardianPhone = '3001234567'
+            ..guardianDocNumber = '123456789'
+            ..guardianDeviceUid = 'HWB041A2CDE'
+            ..guardianEmail = 'ana@example.com'
+            ..guardianAuthAccepted = true
+            ..guardianSignatureStrokes = [
+              [const Offset(10, 10), const Offset(50, 50)],
+            ];
 
-        final s = AppStrings.forTesting('es');
-        final chipTios = find.text(s.relUncles).first;
-        await tester.ensureVisible(chipTios);
-        await tester.tap(chipTios);
-        await tester.pumpAndSettle();
+          await tester.pumpWidget(buildSubject(draft: draft));
+          await tester.pumpAndSettle();
 
-        expect(draft.guardianRelationship, equals('03'));
-      },
-    );
-  });
+          await tester.tap(find.text('Agregar'));
+          await tester.pumpAndSettle();
 
-  group('Step2Guardian — Cobertura 100% de Gestos, Menús y Validaciones', () {
-    testWidgets(
-      '36. Cierre del MenuAnchor si ya se encuentra abierto al presionar el selector de tipo de documento',
-      (tester) async {
+          final s = AppStrings.forTesting('es');
+
+          final name2Input = find
+              .widgetWithText(TextField, s.guardianFullNameHint)
+              .last;
+          await tester.ensureVisible(name2Input);
+          await tester.enterText(name2Input, 'Carlos López');
+
+          final phone2Input = find
+              .widgetWithText(TextField, s.guardianPhoneHint)
+              .last;
+          await tester.ensureVisible(phone2Input);
+          await tester.enterText(phone2Input, '3109876543');
+
+          final doc2Input = find
+              .widgetWithText(TextField, 'Ej. 1234567890')
+              .last;
+          await tester.ensureVisible(doc2Input);
+          await tester.enterText(doc2Input, '9876543210');
+
+          final email2Input = find.widgetWithText(TextField, s.emailHint).last;
+          await tester.ensureVisible(email2Input);
+          await tester.enterText(email2Input, 'carlos@example.com');
+
+          final chipHermanos = find.text(s.relSiblings).last;
+          await tester.ensureVisible(chipHermanos);
+          await tester.tap(chipHermanos);
+          await tester.pumpAndSettle();
+
+          FocusManager.instance.primaryFocus?.unfocus();
+          await tester.pumpAndSettle();
+
+          final dynamic state = tester.state(find.byType(Step2Guardian));
+
+          await tester.runAsync(() async {
+            await state.saveForTest();
+          });
+          await tester.pumpAndSettle();
+
+          expect(draft.guardian2Name, equals('Carlos López'));
+          expect(draft.guardian2Phone, equals('3109876543'));
+          expect(draft.guardian2DocNumber, equals('9876543210'));
+          expect(draft.guardian2Relationship, equals('02'));
+
+          final clearBtns = find.text('Limpiar firma');
+          if (clearBtns.evaluate().isNotEmpty) {
+            await tester.ensureVisible(clearBtns.last);
+            await tester.tap(clearBtns.last);
+            await tester.pumpAndSettle();
+          }
+        },
+      );
+
+      testWidgets('31. Cambio de Dropdown de tipo de documento', (
+        tester,
+      ) async {
         resizeViewport(tester);
         await tester.pumpWidget(buildSubject());
         await tester.pumpAndSettle();
@@ -797,113 +707,243 @@ void main() {
         final s = AppStrings.forTesting('es');
         final selector = find.text(s.docTypeCC).first;
         await tester.ensureVisible(selector);
-
         await tester.tap(selector);
         await tester.pumpAndSettle();
 
-        await tester.tap(selector);
+        final ceItem = find.text(s.docTypeCE).last;
+        await tester.tap(ceItem);
         await tester.pumpAndSettle();
 
-        expect(tester.takeException(), isNull);
-      },
-    );
+        expect(find.text(s.docTypeCE), findsOneWidget);
+        expect(find.text(s.docTypeCC), findsNothing);
+      });
 
-    testWidgets(
-      '37. Interacción completa con gestos de firma (panStart, panUpdate, panEnd) y checkbox de Cuidador 1 y Cuidador 2',
-      (tester) async {
+      testWidgets(
+        '32. Renderizado del Modal de Políticas de Privacidad en Inglés',
+        (tester) async {
+          resizeViewport(tester);
+          await tester.pumpWidget(buildSubject(locale: 'en'));
+          await tester.pumpAndSettle();
+
+          final privacyLink = find.text('privacy policy');
+          await tester.ensureVisible(privacyLink.first);
+          await tester.tap(privacyLink.first, warnIfMissed: false);
+          await tester.pumpAndSettle();
+
+          expect(find.text('Privacy Policy'), findsWidgets);
+        },
+      );
+
+      testWidgets('33. Interacción con el texto del Checkbox de Autorización', (
+        tester,
+      ) async {
         resizeViewport(tester);
         await tester.pumpWidget(buildSubject());
         await tester.pumpAndSettle();
 
-        final addBtn = find.text('Agregar');
-        await tester.ensureVisible(addBtn);
-        await tester.tap(addBtn);
+        final checkbox = find.byType(Checkbox).first;
+        await tester.ensureVisible(checkbox);
+        await tester.tap(checkbox);
         await tester.pumpAndSettle();
 
-        final signaturePads = find.byType(CustomPaint);
-        if (signaturePads.evaluate().isNotEmpty) {
-          final pad1 = signaturePads.first;
-          await tester.ensureVisible(pad1);
-          await tester.drag(pad1, const Offset(30, 30), warnIfMissed: false);
+        final checkboxWidget = tester.widget<Checkbox>(checkbox);
+        expect(checkboxWidget.value, isTrue);
+      });
+
+      testWidgets(
+        '34. Cambio manual en input de texto NFC de Cuidador 1 y Cuidador 2 activa onChanged()',
+        (tester) async {
+          resizeViewport(tester);
+          await tester.pumpWidget(buildSubject());
           await tester.pumpAndSettle();
-        }
 
-        if (signaturePads.evaluate().length > 1) {
-          final pad2 = signaturePads.at(1);
-          await tester.ensureVisible(pad2);
-          await tester.drag(pad2, const Offset(30, 30), warnIfMissed: false);
+          // Cuidador 1 NFC onChanged
+          final uidFieldG1 = tester
+              .widgetList<TextField>(find.byType(TextField))
+              .elementAt(2);
+          await tester.enterText(find.byWidget(uidFieldG1), 'MANUAL-UID-01');
           await tester.pumpAndSettle();
-        }
 
-        final s = AppStrings.forTesting('es');
-        final docType2Selectors = find.text(s.docTypeCC);
-        if (docType2Selectors.evaluate().length > 1) {
-          await tester.ensureVisible(docType2Selectors.last);
-          await tester.tap(docType2Selectors.last);
+          expect(find.textContaining('MANUAL-UID-01'), findsWidgets);
+
+          // Habilitar Cuidador 2 y cambiar NFC manualmente
+          await tester.tap(find.text('Agregar'));
           await tester.pumpAndSettle();
-          final ceOption = find.text(s.docTypeCE).last;
-          await tester.tap(ceOption);
+
+          final uidFieldG2 = tester
+              .widgetList<TextField>(find.byType(TextField))
+              .elementAt(8);
+          await tester.enterText(find.byWidget(uidFieldG2), 'MANUAL-UID-02');
           await tester.pumpAndSettle();
-        }
 
-        final checkboxes = find.byType(Checkbox);
-        if (checkboxes.evaluate().isNotEmpty) {
-          await tester.ensureVisible(checkboxes.first);
-          await tester.tap(checkboxes.first);
+          expect(find.textContaining('MANUAL-UID-02'), findsWidgets);
+        },
+      );
+
+      testWidgets(
+        '35. Cambio de parentesco mediante Chips en Cuidador 1 dispara la función de actualización',
+        (tester) async {
+          resizeViewport(tester);
+          final draft = RegisterDraft();
+          await tester.pumpWidget(buildSubject(draft: draft));
           await tester.pumpAndSettle();
-        }
 
-        if (checkboxes.evaluate().length > 1) {
-          await tester.ensureVisible(checkboxes.last);
-          await tester.tap(checkboxes.last);
+          final s = AppStrings.forTesting('es');
+          final chipTios = find.text(s.relUncles).first;
+          await tester.ensureVisible(chipTios);
+          await tester.tap(chipTios);
           await tester.pumpAndSettle();
-        }
-      },
-    );
 
-    testWidgets(
-      '38. Muestra mensajes de error de validación de formato (doc, teléfono, correo) al intentar guardar',
-      (tester) async {
-        resizeViewport(tester);
-        final draft = RegisterDraft()
-          ..guardianName = 'Ana García'
-          ..guardianPhone = '123'
-          ..guardianDocNumber = '12'
-          ..guardianEmail = 'correo_invalido'
-          ..guardianDeviceUid = 'HWB-001'
-          ..guardianAuthAccepted = true
-          ..guardianSignatureStrokes = [
-            [const Offset(10, 10), const Offset(50, 50)],
-          ]
-          ..guardian2Name = 'Carlos Torres'
-          ..guardian2Phone = '456'
-          ..guardian2DocNumber = '34'
-          ..guardian2Email = 'email_malo'
-          ..guardian2AuthAccepted = false
-          ..guardian2SignatureStrokes = [
-            [const Offset(10, 10), const Offset(50, 50)],
-          ];
+          expect(draft.guardianRelationship, equals('03'));
+        },
+      );
+    },
+  );
 
-        await tester.pumpWidget(buildSubject(draft: draft));
-        await tester.pumpAndSettle();
+  group(
+    'Step2Guardian — gestos de firma, menús desplegables y validación de formato',
+    () {
+      testWidgets(
+        '36. Cierre del MenuAnchor si ya se encuentra abierto al presionar el selector de tipo de documento',
+        (tester) async {
+          resizeViewport(tester);
+          await tester.pumpWidget(buildSubject());
+          await tester.pumpAndSettle();
 
-        final dynamic state = tester.state(find.byType(Step2Guardian));
-        await tester.runAsync(() async {
-          await state.saveForTest();
-        });
-        await tester.pumpAndSettle();
+          final s = AppStrings.forTesting('es');
+          final selector = find.text(s.docTypeCC).first;
+          await tester.ensureVisible(selector);
 
-        expect(find.byIcon(Icons.error_outline), findsOneWidget);
-        expect(
-          find.textContaining('Documento de cuidador inválido'),
-          findsNWidgets(3),
-          reason:
-              'en el aviso y bajo el documento de cada cuidador, '
-              'con la misma causa',
-        );
-      },
-    );
-  });
+          await tester.tap(selector);
+          await tester.pumpAndSettle();
+
+          await tester.tap(selector);
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+        },
+      );
+
+      testWidgets(
+        '37. Agregar el cuidador 2 y tocar sus campos y casillas no lanza excepciones',
+        (tester) async {
+          resizeViewport(tester);
+          await tester.pumpWidget(buildSubject());
+          await tester.pumpAndSettle();
+
+          final addBtn = find.text('Agregar');
+          await tester.ensureVisible(addBtn);
+          await tester.tap(addBtn);
+          await tester.pumpAndSettle();
+
+          final signaturePads = find.byType(CustomPaint);
+          if (signaturePads.evaluate().isNotEmpty) {
+            final pad1 = signaturePads.first;
+            await tester.ensureVisible(pad1);
+            await tester.drag(pad1, const Offset(30, 30), warnIfMissed: false);
+            await tester.pumpAndSettle();
+          }
+
+          if (signaturePads.evaluate().length > 1) {
+            final pad2 = signaturePads.at(1);
+            await tester.ensureVisible(pad2);
+            await tester.drag(pad2, const Offset(30, 30), warnIfMissed: false);
+            await tester.pumpAndSettle();
+          }
+
+          final s = AppStrings.forTesting('es');
+          final docType2Selectors = find.text(s.docTypeCC);
+          if (docType2Selectors.evaluate().length > 1) {
+            await tester.ensureVisible(docType2Selectors.last);
+            await tester.tap(docType2Selectors.last);
+            await tester.pumpAndSettle();
+            final ceOption = find.text(s.docTypeCE).last;
+            await tester.tap(ceOption);
+            await tester.pumpAndSettle();
+          }
+
+          final checkboxes = find.byType(Checkbox);
+          if (checkboxes.evaluate().isNotEmpty) {
+            await tester.ensureVisible(checkboxes.first);
+            await tester.tap(checkboxes.first);
+            await tester.pumpAndSettle();
+          }
+
+          if (checkboxes.evaluate().length > 1) {
+            await tester.ensureVisible(checkboxes.last);
+            await tester.tap(checkboxes.last);
+            await tester.pumpAndSettle();
+          }
+
+          expect(tester.takeException(), isNull);
+        },
+      );
+
+      testWidgets(
+        '38. Muestra mensajes de error de validación de formato (doc, teléfono, correo) al intentar guardar',
+        (tester) async {
+          resizeViewport(tester);
+          final draft = RegisterDraft()
+            ..guardianName = 'Ana García'
+            ..guardianPhone = '123'
+            ..guardianDocNumber = '12'
+            ..guardianEmail = 'correo_invalido'
+            ..guardianDeviceUid = 'HWB-001'
+            ..guardianAuthAccepted = true
+            ..guardianSignatureStrokes = [
+              [const Offset(10, 10), const Offset(50, 50)],
+            ]
+            ..guardian2Name = 'Carlos Torres'
+            ..guardian2Phone = '456'
+            ..guardian2DocNumber = '34'
+            ..guardian2Email = 'email_malo'
+            ..guardian2AuthAccepted = false
+            ..guardian2SignatureStrokes = [
+              [const Offset(10, 10), const Offset(50, 50)],
+            ];
+
+          await tester.pumpWidget(buildSubject(draft: draft));
+          await tester.pumpAndSettle();
+
+          final dynamic state = tester.state(find.byType(Step2Guardian));
+          await tester.runAsync(() async {
+            await state.saveForTest();
+          });
+          await tester.pumpAndSettle();
+
+          expect(find.byIcon(Icons.error_outline), findsOneWidget);
+          expect(
+            find.textContaining('Documento de cuidador inválido'),
+            findsNWidgets(3),
+            reason:
+                'en el aviso y bajo el documento de cada cuidador, '
+                'con la misma causa',
+          );
+          for (final message in const <String>[
+            'Teléfono inválido: escriba el indicativo y el número',
+            'Correo electrónico inválido',
+          ]) {
+            expect(
+              find.textContaining(message),
+              findsNWidgets(3),
+              reason: '$message: en el aviso y bajo el campo de cada cuidador',
+            );
+          }
+          for (final message in const <String>[
+            'Documento de cuidador 2 inválido',
+            'Teléfono de cuidador 2 inválido',
+            'Correo de cuidador 2 inválido',
+          ]) {
+            expect(
+              find.textContaining(message),
+              findsOneWidget,
+              reason: message,
+            );
+          }
+        },
+      );
+    },
+  );
 
   group('Lectura del dispositivo del cuidador con readDevice', () {
     Finder scanButton({required bool last}) {

@@ -2458,46 +2458,44 @@ void main() {
         },
       );
 
-      test(
-        'syncOne ante un fallo transitorio de red (SocketException) programa _scheduleRetry',
-        () {
-          fakeAsync((async) {
-            final shortEngine = SyncEngine(
-              patientRepository: patientRepo,
-              authRepository: authRepo,
-              localDatabase: localDb,
-              retryBackoff: const [Duration(milliseconds: 100)],
-            );
+      test('syncOne reintenta solo tras un fallo transitorio de red', () {
+        fakeAsync((async) {
+          final shortEngine = SyncEngine(
+            patientRepository: patientRepo,
+            authRepository: authRepo,
+            localDatabase: localDb,
+            retryBackoff: const [Duration(milliseconds: 100)],
+          );
+          addTearDown(shortEngine.stop);
 
-            final entry = buildEntry('NET-1', record: MockPatientFullRecord());
-            when(
-              () => localDb.getUnsyncedRecords(
-                ownerUserId: any(named: 'ownerUserId'),
-              ),
-            ).thenAnswer((_) async => [entry]);
-            when(
-              () => localDb.getRetryablePendingCount(
-                ownerUserId: any(named: 'ownerUserId'),
-              ),
-            ).thenAnswer((_) async => 1);
-            when(
-              () => patientRepo.syncPatient(any()),
-            ).thenThrow(const SocketException('fallo temporal de red'));
+          final entry = buildEntry('NET-1', record: MockPatientFullRecord());
+          when(
+            () => localDb.getUnsyncedRecords(
+              ownerUserId: any(named: 'ownerUserId'),
+            ),
+          ).thenAnswer((_) async => [entry]);
+          when(
+            () => localDb.getRetryablePendingCount(
+              ownerUserId: any(named: 'ownerUserId'),
+            ),
+          ).thenAnswer((_) async => 1);
+          when(
+            () => patientRepo.syncPatient(any()),
+          ).thenThrow(const SocketException('fallo temporal de red'));
 
-            SyncOneResult? result;
-            shortEngine.syncOne('NET-1').then((r) => result = r);
-            async.elapse(Duration.zero);
+          SyncOneResult? result;
+          shortEngine.syncOne('NET-1').then((r) => result = r);
+          async.elapse(Duration.zero);
 
-            expect(result, SyncOneResult.failure);
-            clearInteractions(patientRepo);
+          expect(result, SyncOneResult.failure);
+          clearInteractions(patientRepo);
 
-            async.elapse(const Duration(milliseconds: 120));
-            verify(() => patientRepo.syncPatient(any())).called(1);
+          async.elapse(const Duration(milliseconds: 120));
+          verify(() => patientRepo.syncPatient(any())).called(1);
 
-            shortEngine.stop();
-          });
-        },
-      );
+          shortEngine.stop();
+        });
+      });
     },
   );
 

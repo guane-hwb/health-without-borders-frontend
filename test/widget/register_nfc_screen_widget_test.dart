@@ -998,153 +998,167 @@ void main() {
     });
   });
 
-  group('RegisterNfcScreen — Cobertura 100% de líneas faltantes', () {
-    // Used to pop straight away: the hub looks like the end, and the back
-    // left with every device blank.
-    testWidgets(
-      'System Pop en el hub (registro guardado, dispositivos sin grabar) '
-      'pregunta antes de salir; "Salir sin grabar" sale sin grabar',
-      (tester) async {
-        await pumpScreen(tester);
-        await advanceToHub(tester);
+  group(
+    'RegisterNfcScreen — retroceso del sistema, restauración de sesión y errores locales',
+    () {
+      // Used to pop straight away: the hub looks like the end, and the back
+      // left with every device blank.
+      testWidgets(
+        'System Pop en el hub (registro guardado, dispositivos sin grabar) '
+        'pregunta antes de salir; "Salir sin grabar" sale sin grabar',
+        (tester) async {
+          await pumpScreen(tester);
+          await advanceToHub(tester);
 
-        expect(tester.widget<PopScope>(find.byType(PopScope)).canPop, isFalse);
-        final popScope = tester.widget<PopScope>(find.byType(PopScope));
-        popScope.onPopInvokedWithResult?.call(false, null);
-        await tester.pumpAndSettle();
+          expect(
+            tester.widget<PopScope>(find.byType(PopScope)).canPop,
+            isFalse,
+          );
+          final popScope = tester.widget<PopScope>(find.byType(PopScope));
+          popScope.onPopInvokedWithResult?.call(false, null);
+          await tester.pumpAndSettle();
 
-        expect(find.text('Los dispositivos no se han grabado'), findsOneWidget);
-        expect(
-          find.text(
-            'El registro quedó guardado en este teléfono, pero ningún '
-            'dispositivo tiene todavía sus datos.',
-          ),
-          findsOneWidget,
-        );
-        expect(find.byType(RegisterNfcScreen), findsOneWidget);
+          expect(
+            find.text('Los dispositivos no se han grabado'),
+            findsOneWidget,
+          );
+          expect(
+            find.text(
+              'El registro quedó guardado en este teléfono, pero ningún '
+              'dispositivo tiene todavía sus datos.',
+            ),
+            findsOneWidget,
+          );
+          expect(find.byType(RegisterNfcScreen), findsOneWidget);
 
-        await tester.tap(find.text('Salir sin grabar'));
-        await tester.pumpAndSettle();
+          await tester.tap(find.text('Salir sin grabar'));
+          await tester.pumpAndSettle();
 
-        expect(find.byType(RegisterNfcScreen), findsNothing);
-        expect(find.byType(HomeScreen), findsOneWidget);
-        verifyNever(() => auth.getNfcKeyring());
-      },
-    );
+          expect(find.byType(RegisterNfcScreen), findsNothing);
+          expect(find.byType(HomeScreen), findsOneWidget);
+          verifyNever(() => auth.getNfcKeyring());
+        },
+      );
 
-    testWidgets(
-      'retroceso real del sistema en el hub: cerrar el diálogo sin elegir '
-      'deja el hub abierto',
-      (tester) async {
-        await pumpScreen(tester);
-        await advanceToHub(tester);
+      testWidgets(
+        'retroceso real del sistema en el hub: cerrar el diálogo sin elegir '
+        'deja el hub abierto',
+        (tester) async {
+          await pumpScreen(tester);
+          await advanceToHub(tester);
 
-        expect(await tester.binding.handlePopRoute(), isTrue);
-        await tester.pumpAndSettle();
-        expect(find.text('Los dispositivos no se han grabado'), findsOneWidget);
+          expect(await tester.binding.handlePopRoute(), isTrue);
+          await tester.pumpAndSettle();
+          expect(
+            find.text('Los dispositivos no se han grabado'),
+            findsOneWidget,
+          );
 
-        await tester.tapAt(const Offset(5, 5));
-        await tester.pumpAndSettle();
+          await tester.tapAt(const Offset(5, 5));
+          await tester.pumpAndSettle();
 
-        expect(find.text('Los dispositivos no se han grabado'), findsNothing);
-        expect(find.byType(RegisterNfcScreen), findsOneWidget);
-        expect(
-          tester.widget<Step6Success>(find.byType(Step6Success)).sealed,
-          isFalse,
-        );
-        verifyNever(() => auth.getNfcKeyring());
-      },
-    );
+          expect(find.text('Los dispositivos no se han grabado'), findsNothing);
+          expect(find.byType(RegisterNfcScreen), findsOneWidget);
+          expect(
+            tester.widget<Step6Success>(find.byType(Step6Success)).sealed,
+            isFalse,
+          );
+          verifyNever(() => auth.getNfcKeyring());
+        },
+      );
 
-    testWidgets(
-      'System Pop en el hub: "Grabar ahora" del diálogo ejecuta la grabación',
-      (tester) async {
-        await pumpScreen(tester);
-        await advanceToHub(tester);
+      testWidgets(
+        'System Pop en el hub: "Grabar ahora" del diálogo ejecuta la grabación',
+        (tester) async {
+          await pumpScreen(tester);
+          await advanceToHub(tester);
 
-        expect(await tester.binding.handlePopRoute(), isTrue);
-        await tester.pumpAndSettle();
+          expect(await tester.binding.handlePopRoute(), isTrue);
+          await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Grabar ahora'));
-        await tester.pumpAndSettle();
+          await tester.tap(find.text('Grabar ahora'));
+          await tester.pumpAndSettle();
 
-        // Without a key the write is tried and the final screen says so.
-        verify(() => auth.getNfcKeyring()).called(1);
-        final finalScreen = tester.widget<Step6Success>(
-          find.byType(Step6Success),
-        );
-        expect(finalScreen.sealed, isFalse);
-        expect(finalScreen.unwritten, hasLength(1));
-        expect(find.byType(RegisterNfcScreen), findsOneWidget);
-      },
-    );
+          // Without a key the write is tried and the final screen says so.
+          verify(() => auth.getNfcKeyring()).called(1);
+          final finalScreen = tester.widget<Step6Success>(
+            find.byType(Step6Success),
+          );
+          expect(finalScreen.sealed, isFalse);
+          expect(finalScreen.unwritten, hasLength(1));
+          expect(find.byType(RegisterNfcScreen), findsOneWidget);
+        },
+      );
 
-    testWidgets(
-      'System Pop cuando _step > 0 retrocede el paso sin mostrar el diálogo de descartar',
-      (tester) async {
-        await pumpScreen(tester);
-        await goToStep1(tester);
+      testWidgets(
+        'System Pop cuando _step > 0 retrocede el paso sin mostrar el diálogo de descartar',
+        (tester) async {
+          await pumpScreen(tester);
+          await goToStep1(tester);
 
-        expect(find.byType(Step2Guardian), findsOneWidget);
+          expect(find.byType(Step2Guardian), findsOneWidget);
 
-        final popScope = tester.widget<PopScope>(find.byType(PopScope));
-        popScope.onPopInvokedWithResult?.call(false, null);
-        await tester.pumpAndSettle();
+          final popScope = tester.widget<PopScope>(find.byType(PopScope));
+          popScope.onPopInvokedWithResult?.call(false, null);
+          await tester.pumpAndSettle();
 
-        expect(find.byType(Step3PatientData), findsOneWidget);
-        expect(find.byType(AlertDialog), findsNothing);
-      },
-    );
+          expect(find.byType(Step3PatientData), findsOneWidget);
+          expect(find.byType(AlertDialog), findsNothing);
+        },
+      );
 
-    testWidgets(
-      'Restaura sesión mediante authRepository.restoreSession() si currentUser es nulo al confirmar',
-      (tester) async {
-        final activeUser = user();
+      testWidgets(
+        'Restaura sesión mediante authRepository.restoreSession() si currentUser es nulo al confirmar',
+        (tester) async {
+          final activeUser = user();
 
-        when(() => auth.currentUser).thenReturn(activeUser);
+          when(() => auth.currentUser).thenReturn(activeUser);
 
-        await pumpScreen(tester);
-        await advanceToReview(tester);
+          await pumpScreen(tester);
+          await advanceToReview(tester);
 
-        when(() => auth.currentUser).thenReturn(null);
-        when(() => auth.restoreSession()).thenAnswer((_) async => activeUser);
+          when(() => auth.currentUser).thenReturn(null);
+          when(() => auth.restoreSession()).thenAnswer((_) async => activeUser);
 
-        await tester.widget<Step5Review>(find.byType(Step5Review)).onConfirm();
-        await tester.pumpAndSettle();
+          await tester
+              .widget<Step5Review>(find.byType(Step5Review))
+              .onConfirm();
+          await tester.pumpAndSettle();
 
-        verify(() => auth.restoreSession()).called(1);
-        expect(find.byType(Step6Success), findsOneWidget);
-      },
-    );
+          verify(() => auth.restoreSession()).called(1);
+          expect(find.byType(Step6Success), findsOneWidget);
+        },
+      );
 
-    testWidgets(
-      'Muestra error SnackBar si falla la actualización en BD local dentro de _persistLocally',
-      (tester) async {
-        await pumpScreen(tester);
-        await advanceToHub(tester);
+      testWidgets(
+        'Muestra error SnackBar si falla la actualización en BD local dentro de _persistLocally',
+        (tester) async {
+          await pumpScreen(tester);
+          await advanceToHub(tester);
 
-        when(
-          () => db.getAllRecords(ownerUserId: any(named: 'ownerUserId')),
-        ).thenThrow(Exception('Local DB Fetch Error'));
+          when(
+            () => db.getAllRecords(ownerUserId: any(named: 'ownerUserId')),
+          ).thenThrow(Exception('Local DB Fetch Error'));
 
-        tester
-            .widget<Step6Success>(find.byType(Step6Success))
-            .onAddConsultation();
-        await pumpFrames(tester);
+          tester
+              .widget<Step6Success>(find.byType(Step6Success))
+              .onAddConsultation();
+          await pumpFrames(tester);
 
-        Navigator.of(tester.element(find.byType(AddConsultationScreen))).pop(
-          MedicalHistoryItem(startDateTime: DateTime.now().toIso8601String()),
-        );
-        await tester.pumpAndSettle();
+          Navigator.of(tester.element(find.byType(AddConsultationScreen))).pop(
+            MedicalHistoryItem(startDateTime: DateTime.now().toIso8601String()),
+          );
+          await tester.pumpAndSettle();
 
-        expect(find.byType(SnackBar), findsOneWidget);
-        expect(
-          find.text('No se pudo actualizar el registro en este dispositivo.'),
-          findsOneWidget,
-        );
-      },
-    );
-  });
+          expect(find.byType(SnackBar), findsOneWidget);
+          expect(
+            find.text('No se pudo actualizar el registro en este dispositivo.'),
+            findsOneWidget,
+          );
+        },
+      );
+    },
+  );
 
   group('RegisterNfcScreen — Cobertura adicional (_stepBack, _persistLocally, '
       'lector real de chip)', () {
