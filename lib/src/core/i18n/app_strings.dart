@@ -303,7 +303,24 @@ class AppStrings {
   String get pleaseWait => _get('pleaseWait');
   String get successRegistration => _get('successRegistration');
   String get patientSavedSynced => _get('patientSavedSynced');
+  String get patientSavedOnPhone => _get('patientSavedOnPhone');
   String get syncFailed => _get('syncFailed');
+  String get writeDevicesAndFinish => _get('writeDevicesAndFinish');
+  String get writeDevicesHint => _get('writeDevicesHint');
+  String get devicesNotWrittenTitle => _get('devicesNotWrittenTitle');
+  String get devicesNotWrittenBody => _get('devicesNotWrittenBody');
+  String get writeNow => _get('writeNow');
+  String get leaveWithoutWriting => _get('leaveWithoutWriting');
+  String get writeLaterFromProfile => _get('writeLaterFromProfile');
+  String get patientDeviceNotWritten => _get('patientDeviceNotWritten');
+  String get guardianDeviceNotWritten => _get('guardianDeviceNotWritten');
+  String guardianDeviceNNotWritten(int n) =>
+      _get('guardianDeviceNNotWritten').replaceAll('{n}', '$n');
+  String get writeFailedSessionExpired => _get('writeFailedSessionExpired');
+  String get writeFailedNoKey => _get('writeFailedNoKey');
+  String get writeFailedInvalidKey => _get('writeFailedInvalidKey');
+  String get writeFailedNotCompleted => _get('writeFailedNotCompleted');
+  String get writeFailedNeedsNtag216 => _get('writeFailedNeedsNtag216');
 
   // ── Vaccine sheet ──────────────────────────────────────────────────────
   String get vaccine => _get('vaccine');
@@ -912,7 +929,32 @@ class AppStrings {
     'pleaseWait': 'Espere un momento mientras se carga la información.',
     'successRegistration': 'Registro exitoso',
     'patientSavedSynced': 'Paciente guardado localmente y sincronizado',
+    'patientSavedOnPhone': 'Paciente guardado en este teléfono',
     'syncFailed': 'Sincronización fallida',
+    'writeDevicesAndFinish': 'Grabar dispositivos y terminar',
+    'writeDevicesHint':
+        'Toque «Grabar dispositivos y terminar» y acerque los dispositivos al '
+        'teléfono.',
+    'devicesNotWrittenTitle': 'Los dispositivos no se han grabado',
+    'devicesNotWrittenBody':
+        'El registro quedó guardado en este teléfono, pero ningún dispositivo '
+        'tiene todavía sus datos.',
+    'writeNow': 'Grabar ahora',
+    'leaveWithoutWriting': 'Salir sin grabar',
+    'writeLaterFromProfile': 'Grabar luego desde el perfil',
+    'patientDeviceNotWritten': 'Dispositivo del paciente: no grabado',
+    'guardianDeviceNotWritten': 'Dispositivo del cuidador: no grabado',
+    'guardianDeviceNNotWritten': 'Dispositivo del cuidador {n}: no grabado',
+    'writeFailedSessionExpired':
+        'Su sesión expiró. Inicie sesión de nuevo para grabarlo.',
+    'writeFailedNoKey': 'No hay clave NFC disponible en este teléfono.',
+    'writeFailedInvalidKey':
+        'La clave NFC no es válida. Contacte al administrador.',
+    'writeFailedNotCompleted':
+        'La grabación no se completó (falló o se omitió).',
+    'writeFailedNeedsNtag216':
+        'Se omitió: los datos no caben en un NTAG215; se requiere un '
+        'dispositivo NTAG216.',
 
     // Vaccine
     'vaccine': 'Vacuna',
@@ -1512,7 +1554,31 @@ class AppStrings {
     'pleaseWait': 'Please wait a moment while the information loads.',
     'successRegistration': 'Successful Registration',
     'patientSavedSynced': 'Patient saved locally and synced to cloud',
+    'patientSavedOnPhone': 'Patient saved on this phone',
     'syncFailed': 'Sync Failed',
+    'writeDevicesAndFinish': 'Write devices and finish',
+    'writeDevicesHint':
+        'Tap "Write devices and finish" and bring the devices to the phone.',
+    'devicesNotWrittenTitle': 'The devices have not been written',
+    'devicesNotWrittenBody':
+        'The record was saved on this phone, but no device has its data '
+        'yet.',
+    'writeNow': 'Write now',
+    'leaveWithoutWriting': 'Leave without writing',
+    'writeLaterFromProfile': 'Write later from the profile',
+    'patientDeviceNotWritten': 'Patient device: not written',
+    'guardianDeviceNotWritten': 'Guardian device: not written',
+    'guardianDeviceNNotWritten': 'Guardian device {n}: not written',
+    'writeFailedSessionExpired':
+        'Your session expired. Log in again to write it.',
+    'writeFailedNoKey': 'No NFC key is available on this phone.',
+    'writeFailedInvalidKey':
+        'The NFC key is invalid. Contact your administrator.',
+    'writeFailedNotCompleted':
+        'The write was not completed (it failed or was skipped).',
+    'writeFailedNeedsNtag216':
+        'Skipped: the data does not fit on an NTAG215; an NTAG216 device is '
+        'required.',
 
     // Vaccine
     'vaccine': 'Vaccine',

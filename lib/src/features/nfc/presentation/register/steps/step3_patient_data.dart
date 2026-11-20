@@ -1,5 +1,6 @@
 // lib/src/features/nfc/presentation/register/steps/step3_patient_data.dart
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../core/validation/identity_validators.dart';
@@ -89,17 +90,31 @@ Widget _buildLabel(String labelText, bool isRequired) {
   );
 }
 
+/// Lets the register screen ask the patient-data step, before leaving the
+/// registration, whether it shows input not yet saved to the draft: what is
+/// typed there reaches the draft only on "Continuar".
+class UnsavedInputProbe {
+  bool Function()? _check;
+
+  /// True while the step on screen shows input not yet saved to the draft.
+  bool get hasUnsavedInput => _check?.call() ?? false;
+}
+
 class Step3PatientData extends StatefulWidget {
   const Step3PatientData({
     super.key,
     required this.draft,
     required this.onBack,
     required this.onContinue,
+    this.unsavedInput,
   });
 
   final RegisterDraft draft;
   final VoidCallback onBack;
   final VoidCallback onContinue;
+
+  /// Answers, while this step is on screen, whether it has unsaved input.
+  final UnsavedInputProbe? unsavedInput;
 
   @override
   State<Step3PatientData> createState() => _Step3State();
@@ -146,14 +161,22 @@ class _Step3State extends State<Step3PatientData> {
 
   bool get _hasEthnicity => patientHasEthnicity(widget.draft.ethnicity);
 
+  /// The step's input when it opened, to tell whether any was entered since.
+  late final List<Object?> _openedWith;
+
   @override
   void initState() {
     super.initState();
     _docNum.addListener(_validateDocInRealTime);
+    _openedWith = _input();
+    widget.unsavedInput?._check = _hasUnsavedInput;
   }
 
   @override
   void dispose() {
+    if (widget.unsavedInput?._check == _hasUnsavedInput) {
+      widget.unsavedInput!._check = null;
+    }
     _docNum.removeListener(_validateDocInRealTime);
     _docNum.dispose();
     _firstName.dispose();
@@ -169,6 +192,40 @@ class _Step3State extends State<Step3PatientData> {
     _patientUid.dispose();
     super.dispose();
   }
+
+  /// The text typed in the fields, and what the selectors put in the draft.
+  List<Object?> _input() {
+    final d = widget.draft;
+    return <Object?>[
+      for (final TextEditingController field in <TextEditingController>[
+        _docNum,
+        _firstName,
+        _secondName,
+        _firstLast,
+        _secondLast,
+        _street,
+        _city,
+        _stateCtrl,
+        _ethnicComm,
+        _weight,
+        _height,
+        _patientUid,
+      ])
+        field.text.trim(),
+      d.documentType,
+      d.dob,
+      d.biologicalSex,
+      d.genderIdentity,
+      d.nationalityCode,
+      d.ethnicity,
+      d.disabilityCategory,
+      d.bloodType,
+      d.isBloodTypeCertified,
+      d.zone,
+    ];
+  }
+
+  bool _hasUnsavedInput() => !listEquals(_input(), _openedWith);
 
   void _validateDocInRealTime() {
     final text = _docNum.text.trim();
