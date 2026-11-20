@@ -528,6 +528,7 @@ class GuardianInfo {
   GuardianInfo copyWith({
     String? name,
     String? relationship,
+    String? relationshipOther,
     String? phone,
     String? deviceUid,
     String? docType,
@@ -539,6 +540,7 @@ class GuardianInfo {
     return GuardianInfo(
       name: name ?? this.name,
       relationship: relationship ?? this.relationship,
+      relationshipOther: relationshipOther ?? this.relationshipOther,
       phone: phone ?? this.phone,
       deviceUid: deviceUid ?? this.deviceUid,
       docType: docType ?? this.docType,
@@ -556,6 +558,7 @@ class GuardianInfo {
           runtimeType == other.runtimeType &&
           name == other.name &&
           relationship == other.relationship &&
+          relationshipOther == other.relationshipOther &&
           phone == other.phone &&
           deviceUid == other.deviceUid &&
           docType == other.docType &&
@@ -568,6 +571,7 @@ class GuardianInfo {
   int get hashCode => Object.hash(
     name,
     relationship,
+    relationshipOther,
     phone,
     deviceUid,
     docType,
