@@ -1358,8 +1358,11 @@ void main() {
     });
 
     // A minor whose guardian copy lands between the real NTAG215 payload
-    // budget (492 B minus the MIME record) and the whole 492 B: the old check
+    // budget (492 B minus the NDEF record) and the whole 492 B: the old check
     // compared with 492 B, let this through and the write then failed.
+    // With format 2 the long personal history is what puts the copy there
+    // (483 B); if the payload format or its dictionary changes, adjust
+    // its length until the check in reachGuardianWriteOfOversizedMinor passes.
     // The second guardian has no device, so only one guardian copy is written.
     void fillMinorThatOverflowsNtag215(RegisterDraft draft) {
       draft
@@ -1389,7 +1392,13 @@ void main() {
         ..guardian2DocType = 'CC'
         ..guardian2DocNumber = '1090654321'
         ..guardian2AuthAccepted = true
-        ..guardian2Email = 'carlos.rodriguez@example.com';
+        ..guardian2Email = 'carlos.rodriguez@example.com'
+        ..personalHistory =
+            'Nació en Barquisimeto; vivió en Mérida, Táchira y Valencia '
+            'antes de cruzar por Paraguachón en 2024. Varicela a los tres '
+            'años, sin complicaciones. Hospitalizada en Maracaibo por '
+            'neumonía en 2022, siete días, con antibiótico intravenoso. '
+            'Esquema de vacunación incompleto, dos dosis.';
     }
 
     /// Registers [fillMinorThatOverflowsNtag215] up to the hub, checks its

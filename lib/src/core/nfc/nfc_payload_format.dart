@@ -10,7 +10,8 @@ import 'package:nfc_manager/ndef_record.dart';
 
 /// Payload formats this build knows.
 enum NfcPayloadFormat {
-  /// CBOR → DEFLATE → AES-256-GCM in a MIME record. Every chip in the field.
+  /// CBOR → DEFLATE → AES-256-GCM in a MIME record. Every chip written before
+  /// phase 2 of ADR 005; chips change format as they are rewritten.
   v1,
 
   /// Typed CBOR → DEFLATE with a preset dictionary → AES-256-GCM in an NFC
@@ -18,15 +19,15 @@ enum NfcPayloadFormat {
   v2,
 }
 
-const bool _writesV2 = String.fromEnvironment('HWB_NFC_PAYLOAD_FORMAT') == '2';
+const bool _writesV1 = String.fromEnvironment('HWB_NFC_PAYLOAD_FORMAT') == '1';
 
-/// The format this build writes. Format 1 unless the build was made with
-/// `--dart-define=HWB_NFC_PAYLOAD_FORMAT=2`, which is for field tests only:
-/// builds older than the one that reads format 2 see such a chip as blank.
-/// Switching the default is phase 2 of ADR 005 and needs the fleet check first.
-const NfcPayloadFormat kNfcWriteFormat = _writesV2
-    ? NfcPayloadFormat.v2
-    : NfcPayloadFormat.v1;
+/// The format this build writes: format 2 (phase 2 of ADR 005), unless the
+/// build was made with `--dart-define=HWB_NFC_PAYLOAD_FORMAT=1`. That is the
+/// way back if format 2 has to stop: every build since phase 1 reads both
+/// formats, so the chips already written in format 2 stay readable.
+const NfcPayloadFormat kNfcWriteFormat = _writesV1
+    ? NfcPayloadFormat.v1
+    : NfcPayloadFormat.v2;
 
 /// External type (NFC Forum RTD, `domain:type`) of a format 2 triage record.
 const String kHwbTriageV2Type = 'guane.com.co:hwbt';
