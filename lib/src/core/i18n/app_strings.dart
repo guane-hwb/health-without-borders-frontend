@@ -50,6 +50,12 @@ class AppStrings {
   @visibleForTesting
   static AppStrings forTesting(String locale) => AppStrings._(locale);
 
+  /// The keys one locale translates. `_get` shows a missing key as is, so a
+  /// test checks that both tables carry the same keys.
+  @visibleForTesting
+  static Set<String> keysForTesting(String locale) =>
+      (locale == 'en' ? _en : _es).keys.toSet();
+
   String _get(String key) => (_locale == 'en' ? _en : _es)[key] ?? key;
 
   // ── Auth ────────────────────────────────────────────────────────────────
@@ -67,6 +73,9 @@ class AppStrings {
   String get passwordTooShort => _get('passwordTooShort');
   String get login => _get('login');
   String get loginFailed => _get('loginFailed');
+  String get loginWrongCredentials => _get('loginWrongCredentials');
+  String get loginCaptivePortal => _get('loginCaptivePortal');
+  String get loginServerUnavailable => _get('loginServerUnavailable');
   String get enterEmailPassword => _get('enterEmailPassword');
   String get forgotPassword => _get('forgotPassword');
   String get forgotPasswordMessage => _get('forgotPasswordMessage');
@@ -705,7 +714,12 @@ class AppStrings {
     'passwordRequired': 'Ingresa tu contraseña',
     'passwordTooShort': 'La contraseña debe tener al menos 6 caracteres',
     'login': 'Iniciar sesión',
-    'loginFailed': 'Error al iniciar sesión',
+    'loginFailed': 'No se pudo iniciar sesión. Intente de nuevo.',
+    'loginWrongCredentials': 'Correo o contraseña incorrectos.',
+    'loginCaptivePortal':
+        'La red Wi-Fi pide aceptar sus condiciones en el navegador. Ábralo, acéptelas y vuelva a intentar.',
+    'loginServerUnavailable':
+        'El servidor no responde. Intente de nuevo en unos minutos.',
     'enterEmailPassword': 'Ingresa correo y contraseña.',
     'forgotPassword': '¿Olvidó su contraseña?',
     'forgotPasswordMessage':
@@ -1333,9 +1347,17 @@ class AppStrings {
     'passwordRequired': 'Enter your password',
     'passwordTooShort': 'Password must be at least 6 characters long',
     'login': 'Login',
-    'loginFailed': 'Login failed',
+    'loginFailed': 'Could not sign in. Try again.',
+    'loginWrongCredentials': 'Incorrect email or password.',
+    'loginCaptivePortal':
+        'The Wi-Fi network asks you to accept its terms in the browser. Open it, accept them and try again.',
+    'loginServerUnavailable':
+        'The server is not responding. Try again in a few minutes.',
     'enterEmailPassword': 'Please enter email and password.',
     'forgotPassword': 'Forgot your password?',
+    'forgotPasswordMessage':
+        'Contact the system administrator to reset your password.',
+    'ok': 'Got it',
     'noAccount': "Don't have an account?",
     'contactAdmin': 'Contact your administrator',
     'sessionExpired': 'Session expired. Please log in again.',

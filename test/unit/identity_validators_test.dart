@@ -101,6 +101,31 @@ void main() {
       expect(validateEmail('a@b'), ValidationErrorKey.emailFormat);
     });
 
+    for (final String email in <String>[
+      'enfermera@salud.gov.co',
+      'juan.perez@cruzroja.org.co',
+      'user@guane.com.co',
+      'ana+brigada@unicef.org',
+      'medico@unicef.org',
+    ]) {
+      test('acepta $email (dominio de dos niveles o con «+»)', () {
+        expect(validateEmail(email), isNull);
+      });
+    }
+
+    for (final String email in <String>[
+      'sin-arroba',
+      '@unicef.org',
+      'ana@',
+      'ana@@unicef.org',
+      'ana @unicef.org',
+      'ana@unicef.o',
+    ]) {
+      test('rechaza «$email»', () {
+        expect(validateEmail(email), ValidationErrorKey.emailFormat);
+      });
+    }
+
     test('un valor vacío no es un error de formato', () {
       expect(validateEmail(''), isNull);
     });

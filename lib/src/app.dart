@@ -99,6 +99,12 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
     super.dispose();
   }
 
+  /// This observer is registered in [initState], before the Navigator's, so
+  /// returning true while locked keeps the system back from popping the
+  /// screen under the lock.
+  @override
+  Future<bool> didPopRoute() async => _lockController.blocksSystemBack;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -150,26 +156,11 @@ class _HealthWithoutBordersAppState extends State<HealthWithoutBordersApp>
           onGenerateRoute: AppRoutes.onGenerateRoute,
           builder: (BuildContext context, Widget? child) => SessionWindowBanner(
             windowClosed: _authRepository.sessionWindowClosed,
-            child: Listener(
-              behavior: HitTestBehavior.translucent,
-              onPointerDown: (_) => _lockController.recordUserActivity(),
-              child: Stack(
-                children: [
-                  child ?? const SizedBox.shrink(),
-                  ValueListenableBuilder<bool>(
-                    valueListenable: _lockController.lockedListenable,
-                    builder: (context, locked, _) {
-                      if (!locked || _authRepository.currentUser == null) {
-                        return const SizedBox.shrink();
-                      }
-                      return LockScreen(
-                        authRepository: _authRepository,
-                        onUnlocked: _lockController.unlock,
-                      );
-                    },
-                  ),
-                ],
-              ),
+            child: LockLayer(
+              controller: _lockController,
+              authRepository: _authRepository,
+              navigatorKey: _navigatorKey,
+              child: child ?? const SizedBox.shrink(),
             ),
           ),
           home: AuthGate(authRepository: _authRepository),
