@@ -1019,7 +1019,7 @@ void main() {
     });
 
     test(
-      'una manilla escrita informa sus tamaños y nada de historial',
+      'escribir el dispositivo del paciente informa sus tamaños y nada de historial',
       () async {
         final result = await observed(
           _blankChip(),
@@ -1040,35 +1040,38 @@ void main() {
       },
     );
 
-    test('una copia del acudiente informa cuánto historial cupo', () async {
-      await observed(_blankChip(maxSize: 888)).writeGuardianRecord(
-        buildFit: (int budget) => const GuardianPayloadFit(
-          payload: {'a': 1},
-          includedConsultations: 1,
-          includedVaccines: 3,
-          totalConsultations: 4,
-          totalVaccines: 5,
-          estimatedBytes: 178,
-          fits: true,
-        ),
-      );
-      await pumpEventQueue();
+    test(
+      'escribir el dispositivo del cuidador informa cuánto historial cupo',
+      () async {
+        await observed(_blankChip(maxSize: 888)).writeGuardianRecord(
+          buildFit: (int budget) => const GuardianPayloadFit(
+            payload: {'a': 1},
+            includedConsultations: 1,
+            includedVaccines: 3,
+            totalConsultations: 4,
+            totalVaccines: 5,
+            estimatedBytes: 178,
+            fits: true,
+          ),
+        );
+        await pumpEventQueue();
 
-      expect(reported, hasLength(1));
-      final m = reported.single;
-      expect(m.deviceRole, 'guardian');
-      expect(m.chipCapacity, 888);
-      expect(m.consultationsKept, 1);
-      // El registro tiene 4 y 5, pero la copia nunca lleva más de 3: el total
-      // es lo que cabría en un chip sin límite, y sólo la capacidad dejó fuera
-      // dos consultas.
-      expect(m.consultationsTotal, 3);
-      expect(m.vaccinesKept, 3);
-      expect(m.vaccinesTotal, 3);
-    });
+        expect(reported, hasLength(1));
+        final m = reported.single;
+        expect(m.deviceRole, 'guardian');
+        expect(m.chipCapacity, 888);
+        expect(m.consultationsKept, 1);
+        // El registro tiene 4 y 5, pero la copia nunca lleva más de 3: el total
+        // es lo que cabría en un chip sin límite, y sólo la capacidad dejó fuera
+        // dos consultas.
+        expect(m.consultationsTotal, 3);
+        expect(m.vaccinesKept, 3);
+        expect(m.vaccinesTotal, 3);
+      },
+    );
 
     test(
-      'la copia escrita con writeGuardianPayload cuenta como acudiente',
+      'la copia escrita con writeGuardianPayload cuenta como dispositivo del cuidador',
       () async {
         await observed(_blankChip()).writeGuardianPayload({'a': 1});
         await pumpEventQueue();
@@ -1208,32 +1211,35 @@ void main() {
       expect(reported.single.messageBytes, ndef.written!.byteLength);
     });
 
-    test('la manilla se escribe en un registro externo y se lee', () async {
-      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
-      final payload = NfcTriagePayload.buildPatientPayload(record: record());
+    test(
+      'el dispositivo del paciente se escribe en un registro externo y se lee',
+      () async {
+        final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+        final payload = NfcTriagePayload.buildPatientPayload(record: record());
 
-      await writer(
-        HwbTag(uid: kExpectedUid, ndef: ndef),
-      ).writeTriagePayload(payload, expectedUid: kExpectedUid);
+        await writer(
+          HwbTag(uid: kExpectedUid, ndef: ndef),
+        ).writeTriagePayload(payload, expectedUid: kExpectedUid);
 
-      final written = ndef.written!.records.single;
-      expect(written.typeNameFormat, TypeNameFormat.external);
-      expect(String.fromCharCodes(written.type), kHwbTriageV2Type);
+        final written = ndef.written!.records.single;
+        expect(written.typeNameFormat, TypeNameFormat.external);
+        expect(String.fromCharCodes(written.type), kHwbTriageV2Type);
 
-      // Lo lee un servicio que escribe formato 1: toda build lee los dos.
-      final read = await writer(
-        readBack(ndef),
-        format: NfcPayloadFormat.v1,
-      ).readHwbChip();
-      expect(read.kind, HwbChipKind.triage);
-      expect(read.triage!.firstName, 'Valentina');
-      expect(read.triage!.dob, '2019-03-14');
-      expect(read.triage!.guardianDeviceUid, '04:11:22:33');
-      expect(read.keyVersion, kLegacyNfcKeyVersion);
-    });
+        // Lo lee un servicio que escribe formato 1: toda build lee los dos.
+        final read = await writer(
+          readBack(ndef),
+          format: NfcPayloadFormat.v1,
+        ).readHwbChip();
+        expect(read.kind, HwbChipKind.triage);
+        expect(read.triage!.firstName, 'Valentina');
+        expect(read.triage!.dob, '2019-03-14');
+        expect(read.triage!.guardianDeviceUid, '04:11:22:33');
+        expect(read.keyVersion, kLegacyNfcKeyVersion);
+      },
+    );
 
     test(
-      'la copia del acudiente se ajusta al presupuesto del formato 2',
+      'la copia del dispositivo del cuidador se ajusta al presupuesto del formato 2',
       () async {
         final budgets = <int>[];
         final ndef = _FakeNdef(maxSize: 872);
@@ -1346,7 +1352,7 @@ void main() {
     });
 
     test(
-      'una manilla de formato 2 cuenta como dispositivo de paciente',
+      'la carga del paciente en formato 2 marca el chip como dispositivo del paciente',
       () async {
         final ndef = _FakeNdef(maxSize: 872);
         await writer(HwbTag(uid: kExpectedUid, ndef: ndef)).writeTriagePayload(
