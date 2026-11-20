@@ -1695,6 +1695,59 @@ void main() {
       expect(g1.hashCode, equals(g2.hashCode));
       expect(g1, isNot(equals(g3)));
     });
+
+    GuardianInfo fullGuardian({String relationshipOther = 'Vecino'}) =>
+        GuardianInfo(
+          name: 'Pedro',
+          relationship: '05',
+          relationshipOther: relationshipOther,
+          phone: '+57 310 482 9914',
+          deviceUid: 'G-UID',
+          docType: 'CC',
+          docNumber: '1098765432',
+          documentType: 'CC',
+          documentNumber: '1098765432',
+          consent: GuardianConsent(
+            accepted: true,
+            acceptedAt: '2026-11-20T10:00:00Z',
+            email: 'pedro@example.com',
+          ),
+        );
+
+    test('copyWith conserva todos los campos que no se cambian', () {
+      final original = fullGuardian();
+
+      expect(original.copyWith().toJson(), original.toJson());
+      expect(original.copyWith(), equals(original));
+    });
+
+    test(
+      'copyWith del dispositivo conserva el texto de «Otro» (cambio de dispositivo)',
+      () {
+        final copy = fullGuardian().copyWith(deviceUid: 'G-UID-NUEVO');
+
+        expect(copy.deviceUid, 'G-UID-NUEVO');
+        expect(copy.relationship, '05');
+        expect(copy.relationshipOther, 'Vecino');
+        expect(copy.toJson()['relationshipOther'], 'Vecino');
+      },
+    );
+
+    test('copyWith cambia el texto de «Otro»', () {
+      final copy = fullGuardian().copyWith(relationshipOther: 'Madrina');
+
+      expect(copy.relationshipOther, 'Madrina');
+    });
+
+    test('operator == y hashCode distinguen el texto de «Otro»', () {
+      final vecino = fullGuardian();
+      final madrina = fullGuardian(relationshipOther: 'Madrina');
+
+      expect(vecino, isNot(equals(madrina)));
+      expect(vecino.hashCode, isNot(equals(madrina.hashCode)));
+      expect(vecino, equals(fullGuardian()));
+      expect(vecino.hashCode, equals(fullGuardian().hashCode));
+    });
   });
 
   group('FamilyHistoryItem — copyWith, operator ==, hashCode', () {
