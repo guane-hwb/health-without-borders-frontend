@@ -42,7 +42,7 @@ void main() {
     );
   }
 
-  group('diagnosisSourceLabel — Cobertura 100%', () {
+  group('diagnosisSourceLabel — etiquetas según el origen del diagnóstico', () {
     testWidgets('retorna null cuando la fuente es CodeSource.clinician', (
       tester,
     ) async {
@@ -89,7 +89,7 @@ void main() {
     );
   });
 
-  group('backgroundCodeLine — Cobertura 100%', () {
+  group('backgroundCodeLine — formateo de códigos CIE-10, CIE-11 y origen', () {
     testWidgets('construye la línea únicamente con el código CIE-10 básico', (
       tester,
     ) async {

@@ -662,7 +662,7 @@ void main() {
     );
   });
 
-  group('K. Additional Unit Tests for 100% ReadNfcScreen Coverage', () {
+  group('K. offlineGuardianRequired en la réplica local del estado', () {
     test(
       'K-01 offlineGuardianRequired se activa al detectar menor en triage',
       () {

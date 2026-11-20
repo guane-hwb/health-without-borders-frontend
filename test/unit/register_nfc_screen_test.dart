@@ -405,7 +405,7 @@ void main() {
     });
   });
 
-  group('Lógica auxiliar de RegisterNfcScreen — Cobertura 100%', () {
+  group('Réplica local de la lógica auxiliar de RegisterNfcScreen', () {
     test(
       '_handleSystemPop debe indicar si hace pop o retrocede según el paso',
       () {

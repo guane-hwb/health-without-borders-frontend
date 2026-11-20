@@ -669,10 +669,6 @@ void main() {
     },
   );
 
-  // =========================================================================
-  // ADDITIONAL TESTS FOR 100% CODE COVERAGE IN EDIT_CHRONIC_PERSONAL_SHEET.DART
-  // =========================================================================
-
   group(
     'EditChronicPersonalSheet – Unsaved Changes Dialog & PopScope Handlers',
     () {
@@ -700,27 +696,27 @@ void main() {
       testWidgets(
         'cancels closing when clicking Keep editing in unsaved dialog',
         (tester) async {
-          await tester.pumpWidget(
-            _wrap(title: 'T', currentValue: 'Valor inicial', onConfirm: (_) {}),
-          );
-          await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          _wrap(title: 'T', currentValue: 'Valor inicial', onConfirm: (_) {}),
+        );
+        await tester.pumpAndSettle();
 
-          await tester.enterText(
-            find.byType(TextField).first,
-            'Valor modificado',
-          );
-          await tester.pump();
+        await tester.enterText(
+          find.byType(TextField).first,
+          'Valor modificado',
+        );
+        await tester.pump();
 
-          await tester.tap(find.byIcon(Icons.close_rounded));
-          await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
 
-          expect(find.byType(AlertDialog), findsOneWidget);
+        expect(find.byType(AlertDialog), findsOneWidget);
 
           await tester.tap(find.text('Seguir editando'));
-          await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-          expect(find.byType(EditChronicPersonalSheet), findsOneWidget);
-          expect(find.byType(AlertDialog), findsNothing);
+        expect(find.byType(EditChronicPersonalSheet), findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
         },
       );
 
