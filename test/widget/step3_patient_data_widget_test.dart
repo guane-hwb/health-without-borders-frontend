@@ -71,6 +71,61 @@ void main() {
     });
   });
 
+  // What is typed here reaches the draft only on "Continuar": the register
+  // screen asks the step before leaving.
+  group('Step3PatientData - entrada sin guardar', () {
+    testWidgets('informa la entrada sin guardar y deja de hacerlo al '
+        'desmontarse', (tester) async {
+      final draft = RegisterDraft();
+      final probe = UnsavedInputProbe();
+      await tester.pumpWidget(
+        _wrap(
+          Step3PatientData(
+            draft: draft,
+            onBack: () {},
+            onContinue: () {},
+            unsavedInput: probe,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(probe.hasUnsavedInput, isFalse);
+
+      await tester.enterText(find.byType(TextField).at(2), 'Carmen');
+      expect(draft.firstName, isEmpty);
+      expect(probe.hasUnsavedInput, isTrue);
+
+      await tester.enterText(find.byType(TextField).at(2), '');
+      expect(probe.hasUnsavedInput, isFalse);
+
+      await tester.enterText(find.byType(TextField).at(2), 'Carmen');
+      await tester.pumpWidget(_wrap(const SizedBox.shrink()));
+      expect(probe.hasUnsavedInput, isFalse);
+    });
+
+    testWidgets('lo ya guardado en el draft no cuenta como entrada sin '
+        'guardar', (tester) async {
+      final draft = RegisterDraft()
+        ..firstName = 'Carmen'
+        ..documentNumber = '1098765432'
+        ..dob = DateTime(1995, 5, 20);
+      final probe = UnsavedInputProbe();
+      await tester.pumpWidget(
+        _wrap(
+          Step3PatientData(
+            draft: draft,
+            onBack: () {},
+            onContinue: () {},
+            unsavedInput: probe,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(probe.hasUnsavedInput, isFalse);
+    });
+  });
+
   group('Step3PatientData - back navigation', () {
     testWidgets('tapping back invokes onBack without requiring valid data', (
       tester,
@@ -128,7 +183,8 @@ void main() {
           )
           .data!;
 
-      expect(errorText, startsWith('Campos requeridos'));
+      expect(errorText, startsWith('${es.formMissingPrefix}: '));
+      expect(errorText, isNot(contains('Campos requeridos')));
       expect(errorText, contains(es.patientNfcDevice));
       expect(errorText, contains(es.documentNumberLabel));
       expect(errorText, contains(es.firstNameLabel));
@@ -307,7 +363,8 @@ void main() {
           expect(find.byIcon(Icons.error_outline), findsOneWidget);
           expect(
             find.textContaining('El peso debe estar entre 0.2 kg y 350 kg'),
-            findsOneWidget,
+            findsNWidgets(2),
+            reason: 'en el aviso y bajo el campo',
           );
         }
       },
@@ -375,7 +432,8 @@ void main() {
           expect(find.byIcon(Icons.error_outline), findsOneWidget);
           expect(
             find.textContaining('La altura debe estar entre 20 cm y 250 cm'),
-            findsOneWidget,
+            findsNWidgets(2),
+            reason: 'en el aviso y bajo el campo',
           );
         }
       },
@@ -446,7 +504,7 @@ void main() {
 
   group('Step3PatientData — Uncovered Branches & Form Handlers', () {
     testWidgets(
-      'validates document number in real time showing error border on invalid text',
+      'el número de documento se valida al salir del campo, no en cada tecla',
       (tester) async {
         tester.view.physicalSize = const Size(800, 2000);
         tester.view.devicePixelRatio = 1.0;
@@ -463,18 +521,30 @@ void main() {
         final docField = find.byWidgetPredicate(
           (w) => w is TextField && w.decoration?.hintText == 'Ej. 1098765432',
         );
+        String? docError() =>
+            tester.widget<TextField>(docField).decoration?.errorText;
+        const formatError =
+            'Número de documento inválido (5 a 20 caracteres, sin símbolos)';
+
+        await tester.enterText(docField, '1');
+        await tester.pumpAndSettle();
+        expect(docError(), isNull, reason: 'no se marca mientras se escribe');
 
         await tester.enterText(docField, '123#');
         await tester.pumpAndSettle();
+        expect(docError(), isNull, reason: 'no se marca mientras se escribe');
 
-        final invalidTextField = tester.widget<TextField>(docField);
-        expect(invalidTextField.controller?.text, '123#');
-
-        await tester.enterText(docField, '');
+        await tester.tap(find.text('Ej. Carmen'));
         await tester.pumpAndSettle();
+        expect(docError(), formatError, reason: 'se marca al salir del campo');
 
-        final emptyTextField = tester.widget<TextField>(docField);
-        expect(emptyTextField.controller?.text, isEmpty);
+        await tester.enterText(docField, '1098765432');
+        await tester.pumpAndSettle();
+        expect(docError(), isNull, reason: 'corregirlo quita el error');
+
+        await tester.tap(find.text('Ej. Carmen'));
+        await tester.pumpAndSettle();
+        expect(docError(), isNull);
       },
     );
 
@@ -613,263 +683,267 @@ void main() {
     });
   });
 
-  group('Step3PatientData — Cobertura 100% de líneas faltantes', () {
-    testWidgets(
-      'Formatea peso entero sin decimales e interactúa con chips de sexo, zona y tipo de sangre',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 3000);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
+  group(
+    'Step3PatientData — chips, selectores desplegables, campos opcionales y validaciones',
+    () {
+      testWidgets(
+        'Formatea peso entero sin decimales e interactúa con chips de sexo, zona y tipo de sangre',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 3000);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
 
-        final draft = RegisterDraft()
-          ..weight = 70.0
-          ..height = 175.0;
+          final draft = RegisterDraft()
+            ..weight = 70.0
+            ..height = 175.0;
 
-        await tester.pumpWidget(
-          _wrap(
-            Step3PatientData(draft: draft, onBack: () {}, onContinue: () {}),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        expect(find.text('70'), findsOneWidget);
-
-        final maleChip = find.text('Masculino');
-        if (maleChip.evaluate().isNotEmpty) {
-          await tester.ensureVisible(maleChip);
-          await tester.tap(maleChip);
-          await tester.pumpAndSettle();
-          expect(draft.biologicalSex, 'M');
-        }
-
-        final bloodChip = find.text('O+');
-        if (bloodChip.evaluate().isNotEmpty) {
-          await tester.ensureVisible(bloodChip);
-          await tester.tap(bloodChip);
-          await tester.pumpAndSettle();
-          expect(draft.bloodType, 'O+');
-
-          await tester.tap(bloodChip);
-          await tester.pumpAndSettle();
-          expect(draft.bloodType, isNull);
-        }
-
-        final ruralChip = find.text('Rural');
-        if (ruralChip.evaluate().isNotEmpty) {
-          await tester.ensureVisible(ruralChip);
-          await tester.tap(ruralChip);
-          await tester.pumpAndSettle();
-          expect(draft.zone, '02');
-        }
-      },
-    );
-
-    testWidgets(
-      'Cambia valores en Dropdowns de Género, Nacionalidad, Etnia y Discapacidad',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 3500);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-
-        final draft = RegisterDraft();
-        await tester.pumpWidget(
-          _wrap(
-            Step3PatientData(draft: draft, onBack: () {}, onContinue: () {}),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        final genderDropdown = find.ancestor(
-          of: find.text('Does not declare').evaluate().isNotEmpty
-              ? find.text('Does not declare')
-              : find.text('No declara'),
-          matching: find.byType(InkWell),
-        );
-        if (genderDropdown.evaluate().isNotEmpty) {
-          await tester.ensureVisible(genderDropdown.first);
-          await tester.tap(genderDropdown.first);
-          await tester.pumpAndSettle();
-
-          final option = find.text('Transgénero');
-          if (option.evaluate().isNotEmpty) {
-            await tester.tap(option.first);
-            await tester.pumpAndSettle();
-            expect(draft.genderIdentity, '03');
-          }
-        }
-
-        // Selección en Dropdown de Nacionalidad (ejecuta el callback de onChanged faltante)
-        final natDropdown = find.ancestor(
-          of: find.textContaining('Colombiana'),
-          matching: find.byType(InkWell),
-        );
-        if (natDropdown.evaluate().isNotEmpty) {
-          await tester.ensureVisible(natDropdown.first);
-          await tester.tap(natDropdown.first);
-          await tester.pumpAndSettle();
-
-          final venOption = find.textContaining('Venezolana');
-          if (venOption.evaluate().isNotEmpty) {
-            await tester.tap(venOption.first);
-            await tester.pumpAndSettle();
-            expect(draft.nationalityCode, 'VEN');
-            expect(draft.nationalityName, isNotNull);
-          }
-        }
-
-        final ethDropdown = find.ancestor(
-          of: find.text('Ninguno'),
-          matching: find.byType(InkWell),
-        );
-        if (ethDropdown.evaluate().isNotEmpty) {
-          await tester.ensureVisible(ethDropdown.first);
-          await tester.tap(ethDropdown.first);
-          await tester.pumpAndSettle();
-
-          final indOption = find.text('Indígena');
-          if (indOption.evaluate().isNotEmpty) {
-            await tester.tap(indOption.first);
-            await tester.pumpAndSettle();
-            expect(draft.ethnicity, '1');
-          }
-        }
-
-        final disDropdown = find.ancestor(
-          of: find.text('Ninguna'),
-          matching: find.byType(InkWell),
-        );
-        if (disDropdown.evaluate().isNotEmpty) {
-          await tester.ensureVisible(disDropdown.first);
-          await tester.tap(disDropdown.first);
-          await tester.pumpAndSettle();
-
-          final fisOption = find.text('Física');
-          if (fisOption.evaluate().isNotEmpty) {
-            await tester.tap(fisOption.first);
-            await tester.pumpAndSettle();
-            expect(draft.disabilityCategory, '01');
-          }
-        }
-      },
-    );
-
-    testWidgets(
-      'Muestra errores al intentar guardar con número de documento inválido y nacionalidad no soportada',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 3000);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-
-        final draft = RegisterDraft()..nationalityCode = 'INVALID_NAT';
-        await tester.pumpWidget(
-          _wrap(
-            Step3PatientData(draft: draft, onBack: () {}, onContinue: () {}),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        final textFields = find.byType(TextField);
-        await tester.enterText(textFields.at(0), 'P-UID-999');
-        await tester.enterText(textFields.at(1), '123#');
-        await tester.enterText(textFields.at(2), 'María');
-        await tester.enterText(textFields.at(4), 'Gómez');
-        draft.dob = DateTime(1990, 1, 1);
-
-        final allFields = tester
-            .widgetList<TextField>(find.byType(TextField))
-            .toList();
-
-        for (var i = 0; i < allFields.length; i++) {
-          final hint = allFields[i].decoration?.hintText ?? '';
-          if (hint.contains('Riohacha') || hint.contains('ej: Riohacha')) {
-            await tester.enterText(textFields.at(i), 'Bogotá');
-          } else if (hint.contains('La Guajira') ||
-              hint.contains('ej: La Guajira')) {
-            await tester.enterText(textFields.at(i), 'Bogotá');
-          }
-        }
-        await tester.pumpAndSettle();
-
-        await _reveal(tester, _continueButton);
-        await tester.tap(_continueButton);
-        await tester.pumpAndSettle();
-
-        expect(find.byIcon(Icons.error_outline), findsOneWidget);
-        expect(
-          find.textContaining('Número de documento inválido'),
-          findsOneWidget,
-        );
-        expect(find.textContaining('Nacionalidad no válida'), findsOneWidget);
-      },
-    );
-
-    testWidgets(
-      'Guarda correctamente datos opcionales (segundo nombre, segundo apellido, comunidad étnica)',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 3500);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-
-        var continued = false;
-        final draft = RegisterDraft()..ethnicity = '1';
-
-        await tester.pumpWidget(
-          _wrap(
-            Step3PatientData(
-              draft: draft,
-              onBack: () {},
-              onContinue: () => continued = true,
+          await tester.pumpWidget(
+            _wrap(
+              Step3PatientData(draft: draft, onBack: () {}, onContinue: () {}),
             ),
-          ),
-        );
-        await tester.pumpAndSettle();
+          );
+          await tester.pumpAndSettle();
 
-        final textFields = find.byType(TextField);
+          expect(find.text('70'), findsOneWidget);
 
-        await tester.enterText(textFields.at(0), 'P-UID-888');
-        await tester.enterText(textFields.at(1), '1098765432');
-        await tester.enterText(textFields.at(2), 'María');
-        await tester.enterText(textFields.at(3), 'Isabel');
-        await tester.enterText(textFields.at(4), 'Gómez');
-        await tester.enterText(textFields.at(5), 'Pérez');
-        draft.dob = DateTime(1992, 3, 10);
-
-        final ethCommField = find.byWidgetPredicate(
-          (w) =>
-              w is TextField &&
-              w.decoration?.hintText == 'Nombre de la comunidad',
-        );
-        if (ethCommField.evaluate().isNotEmpty) {
-          await tester.enterText(ethCommField, 'Wayúu');
-        }
-
-        final allFields = tester
-            .widgetList<TextField>(find.byType(TextField))
-            .toList();
-
-        for (var i = 0; i < allFields.length; i++) {
-          final hint = allFields[i].decoration?.hintText ?? '';
-          if (hint.contains('Riohacha') || hint.contains('ej: Riohacha')) {
-            await tester.enterText(textFields.at(i), 'Riohacha');
-          } else if (hint.contains('La Guajira') ||
-              hint.contains('ej: La Guajira')) {
-            await tester.enterText(textFields.at(i), 'La Guajira');
+          final maleChip = find.text('Masculino');
+          if (maleChip.evaluate().isNotEmpty) {
+            await tester.ensureVisible(maleChip);
+            await tester.tap(maleChip);
+            await tester.pumpAndSettle();
+            expect(draft.biologicalSex, 'M');
           }
-        }
 
-        await tester.pumpAndSettle();
+          final bloodChip = find.text('O+');
+          if (bloodChip.evaluate().isNotEmpty) {
+            await tester.ensureVisible(bloodChip);
+            await tester.tap(bloodChip);
+            await tester.pumpAndSettle();
+            expect(draft.bloodType, 'O+');
 
-        await _reveal(tester, _continueButton);
-        await tester.tap(_continueButton);
-        await tester.pumpAndSettle();
+            await tester.tap(bloodChip);
+            await tester.pumpAndSettle();
+            expect(draft.bloodType, isNull);
+          }
 
-        expect(continued, isTrue);
-        expect(draft.secondName, 'Isabel');
-        expect(draft.secondLastName, 'Pérez');
-        expect(draft.ethnicCommunity, 'Wayúu');
-      },
-    );
-  });
+          final ruralChip = find.text('Rural');
+          if (ruralChip.evaluate().isNotEmpty) {
+            await tester.ensureVisible(ruralChip);
+            await tester.tap(ruralChip);
+            await tester.pumpAndSettle();
+            expect(draft.zone, '02');
+          }
+        },
+      );
+
+      testWidgets(
+        'Cambia valores en Dropdowns de Género, Nacionalidad, Etnia y Discapacidad',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 3500);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
+
+          final draft = RegisterDraft();
+          await tester.pumpWidget(
+            _wrap(
+              Step3PatientData(draft: draft, onBack: () {}, onContinue: () {}),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final genderDropdown = find.ancestor(
+            of: find.text('Does not declare').evaluate().isNotEmpty
+                ? find.text('Does not declare')
+                : find.text('No declara'),
+            matching: find.byType(InkWell),
+          );
+          if (genderDropdown.evaluate().isNotEmpty) {
+            await tester.ensureVisible(genderDropdown.first);
+            await tester.tap(genderDropdown.first);
+            await tester.pumpAndSettle();
+
+            final option = find.text('Transgénero');
+            if (option.evaluate().isNotEmpty) {
+              await tester.tap(option.first);
+              await tester.pumpAndSettle();
+              expect(draft.genderIdentity, '03');
+            }
+          }
+
+          // Selección en Dropdown de Nacionalidad (ejecuta el callback de onChanged faltante)
+          final natDropdown = find.ancestor(
+            of: find.textContaining('Colombiana'),
+            matching: find.byType(InkWell),
+          );
+          if (natDropdown.evaluate().isNotEmpty) {
+            await tester.ensureVisible(natDropdown.first);
+            await tester.tap(natDropdown.first);
+            await tester.pumpAndSettle();
+
+            final venOption = find.textContaining('Venezolana');
+            if (venOption.evaluate().isNotEmpty) {
+              await tester.tap(venOption.first);
+              await tester.pumpAndSettle();
+              expect(draft.nationalityCode, 'VEN');
+              expect(draft.nationalityName, isNotNull);
+            }
+          }
+
+          final ethDropdown = find.ancestor(
+            of: find.text('Ninguno'),
+            matching: find.byType(InkWell),
+          );
+          if (ethDropdown.evaluate().isNotEmpty) {
+            await tester.ensureVisible(ethDropdown.first);
+            await tester.tap(ethDropdown.first);
+            await tester.pumpAndSettle();
+
+            final indOption = find.text('Indígena');
+            if (indOption.evaluate().isNotEmpty) {
+              await tester.tap(indOption.first);
+              await tester.pumpAndSettle();
+              expect(draft.ethnicity, '1');
+            }
+          }
+
+          final disDropdown = find.ancestor(
+            of: find.text('Ninguna'),
+            matching: find.byType(InkWell),
+          );
+          if (disDropdown.evaluate().isNotEmpty) {
+            await tester.ensureVisible(disDropdown.first);
+            await tester.tap(disDropdown.first);
+            await tester.pumpAndSettle();
+
+            final fisOption = find.text('Física');
+            if (fisOption.evaluate().isNotEmpty) {
+              await tester.tap(fisOption.first);
+              await tester.pumpAndSettle();
+              expect(draft.disabilityCategory, '01');
+            }
+          }
+        },
+      );
+
+      testWidgets(
+        'Muestra errores al intentar guardar con número de documento inválido y nacionalidad no soportada',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 3000);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
+
+          final draft = RegisterDraft()..nationalityCode = 'INVALID_NAT';
+          await tester.pumpWidget(
+            _wrap(
+              Step3PatientData(draft: draft, onBack: () {}, onContinue: () {}),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final textFields = find.byType(TextField);
+          await tester.enterText(textFields.at(0), 'P-UID-999');
+          await tester.enterText(textFields.at(1), '123#');
+          await tester.enterText(textFields.at(2), 'María');
+          await tester.enterText(textFields.at(4), 'Gómez');
+          draft.dob = DateTime(1990, 1, 1);
+
+          final allFields = tester
+              .widgetList<TextField>(find.byType(TextField))
+              .toList();
+
+          for (var i = 0; i < allFields.length; i++) {
+            final hint = allFields[i].decoration?.hintText ?? '';
+            if (hint.contains('Riohacha') || hint.contains('ej: Riohacha')) {
+              await tester.enterText(textFields.at(i), 'Bogotá');
+            } else if (hint.contains('La Guajira') ||
+                hint.contains('ej: La Guajira')) {
+              await tester.enterText(textFields.at(i), 'Bogotá');
+            }
+          }
+          await tester.pumpAndSettle();
+
+          await _reveal(tester, _continueButton);
+          await tester.tap(_continueButton);
+          await tester.pumpAndSettle();
+
+          expect(find.byIcon(Icons.error_outline), findsOneWidget);
+          expect(
+            find.textContaining('Número de documento inválido'),
+            findsNWidgets(2),
+            reason: 'en el aviso y bajo el campo',
+          );
+          expect(find.textContaining('Nacionalidad no válida'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'Guarda correctamente datos opcionales (segundo nombre, segundo apellido, comunidad étnica)',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 3500);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
+
+          var continued = false;
+          final draft = RegisterDraft()..ethnicity = '1';
+
+          await tester.pumpWidget(
+            _wrap(
+              Step3PatientData(
+                draft: draft,
+                onBack: () {},
+                onContinue: () => continued = true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final textFields = find.byType(TextField);
+
+          await tester.enterText(textFields.at(0), 'P-UID-888');
+          await tester.enterText(textFields.at(1), '1098765432');
+          await tester.enterText(textFields.at(2), 'María');
+          await tester.enterText(textFields.at(3), 'Isabel');
+          await tester.enterText(textFields.at(4), 'Gómez');
+          await tester.enterText(textFields.at(5), 'Pérez');
+          draft.dob = DateTime(1992, 3, 10);
+
+          final ethCommField = find.byWidgetPredicate(
+            (w) =>
+                w is TextField &&
+                w.decoration?.hintText == 'Nombre de la comunidad',
+          );
+          if (ethCommField.evaluate().isNotEmpty) {
+            await tester.enterText(ethCommField, 'Wayúu');
+          }
+
+          final allFields = tester
+              .widgetList<TextField>(find.byType(TextField))
+              .toList();
+
+          for (var i = 0; i < allFields.length; i++) {
+            final hint = allFields[i].decoration?.hintText ?? '';
+            if (hint.contains('Riohacha') || hint.contains('ej: Riohacha')) {
+              await tester.enterText(textFields.at(i), 'Riohacha');
+            } else if (hint.contains('La Guajira') ||
+                hint.contains('ej: La Guajira')) {
+              await tester.enterText(textFields.at(i), 'La Guajira');
+            }
+          }
+
+          await tester.pumpAndSettle();
+
+          await _reveal(tester, _continueButton);
+          await tester.tap(_continueButton);
+          await tester.pumpAndSettle();
+
+          expect(continued, isTrue);
+          expect(draft.secondName, 'Isabel');
+          expect(draft.secondLastName, 'Pérez');
+          expect(draft.ethnicCommunity, 'Wayúu');
+        },
+      );
+    },
+  );
 
   group('Step3PatientData — onChanged del dropdown de Nacionalidad', () {
     // Abre el dropdown de nacionalidad (mostrando [fromName]) y elige la
@@ -954,5 +1028,166 @@ void main() {
       expect(draft.nationalityCode, codeA);
       expect(draft.nationalityName, nameA);
     });
+  });
+
+  group('Step3PatientData — validación visible al pulsar Continuar', () {
+    final es = AppStrings.forTesting('es');
+
+    Finder fieldWithHint(String hint) => find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.hintText == hint,
+    );
+
+    bool insideList(WidgetTester tester, Finder finder) {
+      final list = tester.getRect(find.byType(ListView));
+      final rect = tester.getRect(finder);
+      return rect.top >= list.top && rect.bottom <= list.bottom;
+    }
+
+    testWidgets(
+      'Continuar con campos vacíos los marca, deja el aviso a la vista, lo '
+      'anuncia y da el foco al primero',
+      (tester) async {
+        // Pantalla de teléfono: la lista se desplaza.
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          _wrap(
+            Step3PatientData(
+              draft: RegisterDraft(),
+              onBack: () {},
+              onContinue: () {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Como quien bajó hasta el final del formulario.
+        final list = tester.widget<ListView>(find.byType(ListView));
+        list.controller!.jumpTo(list.controller!.position.maxScrollExtent);
+        await tester.pumpAndSettle();
+        final uidField = fieldWithHint(es.manualPatientUidHint);
+        expect(
+          uidField.evaluate().isEmpty || !insideList(tester, uidField),
+          isTrue,
+          reason: 'el UID empieza fuera de la vista',
+        );
+
+        await tester.tap(_continueButton);
+        await tester.pumpAndSettle();
+
+        final uid = tester.widget<TextField>(uidField);
+        expect(uid.decoration!.errorText, es.nfcUidRequired);
+        expect(uid.focusNode!.hasFocus, isTrue);
+        expect(insideList(tester, uidField), isTrue);
+        for (final hint in ['Ej. 1098765432', 'Ej. Carmen', 'Ej. Vargas']) {
+          expect(
+            tester.widget<TextField>(fieldWithHint(hint)).decoration!.errorText,
+            es.formFieldRequired,
+            reason: hint,
+          );
+        }
+
+        final summary = find.textContaining('${es.formMissingPrefix}: ');
+        expect(summary, findsOneWidget);
+        expect(insideList(tester, summary), isTrue);
+        final message = tester.widget<Text>(summary).data!;
+        expect(message, isNot(contains('${es.formFixPrefix}:')));
+        expect(
+          tester.takeAnnouncements(),
+          contains(isAccessibilityAnnouncement(message)),
+        );
+      },
+    );
+
+    testWidgets(
+      'un documento con formato inválido va bajo «Corrija», no bajo «Faltan» '
+      'ni «Campos requeridos»',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 3500);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        var continued = false;
+        final draft = RegisterDraft()..dob = DateTime(1995, 5, 20);
+        await tester.pumpWidget(
+          _wrap(
+            Step3PatientData(
+              draft: draft,
+              onBack: () {},
+              onContinue: () => continued = true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(fieldWithHint(es.manualPatientUidHint), 'P-1');
+        await tester.enterText(fieldWithHint('Ej. 1098765432'), '123#');
+        await tester.enterText(fieldWithHint('Ej. Carmen'), 'Carmen');
+        await tester.enterText(fieldWithHint('Ej. Vargas'), 'Vargas');
+        await tester.enterText(fieldWithHint(es.cityHint), 'Riohacha');
+        await tester.enterText(fieldWithHint(es.stateHint), 'La Guajira');
+        await tester.pumpAndSettle();
+
+        await tester.tap(_continueButton);
+        await tester.pumpAndSettle();
+
+        const formatError =
+            'Número de documento inválido (5 a 20 caracteres, sin símbolos)';
+        expect(continued, isFalse);
+        expect(find.text('${es.formFixPrefix}: $formatError'), findsOneWidget);
+        expect(find.textContaining('${es.formMissingPrefix}:'), findsNothing);
+        expect(find.textContaining('Campos requeridos'), findsNothing);
+        final doc = tester.widget<TextField>(fieldWithHint('Ej. 1098765432'));
+        expect(doc.decoration!.errorText, formatError);
+        expect(doc.focusNode!.hasFocus, isTrue);
+      },
+    );
+
+    testWidgets(
+      'el aviso deja de pedir lo corregido y se va cuando no queda nada',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 3500);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final draft = RegisterDraft()..dob = DateTime(1995, 5, 20);
+        await tester.pumpWidget(
+          _wrap(
+            Step3PatientData(draft: draft, onBack: () {}, onContinue: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(fieldWithHint(es.manualPatientUidHint), 'P-1');
+        await tester.enterText(fieldWithHint('Ej. 1098765432'), '123#');
+        await tester.enterText(fieldWithHint(es.cityHint), 'Riohacha');
+        await tester.enterText(fieldWithHint(es.stateHint), 'La Guajira');
+        await tester.pumpAndSettle();
+        await tester.tap(_continueButton);
+        await tester.pumpAndSettle();
+
+        const formatError =
+            'Número de documento inválido (5 a 20 caracteres, sin símbolos)';
+        final missing =
+            '${es.formMissingPrefix}: ${es.firstNameLabel}, '
+            '${es.lastNameLabel}';
+        expect(
+          find.text('$missing\n${es.formFixPrefix}: $formatError'),
+          findsOneWidget,
+        );
+
+        await tester.enterText(fieldWithHint('Ej. 1098765432'), '1100000003');
+        await tester.pumpAndSettle();
+        expect(find.text(missing), findsOneWidget);
+
+        await tester.enterText(fieldWithHint('Ej. Carmen'), 'Carmen');
+        await tester.enterText(fieldWithHint('Ej. Vargas'), 'Vargas');
+        await tester.pumpAndSettle();
+        expect(find.textContaining('${es.formMissingPrefix}:'), findsNothing);
+        expect(find.textContaining('${es.formFixPrefix}:'), findsNothing);
+      },
+    );
   });
 }

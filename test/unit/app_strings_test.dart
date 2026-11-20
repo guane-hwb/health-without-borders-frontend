@@ -2117,24 +2117,20 @@ void main() {
         reason: 'notAuthorizedConsultations (es) should not be empty',
       );
       expect(
-        es.unsyncedChangesTitle,
+        es.discardSheetTitle,
         isA<String>(),
-        reason: 'unsyncedChangesTitle (es)',
+        reason: 'discardSheetTitle (es)',
       );
       expect(
-        es.unsyncedChangesTitle.isNotEmpty,
+        es.discardSheetTitle.isNotEmpty,
         isTrue,
-        reason: 'unsyncedChangesTitle (es) should not be empty',
+        reason: 'discardSheetTitle (es) should not be empty',
       );
+      expect(es.discardSheetMsg, isA<String>(), reason: 'discardSheetMsg (es)');
       expect(
-        es.exitWithoutSyncMsg,
-        isA<String>(),
-        reason: 'exitWithoutSyncMsg (es)',
-      );
-      expect(
-        es.exitWithoutSyncMsg.isNotEmpty,
+        es.discardSheetMsg.isNotEmpty,
         isTrue,
-        reason: 'exitWithoutSyncMsg (es) should not be empty',
+        reason: 'discardSheetMsg (es) should not be empty',
       );
       expect(es.exit, isA<String>(), reason: 'exit (es)');
       expect(
@@ -5790,24 +5786,20 @@ void main() {
         reason: 'notAuthorizedConsultations (en) should not be empty',
       );
       expect(
-        en.unsyncedChangesTitle,
+        en.discardSheetTitle,
         isA<String>(),
-        reason: 'unsyncedChangesTitle (en)',
+        reason: 'discardSheetTitle (en)',
       );
       expect(
-        en.unsyncedChangesTitle.isNotEmpty,
+        en.discardSheetTitle.isNotEmpty,
         isTrue,
-        reason: 'unsyncedChangesTitle (en) should not be empty',
+        reason: 'discardSheetTitle (en) should not be empty',
       );
+      expect(en.discardSheetMsg, isA<String>(), reason: 'discardSheetMsg (en)');
       expect(
-        en.exitWithoutSyncMsg,
-        isA<String>(),
-        reason: 'exitWithoutSyncMsg (en)',
-      );
-      expect(
-        en.exitWithoutSyncMsg.isNotEmpty,
+        en.discardSheetMsg.isNotEmpty,
         isTrue,
-        reason: 'exitWithoutSyncMsg (en) should not be empty',
+        reason: 'discardSheetMsg (en) should not be empty',
       );
       expect(en.exit, isA<String>(), reason: 'exit (en)');
       expect(
@@ -7379,16 +7371,28 @@ void main() {
       expect(en.guardianEmail, equals('guardianEmail'));
     });
 
-    test('keys present only in the Spanish map fall back to the raw key '
-        'in English (documents a translation gap - see note above)', () {
+    test('the forgot-password dialog is translated in English, not shown '
+        'as its keys', () {
       final en = AppStrings.forTesting('en');
       final es = AppStrings.forTesting('es');
 
-      expect(en.ok, equals('ok'));
-      expect(es.ok, isNot(equals('ok')));
+      expect(en.ok, equals('Got it'));
+      expect(es.ok, equals('Entendido'));
 
-      expect(en.forgotPasswordMessage, equals('forgotPasswordMessage'));
+      expect(
+        en.forgotPasswordMessage,
+        equals('Contact the system administrator to reset your password.'),
+      );
       expect(es.forgotPasswordMessage, isNot(equals('forgotPasswordMessage')));
+    });
+
+    test('the Spanish and English tables translate the same keys', () {
+      final Set<String> es = AppStrings.keysForTesting('es');
+      final Set<String> en = AppStrings.keysForTesting('en');
+
+      expect(es, isNotEmpty);
+      expect(es.difference(en), isEmpty, reason: 'keys missing from _en');
+      expect(en.difference(es), isEmpty, reason: 'keys missing from _es');
     });
   });
 
@@ -7537,8 +7541,9 @@ void main() {
       },
     );
   });
+
   group('AppStrings - session unlock keys', () {
-    test('unlockSubtitle returns non-empty localized text (es and en)', () {
+    test('unlockSubtitle en es y en', () {
       final es = AppStrings.forTesting('es');
       final en = AppStrings.forTesting('en');
 
@@ -7546,27 +7551,18 @@ void main() {
         es.unlockSubtitle,
         'Ingresa tu contraseña para reanudar la sesión.',
       );
-      expect(es.unlockSubtitle, isNot('unlockSubtitle'));
-
       expect(en.unlockSubtitle, 'Enter your password to resume session.');
-      expect(en.unlockSubtitle, isNot('unlockSubtitle'));
     });
 
-    test(
-      'unlockIncorrectPassword returns non-empty localized text (es and en)',
-      () {
-        final es = AppStrings.forTesting('es');
-        final en = AppStrings.forTesting('en');
+    test('unlockIncorrectPassword en es y en', () {
+      final es = AppStrings.forTesting('es');
+      final en = AppStrings.forTesting('en');
 
-        expect(es.unlockIncorrectPassword, 'Contraseña incorrecta.');
-        expect(es.unlockIncorrectPassword, isNot('unlockIncorrectPassword'));
+      expect(es.unlockIncorrectPassword, 'Contraseña incorrecta.');
+      expect(en.unlockIncorrectPassword, 'Incorrect password.');
+    });
 
-        expect(en.unlockIncorrectPassword, 'Incorrect password.');
-        expect(en.unlockIncorrectPassword, isNot('unlockIncorrectPassword'));
-      },
-    );
-
-    test('unlockAttemptsRemaining interpolates {n} correctly (es and en)', () {
+    test('unlockAttemptsRemaining interpola {n} en es y en', () {
       final es = AppStrings.forTesting('es');
       final en = AppStrings.forTesting('en');
 
@@ -7581,7 +7577,7 @@ void main() {
       expect(en.unlockAttemptsRemaining(2), isNot('unlockAttemptsRemaining'));
     });
 
-    test('unlockLockedOut returns non-empty localized text (es and en)', () {
+    test('unlockLockedOut en es y en', () {
       final es = AppStrings.forTesting('es');
       final en = AppStrings.forTesting('en');
 
@@ -7589,13 +7585,54 @@ void main() {
         es.unlockLockedOut,
         'Demasiados intentos fallidos. La sesión ha sido cerrada por seguridad.',
       );
-      expect(es.unlockLockedOut, isNot('unlockLockedOut'));
-
       expect(
         en.unlockLockedOut,
         'Too many failed attempts. Session closed for security.',
       );
-      expect(en.unlockLockedOut, isNot('unlockLockedOut'));
+    });
+  });
+
+  group('AppStrings - discarding what was written', () {
+    // The forms and sheets ask before losing what was typed: nothing of it is
+    // saved, so the dialog says "discard", never "sync" or "exit".
+    test('es: the consultation, vaccine and sheet dialogs', () {
+      final es = AppStrings.forTesting('es');
+      expect(es.discardWrittenTitle, '¿Descartar lo escrito?');
+      expect(
+        es.discardConsultationMsg,
+        'Lo que escribió en esta consulta se perderá.',
+      );
+      expect(
+        es.discardVaccineMsg,
+        'Lo que escribió en este registro de vacunas se perderá.',
+      );
+      expect(es.discardSheetTitle, '¿Descartar lo que escribió?');
+      expect(es.discardSheetMsg, 'Lo que escribió en esta hoja se perderá.');
+      expect(es.keepEditing, 'Seguir editando');
+      expect(es.discard, 'Descartar');
+    });
+
+    test('en: every key resolves and differs from Spanish', () {
+      final es = AppStrings.forTesting('es');
+      final en = AppStrings.forTesting('en');
+      final pairs = <String, List<String>>{
+        'discardWrittenTitle': [en.discardWrittenTitle, es.discardWrittenTitle],
+        'discardConsultationMsg': [
+          en.discardConsultationMsg,
+          es.discardConsultationMsg,
+        ],
+        'discardVaccineMsg': [en.discardVaccineMsg, es.discardVaccineMsg],
+        'discardSheetTitle': [en.discardSheetTitle, es.discardSheetTitle],
+        'discardSheetMsg': [en.discardSheetMsg, es.discardSheetMsg],
+        'keepEditing': [en.keepEditing, es.keepEditing],
+        'discard': [en.discard, es.discard],
+      };
+      for (final MapEntry<String, List<String>> e in pairs.entries) {
+        expect(e.value[0], isNot(e.key), reason: '${e.key} (en) missing');
+        expect(e.value[0], isNot(e.value[1]), reason: '${e.key} (en) is es');
+      }
+      expect(en.keepEditing, 'Keep editing');
+      expect(en.discard, 'Discard');
     });
   });
 }

@@ -55,7 +55,7 @@ class _AddFamilyHistorySheetState extends State<AddFamilyHistorySheet> {
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         title: Text(
-          s.unsyncedChangesTitle,
+          s.discardSheetTitle,
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
@@ -63,17 +63,20 @@ class _AddFamilyHistorySheetState extends State<AddFamilyHistorySheet> {
           ),
         ),
         content: Text(
-          s.exitWithoutSyncMsg,
+          s.discardSheetMsg,
           style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text(s.cancel),
+            child: Text(s.keepEditing),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(s.exit, style: const TextStyle(color: AppColors.error)),
+            child: Text(
+              s.discard,
+              style: const TextStyle(color: AppColors.error),
+            ),
           ),
         ],
       ),
