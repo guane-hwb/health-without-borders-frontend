@@ -150,6 +150,10 @@ class AppStrings {
   String get patientNfcDevice => _get('patientNfcDevice');
   String get patientNfcDeviceSub => _get('patientNfcDeviceSub');
   String get nfcUidRequired => _get('nfcUidRequired');
+  // Steps 1 and 2: what «Continuar» found
+  String get formMissingPrefix => _get('formMissingPrefix');
+  String get formFixPrefix => _get('formFixPrefix');
+  String get formFieldRequired => _get('formFieldRequired');
 
   // ── Patient form fields ─────────────────────────────────────────────────
   String get identification => _get('identification');
@@ -187,6 +191,7 @@ class AppStrings {
   String get guardianRelationship => _get('guardianRelationship');
   String get guardianPhoneLabel => _get('guardianPhoneLabel');
   String get guardianPhoneHint => _get('guardianPhoneHint');
+  String get guardianPhoneInvalid => _get('guardianPhoneInvalid');
   String get guardianNfcDevice => _get('guardianNfcDevice');
   String get guardianNfcUidHint => _get('guardianNfcUidHint');
   String get guardianNfcUnavailable => _get('guardianNfcUnavailable');
@@ -795,6 +800,9 @@ class AppStrings {
     'patientNfcDeviceSub':
         'Acerque el dispositivo NFC o ingrese el UID manualmente.',
     'nfcUidRequired': 'Debe escanear o ingresar el UID del dispositivo NFC.',
+    'formMissingPrefix': 'Faltan',
+    'formFixPrefix': 'Corrija',
+    'formFieldRequired': 'Este campo es obligatorio.',
 
     // Patient form
     'identification': 'Identificación',
@@ -1109,6 +1117,8 @@ class AppStrings {
     'guardianRelationship': 'Parentesco',
     'guardianPhoneLabel': 'Teléfono',
     'guardianPhoneHint': 'ej: +57 310 482 9914',
+    'guardianPhoneInvalid':
+        'Teléfono inválido: escriba el indicativo y el número, por ejemplo +57 310 482 9914',
     'guardianNfcDevice': 'Dispositivo NFC del cuidador',
     'guardianNfcUidHint': 'UID del dispositivo NFC',
     'guardianNfcUnavailable': 'NFC no disponible. Ingrese el UID manualmente.',
@@ -1429,6 +1439,9 @@ class AppStrings {
     'patientNfcDevice': 'Patient NFC device',
     'patientNfcDeviceSub': 'Tap the NFC device or enter the UID manually.',
     'nfcUidRequired': 'You must scan or enter the NFC device UID.',
+    'formMissingPrefix': 'Missing',
+    'formFixPrefix': 'Fix',
+    'formFieldRequired': 'This field is required.',
 
     // Patient form
     'identification': 'Identification',
@@ -1748,6 +1761,8 @@ class AppStrings {
     'guardianRelationship': 'Relationship',
     'guardianPhoneLabel': 'Phone',
     'guardianPhoneHint': 'e.g. +1 310 482 9914',
+    'guardianPhoneInvalid':
+        'Invalid phone number: enter the country code and the number, for example +1 310 482 9914',
     'guardianNfcDevice': 'Guardian NFC device',
     'guardianNfcUidHint': 'NFC device UID',
     'guardianNfcUnavailable': 'NFC not available. Enter UID manually.',
