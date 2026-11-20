@@ -19,6 +19,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
+import '../nfc/nfc_write_metric.dart';
 import '../nfc/retired_device_hash.dart';
 import '../utils/app_logger.dart';
 import '../utils/clinical_time.dart';
@@ -204,11 +205,16 @@ class LocalDatabase {
   ];
 
   static const String _dbName = 'hwb_patients.db';
-  static const int _dbVersion = 13;
+  static const int _dbVersion = 14;
   static const String _table = 'local_patients';
   static const String _chipStatusTable = 'nfc_chip_status';
   static const String _emergencyLogTable = 'emergency_access_log';
   static const String _keyVersionTable = 'nfc_key_version_observations';
+  static const String _writeMetricTable = 'nfc_write_metrics';
+
+  /// Most write metrics kept waiting for a sync. A device that never syncs
+  /// keeps the most recent ones; the oldest are dropped first.
+  static const int maxPendingNfcWriteMetrics = 2000;
   static const String _syncNoticeTable = 'sync_notices';
   static const String _retiredDeviceTable = 'retired_devices';
   static const String _retiredCursorTable = 'retired_devices_cursor';
@@ -1079,6 +1085,7 @@ class LocalDatabase {
         await _createKeyVersionTable(db);
         await _createSyncNoticeTable(db);
         await _createRetiredDeviceTables(db);
+        await _createWriteMetricTable(db);
       },
       onUpgrade: (Database db, int oldVersion, int newVersion) async {
         if (oldVersion < 2) {
@@ -1157,6 +1164,9 @@ class LocalDatabase {
             'attempts',
             'INTEGER NOT NULL DEFAULT 0',
           );
+        }
+        if (oldVersion < 14) {
+          await _createWriteMetricTable(db);
         }
       },
     );
@@ -1250,6 +1260,28 @@ class LocalDatabase {
       'CREATE INDEX IF NOT EXISTS idx_keyver_synced '
       'ON $_keyVersionTable (is_synced)',
     );
+  }
+
+  /// Sizes and counts of chip writes, waiting to be reported (see
+  /// [NfcWriteMetric]). No UID, no patient, no record: a row cannot be traced
+  /// back to a person. Rows are deleted once the server accepts them.
+  static Future<void> _createWriteMetricTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_writeMetricTable (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_role         TEXT NOT NULL,
+        payload_format      INTEGER NOT NULL,
+        key_version         INTEGER NOT NULL,
+        payload_bytes       INTEGER NOT NULL,
+        message_bytes       INTEGER NOT NULL,
+        chip_capacity       INTEGER NOT NULL,
+        consultations_kept  INTEGER,
+        consultations_total INTEGER,
+        vaccines_kept       INTEGER,
+        vaccines_total      INTEGER,
+        written_at          TEXT NOT NULL
+      )
+    ''');
   }
 
   static Future<void> _createSyncNoticeTable(Database db) async {
@@ -1388,6 +1420,67 @@ class LocalDatabase {
     } catch (e, stack) {
       AppLogger.e(
         'No se pudieron marcar como sincronizadas las versiones de llave NFC',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  /// Stores the sizes of a chip write until the next sync reports them.
+  ///
+  /// The web build writes no chips, so it stores nothing. Never throws: a lost
+  /// metric delays a decision, it must not fail the write that produced it.
+  Future<void> recordNfcWriteMetric(NfcWriteMetric metric) async {
+    try {
+      final db = await _database;
+      if (db == null) return;
+      await db.insert(_writeMetricTable, metric.toRow());
+      // Bound the table for a device that never syncs: keep the newest rows.
+      await db.rawDelete(
+        'DELETE FROM $_writeMetricTable WHERE id NOT IN '
+        '(SELECT id FROM $_writeMetricTable ORDER BY id DESC LIMIT ?)',
+        <Object?>[maxPendingNfcWriteMetrics],
+      );
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudo registrar la métrica de escritura NFC',
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  /// Write metrics not yet reported, oldest first.
+  Future<List<Map<String, Object?>>> pendingNfcWriteMetrics() async {
+    try {
+      final db = await _database;
+      if (db == null) return <Map<String, Object?>>[];
+      return await db.query(_writeMetricTable, orderBy: 'id ASC');
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudieron leer las métricas de escritura NFC pendientes',
+        error: e,
+        stackTrace: stack,
+      );
+      return <Map<String, Object?>>[];
+    }
+  }
+
+  /// Deletes the write metrics the server accepted. Nothing of them is needed
+  /// on the device afterwards.
+  Future<void> deleteNfcWriteMetrics(List<int> ids) async {
+    if (ids.isEmpty) return;
+    try {
+      final db = await _database;
+      if (db == null) return;
+      await db.delete(
+        _writeMetricTable,
+        where: 'id IN (${List<String>.filled(ids.length, '?').join(',')})',
+        whereArgs: ids,
+      );
+    } catch (e, stack) {
+      AppLogger.e(
+        'No se pudieron borrar las métricas de escritura NFC reportadas',
         error: e,
         stackTrace: stack,
       );

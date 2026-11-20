@@ -1336,6 +1336,31 @@ void main() {
       },
     );
 
+    test('sessionExpired se levanta cuando currentUser aún dice de quién era '
+        'la sesión, y antes de que la sesión quede en null', () async {
+      // The app asks that same person for the password over the open screen;
+      // Home, which rebuilds when the session goes, must already see it.
+      stubLogin();
+      await repo.login(email: 'doc@hwb.org', password: 'x');
+      final String id = repo.currentUser!.id;
+      String? whoseWhenRaised;
+      bool? expiredWhenSessionWent;
+      repo.sessionExpired.addListener(
+        () => whoseWhenRaised = repo.currentUser?.id,
+      );
+      repo.sessionNotifier.addListener(() {
+        if (repo.sessionNotifier.value == null) {
+          expiredWhenSessionWent = repo.sessionExpired.value;
+        }
+      });
+
+      await repo.handleAccountInactive('ACCOUNT_X');
+
+      expect(whoseWhenRaised, id);
+      expect(expiredWhenSessionWent, isTrue);
+      expect(repo.currentUser, isNull);
+    });
+
     test('un refresh 401 con código de cuenta inactiva lo publica', () async {
       final String code = inactiveAccountCode();
       stubStoredRefresh('old-refresh');

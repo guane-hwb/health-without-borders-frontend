@@ -15,6 +15,10 @@ import 'sheets/edit_chronic_personal_sheet.dart';
 import 'sheets/edit_guardian_sheet.dart';
 import 'sheets/edit_vital_signs_sheet.dart';
 
+/// The sheets with fields to fill in open with `enableDrag: false`: dragging
+/// one down closes it with `Navigator.pop`, which skips the sheet's PopScope
+/// and loses what was written without asking. The close button, the barrier
+/// and the system back still ask first.
 abstract class PatientProfileSheets {
   static Future<void> openVitalSignsSheet(
     BuildContext context, {
@@ -31,6 +35,7 @@ abstract class PatientProfileSheets {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (_) => EditVitalSignsSheet(
         weight: draft.patientInfo.weight,
@@ -52,6 +57,7 @@ abstract class PatientProfileSheets {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (_) => EditAddressSheet(address: address, onConfirm: onConfirm),
     );
@@ -90,6 +96,7 @@ abstract class PatientProfileSheets {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (_) => EditChronicPersonalSheet(
         title: AppStrings.of(context).personalHistoryTitle,
@@ -106,6 +113,7 @@ abstract class PatientProfileSheets {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (_) => AddChronicConditionSheet(onAdd: onAdd),
     );
@@ -118,6 +126,7 @@ abstract class PatientProfileSheets {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (_) => AddMedicationSheet(onAdd: onAdd),
     );
@@ -130,6 +139,7 @@ abstract class PatientProfileSheets {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (_) => AddFamilyHistorySheet(onAdd: onAdd),
     );
@@ -142,6 +152,7 @@ abstract class PatientProfileSheets {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (_) => AddAllergySheet(onAdd: onAdd),
     );

@@ -914,11 +914,22 @@ void main() {
           expect(find.byIcon(Icons.error_outline), findsOneWidget);
           expect(
             find.textContaining('Documento de cuidador inválido'),
-            findsOneWidget,
+            findsNWidgets(3),
+            reason:
+                'en el aviso y bajo el documento de cada cuidador, '
+                'con la misma causa',
           );
           for (final message in const <String>[
-            'Teléfono inválido (mínimo 7 dígitos)',
+            'Teléfono inválido: escriba el indicativo y el número',
             'Correo electrónico inválido',
+          ]) {
+            expect(
+              find.textContaining(message),
+              findsNWidgets(3),
+              reason: '$message: en el aviso y bajo el campo de cada cuidador',
+            );
+          }
+          for (final message in const <String>[
             'Documento de cuidador 2 inválido',
             'Teléfono de cuidador 2 inválido',
             'Correo de cuidador 2 inválido',
@@ -1178,7 +1189,7 @@ void main() {
         });
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('Campos requeridos'), findsNothing);
+        expect(find.byIcon(Icons.error_outline), findsNothing);
         expect(continueCalled, isTrue);
         expect(draft.guardian2DeviceUid, 'HWB041A2CDF');
       },
@@ -1284,5 +1295,230 @@ void main() {
         );
       },
     );
+  });
+
+  group('Validación visible al pulsar Continuar', () {
+    final s = AppStrings.forTesting('es');
+
+    RegisterDraft validDraft() => RegisterDraft()
+      ..guardianName = 'Ana María García'
+      ..guardianPhone = '3158492041'
+      ..guardianDeviceUid = 'HWB041A2CDE'
+      ..guardianDocNumber = '52384912'
+      ..guardianDocType = 'CC'
+      ..guardianAuthAccepted = true
+      ..guardianSignatureStrokes = [
+        [const Offset(10, 10), const Offset(50, 50)],
+      ];
+
+    Finder fieldWithHint(String hint) => find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.hintText == hint,
+    );
+
+    bool insideList(WidgetTester tester, Finder finder) {
+      final list = tester.getRect(find.byType(ListView));
+      final rect = tester.getRect(finder);
+      return rect.top >= list.top && rect.bottom <= list.bottom;
+    }
+
+    testWidgets(
+      'el teléfono escrito como el ejemplo se acepta y se guarda normalizado '
+      'en los dos cuidadores',
+      (tester) async {
+        resizeViewport(tester);
+        var continued = false;
+        final draft = validDraft()
+          ..guardianPhone = '+57 310 482 9914'
+          ..guardian2Name = 'Carlos López'
+          ..guardian2Phone = '(310) 482-9914'
+          ..guardian2DocNumber = '9876543210';
+
+        await tester.pumpWidget(
+          buildSubject(draft: draft, onContinue: () => continued = true),
+        );
+        await tester.pumpAndSettle();
+
+        final dynamic state = tester.state(find.byType(Step2Guardian));
+        await tester.runAsync(() async {
+          await state.saveForTest();
+        });
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.error_outline), findsNothing);
+        expect(continued, isTrue);
+        expect(draft.guardianPhone, '+573104829914');
+        expect(draft.guardian2Phone, '3104829914');
+      },
+    );
+
+    testWidgets(
+      'un teléfono inválido dice la causa bajo el campo y en «Corrija», '
+      'no bajo «Faltan» ni «Campos requeridos»',
+      (tester) async {
+        resizeViewport(tester);
+        var continued = false;
+        final draft = validDraft()..guardianPhone = '310 482 99AB';
+
+        await tester.pumpWidget(
+          buildSubject(draft: draft, onContinue: () => continued = true),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.arrow_forward));
+        await tester.pumpAndSettle();
+
+        expect(continued, isFalse);
+        expect(
+          tester
+              .widget<TextField>(fieldWithHint(s.guardianPhoneHint))
+              .decoration!
+              .errorText,
+          s.guardianPhoneInvalid,
+        );
+        expect(
+          find.text('${s.formFixPrefix}: ${s.guardianPhoneInvalid}'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('${s.formMissingPrefix}:'), findsNothing);
+        expect(find.textContaining('Campos requeridos'), findsNothing);
+        expect(find.textContaining('mínimo 7 dígitos'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Continuar con un campo vacío lo marca, deja el aviso arriba y a la '
+      'vista, lo anuncia y da el foco al campo',
+      (tester) async {
+        // Pantalla de teléfono: la lista se desplaza.
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        // Sin UID: la fila «Dispositivo vinculado» se desborda a 360 px.
+        final draft = validDraft()
+          ..guardianName = null
+          ..guardianDeviceUid = null;
+        final message =
+            '${s.formMissingPrefix}: ${s.guardianFullName}, '
+            '${s.guardianNfcDevice}';
+        await tester.pumpWidget(buildSubject(draft: draft));
+        await tester.pumpAndSettle();
+
+        // Como quien llenó el formulario: la vista está al final.
+        final list = tester.widget<ListView>(find.byType(ListView));
+        list.controller!.jumpTo(list.controller!.position.maxScrollExtent);
+        await tester.pumpAndSettle();
+        final nameField = fieldWithHint(s.guardianFullNameHint);
+        expect(insideList(tester, nameField), isFalse);
+
+        await tester.tap(find.byIcon(Icons.arrow_forward));
+        await tester.pumpAndSettle();
+
+        final field = tester.widget<TextField>(nameField);
+        expect(field.decoration!.errorText, s.formFieldRequired);
+        expect(field.focusNode!.hasFocus, isTrue);
+
+        final summary = find.text(message);
+        expect(summary, findsOneWidget);
+        expect(insideList(tester, summary), isTrue);
+        expect(insideList(tester, nameField), isTrue);
+        expect(
+          tester.getRect(summary).bottom,
+          lessThan(tester.getRect(nameField).top),
+          reason: 'el aviso va arriba, antes de los campos',
+        );
+        expect(
+          tester.takeAnnouncements(),
+          contains(isAccessibilityAnnouncement(message)),
+        );
+
+        await tester.enterText(nameField, 'Ana María García');
+        await tester.pump();
+        expect(
+          tester.widget<TextField>(nameField).decoration!.errorText,
+          isNull,
+          reason: 'escribir en el campo quita su error',
+        );
+      },
+    );
+
+    testWidgets(
+      'el aviso deja de pedir lo corregido: sin «Corrija» al arreglar el '
+      'teléfono y sin aviso al llenar lo que faltaba',
+      (tester) async {
+        resizeViewport(tester);
+        final draft = validDraft()
+          ..guardianName = null
+          ..guardianPhone = '12';
+        await tester.pumpWidget(buildSubject(draft: draft));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.arrow_forward));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            '${s.formMissingPrefix}: ${s.guardianFullName}\n'
+            '${s.formFixPrefix}: ${s.guardianPhoneInvalid}',
+          ),
+          findsOneWidget,
+        );
+
+        await tester.enterText(
+          fieldWithHint(s.guardianPhoneHint),
+          '+57 310 482 9914',
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text('${s.formMissingPrefix}: ${s.guardianFullName}'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('${s.formFixPrefix}:'), findsNothing);
+
+        await tester.enterText(
+          fieldWithHint(s.guardianFullNameHint),
+          'Ana María García',
+        );
+        await tester.pumpAndSettle();
+        expect(find.textContaining('${s.formMissingPrefix}:'), findsNothing);
+        expect(find.byIcon(Icons.error_outline), findsNothing);
+      },
+    );
+
+    testWidgets('marcar la autorización y firmar la quitan del aviso', (
+      tester,
+    ) async {
+      resizeViewport(tester);
+      final draft = validDraft()
+        ..guardianAuthAccepted = false
+        ..guardianSignatureStrokes = <List<Offset>>[];
+      await tester.pumpWidget(buildSubject(draft: draft));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.arrow_forward));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          '${s.formMissingPrefix}: '
+          'Autorización de política de privacidad, Firma biométrica',
+        ),
+        findsOneWidget,
+      );
+
+      final checkbox = find.byType(Checkbox).first;
+      await tester.ensureVisible(checkbox);
+      await tester.pumpAndSettle();
+      await tester.tap(checkbox);
+      await tester.pumpAndSettle();
+      expect(
+        find.text('${s.formMissingPrefix}: Firma biométrica'),
+        findsOneWidget,
+      );
+
+      final pad = find.text('Firmar aquí');
+      await tester.ensureVisible(pad);
+      await tester.pumpAndSettle();
+      await tester.drag(pad, const Offset(60, 20));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('${s.formMissingPrefix}:'), findsNothing);
+    });
   });
 }

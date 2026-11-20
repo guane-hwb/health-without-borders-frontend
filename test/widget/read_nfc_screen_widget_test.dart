@@ -1,5 +1,7 @@
 // test/widget/read_nfc_screen_widget_test.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -332,9 +334,12 @@ void main() {
     );
   }
 
+  /// With [overHome], the screen is pushed over a first route, as the home
+  /// screen does in the app.
   Future<void> reachOfflineGate(
     WidgetTester tester, {
     required TriageSummary triage,
+    bool overHome = false,
   }) async {
     fakeAuth.nfcKey = 'secret-key';
     fakeRepo.throwNonApiError = true;
@@ -347,11 +352,21 @@ void main() {
 
     await tester.pumpWidget(
       _buildTestableWidget(
-        child: const ReadNfcScreen(),
+        child: overHome ? const SizedBox.shrink() : const ReadNfcScreen(),
         repo: fakeRepo,
         authRepo: fakeAuth,
       ),
     );
+    if (overHome) {
+      unawaited(
+        tester
+            .state<NavigatorState>(find.byType(Navigator))
+            .push(
+              MaterialPageRoute<void>(builder: (_) => const ReadNfcScreen()),
+            ),
+      );
+      await tester.pumpAndSettle();
+    }
     await tester.pump();
 
     await tester.tap(find.byIcon(Icons.wifi));
@@ -1018,6 +1033,57 @@ void main() {
         expect(find.byType(TextField), findsOneWidget);
         expect(find.byIcon(Icons.wifi), findsOneWidget);
         expect(find.byIcon(Icons.check_circle), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Con el atrás del sistema desde el acceso de emergencia de un menor, '
+      'vuelve al paso 1 y ningún acceso queda registrado sin el UID del '
+      'paciente',
+      (tester) async {
+        await reachOfflineGate(
+          tester,
+          triage: makeTriage(minor: true),
+          overHome: true,
+        );
+
+        Future<void> confirmEmergencyAccess() async {
+          await tester.tap(find.text('Acceso de emergencia'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Continuar'));
+          await tester.pumpAndSettle();
+          final profile = tester.widget<PatientProfileScreen>(
+            find.byType(PatientProfileScreen),
+          );
+          expect(profile.patient.deviceUid, 'HWB-PATIENT-GATE');
+        }
+
+        await confirmEmergencyAccess();
+
+        // The system back (Android back button or gesture, iOS edge swipe)
+        // pops only the profile; its own back arrow pops to the first route.
+        expect(await tester.binding.handlePopRoute(), isTrue);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(PatientProfileScreen), findsNothing);
+        expect(find.text('Acceso de emergencia'), findsNothing);
+        expect(find.text('Acerque el dispositivo NFC'), findsOneWidget);
+
+        // Another emergency access reads the patient device again first.
+        await tester.tap(find.byIcon(Icons.wifi));
+        await tester.pumpAndSettle();
+        await confirmEmergencyAccess();
+
+        final List<dynamic> loggedUids = verify(
+          () => mockDb.logEmergencyAccess(
+            patientUid: captureAny(named: 'patientUid'),
+            patientName: any(named: 'patientName'),
+            userId: any(named: 'userId'),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+          ),
+        ).captured;
+        expect(loggedUids, <String>['HWB-PATIENT-GATE', 'HWB-PATIENT-GATE']);
       },
     );
   });

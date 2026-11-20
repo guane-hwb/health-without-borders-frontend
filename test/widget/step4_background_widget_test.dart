@@ -391,6 +391,29 @@ void main() {
 
       expect(called, isTrue);
     });
+
+    // "Antecedentes personales" was saved only on "Continuar".
+    testWidgets('pulsar Atrás guarda los antecedentes personales (trim)', (
+      tester,
+    ) async {
+      resizeViewport(tester);
+      final draft = _emptyDraft();
+      String? savedWhenBack;
+      await tester.pumpWidget(
+        _buildStep4(
+          draft: draft,
+          onBack: () => savedWhenBack = draft.personalHistory,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, '  Cirugía 2019  ');
+      await tester.tap(find.text('Atrás'));
+      await tester.pumpAndSettle();
+
+      expect(draft.personalHistory, 'Cirugía 2019');
+      expect(savedWhenBack, 'Cirugía 2019');
+    });
   });
 
   group('_AddChronicConditionSheet — canConfirm y flow', () {

@@ -518,7 +518,7 @@ void main() {
     );
 
     testWidgets(
-      'cancels closing when clicking Cancel in unsaved changes dialog',
+      'cancels closing when clicking Keep editing in unsaved changes dialog',
       (tester) async {
         await tester.pumpWidget(_buildSheet(onAdd: (_) {}));
 
@@ -530,7 +530,7 @@ void main() {
 
         expect(find.byType(AlertDialog), findsOneWidget);
 
-        await tester.tap(find.text('Cancelar'));
+        await tester.tap(find.text('Seguir editando'));
         await tester.pumpAndSettle();
 
         expect(find.byType(AddFamilyHistorySheet), findsOneWidget);
@@ -539,7 +539,7 @@ void main() {
     );
 
     testWidgets(
-      'confirms exit and closes sheet when clicking Exit in unsaved changes dialog',
+      'confirms exit and closes sheet when clicking Discard in unsaved changes dialog',
       (tester) async {
         await tester.pumpWidget(
           _LocaleWrapper(
@@ -569,7 +569,7 @@ void main() {
         await tester.tap(find.byIcon(Icons.close_rounded));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Salir'));
+        await tester.tap(find.text('Descartar'));
         await tester.pumpAndSettle();
 
         expect(find.byType(AddFamilyHistorySheet), findsNothing);

@@ -612,9 +612,9 @@ void main() {
         },
       );
 
-      testWidgets('cancels closing when clicking Cancel in unsaved dialog', (
-        tester,
-      ) async {
+      testWidgets(
+        'cancels closing when clicking Keep editing in unsaved dialog',
+        (tester) async {
         await tester.pumpWidget(
           _buildSubject(
             guardian: _sampleGuardian(consent: fakeConsent),
@@ -634,15 +634,16 @@ void main() {
 
         expect(find.byType(AlertDialog), findsOneWidget);
 
-        await tester.tap(find.text('Cancelar'));
+          await tester.tap(find.text('Seguir editando'));
         await tester.pumpAndSettle();
 
         expect(find.byType(EditGuardianSheet), findsOneWidget);
         expect(find.byType(AlertDialog), findsNothing);
-      });
+        },
+      );
 
       testWidgets(
-        'confirms exit and closes sheet when clicking Exit in unsaved dialog',
+        'confirms exit and closes sheet when clicking Discard in unsaved dialog',
         (tester) async {
           await tester.pumpWidget(
             _wrap(
@@ -675,7 +676,7 @@ void main() {
           await tester.tap(find.byIcon(Icons.close_rounded));
           await tester.pumpAndSettle();
 
-          await tester.tap(find.text('Salir'));
+          await tester.tap(find.text('Descartar'));
           await tester.pumpAndSettle();
 
           expect(find.byType(EditGuardianSheet), findsNothing);

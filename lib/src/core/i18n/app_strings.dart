@@ -50,6 +50,12 @@ class AppStrings {
   @visibleForTesting
   static AppStrings forTesting(String locale) => AppStrings._(locale);
 
+  /// The keys one locale translates. `_get` shows a missing key as is, so a
+  /// test checks that both tables carry the same keys.
+  @visibleForTesting
+  static Set<String> keysForTesting(String locale) =>
+      (locale == 'en' ? _en : _es).keys.toSet();
+
   String _get(String key) => (_locale == 'en' ? _en : _es)[key] ?? key;
 
   // ── Auth ────────────────────────────────────────────────────────────────
@@ -67,6 +73,9 @@ class AppStrings {
   String get passwordTooShort => _get('passwordTooShort');
   String get login => _get('login');
   String get loginFailed => _get('loginFailed');
+  String get loginWrongCredentials => _get('loginWrongCredentials');
+  String get loginCaptivePortal => _get('loginCaptivePortal');
+  String get loginServerUnavailable => _get('loginServerUnavailable');
   String get enterEmailPassword => _get('enterEmailPassword');
   String get forgotPassword => _get('forgotPassword');
   String get forgotPasswordMessage => _get('forgotPasswordMessage');
@@ -131,11 +140,20 @@ class AppStrings {
   String get newPatient => _get('newPatient');
   String get consultationSaved => _get('consultationSaved');
   String get vaccineSaved => _get('vaccineSaved');
+  String get discardWrittenTitle => _get('discardWrittenTitle');
+  String get discardConsultationMsg => _get('discardConsultationMsg');
+  String get discardVaccineMsg => _get('discardVaccineMsg');
+  String get keepEditing => _get('keepEditing');
+  String get discard => _get('discard');
   String get today => _get('today');
   // Step 1
   String get patientNfcDevice => _get('patientNfcDevice');
   String get patientNfcDeviceSub => _get('patientNfcDeviceSub');
   String get nfcUidRequired => _get('nfcUidRequired');
+  // Steps 1 and 2: what «Continuar» found
+  String get formMissingPrefix => _get('formMissingPrefix');
+  String get formFixPrefix => _get('formFixPrefix');
+  String get formFieldRequired => _get('formFieldRequired');
 
   // ── Patient form fields ─────────────────────────────────────────────────
   String get identification => _get('identification');
@@ -173,6 +191,7 @@ class AppStrings {
   String get guardianRelationship => _get('guardianRelationship');
   String get guardianPhoneLabel => _get('guardianPhoneLabel');
   String get guardianPhoneHint => _get('guardianPhoneHint');
+  String get guardianPhoneInvalid => _get('guardianPhoneInvalid');
   String get guardianNfcDevice => _get('guardianNfcDevice');
   String get guardianNfcUidHint => _get('guardianNfcUidHint');
   String get guardianNfcUnavailable => _get('guardianNfcUnavailable');
@@ -294,7 +313,24 @@ class AppStrings {
   String get pleaseWait => _get('pleaseWait');
   String get successRegistration => _get('successRegistration');
   String get patientSavedSynced => _get('patientSavedSynced');
+  String get patientSavedOnPhone => _get('patientSavedOnPhone');
   String get syncFailed => _get('syncFailed');
+  String get writeDevicesAndFinish => _get('writeDevicesAndFinish');
+  String get writeDevicesHint => _get('writeDevicesHint');
+  String get devicesNotWrittenTitle => _get('devicesNotWrittenTitle');
+  String get devicesNotWrittenBody => _get('devicesNotWrittenBody');
+  String get writeNow => _get('writeNow');
+  String get leaveWithoutWriting => _get('leaveWithoutWriting');
+  String get writeLaterFromProfile => _get('writeLaterFromProfile');
+  String get patientDeviceNotWritten => _get('patientDeviceNotWritten');
+  String get guardianDeviceNotWritten => _get('guardianDeviceNotWritten');
+  String guardianDeviceNNotWritten(int n) =>
+      _get('guardianDeviceNNotWritten').replaceAll('{n}', '$n');
+  String get writeFailedSessionExpired => _get('writeFailedSessionExpired');
+  String get writeFailedNoKey => _get('writeFailedNoKey');
+  String get writeFailedInvalidKey => _get('writeFailedInvalidKey');
+  String get writeFailedNotCompleted => _get('writeFailedNotCompleted');
+  String get writeFailedNeedsNtag216 => _get('writeFailedNeedsNtag216');
 
   // ── Vaccine sheet ──────────────────────────────────────────────────────
   String get vaccine => _get('vaccine');
@@ -401,8 +437,8 @@ class AppStrings {
   String get syncBtn => _get('syncBtn');
   String get savedChangesMsg => _get('savedChangesMsg');
   String get notAuthorizedConsultations => _get('notAuthorizedConsultations');
-  String get unsyncedChangesTitle => _get('unsyncedChangesTitle');
-  String get exitWithoutSyncMsg => _get('exitWithoutSyncMsg');
+  String get discardSheetTitle => _get('discardSheetTitle');
+  String get discardSheetMsg => _get('discardSheetMsg');
   String get exit => _get('exit');
   String get tabSummary => _get('tabSummary');
   String get yearsOldSuffix => _get('yearsOldSuffix');
@@ -683,7 +719,12 @@ class AppStrings {
     'passwordRequired': 'Ingresa tu contraseña',
     'passwordTooShort': 'La contraseña debe tener al menos 6 caracteres',
     'login': 'Iniciar sesión',
-    'loginFailed': 'Error al iniciar sesión',
+    'loginFailed': 'No se pudo iniciar sesión. Intente de nuevo.',
+    'loginWrongCredentials': 'Correo o contraseña incorrectos.',
+    'loginCaptivePortal':
+        'La red Wi-Fi pide aceptar sus condiciones en el navegador. Ábralo, acéptelas y vuelva a intentar.',
+    'loginServerUnavailable':
+        'El servidor no responde. Intente de nuevo en unos minutos.',
     'enterEmailPassword': 'Ingresa correo y contraseña.',
     'forgotPassword': '¿Olvidó su contraseña?',
     'forgotPasswordMessage':
@@ -748,11 +789,20 @@ class AppStrings {
     'newPatient': 'Nuevo paciente',
     'consultationSaved': 'Consulta guardada exitosamente',
     'vaccineSaved': 'Vacuna guardada exitosamente',
+    'discardWrittenTitle': '¿Descartar lo escrito?',
+    'discardConsultationMsg': 'Lo que escribió en esta consulta se perderá.',
+    'discardVaccineMsg':
+        'Lo que escribió en este registro de vacunas se perderá.',
+    'keepEditing': 'Seguir editando',
+    'discard': 'Descartar',
     'today': 'Hoy',
     'patientNfcDevice': 'Dispositivo NFC del paciente',
     'patientNfcDeviceSub':
         'Acerque el dispositivo NFC o ingrese el UID manualmente.',
     'nfcUidRequired': 'Debe escanear o ingresar el UID del dispositivo NFC.',
+    'formMissingPrefix': 'Faltan',
+    'formFixPrefix': 'Corrija',
+    'formFieldRequired': 'Este campo es obligatorio.',
 
     // Patient form
     'identification': 'Identificación',
@@ -898,7 +948,32 @@ class AppStrings {
     'pleaseWait': 'Espere un momento mientras se carga la información.',
     'successRegistration': 'Registro exitoso',
     'patientSavedSynced': 'Paciente guardado localmente y sincronizado',
+    'patientSavedOnPhone': 'Paciente guardado en este teléfono',
     'syncFailed': 'Sincronización fallida',
+    'writeDevicesAndFinish': 'Grabar dispositivos y terminar',
+    'writeDevicesHint':
+        'Toque «Grabar dispositivos y terminar» y acerque los dispositivos al '
+        'teléfono.',
+    'devicesNotWrittenTitle': 'Los dispositivos no se han grabado',
+    'devicesNotWrittenBody':
+        'El registro quedó guardado en este teléfono, pero ningún dispositivo '
+        'tiene todavía sus datos.',
+    'writeNow': 'Grabar ahora',
+    'leaveWithoutWriting': 'Salir sin grabar',
+    'writeLaterFromProfile': 'Grabar luego desde el perfil',
+    'patientDeviceNotWritten': 'Dispositivo del paciente: no grabado',
+    'guardianDeviceNotWritten': 'Dispositivo del cuidador: no grabado',
+    'guardianDeviceNNotWritten': 'Dispositivo del cuidador {n}: no grabado',
+    'writeFailedSessionExpired':
+        'Su sesión expiró. Inicie sesión de nuevo para grabarlo.',
+    'writeFailedNoKey': 'No hay clave NFC disponible en este teléfono.',
+    'writeFailedInvalidKey':
+        'La clave NFC no es válida. Contacte al administrador.',
+    'writeFailedNotCompleted':
+        'La grabación no se completó (falló o se omitió).',
+    'writeFailedNeedsNtag216':
+        'Se omitió: los datos no caben en un NTAG215; se requiere un '
+        'dispositivo NTAG216.',
 
     // Vaccine
     'vaccine': 'Vacuna',
@@ -1001,8 +1076,8 @@ class AppStrings {
     'savedChangesMsg': 'Cambios guardados. Se sincronizarán automáticamente.',
     'notAuthorizedConsultations':
         'No autorizado: solo doctores pueden agregar consultas.',
-    'unsyncedChangesTitle': 'Cambios sin sincronizar',
-    'exitWithoutSyncMsg': 'Tienes cambios pendientes. ¿Salir sin sincronizar?',
+    'discardSheetTitle': '¿Descartar lo que escribió?',
+    'discardSheetMsg': 'Lo que escribió en esta hoja se perderá.',
     'exit': 'Salir',
     'tabSummary': 'Resumen',
     'yearsOldSuffix': 'años',
@@ -1042,6 +1117,8 @@ class AppStrings {
     'guardianRelationship': 'Parentesco',
     'guardianPhoneLabel': 'Teléfono',
     'guardianPhoneHint': 'ej: +57 310 482 9914',
+    'guardianPhoneInvalid':
+        'Teléfono inválido: escriba el indicativo y el número, por ejemplo +57 310 482 9914',
     'guardianNfcDevice': 'Dispositivo NFC del cuidador',
     'guardianNfcUidHint': 'UID del dispositivo NFC',
     'guardianNfcUnavailable': 'NFC no disponible. Ingrese el UID manualmente.',
@@ -1281,9 +1358,17 @@ class AppStrings {
     'passwordRequired': 'Enter your password',
     'passwordTooShort': 'Password must be at least 6 characters long',
     'login': 'Login',
-    'loginFailed': 'Login failed',
+    'loginFailed': 'Could not sign in. Try again.',
+    'loginWrongCredentials': 'Incorrect email or password.',
+    'loginCaptivePortal':
+        'The Wi-Fi network asks you to accept its terms in the browser. Open it, accept them and try again.',
+    'loginServerUnavailable':
+        'The server is not responding. Try again in a few minutes.',
     'enterEmailPassword': 'Please enter email and password.',
     'forgotPassword': 'Forgot your password?',
+    'forgotPasswordMessage':
+        'Contact the system administrator to reset your password.',
+    'ok': 'Got it',
     'noAccount': "Don't have an account?",
     'contactAdmin': 'Contact your administrator',
     'sessionExpired': 'Session expired. Please log in again.',
@@ -1343,10 +1428,20 @@ class AppStrings {
     'newPatient': 'New patient',
     'consultationSaved': 'Consultation saved successfully',
     'vaccineSaved': 'Vaccine saved successfully',
+    'discardWrittenTitle': 'Discard what you wrote?',
+    'discardConsultationMsg':
+        'What you wrote in this consultation will be lost.',
+    'discardVaccineMsg':
+        'What you wrote in this vaccination record will be lost.',
+    'keepEditing': 'Keep editing',
+    'discard': 'Discard',
     'today': 'Today',
     'patientNfcDevice': 'Patient NFC device',
     'patientNfcDeviceSub': 'Tap the NFC device or enter the UID manually.',
     'nfcUidRequired': 'You must scan or enter the NFC device UID.',
+    'formMissingPrefix': 'Missing',
+    'formFixPrefix': 'Fix',
+    'formFieldRequired': 'This field is required.',
 
     // Patient form
     'identification': 'Identification',
@@ -1490,7 +1585,31 @@ class AppStrings {
     'pleaseWait': 'Please wait a moment while the information loads.',
     'successRegistration': 'Successful Registration',
     'patientSavedSynced': 'Patient saved locally and synced to cloud',
+    'patientSavedOnPhone': 'Patient saved on this phone',
     'syncFailed': 'Sync Failed',
+    'writeDevicesAndFinish': 'Write devices and finish',
+    'writeDevicesHint':
+        'Tap "Write devices and finish" and bring the devices to the phone.',
+    'devicesNotWrittenTitle': 'The devices have not been written',
+    'devicesNotWrittenBody':
+        'The record was saved on this phone, but no device has its data '
+        'yet.',
+    'writeNow': 'Write now',
+    'leaveWithoutWriting': 'Leave without writing',
+    'writeLaterFromProfile': 'Write later from the profile',
+    'patientDeviceNotWritten': 'Patient device: not written',
+    'guardianDeviceNotWritten': 'Guardian device: not written',
+    'guardianDeviceNNotWritten': 'Guardian device {n}: not written',
+    'writeFailedSessionExpired':
+        'Your session expired. Log in again to write it.',
+    'writeFailedNoKey': 'No NFC key is available on this phone.',
+    'writeFailedInvalidKey':
+        'The NFC key is invalid. Contact your administrator.',
+    'writeFailedNotCompleted':
+        'The write was not completed (it failed or was skipped).',
+    'writeFailedNeedsNtag216':
+        'Skipped: the data does not fit on an NTAG215; an NTAG216 device is '
+        'required.',
 
     // Vaccine
     'vaccine': 'Vaccine',
@@ -1598,8 +1717,8 @@ class AppStrings {
     'savedChangesMsg': 'Changes saved. They will sync automatically.',
     'notAuthorizedConsultations':
         'Not authorized: only doctors can add consultations.',
-    'unsyncedChangesTitle': 'Unsynchronized changes',
-    'exitWithoutSyncMsg': 'You have pending changes. Exit without syncing?',
+    'discardSheetTitle': 'Discard what you wrote?',
+    'discardSheetMsg': 'What you wrote in this sheet will be lost.',
     'exit': 'Exit',
     'tabSummary': 'Summary',
     'yearsOldSuffix': 'yrs',
@@ -1642,6 +1761,8 @@ class AppStrings {
     'guardianRelationship': 'Relationship',
     'guardianPhoneLabel': 'Phone',
     'guardianPhoneHint': 'e.g. +1 310 482 9914',
+    'guardianPhoneInvalid':
+        'Invalid phone number: enter the country code and the number, for example +1 310 482 9914',
     'guardianNfcDevice': 'Guardian NFC device',
     'guardianNfcUidHint': 'NFC device UID',
     'guardianNfcUnavailable': 'NFC not available. Enter UID manually.',

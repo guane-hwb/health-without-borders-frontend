@@ -19,6 +19,8 @@ class NfcUidField extends StatelessWidget {
     required this.onChanged,
     required this.hintText,
     this.prefixIcon = Icons.contactless,
+    this.errorText,
+    this.focusNode,
   });
 
   final TextEditingController controller;
@@ -27,6 +29,10 @@ class NfcUidField extends StatelessWidget {
   final VoidCallback onChanged;
   final String hintText;
   final IconData prefixIcon;
+
+  /// Shown under the field, with a red border, while it is not null.
+  final String? errorText;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +50,7 @@ class NfcUidField extends StatelessWidget {
             Expanded(
               child: TextField(
                 controller: controller,
+                focusNode: focusNode,
                 style: const TextStyle(
                   fontSize: 14,
                   fontFamily: 'monospace',
@@ -88,6 +95,22 @@ class NfcUidField extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                     borderSide: const BorderSide(
                       color: AppColors.primary,
+                      width: 2,
+                    ),
+                  ),
+                  errorText: errorText,
+                  errorMaxLines: 3,
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: AppColors.error,
+                      width: 1.5,
+                    ),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: AppColors.error,
                       width: 2,
                     ),
                   ),

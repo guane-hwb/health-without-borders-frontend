@@ -232,6 +232,31 @@ void main() {
 
       expect(find.byType(LoginScreen), findsOneWidget);
     });
+
+    testWidgets('si la sesión se va con otra pantalla encima, no la reemplaza '
+        'por el inicio de sesión', (tester) async {
+      // Over a form, the expired session asks for the password on top of it
+      // (reauthenticateOverCurrentScreen); Home must not drop that screen.
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+      final NavigatorState navigator = tester.state<NavigatorState>(
+        find.byType(Navigator),
+      );
+      navigator
+          .push(
+            MaterialPageRoute<void>(
+              builder: (_) => const Scaffold(body: Text('Formulario abierto')),
+            ),
+          )
+          .ignore();
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(_wrapHome(user: null));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Formulario abierto'), findsOneWidget);
+      expect(find.byType(LoginScreen), findsNothing);
+    });
   });
 
   group('HomeScreen — header', () {

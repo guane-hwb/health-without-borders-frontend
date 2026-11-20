@@ -11,14 +11,61 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_error_codes.dart';
+import '../../../core/validation/identity_validators.dart';
 import '../../../design/tokens/app_colors.dart';
 import '../../../shared/widgets/hwb_logo.dart';
 import '../../home/presentation/home_screen.dart';
+import '../domain/user_session.dart';
+
+/// What the app does when the session expires: asks for the password again
+/// over whatever is open, instead of clearing the stack and losing, without
+/// asking, a form being filled in.
+///
+/// If the person whose session expired ([expiredUserId]) signs in again, they
+/// are back where they were, with what they had written. Another account, or a
+/// password that must be changed before anything else, clears the stack to
+/// Home: what is open belongs to the other session. Leaving the prompt with
+/// back clears it to the login.
+Future<void> reauthenticateOverCurrentScreen(
+  NavigatorState navigator, {
+  required String? expiredUserId,
+}) async {
+  final UserSession? session = await navigator.push<UserSession>(
+    MaterialPageRoute<UserSession>(
+      builder: (_) =>
+          const LoginScreen(showSessionExpired: true, returnsSession: true),
+    ),
+  );
+  if (!navigator.mounted) return;
+  final bool samePerson =
+      session != null &&
+      expiredUserId != null &&
+      expiredUserId.isNotEmpty &&
+      session.id == expiredUserId;
+  if (samePerson && !session.mustChangePassword) return;
+  unawaited(
+    navigator.pushAndRemoveUntil<void>(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            session == null ? const LoginScreen() : const HomeScreen(),
+      ),
+      (Route<dynamic> route) => false,
+    ),
+  );
+}
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, this.showSessionExpired = false});
+  const LoginScreen({
+    super.key,
+    this.showSessionExpired = false,
+    this.returnsSession = false,
+  });
 
   final bool showSessionExpired;
+
+  /// Pops with the signed-in [UserSession] instead of opening Home: the
+  /// prompt of [reauthenticateOverCurrentScreen].
+  final bool returnsSession;
 
   @visibleForTesting
   static bool? debugIsWebOverride;
@@ -184,10 +231,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 if (v == null || v.trim().isEmpty) {
                                   return s.emailRequired;
                                 }
-                                final emailRegex = RegExp(
-                                  r'^[\w\-.]+@[\w\-]+\.[a-zA-Z]{2,}$',
-                                );
-                                if (!emailRegex.hasMatch(v.trim())) {
+                                if (validateEmail(v) != null) {
                                   return s.emailInvalid;
                                 }
                                 return null;
@@ -350,12 +394,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await AppScope.of(context).authRepository.login(
-        email: _emailCtrl.text.trim(),
-        password: _passwordCtrl.text,
-        rememberSession: LoginScreen.isWebPlatform ? false : _rememberSession,
-      );
+      final UserSession session = await AppScope.of(context).authRepository
+          .login(
+            email: _emailCtrl.text.trim(),
+            password: _passwordCtrl.text,
+            rememberSession: LoginScreen.isWebPlatform
+                ? false
+                : _rememberSession,
+          );
       if (!mounted) return;
+      if (widget.returnsSession) {
+        Navigator.of(context).pop(session);
+        return;
+      }
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
       );
@@ -367,9 +418,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      final errorMessage = e.statusCode == 429
-          ? ApiErrorCode.tooManyAttempts(e.retryAfter, isEs: s.isEs)
-          : ApiErrorCode.describe(e.code, isEs: s.isEs) ?? e.message;
+      final errorMessage = _loginErrorMessage(e, s);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -402,6 +451,27 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// What a refused sign-in tells the user. Decided on the status and the
+  /// backend's `code`, never on [ApiException.message]: that is English for
+  /// the logs, and the 401 of a wrong password carries no code at all.
+  String _loginErrorMessage(ApiException e, AppStrings s) {
+    final int? status = e.statusCode;
+    if (status == 429) {
+      return ApiErrorCode.tooManyAttempts(e.retryAfter, isEs: s.isEs);
+    }
+    final String? known = ApiErrorCode.describe(e.code, isEs: s.isEs);
+    if (known != null) return known;
+    if (status == null) return s.loginFailed;
+    if (status == 401) return s.loginWrongCredentials;
+    // The client follows no redirect, and a 2xx only fails when its body is
+    // not the API's JSON: a captive portal answered (511 is its own status).
+    if ((status >= 200 && status < 400) || status == 511) {
+      return s.loginCaptivePortal;
+    }
+    if (status >= 500) return s.loginServerUnavailable;
+    return s.loginFailed;
   }
 
   void _showNetworkErrorSnackBar(String message) {
