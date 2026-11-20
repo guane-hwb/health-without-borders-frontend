@@ -18,8 +18,8 @@ unless `HWB_NFC_CORPUS` names the input.
   dictionary takes a new id (and `kNfcV2…DictionaryId` moves to it); the old one
   stays in the file. `test/unit/nfc_payload_v2_test.dart` pins every dictionary
   by SHA-256 so a regeneration cannot replace one silently.
-- **Dictionary 1 is a candidate until phase 2 of ADR 005.** Until a build has
-  written format 2 in the field, it may still be rebuilt in place.
+- **Dictionary 1 is frozen by phase 2 of ADR 005.** Builds write format 2 with
+  it, so it is never rebuilt in place: a better one takes a new id.
 
 ## Input
 

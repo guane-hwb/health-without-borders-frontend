@@ -1,8 +1,9 @@
 # ADR 005: NFC Payload Format 2
 
 ## Status
-Proposed. Phase 1 (every build reads format 2, writes format 1) is implemented;
-phase 2 (writing format 2) needs the fleet check below and its own change.
+Accepted. Phase 1 (every build reads format 2 and writes format 1) shipped
+first; phase 2 makes format 2 the format every build writes, after the fleet
+check below.
 
 ## Date
 2026-11-17
@@ -47,8 +48,8 @@ One NFC Forum external record (TNF 0x04) per chip:
 
 The record type is also what tells a reader which format it has, and it is the
 type string the chip binding of ADR 003 puts in the associated data. The record
-overhead drops from 29–34 B to 20–23 B. The domain is Guane's; another owned
-domain can replace it before phase 2, never after.
+overhead drops from 29–34 B to 20–23 B. The domain is Guane's, and since
+phase 2 it is fixed: every format 2 chip carries it.
 
 ### Payload
 
@@ -105,9 +106,10 @@ from the typed CBOR of 400 **synthetic** training records of the audit corpus.
 - **A dictionary is part of the format.** Once a build has written with
   dictionary *n*, every later build reads it. A better dictionary gets a new id;
   the bytes of an id never change. Tests pin each one by SHA-256.
-- **Dictionary 1 is a candidate until phase 2.** The audit measured it on
-  synthetic text. Before it is frozen, measure real note lengths with
-  `tool/nfc_measure` (audit recommendation 3) and decide whether to rebuild it.
+- **Dictionary 1 is frozen by phase 2.** From then on builds write with it, so
+  its bytes are read forever. The audit measured it on synthetic text; before
+  phase 2 ships, real note lengths (`tool/nfc_measure`, audit recommendation 3)
+  say whether it stays or a dictionary 2 replaces it in the same change.
 
 ### What was left out, and why
 
@@ -151,15 +153,16 @@ columns, and real note lengths decide where.
 | Format 1 | ✅ | ✅ |
 | Format 2 | ❌ (seen as a blank chip) | ✅ |
 
-1. **Phase 1, this change.** Every build reads both formats and writes format 1.
-   `--dart-define=HWB_NFC_PAYLOAD_FORMAT=2` makes a build write format 2, for
-   field tests with chips that only those test devices read.
+1. **Phase 1.** Every build reads both formats and writes format 1. While it
+   was the default, `--dart-define=HWB_NFC_PAYLOAD_FORMAT=2` made a build write
+   format 2, for field tests with chips that only those test devices read.
 2. **Fleet check.** The backend logs `X-App-Version` on login and refresh: wait
    until every device in use runs a build with phase 1. The write-size telemetry
    (`nfc_write_metrics`, payload format 1) shows which chips are written and how
    full they get.
-3. **Phase 2, its own change.** Switch the default of `kNfcWriteFormat` to
-   format 2. Chips change format as they are rewritten.
+3. **Phase 2.** `kNfcWriteFormat` defaults to format 2. Chips change format as
+   they are rewritten. `--dart-define=HWB_NFC_PAYLOAD_FORMAT=1` builds a
+   format 1 writer, the way back; it still reads every format 2 chip.
 
 Going back to writing format 1 is always possible; dropping the reading of
 format 2 is not, while any chip may hold it. The same rule as key rotation
