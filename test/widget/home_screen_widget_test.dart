@@ -232,6 +232,31 @@ void main() {
 
       expect(find.byType(LoginScreen), findsOneWidget);
     });
+
+    testWidgets('si la sesión se va con otra pantalla encima, no la reemplaza '
+        'por el inicio de sesión', (tester) async {
+      // Over a form, the expired session asks for the password on top of it
+      // (reauthenticateOverCurrentScreen); Home must not drop that screen.
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
+      final NavigatorState navigator = tester.state<NavigatorState>(
+        find.byType(Navigator),
+      );
+      navigator
+          .push(
+            MaterialPageRoute<void>(
+              builder: (_) => const Scaffold(body: Text('Formulario abierto')),
+            ),
+          )
+          .ignore();
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(_wrapHome(user: null));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Formulario abierto'), findsOneWidget);
+      expect(find.byType(LoginScreen), findsNothing);
+    });
   });
 
   group('HomeScreen — header', () {
@@ -1077,9 +1102,9 @@ void main() {
     );
   });
 
-  group('_ActionCard — Renderizado sin subtítulo', () {
+  group('_ActionCard — renderizado', () {
     testWidgets(
-      'Renderiza correctamente el dispositivo cuando subtitle es null',
+      'la pantalla de inicio del superadmin muestra sus tarjetas de acción',
       (tester) async {
         final user = _session(UserRole.superadmin);
         await tester.pumpWidget(_wrapHome(user: user));
@@ -1091,28 +1116,52 @@ void main() {
     );
   });
 
-  group(
-    'HomeScreen — Cobertura adicional (_ActionCard sin subtítulo y refresco de SyncCard)',
-    () {
-      testWidgets('renderiza _ActionCard cuando subtitle es null', (
-        tester,
-      ) async {
+  group('HomeScreen — volver de la cola de sincronización', () {
+    testWidgets(
+      'tocar la tarjeta de sincronización abre la cola y al volver se regresa a HomeScreen',
+      (tester) async {
+        final user = _session(UserRole.doctor);
+        final apiClient = ApiClient(baseUrl: 'https://example.com');
+        final patientRepo = PatientRepository(
+          apiClient: apiClient,
+          authRepository: mockAuth,
+        );
+        final syncEngine = SyncEngine(
+          patientRepository: patientRepo,
+          localDatabase: mockDb,
+        );
+
+        mockAuth.currentUser = user;
+
         await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: Builder(
-                builder: (context) {
-                  return SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        ElevatedButton(
-                          key: const Key('action_card_no_sub'),
-                          onPressed: () {},
-                          child: const Text('Test Card'),
-                        ),
-                      ],
+          AppLocale(
+            locale: 'es',
+            setLocale: (_) {},
+            child: AppScope(
+              authRepository: mockAuth,
+              userRepository: UserRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              patientRepository: patientRepo,
+              localDatabase: mockDb,
+              syncEngine: syncEngine,
+              statsRepository: StatsRepository(
+                apiClient: apiClient,
+                authRepository: mockAuth,
+              ),
+              reachability: Reachability(baseUrl: 'http://localhost'),
+              child: MaterialApp(
+                routes: {
+                  '/': (_) => const HomeScreen(),
+                  '/sync/queue': (_) => Scaffold(
+                    body: ElevatedButton(
+                      onPressed: () => Navigator.of(
+                        tester.element(find.byType(Scaffold).last),
+                      ).pop(),
+                      child: const Text('Volver'),
                     ),
-                  );
+                  ),
                 },
               ),
             ),
@@ -1120,178 +1169,20 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Test Card'), findsOneWidget);
-      });
+        final syncCard = find.byIcon(Icons.cloud_done_outlined);
+        await tester.scrollUntilVisible(syncCard, 100);
+        await tester.tap(syncCard);
+        await tester.pumpAndSettle();
 
-      testWidgets(
-        'refresca el conteo de pendientes al retornar de la pantalla SyncQueue',
-        (tester) async {
-          final user = _session(UserRole.doctor);
-          final apiClient = ApiClient(baseUrl: 'https://example.com');
-          final patientRepo = PatientRepository(
-            apiClient: apiClient,
-            authRepository: mockAuth,
-          );
-          final syncEngine = SyncEngine(
-            patientRepository: patientRepo,
-            localDatabase: mockDb,
-          );
+        expect(find.text('Volver'), findsOneWidget);
 
-          mockAuth.currentUser = user;
+        await tester.tap(find.text('Volver'));
+        await tester.pumpAndSettle();
 
-          await tester.pumpWidget(
-            AppLocale(
-              locale: 'es',
-              setLocale: (_) {},
-              child: AppScope(
-                authRepository: mockAuth,
-                userRepository: UserRepository(
-                  apiClient: apiClient,
-                  authRepository: mockAuth,
-                ),
-                patientRepository: patientRepo,
-                localDatabase: mockDb,
-                syncEngine: syncEngine,
-                statsRepository: StatsRepository(
-                  apiClient: apiClient,
-                  authRepository: mockAuth,
-                ),
-                reachability: Reachability(baseUrl: 'http://localhost'),
-                child: MaterialApp(
-                  routes: {
-                    '/': (_) => const HomeScreen(),
-                    '/sync/queue': (_) => Scaffold(
-                      body: ElevatedButton(
-                        onPressed: () => Navigator.of(
-                          tester.element(find.byType(Scaffold).last),
-                        ).pop(),
-                        child: const Text('Volver'),
-                      ),
-                    ),
-                  },
-                ),
-              ),
-            ),
-          );
-          await tester.pumpAndSettle();
-
-          final syncCard = find.byIcon(Icons.cloud_done_outlined);
-          await tester.scrollUntilVisible(syncCard, 100);
-          await tester.tap(syncCard);
-          await tester.pumpAndSettle();
-
-          expect(find.text('Volver'), findsOneWidget);
-
-          await tester.tap(find.text('Volver'));
-          await tester.pumpAndSettle();
-
-          expect(find.byType(HomeScreen), findsOneWidget);
-        },
-      );
-    },
-  );
-
-  group(
-    'HomeScreen — Cobertura 100% (Subtítulo nulo y refresco tras pop de SyncQueue)',
-    () {
-      testWidgets(
-        'renderiza _ActionCard correctamente cuando el subtítulo es nulo',
-        (tester) async {
-          final user = _session(UserRole.superadmin);
-          await tester.pumpWidget(_wrapHome(user: user));
-          await tester.pumpAndSettle();
-
-          await tester.pumpWidget(
-            MaterialApp(
-              home: Scaffold(
-                body: Builder(
-                  builder: (context) => SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        ElevatedButton(
-                          onPressed: () {},
-                          child: const Text('Tarjeta Sin Subtítulo'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-          await tester.pumpAndSettle();
-
-          expect(find.text('Tarjeta Sin Subtítulo'), findsOneWidget);
-        },
-      );
-
-      testWidgets(
-        'ejecuta refreshPendingCount() y _fetchCount() al volver de la cola de sincronización',
-        (tester) async {
-          final user = _session(UserRole.doctor);
-          final apiClient = ApiClient(baseUrl: 'https://example.com');
-          final patientRepo = PatientRepository(
-            apiClient: apiClient,
-            authRepository: mockAuth,
-          );
-          final syncEngine = SyncEngine(
-            patientRepository: patientRepo,
-            localDatabase: mockDb,
-          );
-
-          mockAuth.currentUser = user;
-
-          await tester.pumpWidget(
-            AppLocale(
-              locale: 'es',
-              setLocale: (_) {},
-              child: AppScope(
-                authRepository: mockAuth,
-                userRepository: UserRepository(
-                  apiClient: apiClient,
-                  authRepository: mockAuth,
-                ),
-                patientRepository: patientRepo,
-                localDatabase: mockDb,
-                syncEngine: syncEngine,
-                statsRepository: StatsRepository(
-                  apiClient: apiClient,
-                  authRepository: mockAuth,
-                ),
-                reachability: Reachability(baseUrl: 'http://localhost'),
-                child: MaterialApp(
-                  routes: {
-                    '/': (_) => const HomeScreen(),
-                    '/sync/queue': (_) => Scaffold(
-                      body: ElevatedButton(
-                        onPressed: () => Navigator.of(
-                          tester.element(find.byType(Scaffold).last),
-                        ).pop(),
-                        child: const Text('Regresar'),
-                      ),
-                    ),
-                  },
-                ),
-              ),
-            ),
-          );
-          await tester.pumpAndSettle();
-
-          final syncCard = find.byIcon(Icons.cloud_done_outlined);
-          await tester.scrollUntilVisible(syncCard, 100);
-          await tester.tap(syncCard);
-          await tester.pumpAndSettle();
-
-          expect(find.text('Regresar'), findsOneWidget);
-
-          await tester.tap(find.text('Regresar'));
-          await tester.pumpAndSettle();
-
-          expect(find.byType(HomeScreen), findsOneWidget);
-        },
-      );
-    },
-  );
+        expect(find.byType(HomeScreen), findsOneWidget);
+      },
+    );
+  });
 
   group('HomeScreen — contraseña', () {
     UserSession mustChange() =>
@@ -1372,7 +1263,7 @@ void main() {
     });
   });
 
-  group('HomeScreen — Cobertura 100% (aviso de pendientes al cerrar sesión)', () {
+  group('HomeScreen — aviso de pendientes al cerrar sesión', () {
     Future<void> tapLogout(WidgetTester tester) async {
       final logoutIcon = find.byIcon(Icons.logout_rounded);
       await tester.scrollUntilVisible(logoutIcon, 80);
@@ -1496,21 +1387,19 @@ void main() {
       expect(mockAuth.clearSessionCalled, isTrue);
     });
 
-    testWidgets(
-      'web: sincroniza antes de preguntar y advierte que se ELIMINARÁN',
-      (tester) async {
-        stubPending(patients: 2, logs: 1);
-        await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
-        await tester.pumpAndSettle();
+    testWidgets('web: el aviso dice que los pendientes se ELIMINARÁN', (
+      tester,
+    ) async {
+      stubPending(patients: 2, logs: 1);
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
 
-        await tapLogout(tester);
+      await tapLogout(tester);
 
-        expect(find.byType(AlertDialog), findsOneWidget);
-        expect(find.textContaining('ELIMINARÁN'), findsOneWidget);
-        verify(() => mockDb.getUnsyncedCount(ownerUserId: null)).called(1);
-      },
-      skip: !kIsWeb,
-    );
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.textContaining('ELIMINARÁN'), findsOneWidget);
+      verify(() => mockDb.getUnsyncedCount(ownerUserId: null)).called(1);
+    }, skip: !kIsWeb);
 
     testWidgets(
       'web: el aviso en inglés indica que se eliminarán de este navegador',
@@ -1534,30 +1423,28 @@ void main() {
       skip: !kIsWeb,
     );
 
-    testWidgets(
-      'web: tras la sincronización previa permite confirmar y cerrar sesión',
-      (tester) async {
-        stubPending(patients: 1);
-        await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
-        await tester.pumpAndSettle();
+    testWidgets('web: con pendientes permite confirmar y cerrar sesión', (
+      tester,
+    ) async {
+      stubPending(patients: 1);
+      await tester.pumpWidget(_wrapHome(user: _session(UserRole.doctor)));
+      await tester.pumpAndSettle();
 
-        await tapLogout(tester);
-        expect(find.byType(AlertDialog), findsOneWidget);
+      await tapLogout(tester);
+      expect(find.byType(AlertDialog), findsOneWidget);
 
-        await tester.tap(
-          find
-              .descendant(
-                of: find.byType(AlertDialog),
-                matching: find.byType(TextButton),
-              )
-              .last,
-        );
-        await tester.pumpAndSettle();
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(AlertDialog),
+              matching: find.byType(TextButton),
+            )
+            .last,
+      );
+      await tester.pumpAndSettle();
 
-        expect(mockAuth.clearSessionCalled, isTrue);
-      },
-      skip: !kIsWeb,
-    );
+      expect(mockAuth.clearSessionCalled, isTrue);
+    }, skip: !kIsWeb);
 
     group('forzando el comportamiento web', () {
       setUp(() {
@@ -1604,7 +1491,7 @@ void main() {
         );
       });
 
-      testWidgets('sincroniza antes de preguntar y permite cerrar sesión', (
+      testWidgets('con pendientes permite confirmar y cerrar sesión', (
         tester,
       ) async {
         stubPending(patients: 1);

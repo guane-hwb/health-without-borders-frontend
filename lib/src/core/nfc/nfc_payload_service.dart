@@ -1,17 +1,23 @@
 // lib/src/core/nfc/nfc_payload_service.dart
 
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show min;
 import 'dart:typed_data';
 
 import 'package:nfc_manager/ndef_record.dart';
 
 import '../../features/nfc/domain/patient_record.dart';
+import '../utils/app_logger.dart';
 import 'nfc_guardian_alias.dart';
 import 'nfc_guardian_payload.dart';
 import 'nfc_keyring.dart' show kLegacyNfcKeyVersion;
 import 'nfc_payload_codec.dart';
+import 'nfc_payload_format.dart';
+import 'nfc_payload_v2.dart';
 import 'nfc_session_manager.dart';
 import 'nfc_triage_payload.dart';
+import 'nfc_write_metric.dart';
 
 export 'nfc_session_manager.dart'
     show
@@ -36,14 +42,24 @@ typedef GuardianFitBuilder = GuardianPayloadFit Function(int payloadBudget);
 /// Both the register wizard and the profile "update chips" flow need exactly
 /// this; keeping it here means neither screen carries a copy, and the wiring is
 /// unit-testable instead of only reachable by driving a full screen.
+///
+/// [format] must be the one the service writes in: it decides how a payload
+/// is measured. Both default to [kNfcWriteFormat].
 GuardianFitBuilder guardianFitBuilder({
   required PatientFullRecord record,
   required NfcPayloadCodec codec,
+  NfcPayloadFormat format = kNfcWriteFormat,
 }) {
+  final int Function(Map<String, dynamic>) estimateSize =
+      format == NfcPayloadFormat.v2
+      ? (Map<String, dynamic> payload) => codec.sealedSize(
+          NfcPayloadV2.plaintextSize(payload, NfcPayloadKind.guardian),
+        )
+      : codec.estimateSize;
   return (int budget) => NfcGuardianPayload.buildWithinCapacity(
     record: record,
     capacityBytes: budget,
-    estimateSize: codec.estimateSize,
+    estimateSize: estimateSize,
   );
 }
 
@@ -52,8 +68,9 @@ GuardianFitBuilder guardianFitBuilder({
 const int kNtag215NdefCapacity = 492;
 
 /// The payload budget a guardian copy has on a chip whose NDEF capacity is
-/// [ndefCapacity]: the capacity minus what the MIME record adds around the
-/// payload (its header and the 28-character type string).
+/// [ndefCapacity]: the capacity minus what the record adds around the payload
+/// (its header and type string: the 28-character MIME type in format 1, the
+/// 17-character external type in format 2).
 ///
 /// The overhead is measured on a 256-byte payload. From that size on the record
 /// stores its length in 4 bytes instead of 1, and a guardian copy is in
@@ -62,18 +79,19 @@ const int kNtag215NdefCapacity = 492;
 ///
 /// [NfcPayloadService.writeGuardianRecord] and the register wizard's check
 /// before the tap both use this, so the two cannot disagree.
-int guardianPayloadBudget(int ndefCapacity) {
+int guardianPayloadBudget(
+  int ndefCapacity, {
+  NfcPayloadFormat format = kNfcWriteFormat,
+}) {
   const int probe = 256;
+  final NdefRecord record = format == NfcPayloadFormat.v2
+      ? buildExternalRecord(kHwbGuardianV2Type, Uint8List(probe))
+      : NfcPayloadService.buildMimeRecord(
+          kHwbGuardianMimeType,
+          Uint8List(probe),
+        );
   final int overhead =
-      NdefMessage(
-        records: [
-          NfcPayloadService.buildMimeRecord(
-            kHwbGuardianMimeType,
-            Uint8List(probe),
-          ),
-        ],
-      ).byteLength -
-      probe;
+      NdefMessage(records: <NdefRecord>[record]).byteLength - probe;
   return ndefCapacity - overhead;
 }
 
@@ -96,11 +114,26 @@ const String kHwbGuardianMimeType = 'application/vnd.hwb.guardian';
 /// Owns no radio state: every operation goes through [NfcTagSource], which
 /// serialises callers and guarantees the future resolves.
 class NfcPayloadService {
-  NfcPayloadService({required this.codec, NfcTagSource? tagSource})
-    : _tagSource = tagSource ?? NfcSessionManager.instance;
+  /// Reads both payload formats; writes [writeFormat], which defaults to the
+  /// build's [kNfcWriteFormat].
+  ///
+  /// [onWritten] is told the sizes of every successful write (see
+  /// [NfcWriteMetric]). It is not awaited and its failures are only logged:
+  /// telemetry never delays or fails a write.
+  NfcPayloadService({
+    required this.codec,
+    NfcTagSource? tagSource,
+    this.writeFormat = kNfcWriteFormat,
+    NfcWriteObserver? onWritten,
+  }) : _tagSource = tagSource ?? NfcSessionManager.instance,
+       _onWritten = onWritten;
 
   final NfcPayloadCodec codec;
   final NfcTagSource _tagSource;
+  final NfcWriteObserver? _onWritten;
+
+  /// Format of every payload this service writes.
+  final NfcPayloadFormat writeFormat;
 
   bool get _bindsToChip {
     final int? version = codec.writeKeyVersion;
@@ -120,6 +153,88 @@ class NfcPayloadService {
     return codec.decodeDetailed(payload);
   }
 
+  /// Opens a format 2 record: decrypts with the chip binding first and then
+  /// without, as [_decodeFromChip] does, and decodes the plaintext. Null when
+  /// no key opens it or it is not a valid format 2 payload.
+  Future<NfcDecodeResult?> _decodeV2FromChip(
+    Uint8List payload,
+    String uid,
+    NfcPayloadKind kind,
+  ) async {
+    final String type = _v2Type(kind);
+    final NfcOpenResult? opened =
+        await codec.open(payload, extraAad: chipBindingAad(uid, type)) ??
+        await codec.open(payload);
+    if (opened == null) return null;
+    try {
+      return NfcDecodeResult(
+        data: NfcPayloadV2.decode(opened.plaintext, kind),
+        keyVersion: opened.keyVersion,
+        hadHeader: opened.hadHeader,
+      );
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static String _v1Type(NfcPayloadKind kind) =>
+      kind == NfcPayloadKind.triage ? kHwbNdefMimeType : kHwbGuardianMimeType;
+
+  static String _v2Type(NfcPayloadKind kind) =>
+      kind == NfcPayloadKind.triage ? kHwbTriageV2Type : kHwbGuardianV2Type;
+
+  /// Whether [tag] carries a record of [kind], in either format.
+  static bool _holds(HwbTag tag, NfcPayloadKind kind) =>
+      _findRecordOf(tag, TypeNameFormat.external, _v2Type(kind)) != null ||
+      _findRecord(tag, _v1Type(kind)) != null;
+
+  /// The payload of [kind] on [tag], decoded, in whichever format it was
+  /// written. Null when there is none or no key opens it.
+  Future<NfcDecodeResult?> _readPayload(HwbTag tag, NfcPayloadKind kind) async {
+    final Uint8List? v2 = _findRecordOf(
+      tag,
+      TypeNameFormat.external,
+      _v2Type(kind),
+    );
+    if (v2 != null) return _decodeV2FromChip(v2, tag.uid, kind);
+    final Uint8List? v1 = _findRecord(tag, _v1Type(kind));
+    if (v1 != null) return _decodeFromChip(v1, tag.uid, _v1Type(kind));
+    return null;
+  }
+
+  /// Record type this service writes for [kind].
+  String _writeType(NfcPayloadKind kind) =>
+      writeFormat == NfcPayloadFormat.v2 ? _v2Type(kind) : _v1Type(kind);
+
+  /// The encrypted payload this service writes for [payload], bound to
+  /// [bindUid] when given. Format 2 checks that the payload reads back exactly
+  /// before anything is encrypted; when it would not, nothing is written.
+  Future<Uint8List> _seal(
+    Map<String, dynamic> payload,
+    NfcPayloadKind kind,
+    String? bindUid,
+  ) async {
+    final Uint8List? aad = bindUid == null
+        ? null
+        : chipBindingAad(bindUid, _writeType(kind));
+    if (writeFormat == NfcPayloadFormat.v2) {
+      final Uint8List plaintext;
+      try {
+        plaintext = NfcPayloadV2.encode(payload, kind);
+      } on NfcPayloadV2Exception catch (e) {
+        throw NfcWriteException(e.message);
+      }
+      return codec.seal(plaintext, extraAad: aad);
+    }
+    return codec.encode(payload, extraAad: aad);
+  }
+
+  /// The single record this service writes for [encrypted].
+  NdefRecord _record(NfcPayloadKind kind, Uint8List encrypted) =>
+      writeFormat == NfcPayloadFormat.v2
+      ? buildExternalRecord(_writeType(kind), encrypted)
+      : buildMimeRecord(_writeType(kind), encrypted);
+
   Future<NfcWriteResult> writeTriagePayload(
     Map<String, dynamic> triagePayload, {
     String? expectedUid,
@@ -129,7 +244,7 @@ class NfcPayloadService {
   }) {
     return _writePayload(
       triagePayload,
-      mimeType: kHwbNdefMimeType,
+      kind: NfcPayloadKind.triage,
       expectedUid: expectedUid,
       timeout: timeout,
       cancel: cancel,
@@ -151,7 +266,7 @@ class NfcPayloadService {
   }) {
     return _writePayload(
       guardianPayload,
-      mimeType: kHwbGuardianMimeType,
+      kind: NfcPayloadKind.guardian,
       expectedUid: expectedUid,
       timeout: timeout,
       cancel: cancel,
@@ -183,8 +298,8 @@ class NfcPayloadService {
     Duration timeout = NfcSessionManager.defaultTimeout,
     NfcCancelToken? cancel,
     String? alertMessage,
-  }) {
-    return _tagSource.withTag<NfcWriteResult>(
+  }) async {
+    final NfcWriteResult result = await _tagSource.withTag<NfcWriteResult>(
       (HwbTag tag) async {
         final uid = tag.uid;
         if (uid.isEmpty) {
@@ -209,19 +324,21 @@ class NfcPayloadService {
           await _refuseAnotherPatientsDevice(tag, uid, patientId);
         }
 
-        // The MIME record overhead comes out of maxSize; see
+        // The record overhead comes out of maxSize; see
         // guardianPayloadBudget.
-        final payloadBudget = guardianPayloadBudget(ndef.maxSize);
+        final payloadBudget = guardianPayloadBudget(
+          ndef.maxSize,
+          format: writeFormat,
+        );
 
         final fit = buildFit(payloadBudget);
-        final encrypted = await codec.encode(
+        final encrypted = await _seal(
           fit.payload,
-          extraAad: _bindsToChip
-              ? chipBindingAad(uid, kHwbGuardianMimeType)
-              : null,
+          NfcPayloadKind.guardian,
+          _bindsToChip ? uid : null,
         );
         final message = NdefMessage(
-          records: [buildMimeRecord(kHwbGuardianMimeType, encrypted)],
+          records: [_record(NfcPayloadKind.guardian, encrypted)],
         );
 
         final needed = message.byteLength;
@@ -248,17 +365,19 @@ class NfcPayloadService {
       cancel: cancel,
       alertMessage: alertMessage,
     );
+    _notifyWritten(result, deviceRole: 'guardian');
+    return result;
   }
 
   /// Shared NDEF write: encodes [payload], waits for a chip, optionally
   /// verifies its UID against [expectedUid], checks capacity, and writes one
-  /// MIME record of type [mimeType].
+  /// record of [kind] in [writeFormat].
   ///
   /// Throws [NfcUidMismatchException] if [expectedUid] is given and the tapped
   /// chip's UID differs, or [NfcWriteException] on any other failure.
   Future<NfcWriteResult> _writePayload(
     Map<String, dynamic> payload, {
-    required String mimeType,
+    required NfcPayloadKind kind,
     String? expectedUid,
     Duration timeout = NfcSessionManager.defaultTimeout,
     NfcCancelToken? cancel,
@@ -270,17 +389,12 @@ class NfcPayloadService {
 
     if (!bind || (expectedUid != null && expectedUid.isNotEmpty)) {
       try {
-        preEncrypted = await codec.encode(
-          payload,
-          extraAad: bind ? chipBindingAad(expectedUid!, mimeType) : null,
-        );
-        preMessage = NdefMessage(
-          records: [buildMimeRecord(mimeType, preEncrypted)],
-        );
+        preEncrypted = await _seal(payload, kind, bind ? expectedUid! : null);
+        preMessage = NdefMessage(records: [_record(kind, preEncrypted)]);
       } catch (_) {}
     }
 
-    return _tagSource.withTag<NfcWriteResult>(
+    final NfcWriteResult result = await _tagSource.withTag<NfcWriteResult>(
       (HwbTag tag) async {
         final uid = tag.uid;
         if (uid.isEmpty) {
@@ -306,15 +420,10 @@ class NfcPayloadService {
         }
 
         final Uint8List encrypted =
-            preEncrypted ??
-            await codec.encode(
-              payload,
-              extraAad: bind ? chipBindingAad(uid, mimeType) : null,
-            );
+            preEncrypted ?? await _seal(payload, kind, bind ? uid : null);
 
         final NdefMessage message =
-            preMessage ??
-            NdefMessage(records: [buildMimeRecord(mimeType, encrypted)]);
+            preMessage ?? NdefMessage(records: [_record(kind, encrypted)]);
 
         final needed = message.byteLength;
         if (needed > ndef.maxSize) {
@@ -338,6 +447,54 @@ class NfcPayloadService {
       cancel: cancel,
       alertMessage: alertMessage,
     );
+    _notifyWritten(
+      result,
+      deviceRole: kind == NfcPayloadKind.guardian ? 'guardian' : 'patient',
+    );
+    return result;
+  }
+
+  /// Tells [_onWritten] the sizes of a write that succeeded. Not awaited, and
+  /// a failure is only logged: the chip is already written.
+  void _notifyWritten(NfcWriteResult result, {required String deviceRole}) {
+    final NfcWriteObserver? observer = _onWritten;
+    if (observer == null) return;
+    final GuardianPayloadFit? fit = result.fit;
+    final metric = NfcWriteMetric(
+      deviceRole: deviceRole,
+      payloadFormat: nfcPayloadFormatNumber(writeFormat),
+      keyVersion: NfcWriteMetric.keyVersionOf(codec.writeKeyVersion),
+      payloadBytes: result.bytesWritten,
+      messageBytes: result.messageBytes,
+      chipCapacity: result.chipCapacity,
+      // Totals are what the copy carries on a chip with room for everything
+      // (the most recent, up to the copy's own limit), so kept < total means
+      // the chip's capacity left history out, and nothing else.
+      consultationsKept: fit?.includedConsultations,
+      consultationsTotal: fit == null
+          ? null
+          : min(
+              fit.totalConsultations,
+              NfcGuardianPayload.kDefaultMaxConsultations,
+            ),
+      vaccinesKept: fit?.includedVaccines,
+      vaccinesTotal: fit == null
+          ? null
+          : min(fit.totalVaccines, NfcGuardianPayload.kDefaultMaxVaccines),
+      writtenAt: DateTime.now().toUtc(),
+    );
+    unawaited(
+      Future<void>.sync(() => observer(metric)).catchError((
+        Object error,
+        StackTrace stack,
+      ) {
+        AppLogger.e(
+          'No se pudo registrar la métrica de escritura NFC',
+          error: error,
+          stackTrace: stack,
+        );
+      }),
+    );
   }
 
   /// Reads and decrypts a triage payload from an NFC chip.
@@ -353,12 +510,11 @@ class NfcPayloadService {
           throw NfcReadException('Could not read chip UID');
         }
 
-        final payload = _findRecord(tag, kHwbNdefMimeType);
-        if (payload == null) {
+        if (!_holds(tag, NfcPayloadKind.triage)) {
           return NfcReadResult(uid: uid, triage: null);
         }
 
-        final decoded = await _decodeFromChip(payload, uid, kHwbNdefMimeType);
+        final decoded = await _readPayload(tag, NfcPayloadKind.triage);
         return NfcReadResult(
           uid: uid,
           triage: decoded != null
@@ -389,13 +545,8 @@ class NfcPayloadService {
       (HwbTag tag) async {
         final uid = tag.uid;
 
-        final guardianPayload = _findRecord(tag, kHwbGuardianMimeType);
-        if (guardianPayload != null) {
-          final decoded = await _decodeFromChip(
-            guardianPayload,
-            uid,
-            kHwbGuardianMimeType,
-          );
+        if (_holds(tag, NfcPayloadKind.guardian)) {
+          final decoded = await _readPayload(tag, NfcPayloadKind.guardian);
           return HwbChipReadResult(
             uid: uid,
             kind: decoded != null ? HwbChipKind.guardian : HwbChipKind.none,
@@ -405,13 +556,8 @@ class NfcPayloadService {
           );
         }
 
-        final triagePayload = _findRecord(tag, kHwbNdefMimeType);
-        if (triagePayload != null) {
-          final decoded = await _decodeFromChip(
-            triagePayload,
-            uid,
-            kHwbNdefMimeType,
-          );
+        if (_holds(tag, NfcPayloadKind.triage)) {
+          final decoded = await _readPayload(tag, NfcPayloadKind.triage);
           final triage = decoded != null
               ? NfcTriagePayload.fromPayload(decoded.data)
               : null;
@@ -443,9 +589,8 @@ class NfcPayloadService {
     String uid,
     String patientId,
   ) async {
-    final Uint8List? copy = _findRecord(tag, kHwbGuardianMimeType);
-    if (copy != null) {
-      final decoded = await _decodeFromChip(copy, uid, kHwbGuardianMimeType);
+    if (_holds(tag, NfcPayloadKind.guardian)) {
+      final decoded = await _readPayload(tag, NfcPayloadKind.guardian);
       final String? owner = decoded == null
           ? null
           : guardianCopyPatientId(decoded.data);
@@ -454,9 +599,8 @@ class NfcPayloadService {
       }
       return;
     }
-    final Uint8List? triage = _findRecord(tag, kHwbNdefMimeType);
-    if (triage != null &&
-        await _decodeFromChip(triage, uid, kHwbNdefMimeType) != null) {
+    if (_holds(tag, NfcPayloadKind.triage) &&
+        await _readPayload(tag, NfcPayloadKind.triage) != null) {
       throw NfcDeviceInUseException(patientDevice: true);
     }
   }
@@ -482,12 +626,20 @@ class NfcPayloadService {
   /// The payload of the first MIME record on [tag] whose type is [mimeType],
   /// or null when the chip is blank, not NDEF-formatted, or carries no such
   /// record.
-  static Uint8List? _findRecord(HwbTag tag, String mimeType) {
+  static Uint8List? _findRecord(HwbTag tag, String mimeType) =>
+      _findRecordOf(tag, TypeNameFormat.media, mimeType);
+
+  /// The payload of the first record on [tag] with [format] and [type].
+  static Uint8List? _findRecordOf(
+    HwbTag tag,
+    TypeNameFormat format,
+    String type,
+  ) {
     final cached = tag.ndef?.cachedMessage;
     if (cached == null) return null;
     for (final record in cached.records) {
-      if (record.typeNameFormat == TypeNameFormat.media &&
-          String.fromCharCodes(record.type) == mimeType) {
+      if (record.typeNameFormat == format &&
+          String.fromCharCodes(record.type) == type) {
         return record.payload;
       }
     }

@@ -2,12 +2,14 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../../../core/di/app_scope.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../core/nfc/nfc_guardian_payload.dart';
 import '../../../../../core/nfc/nfc_keyring.dart';
 import '../../../../../core/nfc/nfc_payload_codec.dart';
 import '../../../../../core/nfc/nfc_payload_service.dart';
 import '../../../../../core/nfc/nfc_triage_payload.dart';
+import '../../../../../core/nfc/nfc_write_metric.dart';
 import '../../../../../core/nfc/partial_card_notice.dart';
 import '../../../../../core/utils/app_logger.dart';
 import '../../../../../design/tokens/app_colors.dart';
@@ -33,6 +35,11 @@ Future<bool> executeUpdateNfcChips({
 }) async {
   final isEs = AppStrings.of(context).isEs;
   final messenger = ScaffoldMessenger.of(context);
+  // Sizes of each write, for the next sync to report. Absent in widget tests
+  // that mount no AppScope.
+  final NfcWriteObserver? onWritten = AppScope.maybeOf(
+    context,
+  )?.localDatabase.recordNfcWriteMetric;
 
   final NfcPayloadCodec codec;
   try {
@@ -55,7 +62,8 @@ Future<bool> executeUpdateNfcChips({
   }
 
   NfcPayloadService makeService() =>
-      serviceBuilder?.call(codec) ?? NfcPayloadService(codec: codec);
+      serviceBuilder?.call(codec) ??
+      NfcPayloadService(codec: codec, onWritten: onWritten);
 
   if (patientChipDirty) {
     final ok = await showNfcGuidedWrite(
@@ -200,8 +208,12 @@ Future<PatientFullRecord?> executeReassignOne({
   required void Function(String message, {bool error}) showSnack,
   NfcPayloadServiceBuilder? serviceBuilder,
 }) async {
+  final NfcWriteObserver? onWritten = AppScope.maybeOf(
+    context,
+  )?.localDatabase.recordNfcWriteMetric;
   NfcPayloadService makeService() =>
-      serviceBuilder?.call(codec) ?? NfcPayloadService(codec: codec);
+      serviceBuilder?.call(codec) ??
+      NfcPayloadService(codec: codec, onWritten: onWritten);
 
   final hasTwo = (record.guardian2Info?.deviceUid ?? '').trim().isNotEmpty;
   String title;

@@ -1,5 +1,6 @@
 // lib/src/features/nfc/presentation/register/steps/step3_patient_data.dart
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import '../../../../../core/nfc/nfc_service.dart';
 import '../../../../../core/validation/identity_validators.dart';
@@ -9,6 +10,7 @@ import '../../../../../shared/widgets/form_widgets.dart';
 import '../../../domain/register_draft.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../widgets/nfc_uid_field.dart';
+import '../widgets/validation_feedback.dart';
 import '../../profile/sheets/edit_vital_signs_helpers.dart';
 
 const _kEnabledBorder = OutlineInputBorder(
@@ -89,17 +91,45 @@ Widget _buildLabel(String labelText, bool isRequired) {
   );
 }
 
+/// Lets the register screen ask the patient-data step, before leaving the
+/// registration, whether it shows input not yet saved to the draft: what is
+/// typed there reaches the draft only on "Continuar".
+class UnsavedInputProbe {
+  bool Function()? _check;
+
+  /// True while the step on screen shows input not yet saved to the draft.
+  bool get hasUnsavedInput => _check?.call() ?? false;
+}
+
+/// The fields «Continuar» checks, in the order they appear on screen.
+enum _PatientField {
+  uid,
+  docNum,
+  firstName,
+  firstLast,
+  dob,
+  nationality,
+  weight,
+  height,
+  city,
+  state,
+}
+
 class Step3PatientData extends StatefulWidget {
   const Step3PatientData({
     super.key,
     required this.draft,
     required this.onBack,
     required this.onContinue,
+    this.unsavedInput,
   });
 
   final RegisterDraft draft;
   final VoidCallback onBack;
   final VoidCallback onContinue;
+
+  /// Answers, while this step is on screen, whether it has unsaved input.
+  final UnsavedInputProbe? unsavedInput;
 
   @override
   State<Step3PatientData> createState() => _Step3State();
@@ -141,20 +171,55 @@ class _Step3State extends State<Step3PatientData> {
     text: widget.draft.deviceUid ?? '',
   );
   bool _scanningUid = false;
+
+  /// An NFC reading error; it takes the banner's place until «Continuar».
   String? _err;
-  bool _isDocInvalid = false;
+
+  /// What the last «Continuar» found; the banner shows what is still open
+  /// ([openSummary]).
+  List<SummaryEntry<_PatientField>> _summary = const [];
+  final _scroll = ScrollController();
+  final _focus = <_PatientField, FocusNode>{
+    for (final f in const [
+      _PatientField.uid,
+      _PatientField.docNum,
+      _PatientField.firstName,
+      _PatientField.firstLast,
+      _PatientField.weight,
+      _PatientField.height,
+      _PatientField.city,
+      _PatientField.state,
+    ])
+      f: FocusNode(),
+  };
+
+  /// The error under each field, set by «Continuar» (and, for the document,
+  /// on leaving the field); typing in a field clears its own.
+  final _fieldErrors = <_PatientField, String>{};
 
   bool get _hasEthnicity => patientHasEthnicity(widget.draft.ethnicity);
+
+  /// The step's input when it opened, to tell whether any was entered since.
+  late final List<Object?> _openedWith;
 
   @override
   void initState() {
     super.initState();
-    _docNum.addListener(_validateDocInRealTime);
+    _focus[_PatientField.docNum]!.addListener(_validateDocOnBlur);
+    _openedWith = _input();
+    widget.unsavedInput?._check = _hasUnsavedInput;
   }
 
   @override
   void dispose() {
-    _docNum.removeListener(_validateDocInRealTime);
+    if (widget.unsavedInput?._check == _hasUnsavedInput) {
+      widget.unsavedInput!._check = null;
+    }
+    _focus[_PatientField.docNum]!.removeListener(_validateDocOnBlur);
+    for (final node in _focus.values) {
+      node.dispose();
+    }
+    _scroll.dispose();
     _docNum.dispose();
     _firstName.dispose();
     _secondName.dispose();
@@ -170,15 +235,65 @@ class _Step3State extends State<Step3PatientData> {
     super.dispose();
   }
 
-  void _validateDocInRealTime() {
-    final text = _docNum.text.trim();
-    if (text.isEmpty) {
-      if (_isDocInvalid) setState(() => _isDocInvalid = false);
-      return;
-    }
-    final invalid = validateDocumentNumber(text) != null;
-    if (invalid != _isDocInvalid) {
-      setState(() => _isDocInvalid = invalid);
+  /// The text typed in the fields, and what the selectors put in the draft.
+  List<Object?> _input() {
+    final d = widget.draft;
+    return <Object?>[
+      for (final TextEditingController field in <TextEditingController>[
+        _docNum,
+        _firstName,
+        _secondName,
+        _firstLast,
+        _secondLast,
+        _street,
+        _city,
+        _stateCtrl,
+        _ethnicComm,
+        _weight,
+        _height,
+        _patientUid,
+      ])
+        field.text.trim(),
+      d.documentType,
+      d.dob,
+      d.biologicalSex,
+      d.genderIdentity,
+      d.nationalityCode,
+      d.ethnicity,
+      d.disabilityCategory,
+      d.bloodType,
+      d.isBloodTypeCertified,
+      d.zone,
+    ];
+  }
+
+  bool _hasUnsavedInput() => !listEquals(_input(), _openedWith);
+
+  String? _docNumberError(bool isEs) =>
+      validateDocumentNumber(_docNum.text) == null
+      ? null
+      : (isEs
+            ? 'Número de documento inválido (5 a 20 caracteres, sin símbolos)'
+            : 'Invalid document number (5 to 20 characters, no symbols)');
+
+  /// The document's format is checked on leaving the field, not on each key.
+  void _validateDocOnBlur() {
+    if (!mounted || _focus[_PatientField.docNum]!.hasFocus) return;
+    if (_docNum.text.trim().isEmpty) return;
+    final error = _docNumberError(AppStrings.of(context).isEs);
+    if (error == _fieldErrors[_PatientField.docNum]) return;
+    setState(() {
+      if (error == null) {
+        _fieldErrors.remove(_PatientField.docNum);
+      } else {
+        _fieldErrors[_PatientField.docNum] = error;
+      }
+    });
+  }
+
+  void _clearFieldError(_PatientField field) {
+    if (_fieldErrors.containsKey(field)) {
+      setState(() => _fieldErrors.remove(field));
     }
   }
 
@@ -192,6 +307,7 @@ class _Step3State extends State<Step3PatientData> {
           _patientUid.text = uid;
           widget.draft.deviceUid = uid;
           _scanningUid = false;
+          _fieldErrors.remove(_PatientField.uid);
         });
       }
     } on NfcNotAvailableException {
@@ -214,30 +330,53 @@ class _Step3State extends State<Step3PatientData> {
   void _save() {
     final s = AppStrings.of(context);
     final isEs = s.isEs;
-    final missing = <String>[];
+    final entries = <SummaryEntry<_PatientField>>[];
+    final fieldErrors = <_PatientField, String>{};
 
-    if (_patientUid.text.trim().isEmpty) {
-      missing.add(s.patientNfcDevice);
+    void requireText(
+      _PatientField field,
+      TextEditingController controller,
+      String label,
+    ) {
+      if (controller.text.trim().isNotEmpty) return;
+      final shown = field == _PatientField.uid
+          ? s.nfcUidRequired
+          : s.formFieldRequired;
+      entries.add(SummaryEntry(label, field: field, fieldError: shown));
+      fieldErrors[field] = shown;
     }
-    if (_docNum.text.trim().isEmpty) missing.add(s.documentNumberLabel);
-    if (_firstName.text.trim().isEmpty) missing.add(s.firstNameLabel);
-    if (_firstLast.text.trim().isEmpty) missing.add(s.lastNameLabel);
-    if (widget.draft.dob == null) missing.add(s.dobLabel);
-    if (_city.text.trim().isEmpty) missing.add(s.municipality);
-    if (_stateCtrl.text.trim().isEmpty) missing.add(s.department);
 
-    if (validateDocumentNumber(_docNum.text) != null) {
-      setState(() => _isDocInvalid = true);
-      missing.add(
-        isEs
-            ? 'Número de documento inválido (5 a 20 caracteres, sin símbolos)'
-            : 'Invalid document number (5 to 20 characters, no symbols)',
+    void reject(_PatientField field, String error) {
+      entries.add(
+        SummaryEntry(error, field: field, fieldError: error, invalid: true),
       );
+      fieldErrors[field] = error;
     }
+
+    requireText(_PatientField.uid, _patientUid, s.patientNfcDevice);
+    requireText(_PatientField.docNum, _docNum, s.documentNumberLabel);
+    requireText(_PatientField.firstName, _firstName, s.firstNameLabel);
+    requireText(_PatientField.firstLast, _firstLast, s.lastNameLabel);
+    if (widget.draft.dob == null) {
+      entries.add(
+        SummaryEntry(
+          s.dobLabel,
+          field: _PatientField.dob,
+          fieldError: s.formFieldRequired,
+        ),
+      );
+      fieldErrors[_PatientField.dob] = s.formFieldRequired;
+    }
+    requireText(_PatientField.city, _city, s.municipality);
+    requireText(_PatientField.state, _stateCtrl, s.department);
+
+    final docError = _docNumberError(isEs);
+    if (docError != null) reject(_PatientField.docNum, docError);
 
     final natCode = widget.draft.nationalityCode;
     if (!kSupportedNationalityCodes.contains(natCode)) {
-      missing.add(
+      reject(
+        _PatientField.nationality,
         isEs
             ? 'Nacionalidad no válida (código ISO 3166-1 requerido)'
             : 'Invalid nationality (ISO 3166-1 code required)',
@@ -248,7 +387,7 @@ class _Step3State extends State<Step3PatientData> {
     if (weightText.isNotEmpty) {
       final parsedWeight = parseWeight(weightText);
       if (parsedWeight == null || !isWeightInRange(parsedWeight)) {
-        missing.add(weightErrorMessage(isEs: isEs));
+        reject(_PatientField.weight, weightErrorMessage(isEs: isEs));
       }
     }
 
@@ -256,13 +395,24 @@ class _Step3State extends State<Step3PatientData> {
     if (heightText.isNotEmpty) {
       final parsedHeight = parseHeight(heightText);
       if (parsedHeight == null || !isHeightInRange(parsedHeight)) {
-        missing.add(heightErrorMessage(isEs: isEs));
+        reject(_PatientField.height, heightErrorMessage(isEs: isEs));
       }
     }
 
-    if (missing.isNotEmpty) {
-      final errPrefix = isEs ? 'Campos requeridos' : 'Required fields';
-      setState(() => _err = '$errPrefix: ${missing.join(', ')}');
+    final summary = openSummary(s, entries, fieldErrors);
+    if (summary != null) {
+      setState(() {
+        _err = null;
+        _summary = entries;
+        _fieldErrors
+          ..clear()
+          ..addAll(fieldErrors);
+      });
+      announceValidation(context, summary);
+      final first = _PatientField.values
+          .where(fieldErrors.containsKey)
+          .firstOrNull;
+      revealFirstInvalid(_scroll, _focus[first]);
       return;
     }
 
@@ -286,6 +436,9 @@ class _Step3State extends State<Step3PatientData> {
         ? null
         : _ethnicComm.text.trim();
     d.bloodType = (d.bloodType ?? '').trim().isEmpty ? null : d.bloodType;
+    if (d.bloodType == null) {
+      d.isBloodTypeCertified = false;
+    }
 
     d.nationalityName = countryDisplay(d.nationalityCode).name(isEs: isEs);
 
@@ -302,6 +455,7 @@ class _Step3State extends State<Step3PatientData> {
     final d = widget.draft;
     final s = AppStrings.of(context);
     final isEs = s.isEs;
+    final banner = _err ?? openSummary(s, _summary, _fieldErrors);
 
     final docTypes = <String, String>{
       'RC': s.docTypeRC,
@@ -398,6 +552,7 @@ class _Step3State extends State<Step3PatientData> {
       children: [
         Expanded(
           child: ListView(
+            controller: _scroll,
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             children: [
               Container(
@@ -428,36 +583,39 @@ class _Step3State extends State<Step3PatientData> {
                 ),
               ),
 
-              if (_err != null) ...[
+              if (banner != null) ...[
                 const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: AppColors.error.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        color: AppColors.error,
-                        size: 18,
+                validationLiveRegion(
+                  context,
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.error.withValues(alpha: 0.4),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _err!,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.error,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: AppColors.error,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            banner,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.error,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -471,14 +629,16 @@ class _Step3State extends State<Step3PatientData> {
                     controller: _patientUid,
                     scanning: _scanningUid,
                     onScan: _scanPatientNfc,
-                    onChanged: () => setState(
-                      () => widget.draft.deviceUid =
-                          _patientUid.text.trim().isEmpty
+                    onChanged: () => setState(() {
+                      widget.draft.deviceUid = _patientUid.text.trim().isEmpty
                           ? null
-                          : _patientUid.text.trim(),
-                    ),
+                          : _patientUid.text.trim();
+                      _fieldErrors.remove(_PatientField.uid);
+                    }),
                     hintText: s.manualPatientUidHint,
                     prefixIcon: Icons.watch_outlined,
+                    errorText: _fieldErrors[_PatientField.uid],
+                    focusNode: _focus[_PatientField.uid],
                   ),
                 ],
               ),
@@ -492,7 +652,12 @@ class _Step3State extends State<Step3PatientData> {
                     title: s.identification,
                   ),
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                    // With an error under the number, aligning the bottoms
+                    // would push the type selector down beside the message.
+                    crossAxisAlignment:
+                        _fieldErrors.containsKey(_PatientField.docNum)
+                        ? CrossAxisAlignment.start
+                        : CrossAxisAlignment.end,
                     children: [
                       SizedBox(
                         width: 130,
@@ -508,42 +673,16 @@ class _Step3State extends State<Step3PatientData> {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Theme(
-                          data: Theme.of(context).copyWith(
-                            inputDecorationTheme: Theme.of(context)
-                                .inputDecorationTheme
-                                .copyWith(
-                                  enabledBorder: _isDocInvalid
-                                      ? const OutlineInputBorder(
-                                          borderRadius: BorderRadius.all(
-                                            Radius.circular(10),
-                                          ),
-                                          borderSide: BorderSide(
-                                            color: AppColors.error,
-                                            width: 2,
-                                          ),
-                                        )
-                                      : null,
-                                  focusedBorder: _isDocInvalid
-                                      ? const OutlineInputBorder(
-                                          borderRadius: BorderRadius.all(
-                                            Radius.circular(10),
-                                          ),
-                                          borderSide: BorderSide(
-                                            color: AppColors.error,
-                                            width: 2,
-                                          ),
-                                        )
-                                      : null,
-                                ),
-                          ),
-                          child: LabeledTextField(
-                            label: s.documentNumberLabel,
-                            controller: _docNum,
-                            hint: 'Ej. 1098765432',
-                            requiredField: true,
-                            keyboardType: TextInputType.text,
-                          ),
+                        child: LabeledTextField(
+                          label: s.documentNumberLabel,
+                          controller: _docNum,
+                          hint: 'Ej. 1098765432',
+                          requiredField: true,
+                          keyboardType: TextInputType.text,
+                          errorText: _fieldErrors[_PatientField.docNum],
+                          focusNode: _focus[_PatientField.docNum],
+                          onChanged: (_) =>
+                              _clearFieldError(_PatientField.docNum),
                         ),
                       ),
                     ],
@@ -558,6 +697,10 @@ class _Step3State extends State<Step3PatientData> {
                           controller: _firstName,
                           hint: 'Ej. Carmen',
                           requiredField: true,
+                          errorText: _fieldErrors[_PatientField.firstName],
+                          focusNode: _focus[_PatientField.firstName],
+                          onChanged: (_) =>
+                              _clearFieldError(_PatientField.firstName),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -580,6 +723,10 @@ class _Step3State extends State<Step3PatientData> {
                           controller: _firstLast,
                           hint: 'Ej. Vargas',
                           requiredField: true,
+                          errorText: _fieldErrors[_PatientField.firstLast],
+                          focusNode: _focus[_PatientField.firstLast],
+                          onChanged: (_) =>
+                              _clearFieldError(_PatientField.firstLast),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -607,7 +754,10 @@ class _Step3State extends State<Step3PatientData> {
                     label: s.dobLabel,
                     value: d.dob,
                     required: true,
-                    onChanged: (v) => setState(() => d.dob = v),
+                    onChanged: (v) => setState(() {
+                      d.dob = v;
+                      _fieldErrors.remove(_PatientField.dob);
+                    }),
                   ),
                   const SizedBox(height: 12),
                   _ChipSelector(
@@ -635,6 +785,7 @@ class _Step3State extends State<Step3PatientData> {
                         setState(() {
                           d.nationalityCode = v;
                           d.nationalityName = nat[v];
+                          _fieldErrors.remove(_PatientField.nationality);
                         });
                       }
                     },
@@ -688,9 +839,63 @@ class _Step3State extends State<Step3PatientData> {
                     required: false,
                     allowDeselect: true,
                     onChanged: (v) => setState(() {
-                      d.bloodType = (d.bloodType == v) ? null : v;
+                      if (d.bloodType == v) {
+                        d.bloodType = null;
+                        d.isBloodTypeCertified = false;
+                      } else {
+                        d.bloodType = v;
+                      }
                     }),
                   ),
+                  if (d.bloodType != null) ...[
+                    const SizedBox(height: 14),
+                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                    const SizedBox(height: 12),
+                    _ChipSelector(
+                      label: isEs
+                          ? '¿El cuidador presentó certificado o examen?'
+                          : 'Did the caregiver show a certificate or lab test?',
+                      value: d.isBloodTypeCertified ? 'certified' : 'mentioned',
+                      options: {
+                        'certified': isEs ? 'Sí' : 'Yes',
+                        'mentioned': isEs ? 'No' : 'No',
+                      },
+                      required: true,
+                      onChanged: (val) => setState(() {
+                        d.isBloodTypeCertified = (val == 'certified');
+                      }),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(
+                          d.isBloodTypeCertified
+                              ? Icons.lock_outline
+                              : Icons.info_outline,
+                          size: 14,
+                          color: d.isBloodTypeCertified
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            d.isBloodTypeCertified
+                                ? (isEs
+                                      ? 'Al estar certificado, quedará bloqueado en Leer NFC.'
+                                      : 'Once certified, it will be locked in Read NFC.')
+                                : (isEs
+                                      ? 'Podrá editarse desde Leer NFC si luego presentan examen.'
+                                      : 'Can be edited from Read NFC if a test is provided later.'),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
 
@@ -713,6 +918,10 @@ class _Step3State extends State<Step3PatientData> {
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
+                          errorText: _fieldErrors[_PatientField.weight],
+                          focusNode: _focus[_PatientField.weight],
+                          onChanged: (_) =>
+                              _clearFieldError(_PatientField.weight),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -724,6 +933,10 @@ class _Step3State extends State<Step3PatientData> {
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
+                          errorText: _fieldErrors[_PatientField.height],
+                          focusNode: _focus[_PatientField.height],
+                          onChanged: (_) =>
+                              _clearFieldError(_PatientField.height),
                         ),
                       ),
                     ],
@@ -751,6 +964,10 @@ class _Step3State extends State<Step3PatientData> {
                           controller: _city,
                           hint: s.cityHint,
                           requiredField: true,
+                          errorText: _fieldErrors[_PatientField.city],
+                          focusNode: _focus[_PatientField.city],
+                          onChanged: (_) =>
+                              _clearFieldError(_PatientField.city),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -760,6 +977,10 @@ class _Step3State extends State<Step3PatientData> {
                           controller: _stateCtrl,
                           hint: s.stateHint,
                           requiredField: true,
+                          errorText: _fieldErrors[_PatientField.state],
+                          focusNode: _focus[_PatientField.state],
+                          onChanged: (_) =>
+                              _clearFieldError(_PatientField.state),
                         ),
                       ),
                     ],

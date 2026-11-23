@@ -612,9 +612,9 @@ void main() {
         },
       );
 
-      testWidgets('cancels closing when clicking Cancel in unsaved dialog', (
-        tester,
-      ) async {
+      testWidgets(
+        'cancels closing when clicking Keep editing in unsaved dialog',
+        (tester) async {
         await tester.pumpWidget(
           _buildSubject(
             guardian: _sampleGuardian(consent: fakeConsent),
@@ -634,15 +634,16 @@ void main() {
 
         expect(find.byType(AlertDialog), findsOneWidget);
 
-        await tester.tap(find.text('Cancelar'));
+          await tester.tap(find.text('Seguir editando'));
         await tester.pumpAndSettle();
 
         expect(find.byType(EditGuardianSheet), findsOneWidget);
         expect(find.byType(AlertDialog), findsNothing);
-      });
+        },
+      );
 
       testWidgets(
-        'confirms exit and closes sheet when clicking Exit in unsaved dialog',
+        'confirms exit and closes sheet when clicking Discard in unsaved dialog',
         (tester) async {
           await tester.pumpWidget(
             _wrap(
@@ -675,7 +676,7 @@ void main() {
           await tester.tap(find.byIcon(Icons.close_rounded));
           await tester.pumpAndSettle();
 
-          await tester.tap(find.text('Salir'));
+          await tester.tap(find.text('Descartar'));
           await tester.pumpAndSettle();
 
           expect(find.byType(EditGuardianSheet), findsNothing);
@@ -945,100 +946,6 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(Dialog), findsNothing);
-      },
-    );
-  });
-
-  group('EditGuardianSheet — Cobertura 100% (Firma, Checkbox y Errores)', () {
-    testWidgets(
-      'Ejecuta gestos de firma (onPanStart, onPanUpdate, onPanEnd) y _clearSignature',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 2400);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        await tester.pumpWidget(
-          _buildSubject(
-            guardian: _sampleGuardian(
-              name: 'María García',
-              docNumber: '1234567890',
-              consent: fakeConsent,
-            ),
-            guardianIndex: 1,
-            onConfirm: (_) {},
-            locale: 'es',
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        final formFields = find.byType(TextFormField);
-        await tester.enterText(formFields.at(0), 'Carlos Ruiz');
-        await tester.enterText(formFields.at(2), '9876543210');
-        await tester.pumpAndSettle();
-
-        final signaturePad = find.byType(CustomPaint).last;
-        await tester.ensureVisible(signaturePad);
-
-        final TestGesture gesture = await tester.startGesture(
-          tester.getCenter(signaturePad),
-        );
-        await tester.pump();
-
-        await gesture.moveBy(const Offset(30, 0));
-        await tester.pump();
-
-        await gesture.moveBy(const Offset(0, 30));
-        await tester.pump();
-
-        await gesture.up();
-        await tester.pumpAndSettle();
-
-        final clearBtn = find.text('Limpiar firma');
-        await tester.ensureVisible(clearBtn);
-        await tester.tap(clearBtn);
-        await tester.pumpAndSettle();
-      },
-    );
-
-    testWidgets(
-      'Tocar el texto contenedor del Checkbox (_AuthCheckbox) conmuta la aceptación',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 2400);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        await tester.pumpWidget(
-          _buildSubject(
-            guardian: _sampleGuardian(
-              name: 'María García',
-              docNumber: '1234567890',
-              consent: fakeConsent,
-            ),
-            guardianIndex: 1,
-            onConfirm: (_) {},
-            locale: 'es',
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        final formFields = find.byType(TextFormField);
-        await tester.enterText(formFields.at(0), 'Carlos Ruiz');
-        await tester.enterText(formFields.at(2), '9876543210');
-        await tester.pumpAndSettle();
-
-        final checkboxFinder = find.byType(Checkbox);
-        await tester.ensureVisible(checkboxFinder);
-
-        Checkbox checkboxWidget = tester.widget<Checkbox>(checkboxFinder);
-        expect(checkboxWidget.value, isFalse);
-
-        await tester.tap(checkboxFinder);
-        await tester.pumpAndSettle();
-
-        checkboxWidget = tester.widget<Checkbox>(checkboxFinder);
-        expect(checkboxWidget.value, isTrue);
       },
     );
 

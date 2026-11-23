@@ -73,7 +73,12 @@ class _AddAllergySheetState extends State<AddAllergySheet> {
     _allergenCtrl = TextEditingController();
     _reactionCtrl = TextEditingController();
     _category = '01';
+    // The barrier and the system back read canPop from the last build.
+    _allergenCtrl.addListener(_onFieldChanged);
+    _reactionCtrl.addListener(_onFieldChanged);
   }
+
+  void _onFieldChanged() => setState(() {});
 
   @override
   void dispose() {
@@ -99,7 +104,7 @@ class _AddAllergySheetState extends State<AddAllergySheet> {
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         title: Text(
-          s.unsyncedChangesTitle,
+          s.discardSheetTitle,
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
@@ -107,17 +112,20 @@ class _AddAllergySheetState extends State<AddAllergySheet> {
           ),
         ),
         content: Text(
-          s.exitWithoutSyncMsg,
+          s.discardSheetMsg,
           style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text(s.cancel),
+            child: Text(s.keepEditing),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(s.exit, style: const TextStyle(color: AppColors.error)),
+            child: Text(
+              s.discard,
+              style: const TextStyle(color: AppColors.error),
+            ),
           ),
         ],
       ),

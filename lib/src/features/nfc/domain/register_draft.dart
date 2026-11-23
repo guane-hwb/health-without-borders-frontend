@@ -24,6 +24,7 @@ class RegisterDraft {
   String? ethnicCommunity;
   String? disabilityCategory;
   String? bloodType;
+  bool isBloodTypeCertified = false;
   double? weight;
   double? height;
   String? street;
@@ -33,6 +34,7 @@ class RegisterDraft {
   String? zone;
   String? guardianName;
   String? guardianRelationship;
+  String? guardianRelationshipOther;
   String? guardianPhone;
   String? guardianDeviceUid;
   String? guardianDocType;
@@ -44,6 +46,7 @@ class RegisterDraft {
   List<List<Offset>> guardianSignatureStrokes = <List<Offset>>[];
   String? guardian2Name;
   String? guardian2Relationship;
+  String? guardian2RelationshipOther;
   String? guardian2Phone;
   String? guardian2DeviceUid;
   String? guardian2DocType;
@@ -93,12 +96,16 @@ class RegisterDraft {
           zone: zone,
         ),
         bloodType: bloodType,
+        isBloodTypeCertified: bloodType != null ? isBloodTypeCertified : false,
         weight: weight,
         height: height,
       ),
       guardianInfo: GuardianInfo(
         name: guardianName ?? '',
         relationship: guardianRelationship ?? '01',
+        relationshipOther: (guardianRelationship == '05')
+            ? guardianRelationshipOther
+            : null,
         phone: guardianPhone ?? '',
         deviceUid: guardianDeviceUid,
         documentType: guardianDocType,

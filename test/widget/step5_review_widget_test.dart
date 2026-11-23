@@ -647,39 +647,45 @@ void main() {
     });
   });
 
-  group('Step5Review — Cobertura 100% de líneas faltantes', () {
-    testWidgets(
-      'Muestra el separador divisorio cuando el paciente tiene Cuidador 1 y Cuidador 2 registrados',
-      (tester) async {
-        configureMobileScreenSize(tester);
+  group(
+    'Step5Review — separador de múltiples cuidadores y formato de sexo biológico no estándar',
+    () {
+      testWidgets(
+        'Muestra el separador divisorio cuando el paciente tiene Cuidador 1 y Cuidador 2 registrados',
+        (tester) async {
+          configureMobileScreenSize(tester);
 
-        final draft =
-            buildDraft(guardianName: 'Ana García', guardianPhone: '3001234567')
-              ..guardian2Name = 'Carlos Torres'
-              ..guardian2Phone = '3109876543';
+          final draft =
+              buildDraft(
+                  guardianName: 'Ana García',
+                  guardianPhone: '3001234567',
+                )
+                ..guardian2Name = 'Carlos Torres'
+                ..guardian2Phone = '3109876543';
 
-        await tester.pumpWidget(buildTestApp(draft: draft));
-        await tester.pumpAndSettle();
+          await tester.pumpWidget(buildTestApp(draft: draft));
+          await tester.pumpAndSettle();
 
-        expect(find.text('Cuidadores (2)'), findsOneWidget);
-        expect(find.text('Ana García'), findsOneWidget);
-        expect(find.text('Carlos Torres'), findsOneWidget);
-        expect(find.text('────────'), findsWidgets);
-      },
-    );
+          expect(find.text('Cuidadores (2)'), findsOneWidget);
+          expect(find.text('Ana García'), findsOneWidget);
+          expect(find.text('Carlos Torres'), findsOneWidget);
+          expect(find.text('────────'), findsWidgets);
+        },
+      );
 
-    testWidgets(
-      'Renderiza el código directo cuando biologicalSex contiene un valor no estándar',
-      (tester) async {
-        configureMobileScreenSize(tester);
+      testWidgets(
+        'Renderiza el código directo cuando biologicalSex contiene un valor no estándar',
+        (tester) async {
+          configureMobileScreenSize(tester);
 
-        final draft = buildDraft(biologicalSex: 'X');
+          final draft = buildDraft(biologicalSex: 'X');
 
-        await tester.pumpWidget(buildTestApp(draft: draft));
-        await tester.pumpAndSettle();
+          await tester.pumpWidget(buildTestApp(draft: draft));
+          await tester.pumpAndSettle();
 
-        expect(find.text('X'), findsOneWidget);
-      },
-    );
-  });
+          expect(find.text('X'), findsOneWidget);
+        },
+      );
+    },
+  );
 }

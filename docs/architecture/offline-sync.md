@@ -76,12 +76,17 @@ POST /api/v1/patients/sync
 | 201 | Marks as synchronized and deletes the row from local storage (markSynced)Marks as synchronized and deletes the row from local storage (markSynced) |
 | 400 / 403 / 409 / 422 | Permanent error — holds row as blocked for review or user resolution |
 | 401 | Stops synchronization entirely — token expired, requires re-login |
-| 429 / 500 | Keeps `is_synced = 0` for automatic retry |
+| 408 / 429 / 502 / 503 / 504 | Transient: keeps `is_synced = 0` and is retried for good; never blocked, whatever its `code` |
+| 500, unexpected errors | Keeps `is_synced = 0` for automatic retry; after 8 attempts (`maxSyncAttemptsBeforeBlocked`) the row is blocked as 422 for review |
 | 503 `sync_in_progress` | Another request was creating the same new patient (a retry racing the first attempt). Kept pending, not blocked, and retried no sooner than `Retry-After` (5 s) or the backoff, whichever is longer; the retry merges into the record the other request created. The queue shows it as pending |
-| Timeout | Keeps `is_synced = 0` for automatic retry |
+| Timeout, no connection | Keeps `is_synced = 0` and is retried for good, online or offline; never blocked |
 
 Transient failures (408, 429, 5xx, network) schedule the next attempt whether
-they come from a background cycle or from **Sync now** on one record.
+they come from a background cycle or from **Sync now** on one record. Only a
+failure of the record's own (a 500, an unexpected error) can block it once it
+has had 8 attempts; not reaching the server and the transient statuses never
+block it, so a device that stays offline, or a backend that is down for hours,
+does not block the queue.
 
 ### Callbacks
 

@@ -380,7 +380,7 @@ void main() {
     });
 
     testWidgets(
-      'cancels closing when clicking Cancel on unsaved changes dialog',
+      'cancels closing when clicking Keep editing on unsaved changes dialog',
       (tester) async {
         await _pumpSheet(tester, onAdd: (_) {});
 
@@ -392,7 +392,7 @@ void main() {
 
         expect(find.byType(AlertDialog), findsOneWidget);
 
-        await tester.tap(find.text('Cancel'));
+        await tester.tap(find.text('Keep editing'));
         await tester.pumpAndSettle();
 
         expect(find.byType(AddAllergySheet), findsOneWidget);
@@ -401,7 +401,7 @@ void main() {
     );
 
     testWidgets(
-      'confirms exit and closes sheet when clicking Exit on unsaved changes dialog',
+      'confirms exit and closes sheet when clicking Discard on unsaved changes dialog',
       (tester) async {
         await _pumpSheet(tester, onAdd: (_) {});
 
@@ -413,7 +413,7 @@ void main() {
 
         expect(find.byType(AlertDialog), findsOneWidget);
 
-        await tester.tap(find.text('Exit'));
+        await tester.tap(find.text('Discard'));
         await tester.pumpAndSettle();
 
         expect(find.byType(AddAllergySheet), findsNothing);

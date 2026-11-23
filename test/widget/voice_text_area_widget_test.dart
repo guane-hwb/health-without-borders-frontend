@@ -202,161 +202,67 @@ void main() {
     controller.dispose();
   });
 
-  group('VoiceTextArea Widget & Dynamic Callbacks (100% Cobertura)', () {
-    testWidgets('1. Inicializacion exitosa y render basico', (tester) async {
-      final fakeSpeech = FakeSpeechToText(initAvailable: true);
-
-      await tester.pumpWidget(
-        _wrapWithApp(
-          VoiceTextArea(
-            label: 'Observaciones',
-            controller: controller,
-            hint: 'Escriba aqui...',
-            onChanged: (_) {},
-            speech: fakeSpeech,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Observaciones'), findsOneWidget);
-      expect(find.text('Escriba aqui...'), findsOneWidget);
-      expect(find.byIcon(Icons.mic_none_rounded), findsOneWidget);
-    });
-
-    testWidgets('2. Muestra SnackBar cuando el microfono NO esta disponible', (
-      tester,
-    ) async {
-      final fakeSpeech = FakeSpeechToText(initAvailable: false);
-
-      await tester.pumpWidget(
-        _wrapWithApp(
-          VoiceTextArea(
-            label: 'Observaciones',
-            controller: controller,
-            hint: 'Escriba...',
-            onChanged: (_) {},
-            speech: fakeSpeech,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byIcon(Icons.mic_none_rounded));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(SnackBar), findsOneWidget);
-      expect(find.text('Micrófono no disponible'), findsOneWidget);
-    });
-
-    testWidgets('3. Muestra SnackBar en ingles cuando locale es en', (
-      tester,
-    ) async {
-      final fakeSpeech = FakeSpeechToText(initAvailable: false);
-
-      await tester.pumpWidget(
-        _wrapWithApp(
-          VoiceTextArea(
-            label: 'Notes',
-            controller: controller,
-            hint: 'Type here...',
-            onChanged: (_) {},
-            speech: fakeSpeech,
-          ),
-          locale: 'en',
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byIcon(Icons.mic_none_rounded));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Microphone not available'), findsOneWidget);
-    });
-
-    testWidgets('4. Exception durante _initSpeech deshabilita speech', (
-      tester,
-    ) async {
-      final fakeSpeech = FakeSpeechToText(shouldThrowOnInit: true);
-
-      await tester.pumpWidget(
-        _wrapWithApp(
-          VoiceTextArea(
-            label: 'Notas',
-            controller: controller,
-            hint: 'Hint',
-            onChanged: (_) {},
-            speech: fakeSpeech,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byIcon(Icons.mic_none_rounded));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(SnackBar), findsOneWidget);
-    });
-
-    testWidgets(
-      '5. Iniciar dictado por voz, mostrar banner "Escuchando...", formatear _baseText y detener manualmente',
-      (tester) async {
+  group(
+    'VoiceTextArea — dictado por voz, callbacks de SpeechToText y edición manual',
+    () {
+      testWidgets('1. Inicializacion exitosa y render basico', (tester) async {
         final fakeSpeech = FakeSpeechToText(initAvailable: true);
-        controller.text = 'Texto previo';
-        String changedText = '';
 
         await tester.pumpWidget(
           _wrapWithApp(
             VoiceTextArea(
-              label: 'Notas',
+              label: 'Observaciones',
               controller: controller,
-              hint: 'Hint',
-              onChanged: (val) => changedText = val,
+              hint: 'Escriba aqui...',
+              onChanged: (_) {},
               speech: fakeSpeech,
             ),
           ),
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byIcon(Icons.mic_none_rounded));
-        await tester.pump();
+        expect(find.text('Observaciones'), findsOneWidget);
+        expect(find.text('Escriba aqui...'), findsOneWidget);
+        expect(find.byIcon(Icons.mic_none_rounded), findsOneWidget);
+      });
 
-        expect(fakeSpeech.listenCalled, isTrue);
-        expect(
-          find.text('Escuchando... toque el micrófono para detener'),
-          findsOneWidget,
-        );
-        expect(find.byIcon(Icons.stop_rounded), findsOneWidget);
+      testWidgets(
+        '2. Muestra SnackBar cuando el microfono NO esta disponible',
+        (tester) async {
+          final fakeSpeech = FakeSpeechToText(initAvailable: false);
 
-        fakeSpeech.triggerResult('nuevo dictado', isFinal: false);
-        await tester.pump();
+          await tester.pumpWidget(
+            _wrapWithApp(
+              VoiceTextArea(
+                label: 'Observaciones',
+                controller: controller,
+                hint: 'Escriba...',
+                onChanged: (_) {},
+                speech: fakeSpeech,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
 
-        expect(controller.text, equals('Texto previo nuevo dictado'));
-        expect(changedText, equals('Texto previo nuevo dictado'));
+          await tester.tap(find.byIcon(Icons.mic_none_rounded));
+          await tester.pumpAndSettle();
 
-        await tester.tap(find.byIcon(Icons.stop_rounded));
-        await tester.pumpAndSettle();
+          expect(find.byType(SnackBar), findsOneWidget);
+          expect(find.text('Micrófono no disponible'), findsOneWidget);
+        },
+      );
 
-        expect(fakeSpeech.stopCalled, isTrue);
-        expect(
-          find.text('Escuchando... toque el micrófono para detener'),
-          findsNothing,
-        );
-      },
-    );
-
-    testWidgets(
-      '6. Banner en ingles y cierre automatico al recibir finalResult',
-      (tester) async {
-        final fakeSpeech = FakeSpeechToText(initAvailable: true);
-        controller.text = 'Hello ';
+      testWidgets('3. Muestra SnackBar en ingles cuando locale es en', (
+        tester,
+      ) async {
+        final fakeSpeech = FakeSpeechToText(initAvailable: false);
 
         await tester.pumpWidget(
           _wrapWithApp(
             VoiceTextArea(
               label: 'Notes',
               controller: controller,
-              hint: 'Hint',
+              hint: 'Type here...',
               onChanged: (_) {},
               speech: fakeSpeech,
             ),
@@ -366,57 +272,122 @@ void main() {
         await tester.pumpAndSettle();
 
         await tester.tap(find.byIcon(Icons.mic_none_rounded));
-        await tester.pump();
-
-        expect(
-          find.text('Listening... tap microphone to stop'),
-          findsOneWidget,
-        );
-
-        fakeSpeech.triggerResult('world', isFinal: true);
         await tester.pumpAndSettle();
 
-        expect(controller.text, equals('Hello world'));
-        expect(find.text('Listening... tap microphone to stop'), findsNothing);
-      },
-    );
+        expect(find.text('Microphone not available'), findsOneWidget);
+      });
 
-    testWidgets('7. Probar callback onError de SpeechToText', (tester) async {
-      final fakeSpeech = FakeSpeechToText(initAvailable: true);
+      testWidgets('4. Exception durante _initSpeech deshabilita speech', (
+        tester,
+      ) async {
+        final fakeSpeech = FakeSpeechToText(shouldThrowOnInit: true);
 
-      await tester.pumpWidget(
-        _wrapWithApp(
-          VoiceTextArea(
-            label: 'Notas',
-            controller: controller,
-            hint: 'Hint',
-            onChanged: (_) {},
-            speech: fakeSpeech,
+        await tester.pumpWidget(
+          _wrapWithApp(
+            VoiceTextArea(
+              label: 'Notas',
+              controller: controller,
+              hint: 'Hint',
+              onChanged: (_) {},
+              speech: fakeSpeech,
+            ),
           ),
-        ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.mic_none_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SnackBar), findsOneWidget);
+      });
+
+      testWidgets(
+        '5. Iniciar dictado por voz, mostrar banner "Escuchando...", formatear _baseText y detener manualmente',
+        (tester) async {
+          final fakeSpeech = FakeSpeechToText(initAvailable: true);
+          controller.text = 'Texto previo';
+          String changedText = '';
+
+          await tester.pumpWidget(
+            _wrapWithApp(
+              VoiceTextArea(
+                label: 'Notas',
+                controller: controller,
+                hint: 'Hint',
+                onChanged: (val) => changedText = val,
+                speech: fakeSpeech,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.mic_none_rounded));
+          await tester.pump();
+
+          expect(fakeSpeech.listenCalled, isTrue);
+          expect(
+            find.text('Escuchando... toque el micrófono para detener'),
+            findsOneWidget,
+          );
+          expect(find.byIcon(Icons.stop_rounded), findsOneWidget);
+
+          fakeSpeech.triggerResult('nuevo dictado', isFinal: false);
+          await tester.pump();
+
+          expect(controller.text, equals('Texto previo nuevo dictado'));
+          expect(changedText, equals('Texto previo nuevo dictado'));
+
+          await tester.tap(find.byIcon(Icons.stop_rounded));
+          await tester.pumpAndSettle();
+
+          expect(fakeSpeech.stopCalled, isTrue);
+          expect(
+            find.text('Escuchando... toque el micrófono para detener'),
+            findsNothing,
+          );
+        },
       );
-      await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.mic_none_rounded));
-      await tester.pump();
+      testWidgets(
+        '6. Banner en ingles y cierre automatico al recibir finalResult',
+        (tester) async {
+          final fakeSpeech = FakeSpeechToText(initAvailable: true);
+          controller.text = 'Hello ';
 
-      expect(
-        find.text('Escuchando... toque el micrófono para detener'),
-        findsOneWidget,
+          await tester.pumpWidget(
+            _wrapWithApp(
+              VoiceTextArea(
+                label: 'Notes',
+                controller: controller,
+                hint: 'Hint',
+                onChanged: (_) {},
+                speech: fakeSpeech,
+              ),
+              locale: 'en',
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.mic_none_rounded));
+          await tester.pump();
+
+          expect(
+            find.text('Listening... tap microphone to stop'),
+            findsOneWidget,
+          );
+
+          fakeSpeech.triggerResult('world', isFinal: true);
+          await tester.pumpAndSettle();
+
+          expect(controller.text, equals('Hello world'));
+          expect(
+            find.text('Listening... tap microphone to stop'),
+            findsNothing,
+          );
+        },
       );
 
-      fakeSpeech.triggerError();
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text('Escuchando... toque el micrófono para detener'),
-        findsNothing,
-      );
-    });
-
-    testWidgets(
-      '8. Probar callback onStatus de SpeechToText (done / notListening)',
-      (tester) async {
+      testWidgets('7. Probar callback onError de SpeechToText', (tester) async {
         final fakeSpeech = FakeSpeechToText(initAvailable: true);
 
         await tester.pumpWidget(
@@ -440,63 +411,18 @@ void main() {
           findsOneWidget,
         );
 
-        fakeSpeech.triggerStatus(stt.SpeechToText.doneStatus);
+        fakeSpeech.triggerError();
         await tester.pumpAndSettle();
 
         expect(
           find.text('Escuchando... toque el micrófono para detener'),
           findsNothing,
         );
+      });
 
-        await tester.tap(find.byIcon(Icons.mic_none_rounded));
-        await tester.pump();
-
-        expect(
-          find.text('Escuchando... toque el micrófono para detener'),
-          findsOneWidget,
-        );
-
-        fakeSpeech.triggerStatus(stt.SpeechToText.notListeningStatus);
-        await tester.pumpAndSettle();
-
-        expect(
-          find.text('Escuchando... toque el micrófono para detener'),
-          findsNothing,
-        );
-      },
-    );
-
-    testWidgets('9. Modificacion directa del TextField dispara onChanged', (
-      tester,
-    ) async {
-      final fakeSpeech = FakeSpeechToText(initAvailable: true);
-      String valueTyped = '';
-
-      await tester.pumpWidget(
-        _wrapWithApp(
-          VoiceTextArea(
-            label: 'Notas',
-            controller: controller,
-            hint: 'Hint',
-            onChanged: (v) => valueTyped = v,
-            speech: fakeSpeech,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.enterText(find.byType(TextField), 'Texto escrito');
-      await tester.pump();
-
-      expect(valueTyped, equals('Texto escrito'));
-    });
-
-    testWidgets(
-      '10. En macOS, _initSpeech deshabilita el micrófono sin llamar a '
-      'initialize()',
-      (tester) async {
-        debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-        try {
+      testWidgets(
+        '8. Probar callback onStatus de SpeechToText (done / notListening)',
+        (tester) async {
           final fakeSpeech = FakeSpeechToText(initAvailable: true);
 
           await tester.pumpWidget(
@@ -513,15 +439,96 @@ void main() {
           await tester.pumpAndSettle();
 
           await tester.tap(find.byIcon(Icons.mic_none_rounded));
+          await tester.pump();
+
+          expect(
+            find.text('Escuchando... toque el micrófono para detener'),
+            findsOneWidget,
+          );
+
+          fakeSpeech.triggerStatus(stt.SpeechToText.doneStatus);
           await tester.pumpAndSettle();
 
-          expect(find.byType(SnackBar), findsOneWidget);
-          expect(find.text('Micrófono no disponible'), findsOneWidget);
-          expect(fakeSpeech.listenCalled, isFalse);
-        } finally {
-          debugDefaultTargetPlatformOverride = null;
-        }
-      },
-    );
-  });
+          expect(
+            find.text('Escuchando... toque el micrófono para detener'),
+            findsNothing,
+          );
+
+          await tester.tap(find.byIcon(Icons.mic_none_rounded));
+          await tester.pump();
+
+          expect(
+            find.text('Escuchando... toque el micrófono para detener'),
+            findsOneWidget,
+          );
+
+          fakeSpeech.triggerStatus(stt.SpeechToText.notListeningStatus);
+          await tester.pumpAndSettle();
+
+          expect(
+            find.text('Escuchando... toque el micrófono para detener'),
+            findsNothing,
+          );
+        },
+      );
+
+      testWidgets('9. Modificacion directa del TextField dispara onChanged', (
+        tester,
+      ) async {
+        final fakeSpeech = FakeSpeechToText(initAvailable: true);
+        String valueTyped = '';
+
+        await tester.pumpWidget(
+          _wrapWithApp(
+            VoiceTextArea(
+              label: 'Notas',
+              controller: controller,
+              hint: 'Hint',
+              onChanged: (v) => valueTyped = v,
+              speech: fakeSpeech,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'Texto escrito');
+        await tester.pump();
+
+        expect(valueTyped, equals('Texto escrito'));
+      });
+
+      testWidgets(
+        '10. En macOS, _initSpeech deshabilita el micrófono sin llamar a '
+        'initialize()',
+        (tester) async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+          try {
+            final fakeSpeech = FakeSpeechToText(initAvailable: true);
+
+            await tester.pumpWidget(
+              _wrapWithApp(
+                VoiceTextArea(
+                  label: 'Notas',
+                  controller: controller,
+                  hint: 'Hint',
+                  onChanged: (_) {},
+                  speech: fakeSpeech,
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+
+            await tester.tap(find.byIcon(Icons.mic_none_rounded));
+            await tester.pumpAndSettle();
+
+            expect(find.byType(SnackBar), findsOneWidget);
+            expect(find.text('Micrófono no disponible'), findsOneWidget);
+            expect(fakeSpeech.listenCalled, isFalse);
+          } finally {
+            debugDefaultTargetPlatformOverride = null;
+          }
+        },
+      );
+    },
+  );
 }

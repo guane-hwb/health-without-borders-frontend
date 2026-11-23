@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
 import 'package:health_without_borders_frontend/src/core/i18n/app_strings.dart';
@@ -19,6 +20,7 @@ import 'package:health_without_borders_frontend/src/features/auth/data/user_repo
 import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
 import 'package:health_without_borders_frontend/src/features/auth/presentation/login_screen.dart';
+import 'package:health_without_borders_frontend/src/features/home/presentation/home_screen.dart';
 import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
 import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
 
@@ -29,6 +31,24 @@ UserSession buildTestSession(String email) => UserSession(
   role: UserRole.doctor,
   organizationId: 'test-organization-id',
 );
+
+/// The [ApiException] the real [ApiClient] throws when the sign-in request
+/// gets [response], so the screen sees exactly what production hands it.
+Future<ApiException> apiErrorFor(http.Response response) async {
+  final ApiClient client = ApiClient(
+    baseUrl: 'https://example.com',
+    client: MockClient((_) async => response),
+  );
+  try {
+    await client.postForm(
+      path: '/api/v1/login/access-token',
+      form: const <String, String>{},
+    );
+  } on ApiException catch (e) {
+    return e;
+  }
+  throw StateError('the client accepted HTTP ${response.statusCode}');
+}
 
 class FakeAuthRepository implements AuthRepository {
   bool loginCalled = false;
@@ -123,7 +143,11 @@ void main() {
   late FakeAuthRepository mockAuthRepo;
 
   // ── Helper: wraps LoginScreen with all its required providers ─────────
-  Widget buildSubject({String locale = 'es', bool showSessionExpired = false}) {
+  Widget buildSubject({
+    String locale = 'es',
+    bool showSessionExpired = false,
+    Widget? home,
+  }) {
     final apiClient = ApiClient(baseUrl: 'https://example.com');
     final userRepository = UserRepository(
       apiClient: apiClient,
@@ -154,7 +178,7 @@ void main() {
         reachability: Reachability(baseUrl: 'http://localhost'),
         child: MaterialApp(
           routes: {'/login': (_) => const LoginScreen()},
-          home: LoginScreen(showSessionExpired: showSessionExpired),
+          home: home ?? LoginScreen(showSessionExpired: showSessionExpired),
         ),
       ),
     );
@@ -288,6 +312,45 @@ void main() {
     });
   });
 
+  group('Correo del inicio de sesión: el validador común', () {
+    Future<void> submitEmail(WidgetTester tester, String email) async {
+      await tester.pumpWidget(buildSubject());
+      await tester.enterText(find.byType(TextFormField).first, email);
+      await tester.enterText(find.byType(TextFormField).last, 'password123');
+      await tester.tap(find.byType(ElevatedButton));
+      await tester.pumpAndSettle();
+    }
+
+    for (final String email in <String>[
+      'enfermera@salud.gov.co',
+      'juan.perez@cruzroja.org.co',
+      'user@guane.com.co',
+      'ana+brigada@unicef.org',
+      'medico@unicef.org',
+    ]) {
+      testWidgets('acepta $email y envía la petición', (tester) async {
+        await submitEmail(tester, email);
+
+        expect(find.text('Correo electrónico no válido'), findsNothing);
+        expect(mockAuthRepo.loginCalled, isTrue);
+        expect(mockAuthRepo.loginEmail, email);
+      });
+    }
+
+    for (final (String email, String message) in <(String, String)>[
+      ('sin-arroba', 'Correo electrónico no válido'),
+      ('a@b', 'Correo electrónico no válido'),
+      ('', 'Ingresa tu correo electrónico'),
+    ]) {
+      testWidgets('rechaza «$email» sin enviar la petición', (tester) async {
+        await submitEmail(tester, email);
+
+        expect(find.text(message), findsOneWidget);
+        expect(mockAuthRepo.loginCalled, isFalse);
+      });
+    }
+  });
+
   // ── Group 3: Password Visibility Toggle ────────────────────────────
   group('Toggle visibilidad de contrasena', () {
     testWidgets('al tocar el icono de ojo, la contrasena se muestra', (
@@ -364,24 +427,33 @@ void main() {
 
   // ── Group 5: Failed login flow ─────────────────────────────────────────
   group('Flujo login fallido', () {
-    testWidgets('muestra SnackBar con mensaje de ApiException', (tester) async {
-      mockAuthRepo.loginHandler =
-          ({required String email, required String password}) async {
-            throw ApiException('Credenciales incorrectas');
-          };
+    testWidgets(
+      'una ApiException sin estado ni code muestra el mensaje genérico, '
+      'nunca su texto',
+      (tester) async {
+        mockAuthRepo.loginHandler =
+            ({required String email, required String password}) async {
+              // Lo que lanza AuthRepository.login si falta el token.
+              throw ApiException('Login did not return an access token.');
+            };
 
-      await tester.pumpWidget(buildSubject());
-      await tester.enterText(
-        find.byType(TextFormField).first,
-        'usuario@test.com',
-      );
-      await tester.enterText(find.byType(TextFormField).last, 'password123');
-      await tester.tap(find.byType(ElevatedButton));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(buildSubject());
+        await tester.enterText(
+          find.byType(TextFormField).first,
+          'usuario@test.com',
+        );
+        await tester.enterText(find.byType(TextFormField).last, 'password123');
+        await tester.tap(find.byType(ElevatedButton));
+        await tester.pumpAndSettle();
 
-      expect(find.byType(SnackBar), findsOneWidget);
-      expect(find.textContaining('Credenciales'), findsOneWidget);
-    });
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(
+          find.text('No se pudo iniciar sesión. Intente de nuevo.'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('access token'), findsNothing);
+      },
+    );
 
     testWidgets('un rechazo con code muestra el mensaje traducido', (
       tester,
@@ -409,6 +481,123 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Organization is inactive.'), findsNothing);
+      expect(find.text('Correo o contraseña incorrectos.'), findsNothing);
+    });
+
+    for (final (String name, http.Response response, String message, String raw)
+        in <(String, http.Response, String, String)>[
+          (
+            '401 sin code (contraseña errada)',
+            http.Response(
+              '{"detail":"Incorrect email or password"}',
+              401,
+              headers: <String, String>{'content-type': 'application/json'},
+            ),
+            'Correo o contraseña incorrectos.',
+            'Incorrect email or password',
+          ),
+          (
+            '302 de un portal cautivo',
+            http.Response(
+              '',
+              302,
+              headers: <String, String>{
+                'location': 'http://portal.example/login',
+              },
+            ),
+            'La red Wi-Fi pide aceptar sus condiciones en el navegador. '
+                'Ábralo, acéptelas y vuelva a intentar.',
+            'Untrusted redirect',
+          ),
+          (
+            '200 con la página HTML de un portal cautivo',
+            http.Response(
+              '<html><body>Acepte las condiciones</body></html>',
+              200,
+              headers: <String, String>{'content-type': 'text/html'},
+            ),
+            'La red Wi-Fi pide aceptar sus condiciones en el navegador. '
+                'Ábralo, acéptelas y vuelva a intentar.',
+            'Unexpected response payload format',
+          ),
+          (
+            '511 de un portal cautivo',
+            http.Response('<html><body>Portal</body></html>', 511),
+            'La red Wi-Fi pide aceptar sus condiciones en el navegador. '
+                'Ábralo, acéptelas y vuelva a intentar.',
+            'HTTP 511',
+          ),
+          (
+            '500 sin code',
+            http.Response('', 500),
+            'El servidor no responde. Intente de nuevo en unos minutos.',
+            'Server error',
+          ),
+          (
+            '503 con la página HTML del balanceador',
+            http.Response('<html><body>Service Unavailable</body></html>', 503),
+            'El servidor no responde. Intente de nuevo en unos minutos.',
+            'Server error',
+          ),
+          (
+            '404 sin code',
+            http.Response('', 404),
+            'No se pudo iniciar sesión. Intente de nuevo.',
+            'Not found',
+          ),
+          (
+            '422 con detail en inglés',
+            http.Response(
+              '{"detail":"Field required"}',
+              422,
+              headers: <String, String>{'content-type': 'application/json'},
+            ),
+            'No se pudo iniciar sesión. Intente de nuevo.',
+            'Field required',
+          ),
+        ]) {
+      testWidgets('un $name se explica en español y sin jerga HTTP', (
+        tester,
+      ) async {
+        mockAuthRepo.loginHandler =
+            ({required String email, required String password}) async {
+              throw await apiErrorFor(response);
+            };
+
+        await tester.pumpWidget(buildSubject());
+        await tester.enterText(
+          find.byType(TextFormField).first,
+          'usuario@test.com',
+        );
+        await tester.enterText(find.byType(TextFormField).last, 'password123');
+        await tester.tap(find.byType(ElevatedButton));
+        await tester.pumpAndSettle();
+
+        expect(find.text(message), findsOneWidget);
+        expect(find.textContaining(raw), findsNothing);
+        expect(find.textContaining('HTTP'), findsNothing);
+      });
+    }
+
+    testWidgets('en inglés, el 401 sin code dice que el correo o la '
+        'contraseña no coinciden', (tester) async {
+      mockAuthRepo.loginHandler =
+          ({required String email, required String password}) async {
+            throw await apiErrorFor(
+              http.Response('{"detail":"Incorrect email or password"}', 401),
+            );
+          };
+
+      await tester.pumpWidget(buildSubject(locale: 'en'));
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
+      await tester.enterText(find.byType(TextFormField).last, 'password123');
+      await tester.tap(find.byType(ElevatedButton));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Incorrect email or password.'), findsOneWidget);
     });
 
     for (final (String name, ApiException error, String message)
@@ -505,6 +694,25 @@ void main() {
       await tester.tap(find.byType(TextButton));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Entendido'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+
+    testWidgets('en inglés el diálogo muestra su texto, no las claves', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildSubject(locale: 'en'));
+      await tester.tap(find.text('Forgot your password?'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Contact the system administrator to reset your password.'),
+        findsOneWidget,
+      );
+      expect(find.text('forgotPasswordMessage'), findsNothing);
+      expect(find.text('ok'), findsNothing);
+
+      await tester.tap(find.text('Got it'));
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsNothing);
     });
@@ -748,5 +956,107 @@ void main() {
         },
       );
     }
+  });
+
+  group('Sesión vencida: la contraseña se pide sobre la pantalla abierta', () {
+    const String written = 'Fiebre de 3 días';
+
+    /// A form with something written in it, and the session expiring over it
+    /// as the app reacts to AuthRepository.sessionExpired.
+    Future<NavigatorState> expireOverForm(
+      WidgetTester tester, {
+      required String? expiredUserId,
+    }) async {
+      await tester.pumpWidget(
+        buildSubject(home: const Scaffold(body: TextField())),
+      );
+      await tester.enterText(find.byType(TextField), written);
+      await tester.pump();
+      final NavigatorState navigator = tester.state<NavigatorState>(
+        find.byType(Navigator),
+      );
+      reauthenticateOverCurrentScreen(
+        navigator,
+        expiredUserId: expiredUserId,
+      ).ignore();
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsOneWidget);
+      return navigator;
+    }
+
+    Future<void> signIn(WidgetTester tester) async {
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'usuario@test.com',
+      );
+      await tester.enterText(find.byType(TextFormField).last, 'password123');
+      await tester.tap(find.byType(ElevatedButton));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('si entra la misma persona, vuelve al formulario con lo '
+        'escrito', (tester) async {
+      final NavigatorState navigator = await expireOverForm(
+        tester,
+        expiredUserId: 'test-user-id',
+      );
+
+      await signIn(tester);
+
+      expect(mockAuthRepo.loginCalled, isTrue);
+      expect(find.byType(LoginScreen), findsNothing);
+      expect(find.byType(HomeScreen), findsNothing);
+      expect(find.text(written), findsOneWidget);
+      expect(navigator.canPop(), isFalse);
+    });
+
+    testWidgets('si entra otra cuenta, deja sólo el inicio de esa cuenta', (
+      tester,
+    ) async {
+      final NavigatorState navigator = await expireOverForm(
+        tester,
+        expiredUserId: 'otra-persona',
+      );
+
+      await signIn(tester);
+
+      expect(find.text(written), findsNothing);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(navigator.canPop(), isFalse);
+    });
+
+    testWidgets('si la misma persona debe cambiar la contraseña, deja sólo el '
+        'inicio, que se lo pide', (tester) async {
+      mockAuthRepo.loginHandler =
+          ({required String email, required String password}) async =>
+              buildTestSession(email).copyWith(mustChangePassword: true);
+      final NavigatorState navigator = await expireOverForm(
+        tester,
+        expiredUserId: 'test-user-id',
+      );
+
+      await signIn(tester);
+
+      expect(find.text(written), findsNothing);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(navigator.canPop(), isFalse);
+    });
+
+    testWidgets('si sale con el retroceso, deja sólo el inicio de sesión', (
+      tester,
+    ) async {
+      final NavigatorState navigator = await expireOverForm(
+        tester,
+        expiredUserId: 'test-user-id',
+      );
+
+      expect(await tester.binding.handlePopRoute(), isTrue);
+      await tester.pumpAndSettle();
+
+      expect(mockAuthRepo.loginCalled, isFalse);
+      expect(find.text(written), findsNothing);
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(navigator.canPop(), isFalse);
+    });
   });
 }

@@ -141,6 +141,11 @@ void main() {
       ),
     ).thenAnswer((_) async => []);
     when(() => localDb.pendingNfcKeyVersions()).thenAnswer((_) async => []);
+    when(() => localDb.pendingNfcWriteMetrics()).thenAnswer((_) async => []);
+    when(() => localDb.deleteNfcWriteMetrics(any())).thenAnswer((_) async {});
+    when(
+      () => patientRepo.reportNfcWriteMetrics(any()),
+    ).thenAnswer((_) async {});
     when(() => localDb.retiredDevicesSyncedAt()).thenAnswer((_) async => null);
     when(
       () => localDb.addRetiredDeviceHashes(
@@ -1327,6 +1332,61 @@ void main() {
     });
   });
 
+  group('métricas de escritura NFC', () {
+    Map<String, Object?> row(int id, {int messageBytes = 173}) =>
+        <String, Object?>{
+          'id': id,
+          'device_role': 'patient',
+          'payload_format': 1,
+          'key_version': 0,
+          'payload_bytes': messageBytes - 29,
+          'message_bytes': messageBytes,
+          'chip_capacity': 492,
+          'written_at': '2026-11-17T21:00:00.000Z',
+        };
+
+    test('sin métricas pendientes no llama al repositorio', () async {
+      await engine.syncAll();
+
+      verifyNever(() => patientRepo.reportNfcWriteMetrics(any()));
+      verifyNever(() => localDb.deleteNfcWriteMetrics(any()));
+    });
+
+    test('envía las pendientes y borra las que el servidor aceptó', () async {
+      when(
+        () => localDb.pendingNfcWriteMetrics(),
+      ).thenAnswer((_) async => [row(3), row(4, messageBytes: 704)]);
+
+      await engine.syncAll();
+
+      final sent =
+          verify(
+                () => patientRepo.reportNfcWriteMetrics(captureAny()),
+              ).captured.single
+              as List<Map<String, Object?>>;
+      expect(sent, hasLength(2));
+      final deleted =
+          verify(
+                () => localDb.deleteNfcWriteMetrics(captureAny()),
+              ).captured.single
+              as List<int>;
+      expect(deleted, <int>[3, 4]);
+    });
+
+    test('un fallo al reportar no aborta el lote ni borra nada', () async {
+      when(
+        () => localDb.pendingNfcWriteMetrics(),
+      ).thenAnswer((_) async => [row(3)]);
+      when(
+        () => patientRepo.reportNfcWriteMetrics(any()),
+      ).thenThrow(Exception('sin red'));
+
+      // La telemetría nunca puede tumbar la sincronización clínica.
+      await expectLater(engine.syncAll(), completes);
+      verifyNever(() => localDb.deleteNfcWriteMetrics(any()));
+    });
+  });
+
   group('lista de dispositivos retirados', () {
     final String hash = 'b' * 64;
 
@@ -2362,5 +2422,171 @@ void main() {
         );
       },
     );
+  });
+
+  group(
+    'Reintentos máximos en fallos no controlados y reprogramación en syncOne',
+    () {
+      test(
+        'error no controlado que no es de red, en el octavo intento, marca el registro como 422',
+        () async {
+          final entryMaxAttempts = buildEntry(
+            'STUCK-ERROR',
+            record: MockPatientFullRecord(),
+            attempts: 7,
+          );
+          when(
+            () => localDb.getUnsyncedRecords(
+              ownerUserId: any(named: 'ownerUserId'),
+            ),
+          ).thenAnswer((_) async => [entryMaxAttempts]);
+
+          when(
+            () => patientRepo.syncPatient(any()),
+          ).thenThrow(StateError('fallo inesperado'));
+
+          await engine.syncAll();
+
+          verify(
+            () => localDb.markSyncError(
+              'STUCK-ERROR',
+              'Error en proceso de sincronización',
+              statusCode: 422,
+              revision: 0,
+            ),
+          ).called(1);
+        },
+      );
+
+      test('syncOne reintenta solo tras un fallo transitorio de red', () {
+        fakeAsync((async) {
+          final shortEngine = SyncEngine(
+            patientRepository: patientRepo,
+            authRepository: authRepo,
+            localDatabase: localDb,
+            retryBackoff: const [Duration(milliseconds: 100)],
+          );
+          addTearDown(shortEngine.stop);
+
+          final entry = buildEntry('NET-1', record: MockPatientFullRecord());
+          when(
+            () => localDb.getUnsyncedRecords(
+              ownerUserId: any(named: 'ownerUserId'),
+            ),
+          ).thenAnswer((_) async => [entry]);
+          when(
+            () => localDb.getRetryablePendingCount(
+              ownerUserId: any(named: 'ownerUserId'),
+            ),
+          ).thenAnswer((_) async => 1);
+          when(
+            () => patientRepo.syncPatient(any()),
+          ).thenThrow(const SocketException('fallo temporal de red'));
+
+          SyncOneResult? result;
+          shortEngine.syncOne('NET-1').then((r) => result = r);
+          async.elapse(Duration.zero);
+
+          expect(result, SyncOneResult.failure);
+          clearInteractions(patientRepo);
+
+          async.elapse(const Duration(milliseconds: 120));
+          verify(() => patientRepo.syncPatient(any())).called(1);
+
+          shortEngine.stop();
+        });
+      });
+    },
+  );
+
+  group('Los fallos transitorios nunca bloquean el registro', () {
+    void stubOneEntry(String id) {
+      when(
+        () =>
+            localDb.getUnsyncedRecords(ownerUserId: any(named: 'ownerUserId')),
+      ).thenAnswer(
+        (_) async => [
+          buildEntry(id, record: MockPatientFullRecord(), attempts: 7),
+        ],
+      );
+    }
+
+    // Fallo de transporte y el mensaje con que queda el registro.
+    final Map<String, (Object, String)> transportFailures =
+        <String, (Object, String)>{
+          'SocketException': (
+            const SocketException('sin conexión'),
+            'Error de conexión de red (Socket)',
+          ),
+          'TimeoutException': (
+            TimeoutException('sin respuesta'),
+            'Tiempo de espera agotado (Timeout)',
+          ),
+          'http.ClientException': (
+            http.ClientException('conexión cerrada'),
+            'Error en proceso de sincronización',
+          ),
+        };
+
+    for (final bool online in <bool>[true, false]) {
+      transportFailures.forEach((String name, (Object, String) failure) {
+        test('$name ${online ? 'con' : 'sin'} conexión en el octavo intento '
+            'deja el registro para reintento', () async {
+          stubOneEntry('T-$name');
+          engine.isOnline.value = online;
+          when(() => patientRepo.syncPatient(any())).thenThrow(failure.$1);
+
+          await engine.syncAll();
+
+          verify(
+            () => localDb.markSyncError(
+              'T-$name',
+              failure.$2,
+              statusCode: null,
+              revision: 0,
+            ),
+          ).called(1);
+        });
+      });
+    }
+
+    for (final int status in SyncEngine.transientStatusCodes) {
+      test('estado $status en el octavo intento deja el registro para '
+          'reintento', () async {
+        stubOneEntry('S-$status');
+        final exception = buildApiException(status, 'temporal');
+        when(() => patientRepo.syncPatient(any())).thenThrow(exception);
+
+        await engine.syncAll();
+
+        verify(
+          () => localDb.markSyncError(
+            'S-$status',
+            'temporal',
+            statusCode: status,
+            revision: 0,
+          ),
+        ).called(1);
+      });
+    }
+
+    test('503 sync_in_progress en el octavo intento deja el registro para '
+        'reintento', () async {
+      stubOneEntry('S-503-code');
+      final exception = buildApiException(503, 'otra petición lo guarda');
+      when(() => exception.code).thenReturn('sync_in_progress');
+      when(() => patientRepo.syncPatient(any())).thenThrow(exception);
+
+      await engine.syncAll();
+
+      verify(
+        () => localDb.markSyncError(
+          'S-503-code',
+          any(),
+          statusCode: 503,
+          revision: 0,
+        ),
+      ).called(1);
+    });
   });
 }

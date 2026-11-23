@@ -54,7 +54,13 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
     _dosageCtrl = TextEditingController();
     _notesCtrl = TextEditingController();
     _status = 'active';
+    // The barrier and the system back read canPop from the last build.
+    _nameCtrl.addListener(_onFieldChanged);
+    _dosageCtrl.addListener(_onFieldChanged);
+    _notesCtrl.addListener(_onFieldChanged);
   }
+
+  void _onFieldChanged() => setState(() {});
 
   @override
   void dispose() {
@@ -87,7 +93,7 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         title: Text(
-          s.unsyncedChangesTitle,
+          s.discardSheetTitle,
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
@@ -95,17 +101,20 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
           ),
         ),
         content: Text(
-          s.exitWithoutSyncMsg,
+          s.discardSheetMsg,
           style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text(s.cancel),
+            child: Text(s.keepEditing),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(s.exit, style: const TextStyle(color: AppColors.error)),
+            child: Text(
+              s.discard,
+              style: const TextStyle(color: AppColors.error),
+            ),
           ),
         ],
       ),

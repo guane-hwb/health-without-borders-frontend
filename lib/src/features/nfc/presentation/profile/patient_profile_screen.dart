@@ -149,6 +149,12 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     if (mounted) setState(() {});
   }
 
+  /// Every save here writes the whole draft, so it also keeps a change whose
+  /// own save failed: leaving no longer needs the warning.
+  void _onDraftSaved() {
+    if (_lastSaveFailed && mounted) setState(() => _lastSaveFailed = false);
+  }
+
   void _onRecordSaved(RecordSyncResult result) {
     if (!mounted) return;
     final effect = _draftController.applySyncResult(result);
@@ -363,6 +369,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         organizationId: currentUser?.organizationId,
         retiredDeviceReason: selection.reason,
       );
+      _onDraftSaved();
       await scope.localDatabase.clearChipsDirty(
         record.patientId,
         patient: patientDone,
@@ -431,6 +438,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
 
     if (currentUser == null) {
       if (!mounted) return;
+      // Nothing was saved, so leaving must warn as after a failed save.
+      setState(() => _lastSaveFailed = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Sesión no activa. Vuelve a iniciar sesión.'),
@@ -446,6 +455,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ownerUserId: currentUser.id,
         organizationId: currentUser.organizationId,
       );
+      _onDraftSaved();
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
       if (_hasInternet) await _sync(silent: true);
     } catch (e, stack) {
@@ -465,21 +475,24 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
           action: SnackBarAction(
             label: isEs ? 'Reintentar' : 'Retry',
             textColor: Colors.white,
-            onPressed: () {
-              setState(() => _lastSaveFailed = false);
-              _saveAndPendingSync();
-            },
+            onPressed: () => unawaited(_saveAndPendingSync()),
           ),
         ),
       );
     }
   }
 
-  void _updateVitalSigns({double? weight, double? height, String? bloodType}) {
+  void _updateVitalSigns({
+    double? weight,
+    double? height,
+    String? bloodType,
+    bool isBloodTypeCertified = false,
+  }) {
     _draftController.updateVitalSigns(
       weight: weight,
       height: height,
       bloodType: bloodType,
+      isBloodTypeCertified: isBloodTypeCertified,
     );
     unawaited(_saveAndPendingSync());
   }
@@ -578,6 +591,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
         ownerUserId: currentUser?.id,
         organizationId: currentUser?.organizationId,
       );
+      _onDraftSaved();
 
       await _markNfcChipsDirtyIfChanged(scope.localDatabase);
       _conflictsDuringSync = false;
@@ -654,7 +668,11 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
             AddConsultationScreen(patient: _draft, returnToProfile: true),
       ),
     );
-    if (result != null) _addConsultation(result);
+    if (!mounted) return;
+    if (result != null) {
+      _addConsultation(result);
+      await _loadChipStatus(AppScope.of(context).localDatabase);
+    }
   }
 
   Future<void> _navigateAddVaccine() async {
@@ -694,8 +712,26 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
     );
   }
 
+  /// The system back warns, as the header's arrow does, before it discards a
+  /// change whose local save failed (iOS turns its edge swipe off meanwhile).
+  /// Confirmed, it pops only this route, as it does with nothing to lose:
+  /// the screen below expects to be returned to (the NFC reading goes back
+  /// to its first step).
+  Future<void> _onSystemBack(bool didPop, Object? result) async {
+    if (didPop || !await confirmProfileExit(context, _lastSaveFailed)) return;
+    if (mounted) Navigator.of(context).pop(result);
+  }
+
   @override
   Widget build(BuildContext context) {
+    return PopScope<Object?>(
+      canPop: !_lastSaveFailed,
+      onPopInvokedWithResult: _onSystemBack,
+      child: _buildProfile(context),
+    );
+  }
+
+  Widget _buildProfile(BuildContext context) {
     final p = _draft;
     return Scaffold(
       backgroundColor: const Color(0xFFF2F6FA),

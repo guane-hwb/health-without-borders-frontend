@@ -333,6 +333,26 @@ void main() {
       expect(controller.draft.guardianInfo.name, 'María Pérez');
       expect(controller.draft.guardian2Info?.name, 'Carlos Pérez');
     });
+
+    test(
+      'cambiar solo el texto de «Otro» cuenta como cambio sin sincronizar',
+      () {
+        final otro = controller.draft.guardianInfo.copyWith(
+          relationship: '05',
+          relationshipOther: 'Vecino',
+        );
+        controller.reset(controller.draft.copyWith(guardianInfo: otro));
+        expect(controller.hasUnsyncedChanges, isFalse);
+
+        controller.updateGuardian(
+          1,
+          otro.copyWith(relationshipOther: 'Madrina'),
+        );
+
+        expect(controller.draft.guardianInfo.relationshipOther, 'Madrina');
+        expect(controller.hasUnsyncedChanges, isTrue);
+      },
+    );
   });
 
   group('PatientDraftController — Antecedentes (BackgroundHistory)', () {
