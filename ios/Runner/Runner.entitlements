@@ -4,9 +4,14 @@
 <dict>
 	<!--
 	  Core NFC will not start a tag session without this entitlement, no matter
-	  what the code does. "TAG" covers the raw tag sessions HWB uses to read
-	  NTAG devices and guardian cards; "NDEF" is not sufficient on its own
-	  because we need the chip identifier, not only its NDEF message.
+	  what the code does. "TAG" covers the raw tag sessions HWB uses
+	  (NFCTagReaderSession, the only kind nfc_manager opens): they give the chip
+	  identifier and read the NDEF message of patient and caregiver devices.
+
+	  Only "TAG". App Store Connect rejects "NDEF" in this list for builds made
+	  with a current SDK ("Invalid entitlement for core nfc framework ... 'NDEF
+	  is disallowed'"), so a build that declares it cannot reach TestFlight or
+	  the App Store. HWB never opens an NFCNDEFReaderSession, so nothing uses it.
 
 	  This file is only half of the requirement: the App ID in the Apple
 	  Developer portal must also have the NFC Tag Reading capability enabled,
@@ -16,7 +21,6 @@
 	<key>com.apple.developer.nfc.readersession.formats</key>
 	<array>
 		<string>TAG</string>
-		<string>NDEF</string>
 	</array>
 </dict>
 </plist>
