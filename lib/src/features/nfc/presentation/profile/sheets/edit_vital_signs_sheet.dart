@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../design/tokens/app_colors.dart';
+import '../../../domain/muac.dart';
+import '../widgets/muac_risk_badge.dart';
 import 'edit_vital_signs_helpers.dart' as helpers;
 
 class EditVitalSignsSheet extends StatefulWidget {
@@ -15,6 +17,9 @@ class EditVitalSignsSheet extends StatefulWidget {
     this.isBloodTypeCertified = false,
     this.previousWeight,
     this.previousHeight,
+    this.muac,
+    this.previousMuac,
+    this.muacApplies = false,
     required this.onConfirm,
   });
 
@@ -24,9 +29,19 @@ class EditVitalSignsSheet extends StatefulWidget {
   final bool isBloodTypeCertified;
   final double? previousWeight;
   final double? previousHeight;
+
+  /// Arm circumference in cm and the value the record had when opened.
+  final double? muac;
+  final double? previousMuac;
+
+  /// Whether the patient is 6 to 59 months old today. The field also shows
+  /// for an older patient who already has a value, so it can be corrected,
+  /// but then without a risk level.
+  final bool muacApplies;
   final void Function({
     double? weight,
     double? height,
+    double? muac,
     String? bloodType,
     bool isBloodTypeCertified,
   })
@@ -39,11 +54,13 @@ class EditVitalSignsSheet extends StatefulWidget {
 class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
   late final TextEditingController _weightCtrl;
   late final TextEditingController _heightCtrl;
+  late final TextEditingController _muacCtrl;
   String? _selectedBloodType;
   String? _errorMessage;
 
   late final String _initialWeightText;
   late final String _initialHeightText;
+  late final String _initialMuacText;
   late final String? _initialBloodType;
 
   late bool _isCertified;
@@ -65,10 +82,12 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
     super.initState();
     _initialWeightText = helpers.weightInitText(widget.weight);
     _initialHeightText = helpers.heightInitText(widget.height);
+    _initialMuacText = helpers.muacInitText(widget.muac);
     _initialBloodType = widget.bloodType;
 
     _weightCtrl = TextEditingController(text: _initialWeightText);
     _heightCtrl = TextEditingController(text: _initialHeightText);
+    _muacCtrl = TextEditingController(text: _initialMuacText);
     _selectedBloodType = _initialBloodType;
 
     _isCertified = widget.isBloodTypeCertified;
@@ -78,6 +97,16 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
     // The barrier and the system back read canPop from the last build.
     _weightCtrl.addListener(_onFieldChanged);
     _heightCtrl.addListener(_onFieldChanged);
+    _muacCtrl.addListener(_onFieldChanged);
+  }
+
+  bool get _showMuac => widget.muacApplies || widget.muac != null;
+
+  /// The level of what is typed, while it is a valid measure.
+  MuacRisk? get _typedMuacRisk {
+    final value = parseMuac(_muacCtrl.text);
+    if (value == null || !isMuacInRange(value)) return null;
+    return classifyMuac(value);
   }
 
   void _onFieldChanged() => setState(() {});
@@ -86,16 +115,22 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
   void dispose() {
     _weightCtrl.dispose();
     _heightCtrl.dispose();
+    _muacCtrl.dispose();
     super.dispose();
   }
 
   bool get _hasUnsavedChanges {
     final weightChanged = _weightCtrl.text.trim() != _initialWeightText;
     final heightChanged = _heightCtrl.text.trim() != _initialHeightText;
+    final muacChanged = _muacCtrl.text.trim() != _initialMuacText;
     final bloodTypeChanged = _selectedBloodType != _initialBloodType;
     final certChanged = _isCertified != widget.isBloodTypeCertified;
 
-    return weightChanged || heightChanged || bloodTypeChanged || certChanged;
+    return weightChanged ||
+        heightChanged ||
+        muacChanged ||
+        bloodTypeChanged ||
+        certChanged;
   }
 
   Future<bool> _onWillPop() async {
@@ -172,9 +207,22 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
       }
     }
 
+    final mText = _muacCtrl.text;
+    double? m;
+    if (mText.trim().isNotEmpty) {
+      m = parseMuac(mText);
+      if (m == null || !isMuacInRange(m)) {
+        setState(() {
+          _errorMessage = s.muacRangeError;
+        });
+        return;
+      }
+    }
+
     widget.onConfirm(
       weight: w,
       height: h,
+      muac: m,
       bloodType: _selectedBloodType,
       isBloodTypeCertified: _selectedBloodType != null ? _isCertified : false,
     );
@@ -389,6 +437,87 @@ class _EditVitalSignsSheetState extends State<EditVitalSignsSheet> {
                       color: AppColors.textSecondary,
                     ),
                   ),
+                ],
+
+                if (_showMuac) ...[
+                  const SizedBox(height: 20),
+                  _FieldLabel(label: s.muacCm),
+                  const SizedBox(height: 2),
+                  Text(
+                    s.muacAgeHint,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    key: const ValueKey('muac_field'),
+                    controller: _muacCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                    textAlign: TextAlign.center,
+                    decoration: InputDecoration(
+                      hintText: '0.0 cm',
+                      hintStyle: const TextStyle(
+                        color: AppColors.disabled,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF7F8FA),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFB0B8C4),
+                          width: 1.5,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: AppColors.primary,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (helpers.showPreviousMuac(widget.previousMuac)) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      helpers.previousMuacText(
+                        s.previous,
+                        widget.previousMuac!,
+                      ),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                  if (_typedMuacRisk != null) ...[
+                    const SizedBox(height: 8),
+                    if (widget.muacApplies)
+                      MuacRiskAdvice(risk: _typedMuacRisk!)
+                    else
+                      Text(
+                        s.muacNoClassification,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                  ],
                 ],
 
                 const SizedBox(height: 20),

@@ -347,6 +347,20 @@ class AppStrings {
   String get heightCm => _get('heightCm');
   String get previous => _get('previous');
   String get bloodTypeReadOnly => _get('bloodTypeReadOnly');
+  String get muacCm => _get('muacCm');
+  String get muacShort => _get('muacShort');
+  String get muacAgeHint => _get('muacAgeHint');
+  String get muacRangeError => _get('muacRangeError');
+  String get muacNoClassification => _get('muacNoClassification');
+  String get muacRiskRed => _get('muacRiskRed');
+  String get muacRiskYellow => _get('muacRiskYellow');
+  String get muacRiskGreen => _get('muacRiskGreen');
+  String get muacMeaningRed => _get('muacMeaningRed');
+  String get muacMeaningYellow => _get('muacMeaningYellow');
+  String get muacMeaningGreen => _get('muacMeaningGreen');
+  String get muacActionRed => _get('muacActionRed');
+  String get muacActionYellow => _get('muacActionYellow');
+  String get muacActionGreen => _get('muacActionGreen');
 
   // ── Allergen categories ─────────────────────────────────────────────────
   String get allergenMedication => _get('allergenMedication');
@@ -1066,6 +1080,28 @@ class AppStrings {
     'heightCm': 'Altura (CM)',
     'previous': 'Anterior',
     'bloodTypeReadOnly': 'Tipo de sangre',
+    'muacCm': 'Circunferencia de brazo (CM)',
+    'muacShort': 'Circ. brazo',
+    'muacAgeHint': 'Niñas y niños de 6 a 59 meses',
+    'muacRangeError':
+        'La circunferencia de brazo debe estar entre 5 cm y 30 cm',
+    'muacNoClassification': 'Sin clasificación: fuera de 6 a 59 meses',
+    'muacRiskRed': 'ROJO',
+    'muacRiskYellow': 'AMARILLO',
+    'muacRiskGreen': 'VERDE',
+    'muacMeaningRed': 'Alto riesgo de muerte asociada a desnutrición',
+    'muacMeaningYellow': 'Riesgo de muerte asociada a desnutrición',
+    'muacMeaningGreen':
+        'Negativo para riesgo de muerte asociada a desnutrición',
+    'muacActionRed': 'Remisión inmediata a Salud.',
+    'muacActionYellow':
+        'Confirme el estado nutricional con peso y talla y remita a alguna de '
+        'las modalidades de la Estrategia de Atención y Prevención de la '
+        'Desnutrición.',
+    'muacActionGreen':
+        'Confirme el estado nutricional con peso y talla. Remita a la '
+        'Estrategia de Atención y Prevención de la Desnutrición si cumple '
+        'los criterios de inclusión.',
 
     // Patient profile screen
     'unsyncedChanges': 'Cambios sin sincronizar',
@@ -1707,6 +1743,26 @@ class AppStrings {
     'heightCm': 'Height (CM)',
     'previous': 'Previous',
     'bloodTypeReadOnly': 'Blood type',
+    'muacCm': 'Arm circumference (CM)',
+    'muacShort': 'Arm circ.',
+    'muacAgeHint': 'Children aged 6 to 59 months',
+    'muacRangeError': 'Arm circumference must be between 5 cm and 30 cm',
+    'muacNoClassification': 'Not classified: outside 6 to 59 months',
+    'muacRiskRed': 'RED',
+    'muacRiskYellow': 'YELLOW',
+    'muacRiskGreen': 'GREEN',
+    'muacMeaningRed': 'High risk of death associated with malnutrition',
+    'muacMeaningYellow': 'Risk of death associated with malnutrition',
+    'muacMeaningGreen':
+        'Negative for risk of death associated with malnutrition',
+    'muacActionRed': 'Immediate referral to health services.',
+    'muacActionYellow':
+        'Confirm nutritional status with weight and height and refer to one '
+        'of the modalities of the Malnutrition Care and Prevention Strategy.',
+    'muacActionGreen':
+        'Confirm nutritional status with weight and height. Refer to the '
+        'Malnutrition Care and Prevention Strategy if the inclusion criteria '
+        'are met.',
 
     // Patient profile screen
     'unsyncedChanges': 'Unsynced changes',

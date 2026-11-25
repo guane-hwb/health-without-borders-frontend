@@ -23,4 +23,11 @@ abstract final class AppColors {
   static const Color disabled = Color(0xFFBCBCBC);
   static const Color divider = Color(0xFFBDBDBD);
   static const Color white = Color(0xFFFFFFFF);
+
+  // Arm circumference risk levels (ROJO / AMARILLO / VERDE). Darker than
+  // `error` and `success` so white text stays readable (≥ 4.5:1); yellow
+  // carries dark text instead.
+  static const Color riskRed = Color(0xFFC62828);
+  static const Color riskYellow = Color(0xFFFFC107);
+  static const Color riskGreen = Color(0xFF2E7D32);
 }

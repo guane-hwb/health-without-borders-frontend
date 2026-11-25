@@ -221,6 +221,7 @@ class PatientInfo {
     this.isBloodTypeCertified = false,
     this.weight,
     this.height,
+    this.muac,
   });
 
   factory PatientInfo.fromJson(Map<String, dynamic> json) {
@@ -253,6 +254,7 @@ class PatientInfo {
           json['is_blood_type_certified'] == true,
       weight: (json['weight'] as num?)?.toDouble(),
       height: (json['height'] as num?)?.toDouble(),
+      muac: (json['muac'] as num?)?.toDouble(),
     );
   }
 
@@ -274,6 +276,10 @@ class PatientInfo {
   final bool isBloodTypeCertified;
   final double? weight;
   final double? height;
+
+  /// Mid-upper arm circumference in cm (circunferencia media de brazo), for
+  /// children of 6 to 59 months; see `muac.dart` for the risk levels.
+  final double? muac;
 
   String get fullName {
     final parts = <String>[firstName];
@@ -304,6 +310,7 @@ class PatientInfo {
     bool? isBloodTypeCertified,
     double? weight,
     double? height,
+    double? muac,
   }) {
     return PatientInfo(
       identification: identification ?? this.identification,
@@ -324,6 +331,7 @@ class PatientInfo {
       isBloodTypeCertified: isBloodTypeCertified ?? this.isBloodTypeCertified,
       weight: weight ?? this.weight,
       height: height ?? this.height,
+      muac: muac ?? this.muac,
     );
   }
 
@@ -349,7 +357,8 @@ class PatientInfo {
           bloodType == other.bloodType &&
           isBloodTypeCertified == other.isBloodTypeCertified &&
           weight == other.weight &&
-          height == other.height;
+          height == other.height &&
+          muac == other.muac;
 
   @override
   int get hashCode => Object.hash(
@@ -368,6 +377,7 @@ class PatientInfo {
     isBloodTypeCertified,
     weight,
     height,
+    muac,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -389,6 +399,7 @@ class PatientInfo {
     'isBloodTypeCertified': isBloodTypeCertified,
     if (weight != null) 'weight': weight,
     if (height != null) 'height': height,
+    if (muac != null) 'muac': muac,
   };
 }
 
