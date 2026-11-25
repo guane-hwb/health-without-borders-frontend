@@ -8,6 +8,7 @@ import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_alias.
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_guardian_payload.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_codec.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_service.dart';
+import 'package:health_without_borders_frontend/src/core/nfc/nfc_payload_v2.dart';
 import 'package:health_without_borders_frontend/src/core/nfc/nfc_triage_payload.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 
@@ -377,6 +378,65 @@ void main() {
       });
     },
   );
+
+  // The guardian device carries the whole patientInfo (weight, height, blood
+  // type...), so the arm circumference goes with it without a field of its
+  // own. The patient device's triage carries none of the measurements.
+  group('circunferencia de brazo en los dispositivos', () {
+    PatientFullRecord withMuac(double? muac) {
+      final r = _record();
+      return r.copyWith(patientInfo: r.patientInfo.copyWith(muac: muac));
+    }
+
+    Map<String, dynamic> copyOf(PatientFullRecord record) =>
+        NfcGuardianPayload.buildWithinCapacity(
+          record: record,
+          capacityBytes: 1000000,
+          estimateSize: (Map<String, dynamic> m) => 0,
+        ).payload;
+
+    test('el dispositivo del cuidador la guarda y la devuelve', () {
+      final rebuilt = NfcGuardianPayload.reconstructFromGuardian(
+        copyOf(withMuac(12.3)),
+      );
+      expect(rebuilt.patientInfo.muac, 12.3);
+    });
+
+    test('también en el formato 2 (CBOR + DEFLATE)', () {
+      final copy = copyOf(withMuac(12.3));
+      final back = NfcPayloadV2.decode(
+        NfcPayloadV2.encode(copy, NfcPayloadKind.guardian),
+        NfcPayloadKind.guardian,
+      );
+      expect(
+        NfcGuardianPayload.reconstructFromGuardian(back).patientInfo.muac,
+        12.3,
+      );
+    });
+
+    test('sin medida no ocupa nada', () {
+      expect(jsonEncode(copyOf(withMuac(null))), isNot(contains('muac')));
+    });
+
+    test('ocupa pocos bytes en el dispositivo del cuidador', () {
+      int size(double? muac) => NfcPayloadV2.encode(
+        copyOf(withMuac(muac)),
+        NfcPayloadKind.guardian,
+      ).length;
+      expect(size(12.3) - size(null), lessThanOrEqualTo(16));
+    });
+
+    test(
+      'el triaje del dispositivo del paciente no la lleva, como el peso',
+      () {
+        final triage = jsonEncode(
+          NfcTriagePayload.buildPatientPayload(record: withMuac(12.3)),
+        );
+        expect(triage, isNot(contains('12.3')));
+        expect(triage, isNot(contains('muac')));
+      },
+    );
+  });
 
   group('reconstructFromGuardian round-trip', () {
     test('rebuilds an equivalent PatientFullRecord', () {
