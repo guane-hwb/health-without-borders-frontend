@@ -104,6 +104,7 @@ class PatientDraftController extends ChangeNotifier {
   void updateVitalSigns({
     double? weight,
     double? height,
+    double? muac,
     String? bloodType,
     bool isBloodTypeCertified = false,
   }) {
@@ -128,6 +129,7 @@ class PatientDraftController extends ChangeNotifier {
         isBloodTypeCertified: bloodType != null ? isBloodTypeCertified : false,
         weight: weight ?? info.weight,
         height: height ?? info.height,
+        muac: muac ?? info.muac,
       ),
     );
   }

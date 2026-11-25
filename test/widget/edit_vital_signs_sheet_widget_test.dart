@@ -18,6 +18,7 @@ Widget _wrap({
     String? bloodType,
     double? weight,
     double? height,
+    double? muac,
     bool isBloodTypeCertified,
   })? onConfirm,
 }) {
@@ -38,6 +39,7 @@ Widget _wrap({
                 String? bloodType,
                 double? weight,
                 double? height,
+                double? muac,
                 bool isBloodTypeCertified = false,
               }) {},
         ),
@@ -244,6 +246,7 @@ void main() {
               String? bloodType,
               double? weight,
               double? height,
+              double? muac,
               bool isBloodTypeCertified = false,
             }) {
               confirmedWeight = weight;
@@ -278,6 +281,7 @@ void main() {
               String? bloodType,
               double? weight,
               double? height,
+              double? muac,
               bool isBloodTypeCertified = false,
             }) {
               confirmedWeight = weight;
@@ -317,6 +321,7 @@ void main() {
               String? bloodType,
               double? weight,
               double? height,
+              double? muac,
               bool isBloodTypeCertified = false,
             }) {
               confirmedWeight = weight;
@@ -349,6 +354,7 @@ void main() {
             String? bloodType,
             double? weight,
             double? height,
+            double? muac,
             bool isBloodTypeCertified = false,
           }) {
             selectedBlood = bloodType;
@@ -380,6 +386,7 @@ void main() {
             String? bloodType,
             double? weight,
             double? height,
+            double? muac,
             bool isBloodTypeCertified = false,
           }) {
             selectedBlood = bloodType;
@@ -656,6 +663,7 @@ void main() {
                                 String? bloodType,
                                 double? weight,
                                 double? height,
+                                double? muac,
                                 bool isBloodTypeCertified = false,
                               }) {},
                         ),

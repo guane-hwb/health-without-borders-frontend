@@ -33,3 +33,11 @@ String weightErrorMessage({required bool isEs}) => isEs
 String heightErrorMessage({required bool isEs}) => isEs
     ? 'La altura debe estar entre 20 cm y 250 cm'
     : 'Height must be between 20 cm and 250 cm';
+
+String muacInitText(double? muac) =>
+    muac != null ? muac.toStringAsFixed(1) : '';
+
+bool showPreviousMuac(double? previousMuac) => previousMuac != null;
+
+String previousMuacText(String previousLabel, double previousMuac) =>
+    '$previousLabel: ${previousMuac.toStringAsFixed(1)} cm';

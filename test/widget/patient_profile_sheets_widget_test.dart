@@ -123,6 +123,7 @@ final List<_Case> _cases = <_Case>[
           ({
             double? weight,
             double? height,
+            double? muac,
             String? bloodType,
             bool isBloodTypeCertified = false,
           }) {},

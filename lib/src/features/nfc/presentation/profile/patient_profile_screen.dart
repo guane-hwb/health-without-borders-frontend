@@ -485,12 +485,14 @@ class _PatientProfileScreenState extends State<PatientProfileScreen>
   void _updateVitalSigns({
     double? weight,
     double? height,
+    double? muac,
     String? bloodType,
     bool isBloodTypeCertified = false,
   }) {
     _draftController.updateVitalSigns(
       weight: weight,
       height: height,
+      muac: muac,
       bloodType: bloodType,
       isBloodTypeCertified: isBloodTypeCertified,
     );
