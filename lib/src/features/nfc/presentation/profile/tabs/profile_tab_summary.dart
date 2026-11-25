@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../core/i18n/app_strings.dart';
+import '../../../domain/muac.dart';
 import '../../../domain/patient_record.dart';
 import '../patient_profile_helpers.dart' as helpers;
 import '../shared/profile_card.dart';
 import '../shared/profile_section_header.dart';
+import '../widgets/muac_risk_badge.dart';
 
 class ProfileTabSummary extends StatelessWidget {
   const ProfileTabSummary({
@@ -61,6 +63,14 @@ class ProfileTabSummary extends StatelessWidget {
       draft.patientInfo.height != original.patientInfo.height;
   @visibleForTesting
   bool get heightChanged => _heightChanged;
+
+  bool get _muacChanged => draft.patientInfo.muac != original.patientInfo.muac;
+  @visibleForTesting
+  bool get muacChanged => _muacChanged;
+
+  /// Whether the arm circumference table applies today (6 to 59 months).
+  bool get muacAppliesNow =>
+      muacApplies(tryParsePatientDate(draft.patientInfo.dob), DateTime.now());
 
   bool get _bloodTypeChanged =>
       draft.patientInfo.bloodType != original.patientInfo.bloodType;
@@ -267,6 +277,14 @@ class ProfileTabSummary extends StatelessWidget {
                   ),
                 ],
               ),
+              if (p.muac != null || muacAppliesNow) ...[
+                const Divider(height: 20, color: AppColors.divider),
+                _MuacRow(
+                  muac: p.muac,
+                  applies: muacAppliesNow,
+                  changed: _muacChanged,
+                ),
+              ],
             ],
           ),
         ),
@@ -739,6 +757,68 @@ class _VitalCell extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The arm circumference with its risk level. Outside 6 to 59 months the
+/// table does not apply, so a stored value shows without a level.
+class _MuacRow extends StatelessWidget {
+  const _MuacRow({
+    required this.muac,
+    required this.applies,
+    required this.changed,
+  });
+  final double? muac;
+  final bool applies;
+  final bool changed;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final value = muac;
+    return Row(
+      key: const ValueKey('muac_summary_row'),
+      children: [
+        const Icon(
+          Icons.accessibility_new,
+          size: 12,
+          color: AppColors.textSecondary,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          s.muacShort.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textSecondary,
+            letterSpacing: 0.5,
+          ),
+        ),
+        if (changed) ...[const SizedBox(width: 4), _OrangeDot()],
+        const SizedBox(width: 8),
+        Text(
+          value != null ? '${value.toStringAsFixed(1)} cm' : '—',
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(width: 8),
+        if (value != null && applies)
+          MuacRiskBadge(risk: classifyMuac(value))
+        else if (value != null)
+          Flexible(
+            child: Text(
+              s.muacNoClassification,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

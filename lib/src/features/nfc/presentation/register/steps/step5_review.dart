@@ -3,7 +3,9 @@
 import 'package:flutter/material.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../core/i18n/app_strings.dart';
+import '../../../domain/muac.dart';
 import '../../../domain/register_draft.dart';
+import '../../profile/widgets/muac_risk_badge.dart' show muacRiskStyle;
 
 class Step5Review extends StatefulWidget {
   const Step5Review({
@@ -211,6 +213,14 @@ class _Step5State extends State<Step5Review> {
                   _kv(isEs ? 'Sexo' : 'Sex', sexLabel),
                   _kv(s.nationality, d.nationalityName ?? d.nationalityCode),
                   if (d.bloodType != null) _kv(s.bloodType, d.bloodType!),
+                  // Step 3 keeps it only for 6 to 59 months, so it always
+                  // has a level here.
+                  if (d.muac != null)
+                    _kv(
+                      s.muacShort,
+                      '${d.muac!.toStringAsFixed(1)} cm · '
+                      '${muacRiskStyle(s, classifyMuac(d.muac!)).label}',
+                    ),
                   _kv(
                     s.address,
                     [

@@ -7,11 +7,13 @@ import '../../../../../core/validation/identity_validators.dart';
 import '../../../../../design/tokens/app_colors.dart';
 import '../../../../../shared/country_display.dart';
 import '../../../../../shared/widgets/form_widgets.dart';
+import '../../../domain/muac.dart';
 import '../../../domain/register_draft.dart';
 import '../../../../../core/i18n/app_strings.dart';
 import '../widgets/nfc_uid_field.dart';
 import '../widgets/validation_feedback.dart';
 import '../../profile/sheets/edit_vital_signs_helpers.dart';
+import '../../profile/widgets/muac_risk_badge.dart';
 
 const _kEnabledBorder = OutlineInputBorder(
   borderRadius: BorderRadius.all(Radius.circular(10)),
@@ -111,6 +113,7 @@ enum _PatientField {
   nationality,
   weight,
   height,
+  muac,
   city,
   state,
 }
@@ -167,6 +170,9 @@ class _Step3State extends State<Step3PatientData> {
         ? widget.draft.height!.toInt().toString()
         : '',
   );
+  late final _muac = TextEditingController(
+    text: muacInitText(widget.draft.muac),
+  );
   late final _patientUid = TextEditingController(
     text: widget.draft.deviceUid ?? '',
   );
@@ -187,6 +193,7 @@ class _Step3State extends State<Step3PatientData> {
       _PatientField.firstLast,
       _PatientField.weight,
       _PatientField.height,
+      _PatientField.muac,
       _PatientField.city,
       _PatientField.state,
     ])
@@ -231,6 +238,7 @@ class _Step3State extends State<Step3PatientData> {
     _ethnicComm.dispose();
     _weight.dispose();
     _height.dispose();
+    _muac.dispose();
     _patientUid.dispose();
     super.dispose();
   }
@@ -251,6 +259,7 @@ class _Step3State extends State<Step3PatientData> {
         _ethnicComm,
         _weight,
         _height,
+        _muac,
         _patientUid,
       ])
         field.text.trim(),
@@ -268,6 +277,16 @@ class _Step3State extends State<Step3PatientData> {
   }
 
   bool _hasUnsavedInput() => !listEquals(_input(), _openedWith);
+
+  /// Whether the birth date puts the patient at 6 to 59 months today.
+  bool get _muacApplies => muacApplies(widget.draft.dob, DateTime.now());
+
+  /// The level of what is typed in the arm circumference, while valid.
+  MuacRisk? get _typedMuacRisk {
+    final value = parseMuac(_muac.text);
+    if (value == null || !isMuacInRange(value)) return null;
+    return classifyMuac(value);
+  }
 
   String? _docNumberError(bool isEs) =>
       validateDocumentNumber(_docNum.text) == null
@@ -399,6 +418,17 @@ class _Step3State extends State<Step3PatientData> {
       }
     }
 
+    // Only 6 to 59 months; for any other birth date the field is hidden and
+    // what was typed in it is not kept.
+    final muacShown = _muacApplies;
+    final muacText = _muac.text.trim();
+    if (muacShown && muacText.isNotEmpty) {
+      final parsedMuac = parseMuac(muacText);
+      if (parsedMuac == null || !isMuacInRange(parsedMuac)) {
+        reject(_PatientField.muac, s.muacRangeError);
+      }
+    }
+
     final summary = openSummary(s, entries, fieldErrors);
     if (summary != null) {
       setState(() {
@@ -444,6 +474,7 @@ class _Step3State extends State<Step3PatientData> {
 
     d.weight = _weight.text.trim().isEmpty ? null : parseWeight(_weight.text);
     d.height = _height.text.trim().isEmpty ? null : parseHeight(_height.text);
+    d.muac = muacShown && muacText.isNotEmpty ? parseMuac(muacText) : null;
 
     applyDemographicSentinelDefaults(d);
 
@@ -941,6 +972,29 @@ class _Step3State extends State<Step3PatientData> {
                       ),
                     ],
                   ),
+                  if (_muacApplies) ...[
+                    const SizedBox(height: 12),
+                    LabeledTextField(
+                      key: const ValueKey('register_muac_field'),
+                      label: s.muacCm,
+                      controller: _muac,
+                      hint: 'Ej: 13.8',
+                      helper: s.muacAgeHint,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      errorText: _fieldErrors[_PatientField.muac],
+                      focusNode: _focus[_PatientField.muac],
+                      // setState also refreshes the risk level below.
+                      onChanged: (_) => setState(
+                        () => _fieldErrors.remove(_PatientField.muac),
+                      ),
+                    ),
+                    if (_typedMuacRisk != null) ...[
+                      const SizedBox(height: 8),
+                      MuacRiskAdvice(risk: _typedMuacRisk!),
+                    ],
+                  ],
                 ],
               ),
 

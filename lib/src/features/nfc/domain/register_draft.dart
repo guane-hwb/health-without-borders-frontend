@@ -27,6 +27,7 @@ class RegisterDraft {
   bool isBloodTypeCertified = false;
   double? weight;
   double? height;
+  double? muac;
   String? street;
   String addressCity = '';
   String? cityCode;
@@ -99,6 +100,7 @@ class RegisterDraft {
         isBloodTypeCertified: bloodType != null ? isBloodTypeCertified : false,
         weight: weight,
         height: height,
+        muac: muac,
       ),
       guardianInfo: GuardianInfo(
         name: guardianName ?? '',

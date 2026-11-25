@@ -44,6 +44,7 @@ Patient demographics (Elems 1–13 of Res. 866).
 | `address` | `Address` | Residential Address |
 | `bloodType` | `String?` | Blood Type |
 | `weight` / `height` | `double?` | Weight (kg) / Height (cm) |
+| `muac` | `double?` | Mid-upper arm circumference (cm), 6–59 months only. The app shows its level: ROJO ≤ 11.5, AMARILLO 11.6–13.5, VERDE ≥ 13.6 (`domain/muac.dart`). Left out of the JSON when null, so the backend keeps its stored value. |
 
 **Supported Document Types:** `CC`, `CE`, `PA`, `RC`, `TI`, `SC`, `PE`, `PT`, `MS`, `AS`, `CN`, `DE`.
 

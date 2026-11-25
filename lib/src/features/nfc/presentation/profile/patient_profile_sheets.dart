@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/i18n/app_strings.dart';
+import '../../domain/muac.dart';
 import '../../domain/patient_record.dart';
 import 'sheets/add_allergy_sheet.dart';
 import 'sheets/add_chronic_condition_sheet.dart';
@@ -27,11 +28,16 @@ abstract class PatientProfileSheets {
     required void Function({
       double? weight,
       double? height,
+      double? muac,
       String? bloodType,
       bool isBloodTypeCertified,
     })
     onConfirm,
   }) async {
+    final applies = muacApplies(
+      tryParsePatientDate(draft.patientInfo.dob),
+      DateTime.now(),
+    );
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -44,6 +50,9 @@ abstract class PatientProfileSheets {
         isBloodTypeCertified: draft.patientInfo.isBloodTypeCertified,
         previousWeight: original.patientInfo.weight,
         previousHeight: original.patientInfo.height,
+        muac: draft.patientInfo.muac,
+        previousMuac: original.patientInfo.muac,
+        muacApplies: applies,
         onConfirm: onConfirm,
       ),
     );
