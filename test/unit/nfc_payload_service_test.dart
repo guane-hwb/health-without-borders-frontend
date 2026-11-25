@@ -104,8 +104,15 @@ HwbTag _blankChip({String uid = kExpectedUid, int maxSize = kNtag215MaxSize}) =>
       ),
     );
 
+/// The format 1 writer: what these groups test, and what a build made with
+/// `--dart-define=HWB_NFC_PAYLOAD_FORMAT=1` still writes. Format 2, the
+/// default, has its own group ("formato 2").
 NfcPayloadService _service(MockNfcPayloadCodec codec, HwbTag tag) =>
-    NfcPayloadService(codec: codec, tagSource: _FakeTagSource.tag(tag));
+    NfcPayloadService(
+      codec: codec,
+      tagSource: _FakeTagSource.tag(tag),
+      writeFormat: NfcPayloadFormat.v1,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -136,7 +143,10 @@ void main() {
     // fallaba al grabar.
     test('el presupuesto del cuidador llena el chip exactamente', () {
       for (final int capacity in <int>[kNtag215NdefCapacity, 888]) {
-        final int budget = guardianPayloadBudget(capacity);
+        final int budget = guardianPayloadBudget(
+          capacity,
+          format: NfcPayloadFormat.v1,
+        );
 
         expect(
           _messageOf(kHwbGuardianMimeType, Uint8List(budget)).byteLength,
@@ -147,11 +157,20 @@ void main() {
           greaterThan(capacity),
         );
       }
-      expect(guardianPayloadBudget(kNtag215NdefCapacity), 492 - 34);
+      expect(
+        guardianPayloadBudget(
+          kNtag215NdefCapacity,
+          format: NfcPayloadFormat.v1,
+        ),
+        492 - 34,
+      );
     });
 
     test('el presupuesto nunca se pasa con un payload corto', () {
-      final int budget = guardianPayloadBudget(kNtag215NdefCapacity);
+      final int budget = guardianPayloadBudget(
+        kNtag215NdefCapacity,
+        format: NfcPayloadFormat.v1,
+      );
       for (final int size in <int>[0, 100, 255, 256]) {
         expect(
           _messageOf(kHwbGuardianMimeType, Uint8List(size)).byteLength - size,
@@ -491,7 +510,10 @@ void main() {
       );
 
       expect(budgets, hasLength(1));
-      expect(budgets.single, guardianPayloadBudget(888));
+      expect(
+        budgets.single,
+        guardianPayloadBudget(888, format: NfcPayloadFormat.v1),
+      );
       expect(budgets.single, greaterThan(888 - 60));
     });
 
@@ -1007,6 +1029,7 @@ void main() {
         NfcPayloadService(
           codec: codec,
           tagSource: _FakeTagSource.tag(tag),
+          writeFormat: NfcPayloadFormat.v1,
           onWritten: onWritten ?? record,
         );
 
@@ -1422,6 +1445,23 @@ void main() {
         expect(read.triage!.documentNumber, '1234567890');
       },
     );
+
+    test('sin HWB_NFC_PAYLOAD_FORMAT, la build escribe el formato 2', () async {
+      expect(kNfcWriteFormat, NfcPayloadFormat.v2);
+
+      final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+      await NfcPayloadService(
+        codec: real,
+        tagSource: _FakeTagSource.tag(HwbTag(uid: kExpectedUid, ndef: ndef)),
+      ).writeTriagePayload(
+        NfcTriagePayload.buildPatientPayload(record: record()),
+        expectedUid: kExpectedUid,
+      );
+
+      final written = ndef.written!.records.single;
+      expect(written.typeNameFormat, TypeNameFormat.external);
+      expect(String.fromCharCodes(written.type), kHwbTriageV2Type);
+    });
   });
 
   group('HwbChipReadResult', () {

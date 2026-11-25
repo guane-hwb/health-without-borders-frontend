@@ -23,7 +23,7 @@ format 2: JSON map → typed CBOR → DEFLATE with a preset dictionary
 
 `lib/src/core/nfc/nfc_payload_codec.dart` owns format 1 and the encryption of
 both; `nfc_payload_v2.dart` builds the format 2 plaintext. A build writes format
-1 unless it was made with `--dart-define=HWB_NFC_PAYLOAD_FORMAT=2`
+2 unless it was made with `--dart-define=HWB_NFC_PAYLOAD_FORMAT=1`, the way back
 (`kNfcWriteFormat`; see ADR 005 before changing it). Both chip types go through
 the **same** `NfcPayloadService` and therefore the same key.
 
