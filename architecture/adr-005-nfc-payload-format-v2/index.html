@@ -1,0 +1,1627 @@
+
+<!doctype html>
+<html lang="es" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Multi-platform client documentation (Flutter) for the Health Without Borders initiative.">
+      
+      
+      
+        <link rel="canonical" href="https://guanes.github.io/health-without-borders-frontend/architecture/adr-005-nfc-payload-format-v2/">
+      
+      
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.42">
+    
+    
+      
+        <title>ADR 005: NFC Payload Format 2 - Health Without Borders — Frontend</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.0253249f.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#adr-005-nfc-payload-format-2" class="md-skip">
+          Saltar a contenido
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Cabecera">
+    <a href="../.." title="Health Without Borders — Frontend" class="md-header__button md-logo" aria-label="Health Without Borders — Frontend" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Health Without Borders — Frontend
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              ADR 005: NFC Payload Format 2
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Búsqueda" placeholder="Búsqueda" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Buscar">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Limpiar" aria-label="Limpiar" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Inicializando búsqueda
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/guanes/health-without-borders-frontend" title="Ir al repositorio" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.6.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    guanes/health-without-borders-frontend
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Pestañas" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+    
+  
+  Setup
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../user-guide/" class="md-tabs__link">
+          
+  
+    
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../development/" class="md-tabs__link">
+          
+  
+    
+  
+  Development
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../" class="md-tabs__link">
+          
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api/" class="md-tabs__link">
+          
+  
+    
+  
+  API and Domain
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../testing/" class="md-tabs__link">
+        
+  
+    
+  
+  Testing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navegación" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Health Without Borders — Frontend" class="md-nav__button md-logo" aria-label="Health Without Borders — Frontend" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Health Without Borders — Frontend
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/guanes/health-without-borders-frontend" title="Ir al repositorio" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.6.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    guanes/health-without-borders-frontend
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Setup
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../user-guide/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    User Guide
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            User Guide
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/register-patient/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Registering a Patient
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/patient-records/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Finding & Viewing a Patient
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/consultations-vaccines/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Consultations & Vaccines
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/sync-pending/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Syncing Pending Records
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/statistics/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Statistics
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/administration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Administration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../development/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Development
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Development
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/setup/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Local Setup
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/qa-plan/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    QA and PR Flow
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/figma-to-flutter/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Figma to Flutter
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project-structure/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Project Structure
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../features/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Modules and Features
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../offline-sync/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Offline-First and Synchronization
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nfc-encryption/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    NFC Encryption and Key Ring
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nfc-compression-audit/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    NFC Compression Audit
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nfc-size-reduction-options/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    NFC Size Options
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../api/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    API and Domain
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            API and Domain
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/domain-models/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Domain Models
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/api-client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    HTTP Client
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/auth/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Auth
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../testing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Testing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Tabla de contenidos">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Tabla de contenidos
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      Status
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#date" class="md-nav__link">
+    <span class="md-ellipsis">
+      Date
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#context" class="md-nav__link">
+    <span class="md-ellipsis">
+      Context
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      Decision
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#record" class="md-nav__link">
+    <span class="md-ellipsis">
+      Record
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#payload" class="md-nav__link">
+    <span class="md-ellipsis">
+      Payload
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dictionaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      Dictionaries
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-was-left-out-and-why" class="md-nav__link">
+    <span class="md-ellipsis">
+      What was left out, and why
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#measured-effect" class="md-nav__link">
+    <span class="md-ellipsis">
+      Measured effect
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rollout" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rollout
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      Consequences
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#acceptance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Acceptance
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="adr-005-nfc-payload-format-2">ADR 005: NFC Payload Format 2<a class="headerlink" href="#adr-005-nfc-payload-format-2" title="Permanent link">&para;</a></h1>
+<h2 id="status">Status<a class="headerlink" href="#status" title="Permanent link">&para;</a></h2>
+<p>Proposed. Phase 1 (every build reads format 2, writes format 1) is implemented;
+phase 2 (writing format 2) needs the fleet check below and its own change.</p>
+<h2 id="date">Date<a class="headerlink" href="#date" title="Permanent link">&para;</a></h2>
+<p>2026-11-17</p>
+<h2 id="context">Context<a class="headerlink" href="#context" title="Permanent link">&para;</a></h2>
+<p>The NFC compression audit measured the current pipeline (<code>JSON map → CBOR →
+DEFLATE → AES-256-GCM</code> in a MIME record) on 600 synthetic records built with the
+app's own builders. DEFLATE itself is close to the best general-purpose
+compressor at these sizes: zstd, brotli and LZMA2 do not beat it by more than
+7 %. What makes the payload large is the method around it:</p>
+<ul>
+<li><strong>No preset dictionary.</strong> Payloads of 100 to 2,000 bytes give DEFLATE no
+  history to draw on: the triage compresses from 122 B to 120 B. Most of what a
+  payload holds (keys, codes, frequent values) repeats from one patient to the
+  next, which is what a dictionary shared by writer and reader supplies.</li>
+<li><strong>Values stored as text.</strong> UUIDs of visits and vaccines are 10 % of a
+  compressed guardian copy and dates 4 %: as text they are close to
+  incompressible.</li>
+<li><strong>A long record type.</strong> <code>application/vnd.hwb.triage</code> and
+  <code>application/vnd.hwb.guardian</code> cost 29 to 34 bytes per chip.</li>
+</ul>
+<p>The guardian copy is where this hurts. Median message sizes: 496 B with no
+history, 1,112 B with one consultation and one vaccine. On an NTAG215 (492 B)
+not even the base fits in 54 % of the records, and an NTAG216 (872 B) holds a
+consultation in practically none (ADR 004, ADR 006).</p>
+<p><code>dart:io</code> adds a trap: <code>ZLibEncoder(raw: true, dictionary: d)</code> ignores the
+dictionary and produces the same bytes as without it. A round-trip test still
+passes, because the decoder ignores it too.</p>
+<h2 id="decision">Decision<a class="headerlink" href="#decision" title="Permanent link">&para;</a></h2>
+<h3 id="record">Record<a class="headerlink" href="#record" title="Permanent link">&para;</a></h3>
+<p>One NFC Forum external record (TNF 0x04) per chip:</p>
+<table>
+<thead>
+<tr>
+<th>Payload</th>
+<th>Format 1 (MIME)</th>
+<th>Format 2 (external)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Patient device</td>
+<td><code>application/vnd.hwb.triage</code></td>
+<td><code>guane.com.co:hwbt</code></td>
+</tr>
+<tr>
+<td>Guardian device</td>
+<td><code>application/vnd.hwb.guardian</code></td>
+<td><code>guane.com.co:hwbg</code></td>
+</tr>
+</tbody>
+</table>
+<p>The record type is also what tells a reader which format it has, and it is the
+type string the chip binding of ADR 003 puts in the associated data. The record
+overhead drops from 29–34 B to 20–23 B. The domain is Guane's; another owned
+domain can replace it before phase 2, never after.</p>
+<h3 id="payload">Payload<a class="headerlink" href="#payload" title="Permanent link">&para;</a></h3>
+<p>The encryption is exactly that of format 1 (<code>NfcPayloadCodec.seal</code>/<code>open</code>): key
+ring, version header from version 1, chip binding, nonce and tag. Only the
+plaintext changes:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>[format = 2][dictionary id][raw DEFLATE stream primed with the dictionary]
+</code></pre></div>
+<ol>
+<li><strong>Map.</strong> The same map format 1 writes: the triage of <code>NfcTriagePayload</code>, the
+   aliased guardian copy of <code>NfcGuardianPayload.buildWithinCapacity</code>. Builders,
+   fitting and reconstruction do not change.</li>
+<li><strong>Typed CBOR.</strong> For a fixed set of keys per kind of payload
+   (<code>nfc_payload_v2.dart</code>, <code>_typing</code>), a value in exactly the canonical shape is
+   stored as what it is. Anything else stays text, so nothing is lost:</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Stored as</th>
+<th>Triage keys</th>
+<th>Guardian-copy keys</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>lower-case UUID</td>
+<td>16-byte string</td>
+<td>—</td>
+<td><code>pid</code>, <code>ei</code>, <code>vid</code></td>
+</tr>
+<tr>
+<td>chip UID as read (<code>04:A1:…</code>)</td>
+<td>byte string</td>
+<td><code>gUid</code>, <code>g2Uid</code></td>
+<td><code>dug</code></td>
+</tr>
+<tr>
+<td><code>YYYY-MM-DD</code></td>
+<td>days since 1900-01-01</td>
+<td><code>dob</code></td>
+<td><code>dob</code>, <code>dte</code></td>
+</tr>
+<tr>
+<td><code>YYYY-MM-DDTHH:MM:SS±HH:MM</code></td>
+<td>[seconds since 2020-01-01, offset / 15 min]</td>
+<td>—</td>
+<td><code>sd</code>, <code>ed</code>, <code>aat</code></td>
+</tr>
+<tr>
+<td>digits, no leading zero, ≤ 18</td>
+<td>integer</td>
+<td><code>docN</code>, <code>gPh</code></td>
+<td><code>dn</code>, <code>ph</code>, <code>rc</code>, <code>nit</code>, <code>cyc</code>, <code>nc</code></td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li><strong>DEFLATE with a preset dictionary</strong>, level 9, raw: the stream zlib produces
+   after <code>deflateSetDictionary</code>, readable by any zlib with
+   <code>inflateSetDictionary</code> (checked against Python's zlib). Since <code>dart:io</code> will
+   not prime a raw stream, the writer compresses the dictionary, flushes to a
+   byte boundary (<code>Z_SYNC_FLUSH</code>) and keeps only what follows; the reader
+   inflates its own compressed form of the dictionary first. The stream depends
+   only on the dictionary's content, not on how either side compressed it (a
+   test reads it after priming at another level).</li>
+</ol>
+<p><strong>Nothing is written that does not read back.</strong> <code>NfcPayloadV2.encode</code> decodes
+its own output and compares it with the input, strictly on types; when they
+differ it throws and the write fails with <code>NfcWriteException</code>. Every payload of
+the audit corpus (3,000, triage and guardian copies with 0 to 3 consultations
+and vaccines) reads back exactly.</p>
+<h3 id="dictionaries">Dictionaries<a class="headerlink" href="#dictionaries" title="Permanent link">&para;</a></h3>
+<p><code>nfc_payload_v2_dictionaries.dart</code> holds them: 8,165 B for the triage and
+30,704 B for the guardian copy, the size where each stops gaining (the guardian
+copy gains up to the 32 KB DEFLATE window, the triage barely past 8 KB).
+<code>tool/nfc_payload_v2/build_dictionaries_test.dart</code> builds them, reproducibly,
+from the typed CBOR of 400 <strong>synthetic</strong> training records of the audit corpus.</p>
+<ul>
+<li><strong>No patient data, ever.</strong> The repository and the app are public, and a
+  dictionary built from real records would ship fragments of them in every
+  install. A dictionary is built from synthetic records, public catalogs (ICD-10,
+  vaccines, DIVIPOLA, EPS) and text written for the purpose.</li>
+<li><strong>A dictionary is part of the format.</strong> Once a build has written with
+  dictionary <em>n</em>, every later build reads it. A better dictionary gets a new id;
+  the bytes of an id never change. Tests pin each one by SHA-256.</li>
+<li><strong>Dictionary 1 is a candidate until phase 2.</strong> The audit measured it on
+  synthetic text. Before it is frozen, measure real note lengths with
+  <code>tool/nfc_measure</code> (audit recommendation 3) and decide whether to rebuild it.</li>
+</ul>
+<h3 id="what-was-left-out-and-why">What was left out, and why<a class="headerlink" href="#what-was-left-out-and-why" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Measured effect</th>
+<th>Why not now</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>zstd or brotli with a dictionary</td>
+<td>8–19 % smaller guardian copy, worse triage</td>
+<td>Native library on Android and iOS for a single-digit gain over DEFLATE with a dictionary</td>
+</tr>
+<tr>
+<td>Integer keys and default omission</td>
+<td>2–4 % once there is a dictionary</td>
+<td>The dictionary already makes repeated keys and defaults cheap</td>
+</tr>
+<tr>
+<td>Catalog codes for vaccines, diagnoses, places</td>
+<td>4–6 % once there is a dictionary (13–15 % without one)</td>
+<td>The app would have to ship and maintain the catalogs</td>
+</tr>
+<tr>
+<td>Shorter AES-GCM nonce or tag</td>
+<td>4–7 B</td>
+<td>Security trade-off; the 28 B are the standard parameters</td>
+</tr>
+</tbody>
+</table>
+<h2 id="measured-effect">Measured effect<a class="headerlink" href="#measured-effect" title="Permanent link">&para;</a></h2>
+<p>Median / 90th percentile / maximum of the whole NDEF message, in bytes, on the
+200 test records of the audit corpus, measured with this code. <em>Pessimistic</em>
+assumes the dictionary does nothing for free clinical text and names: they are
+measured apart and charged what they cost with no dictionary.</p>
+<table>
+<thead>
+<tr>
+<th>Payload</th>
+<th>Format 1</th>
+<th>Format 2</th>
+<th>Format 2, pessimistic</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Triage</td>
+<td>178 / 211 / 242</td>
+<td>89 / 99 / 130</td>
+<td>104 / 113 / 136</td>
+</tr>
+<tr>
+<td>Guardian copy, no history</td>
+<td>496 / 550 / 652</td>
+<td>215 / 250 / 286</td>
+<td>244 / 291 / 344</td>
+</tr>
+<tr>
+<td>Guardian copy, 1 + 1</td>
+<td>1,112 / 1,237 / 1,356</td>
+<td>375 / 427 / 513</td>
+<td>618 / 711 / 825</td>
+</tr>
+<tr>
+<td>Guardian copy, 3 + 3</td>
+<td>1,775 / 2,009 / 2,167</td>
+<td>636 / 736 / 798</td>
+<td>1,047 / 1,232 / 1,382</td>
+</tr>
+</tbody>
+</table>
+<p>Guardian copy fitted by the app (<code>guardianFitBuilder</code>, <code>guardianPayloadBudget</code>),
+format 1 → format 2:</p>
+<table>
+<thead>
+<tr>
+<th>Chip</th>
+<th>Base does not fit</th>
+<th>Records with ≥ 1 consultation</th>
+<th>Consultations kept</th>
+<th>Vaccines kept</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NTAG215</td>
+<td>54 % → 0 %</td>
+<td>0 % → 88 %</td>
+<td>0.00 → 1.01</td>
+<td>0.01 → 1.80</td>
+</tr>
+<tr>
+<td>NTAG216</td>
+<td>0 % → 0 %</td>
+<td>1 % → 89 % (all that have one)</td>
+<td>0.01 → 2.27 (all)</td>
+<td>1.03 → 2.35 (all)</td>
+</tr>
+</tbody>
+</table>
+<p>The records are synthetic and their text comes from closed phrase lists, which
+the dictionary knows: the real figure for free text lies between the two
+columns, and real note lengths decide where.</p>
+<h2 id="rollout">Rollout<a class="headerlink" href="#rollout" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Chip written by</th>
+<th>Read by builds before this ADR</th>
+<th>Read by builds with it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Format 1</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Format 2</td>
+<td>❌ (seen as a blank chip)</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li><strong>Phase 1, this change.</strong> Every build reads both formats and writes format 1.
+   <code>--dart-define=HWB_NFC_PAYLOAD_FORMAT=2</code> makes a build write format 2, for
+   field tests with chips that only those test devices read.</li>
+<li><strong>Fleet check.</strong> The backend logs <code>X-App-Version</code> on login and refresh: wait
+   until every device in use runs a build with phase 1. The write-size telemetry
+   (<code>nfc_write_metrics</code>, payload format 1) shows which chips are written and how
+   full they get.</li>
+<li><strong>Phase 2, its own change.</strong> Switch the default of <code>kNfcWriteFormat</code> to
+   format 2. Chips change format as they are rewritten.</li>
+</ol>
+<p>Going back to writing format 1 is always possible; dropping the reading of
+format 2 is not, while any chip may hold it. The same rule as key rotation
+(<code>nfc-encryption.md</code>, "Updating the fleet") applies, for the same reason: a build
+that cannot read a chip treats it as blank.</p>
+<h2 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Phase 1 changes nothing on the chips: builds can be mixed.</li>
+<li>A build before phase 1 that meets a format 2 chip sees it as blank. That is
+  why phase 2 waits for the fleet check.</li>
+<li>The app carries 38 KB of dictionaries (58 KB of source).</li>
+<li>Each write and each fit estimate compresses the dictionary first: about
+  0.2 ms per estimate on a laptop, a few ms on a phone, inside the tap.</li>
+</ul>
+<h2 id="acceptance">Acceptance<a class="headerlink" href="#acceptance" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>test/unit/nfc_payload_v2_test.dart</code>: exact round trip of triage and guardian
+  copies, typed values, values left as text, payloads refused, damaged or
+  foreign plaintexts rejected, dictionaries pinned, stream independent of the
+  priming.</li>
+<li><code>test/unit/nfc_payload_service_test.dart</code>, group "formato 2": external record
+  written and read, a format 1 build reads it, a format 2 build reads format 1,
+  the budget of the external record, chip binding with key version 1, devices of
+  another patient refused, a damaged record read as blank.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Volver al principio
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "content.code.annotate", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copiado al portapapeles", "clipboard.copy": "Copiar al portapapeles", "search.result.more.one": "1 m\u00e1s en esta p\u00e1gina", "search.result.more.other": "# m\u00e1s en esta p\u00e1gina", "search.result.none": "No se encontraron documentos", "search.result.one": "1 documento encontrado", "search.result.other": "# documentos encontrados", "search.result.placeholder": "Teclee para comenzar b\u00fasqueda", "search.result.term.missing": "Falta", "select.version": "Seleccionar versi\u00f3n"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.83f73b43.min.js"></script>
+      
+    
+  </body>
+</html>
