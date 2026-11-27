@@ -2247,6 +2247,39 @@ void main() {
       expect(await db.pendingNfcWriteMetrics(), isEmpty);
       expect(webBackend, isEmpty);
     });
+
+    test(
+      'captura errores de SQLite sin lanzar si la tabla de métricas no existe',
+      () async {
+        final db = LocalDatabase.instance;
+        final raw = await rawConnection();
+
+        try {
+          await raw.execute('DROP TABLE IF EXISTS nfc_write_metrics');
+
+          await expectLater(db.recordNfcWriteMetric(metric()), completes);
+          expect(await db.pendingNfcWriteMetrics(), isEmpty);
+          await expectLater(db.deleteNfcWriteMetrics(<int>[1, 2]), completes);
+        } finally {
+          await raw.execute('''
+            CREATE TABLE IF NOT EXISTS nfc_write_metrics (
+              id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+              device_role         TEXT NOT NULL,
+              payload_format      INTEGER NOT NULL,
+              key_version         INTEGER NOT NULL,
+              payload_bytes       INTEGER NOT NULL,
+              message_bytes       INTEGER NOT NULL,
+              chip_capacity       INTEGER NOT NULL,
+              consultations_kept  INTEGER,
+              consultations_total INTEGER,
+              vaccines_kept       INTEGER,
+              vaccines_total      INTEGER,
+              written_at          TEXT NOT NULL
+            )
+          ''');
+        }
+      },
+    );
   });
 
   group('Versiones de llave NFC observadas (nativo)', () {

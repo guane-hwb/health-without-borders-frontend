@@ -1,3 +1,5 @@
+// test/widget/lock_gate_widget_test.dart
+
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
@@ -380,6 +382,120 @@ void main() {
       await tester.pump();
       expect(find.text('Consultas abiertas: 2'), findsOneWidget);
       semantics.dispose();
+    });
+  });
+
+  group('LockController — ciclo de vida de la aplicación', () {
+    test('ignora cambios de ciclo de vida cuando no hay usuario activo', () {
+      localLockedNotifier.value = false;
+      when(() => authRepo.currentUser).thenReturn(null);
+      final controller = LockController(
+        authRepository: authRepo,
+        backgroundTimeout: const Duration(minutes: 5),
+      );
+      addTearDown(controller.dispose);
+
+      controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+      controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+
+      expect(localLockedNotifier.value, isFalse);
+    });
+
+    test(
+      'bloquea al reanudar si el tiempo en segundo plano supera backgroundTimeout',
+      () {
+        localLockedNotifier.value = false;
+        final controller = LockController(
+          authRepository: authRepo,
+          foregroundTimeout: const Duration(minutes: 10),
+          backgroundTimeout: Duration.zero,
+        );
+        addTearDown(controller.dispose);
+
+        controller.recordUserActivity();
+        controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+        controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+
+        expect(localLockedNotifier.value, isTrue);
+      },
+    );
+
+    test(
+      'reinicia el timer de inactividad al reanudar antes de backgroundTimeout',
+      () {
+        fakeAsync((async) {
+          localLockedNotifier.value = false;
+          final controller = LockController(
+            authRepository: authRepo,
+            foregroundTimeout: const Duration(minutes: 10),
+            backgroundTimeout: const Duration(minutes: 5),
+          );
+
+          controller.recordUserActivity();
+          controller.didChangeAppLifecycleState(AppLifecycleState.inactive);
+
+          async.elapse(const Duration(minutes: 2));
+          controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+          expect(localLockedNotifier.value, isFalse);
+
+          async.elapse(const Duration(minutes: 9));
+          expect(localLockedNotifier.value, isFalse);
+
+          async.elapse(const Duration(minutes: 1));
+          expect(localLockedNotifier.value, isTrue);
+
+          controller.dispose();
+        });
+      },
+    );
+  });
+
+  group('LockScreen — visibilidad y envío por teclado', () {
+    late _LockAuth auth;
+
+    setUp(() => auth = _LockAuth());
+
+    Finder passwordField() => find.descendant(
+      of: find.byType(LockScreen),
+      matching: find.byType(TextField),
+    );
+
+    testWidgets(
+      'alterna la visibilidad de la contraseña al tocar el ícono del ojo',
+      (tester) async {
+        await tester.pumpWidget(_LockedApp(auth: auth));
+        auth.setLocalLocked(true);
+        await tester.pump();
+
+        expect(tester.widget<TextField>(passwordField()).obscureText, isTrue);
+        expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.visibility_outlined));
+        await tester.pump();
+
+        expect(tester.widget<TextField>(passwordField()).obscureText, isFalse);
+        expect(find.byIcon(Icons.visibility_off_outlined), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.visibility_off_outlined));
+        await tester.pump();
+
+        expect(tester.widget<TextField>(passwordField()).obscureText, isTrue);
+      },
+    );
+
+    testWidgets('desbloquea al enviar el formulario desde el teclado (done)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_LockedApp(auth: auth));
+      auth.setLocalLocked(true);
+      await tester.pump();
+
+      await tester.enterText(passwordField(), _LockAuth.password);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+
+      expect(find.byType(LockScreen), findsNothing);
+      expect(find.text('Alergias: Penicilina'), findsOneWidget);
     });
   });
 }

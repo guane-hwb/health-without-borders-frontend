@@ -162,6 +162,35 @@ class _TestLocaleWrapperState extends State<_TestLocaleWrapper> {
   }
 }
 
+class _CapturingUserRepository extends FakeUserRepository {
+  _CapturingUserRepository({required this.onCreateUser});
+
+  final void Function({String? documentType, String? documentNumber})
+  onCreateUser;
+
+  @override
+  Future<UserSession> createUser({
+    String? documentNumber,
+    String? documentType,
+    required String email,
+    required String fullName,
+    String? organizationId,
+    required String role,
+    required String password,
+  }) async {
+    onCreateUser(documentType: documentType, documentNumber: documentNumber);
+    return super.createUser(
+      documentNumber: documentNumber,
+      documentType: documentType,
+      email: email,
+      fullName: fullName,
+      organizationId: organizationId,
+      role: role,
+      password: password,
+    );
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 UserSession buildUser({
@@ -1144,6 +1173,87 @@ void main() {
       expect(find.text('Error al eliminar usuario'), findsOneWidget);
     });
   });
+
+  group(
+    'ManageUsersScreen — cobertura residual (UserRole.unknown y selector de documento)',
+    () {
+      testWidgets(
+        'muestra badge y color gris para UserRole.unknown en español e inglés',
+        (tester) async {
+          configureMobileScreenSize(tester);
+          fakeRepo.usersToReturn = [
+            buildUser(fullName: 'Rol Desconocido', role: UserRole.unknown),
+          ];
+
+          await tester.pumpWidget(buildTestApp(fakeRepo, locale: 'es'));
+          await tester.pumpAndSettle();
+
+          expect(find.text('Desconocido'), findsOneWidget);
+
+          await tester.tap(find.text('EN'));
+          await tester.pumpAndSettle();
+
+          expect(find.text('Unknown'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'abre, cierra y selecciona tipo de documento en _UserFormSheet enviándolo en createUser',
+        (tester) async {
+          configureMobileScreenSize(tester);
+          String? capturedDocType;
+          String? capturedDocNumber;
+
+          final capturingRepo = _CapturingUserRepository(
+            onCreateUser: ({String? documentType, String? documentNumber}) {
+              capturedDocType = documentType;
+              capturedDocNumber = documentNumber;
+            },
+          );
+
+          await tester.pumpWidget(buildTestApp(capturingRepo, locale: 'es'));
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byType(FloatingActionButton));
+          await tester.pumpAndSettle();
+
+          final s = AppStrings.forTesting('es');
+          final docSelector = find.text(s.docTypeCC);
+          expect(docSelector, findsOneWidget);
+
+          await tester.tap(docSelector.first);
+          await tester.pumpAndSettle();
+          expect(find.byType(MenuItemButton), findsNWidgets(2));
+
+          await tester.tap(docSelector.first, warnIfMissed: false);
+          await tester.pumpAndSettle();
+          expect(find.byType(MenuItemButton), findsNothing);
+
+          await tester.tap(docSelector.first);
+          await tester.pumpAndSettle();
+          await tester.tap(find.widgetWithText(MenuItemButton, s.docTypeCE));
+          await tester.pumpAndSettle();
+
+          expect(find.text(s.docTypeCE), findsOneWidget);
+
+          final fields = find.byType(TextField);
+          await tester.enterText(fields.at(0), 'Laura Gómez');
+          await tester.enterText(fields.at(1), '987654321');
+          await tester.enterText(fields.at(2), 'laura@test.com');
+          await tester.enterText(fields.at(3), 'password123');
+          await tester.pumpAndSettle();
+
+          await tester.tap(
+            find.widgetWithText(ElevatedButton, s.userFormCreateButton),
+          );
+          await tester.pumpAndSettle();
+
+          expect(capturedDocType, 'CE');
+          expect(capturedDocNumber, '987654321');
+        },
+      );
+    },
+  );
 }
 
 void configureMobileScreenSize(WidgetTester tester) {

@@ -415,4 +415,26 @@ void main() {
       expect(strokes, isEmpty);
     });
   });
+
+  group('Parentesco "Otro" (código 05) — mapeo unitario', () {
+    test('código 05 resuelve etiqueta localizable en ES y EN', () {
+      String label(AppStrings s, String code) =>
+          code == '05' ? (s.isEs ? 'Otro' : 'Other') : code;
+
+      expect(label(AppStrings.forTesting('es'), '05'), 'Otro');
+      expect(label(AppStrings.forTesting('en'), '05'), 'Other');
+    });
+
+    test(
+      'relationshipOther conserva valor recortado solo cuando relationship es 05',
+      () {
+        String? resolveOther(String rel, String raw) =>
+            rel == '05' && raw.trim().isNotEmpty ? raw.trim() : null;
+
+        expect(resolveOther('05', '  Padrino  '), 'Padrino');
+        expect(resolveOther('05', '   '), isNull);
+        expect(resolveOther('01', 'Padrino'), isNull);
+      },
+    );
+  });
 }

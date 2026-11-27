@@ -395,4 +395,35 @@ void main() {
       );
     });
   });
+
+  group('EditVitalSignsSheet — Certificación y bloqueo de tipo de sangre', () {
+    bool isBloodTypeLocked({
+      required bool isBloodTypeCertified,
+      required String? bloodType,
+    }) {
+      return isBloodTypeCertified && (bloodType?.trim().isNotEmpty ?? false);
+    }
+
+    test(
+      'bloquea edición solo cuando está certificado y hay bloodType válido',
+      () {
+        expect(
+          isBloodTypeLocked(isBloodTypeCertified: true, bloodType: 'O+'),
+          isTrue,
+        );
+        expect(
+          isBloodTypeLocked(isBloodTypeCertified: false, bloodType: 'O+'),
+          isFalse,
+        );
+        expect(
+          isBloodTypeLocked(isBloodTypeCertified: true, bloodType: null),
+          isFalse,
+        );
+        expect(
+          isBloodTypeLocked(isBloodTypeCertified: true, bloodType: '   '),
+          isFalse,
+        );
+      },
+    );
+  });
 }

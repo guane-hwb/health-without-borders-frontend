@@ -1042,6 +1042,69 @@ void main() {
         expect(captured[2], session.organizationId);
       },
     );
+
+    testWidgets(
+      'prellena número de documento válido y nombre de organización del usuario autenticado',
+      (tester) async {
+        final scope = _defaultScope();
+        final session = _MockUserSession();
+        when(() => session.id).thenReturn('u-10');
+        when(() => session.organizationId).thenReturn('org-10');
+        when(() => session.documentType).thenReturn('CC');
+        when(() => session.documentNumber).thenReturn('  1098765432  ');
+        when(() => session.fullName).thenReturn('Dra. Sofía Méndez');
+        when(
+          () => session.organizationName,
+        ).thenReturn('  Clínica del Norte  ');
+        final auth = scope.authRepository as _MockAuthRepository;
+        when(() => auth.currentUser).thenReturn(session);
+
+        await tester.pumpWidget(
+          _buildApp(patient: _fakePatient(), scope: scope),
+        );
+        await tester.pumpAndSettle();
+
+        final values = tester
+            .widgetList<TextField>(find.byType(TextField))
+            .map((tf) => tf.controller?.text ?? '')
+            .toList();
+
+        expect(values, contains('1098765432'));
+        expect(values, contains('Dra. Sofía Méndez'));
+        expect(values, contains('Clínica del Norte'));
+      },
+    );
+
+    testWidgets(
+      'ignora documentos placeholder (1000001 o dígitos repetidos 222222) al prellenar',
+      (tester) async {
+        for (final invalidDoc in <String>['1000001', '222222']) {
+          final scope = _defaultScope();
+          final session = _MockUserSession();
+          when(() => session.id).thenReturn('u-11');
+          when(() => session.organizationId).thenReturn('org-11');
+          when(() => session.documentType).thenReturn('CC');
+          when(() => session.documentNumber).thenReturn(invalidDoc);
+          when(() => session.fullName).thenReturn('Dr. Placeholder');
+          when(() => session.organizationName).thenReturn('   ');
+          final auth = scope.authRepository as _MockAuthRepository;
+          when(() => auth.currentUser).thenReturn(session);
+
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpWidget(
+            _buildApp(patient: _fakePatient(), scope: scope),
+          );
+          await tester.pumpAndSettle();
+
+          final values = tester
+              .widgetList<TextField>(find.byType(TextField))
+              .map((tf) => tf.controller?.text ?? '')
+              .toList();
+
+          expect(values, isNot(contains(invalidDoc)));
+        }
+      },
+    );
   });
 
   group('Manejo dinámico de prescripciones', () {

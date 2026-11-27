@@ -313,6 +313,11 @@ void main() {
         throwsA(isA<NfcPayloadV2Exception>()),
       );
     });
+
+    test('NfcPayloadV2Exception expone su mensaje en toString', () {
+      final exception = NfcPayloadV2Exception('mensaje de error');
+      expect(exception.toString(), 'mensaje de error');
+    });
   });
 
   group('lo que no se lee', () {
@@ -351,6 +356,67 @@ void main() {
           NfcPayloadKind.triage,
         ),
         throwsFormatException,
+      );
+    });
+
+    test('un flujo DEFLATE corrupto lanza FormatException', () {
+      // Bloque DEFLATE raw con tipo de bloque reservado (11 en los bits 1..2 -> 0x06),
+      // lo que fuerza a RawZLibFilter.inflateFilter a lanzar ZLibException.
+      final Uint8List corruptedDeflate = Uint8List.fromList(<int>[
+        kNfcPayloadV2FormatByte,
+        kNfcV2TriageDictionaryId,
+        0x06,
+      ]);
+
+      expect(
+        () => NfcPayloadV2.decode(corruptedDeflate, NfcPayloadKind.triage),
+        throwsA(
+          isA<FormatException>().having(
+            (FormatException e) => e.message,
+            'message',
+            contains('Damaged format 2 NFC payload'),
+          ),
+        ),
+      );
+    });
+
+    test('un valor CBOR no soportado lanza FormatException', () {
+      // Construye un mapa CBOR válido con clave 'fn' y un valor simple CBOR
+      // no asignado (major type 7, info 16 -> byte 0xf0 = CborSimpleValue(16)),
+      // que no coincide con ninguna rama de _decodeValue.
+      final Uint8List dictionary = nfcV2TriageDictionary(
+        kNfcV2TriageDictionaryId,
+      )!;
+      final Uint8List unsupportedCbor = Uint8List.fromList(<int>[
+        0xa1, // map(1)
+        0x62, 0x66, 0x6e, // text(2) "fn"
+        0xf0, // simple(16) -> CborSimpleValue
+      ]);
+
+      final RawZLibFilter deflater = RawZLibFilter.deflateFilter(
+        level: 9,
+        raw: true,
+      );
+      deflater.process(dictionary, 0, dictionary.length);
+      _drain(deflater, end: false);
+      deflater.process(unsupportedCbor, 0, unsupportedCbor.length);
+      final List<int> stream = _drain(deflater, end: true);
+
+      final Uint8List plaintext = Uint8List.fromList(<int>[
+        kNfcPayloadV2FormatByte,
+        kNfcV2TriageDictionaryId,
+        ...stream,
+      ]);
+
+      expect(
+        () => NfcPayloadV2.decode(plaintext, NfcPayloadKind.triage),
+        throwsA(
+          isA<FormatException>().having(
+            (FormatException e) => e.message,
+            'message',
+            contains('Unexpected CBOR value'),
+          ),
+        ),
       );
     });
   });

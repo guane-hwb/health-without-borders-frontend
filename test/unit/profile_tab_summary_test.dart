@@ -508,4 +508,49 @@ void main() {
       expect(docTypeLabel('XX'), 'XX');
     });
   });
+
+  group('_guardianChanged y _relLabel para parentesco 05 (Otro)', () {
+    test('detecta cambio cuando relationshipOther difiere en el cuidador', () {
+      final original = _makeRecord(
+        guardian: GuardianInfo(
+          name: 'María López',
+          phone: '3001234567',
+          relationship: '05',
+          relationshipOther: 'Tía',
+        ),
+      );
+      final draft = _makeRecord(
+        guardian: GuardianInfo(
+          name: 'María López',
+          phone: '3001234567',
+          relationship: '05',
+          relationshipOther: 'Madrina',
+        ),
+      );
+
+      final w = _makeWidget(draft: draft, original: original);
+      expect(w.testGuardianChanged, isTrue);
+    });
+
+    test('formatea etiqueta de parentesco 05 con y sin detalle en ES y EN', () {
+      String formatRel05({required bool isEs, String? relationshipOther}) {
+        final otherLabel = isEs ? 'Otro' : 'Other';
+        final detail = relationshipOther?.trim();
+        return (detail != null && detail.isNotEmpty)
+            ? '$otherLabel ($detail)'
+            : otherLabel;
+      }
+
+      expect(
+        formatRel05(isEs: true, relationshipOther: '  Tutor legal  '),
+        'Otro (Tutor legal)',
+      );
+      expect(formatRel05(isEs: true, relationshipOther: ''), 'Otro');
+      expect(
+        formatRel05(isEs: false, relationshipOther: 'Neighbor'),
+        'Other (Neighbor)',
+      );
+      expect(formatRel05(isEs: false, relationshipOther: null), 'Other');
+    });
+  });
 }

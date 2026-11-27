@@ -1190,4 +1190,122 @@ void main() {
       },
     );
   });
+
+  group(
+    'Step3PatientData — ramas residuales (blur, certificación y cierre de menú)',
+    () {
+      testWidgets(
+        'quitar foco tras corregir un documento inválido remueve el error en _validateDocOnBlur',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 2000);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
+
+          final draft = RegisterDraft();
+          await tester.pumpWidget(
+            _wrap(
+              Step3PatientData(draft: draft, onBack: () {}, onContinue: () {}),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final docField = find.byWidgetPredicate(
+            (w) => w is TextField && w.decoration?.hintText == 'Ej. 1098765432',
+          );
+          String? docError() =>
+              tester.widget<TextField>(docField).decoration?.errorText;
+
+          await tester.enterText(docField, '123#');
+          await tester.tap(find.text('Ej. Carmen'));
+          await tester.pumpAndSettle();
+          expect(docError(), isNotNull);
+
+          await tester.tap(docField);
+          await tester.pumpAndSettle();
+          final controller = tester.widget<TextField>(docField).controller!;
+          controller.text = '1098765432';
+          await tester.pump();
+
+          await tester.tap(find.text('Ej. Carmen'));
+          await tester.pumpAndSettle();
+
+          expect(docError(), isNull);
+        },
+      );
+
+      testWidgets(
+        'seleccionar "Sí" y "No" en certificación de tipo de sangre actualiza draft.isBloodTypeCertified',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 3000);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
+
+          final draft = RegisterDraft();
+          await tester.pumpWidget(
+            _wrap(
+              Step3PatientData(draft: draft, onBack: () {}, onContinue: () {}),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final bloodChip = find.text('O+');
+          await tester.ensureVisible(bloodChip);
+          await tester.tap(bloodChip);
+          await tester.pumpAndSettle();
+
+          expect(
+            find.textContaining(
+              '¿El cuidador presentó certificado o examen?',
+              findRichText: true,
+            ),
+            findsOneWidget,
+          );
+          expect(draft.isBloodTypeCertified, isFalse);
+
+          final yesChip = find.text('Sí');
+          await tester.ensureVisible(yesChip);
+          await tester.tap(yesChip);
+          await tester.pumpAndSettle();
+
+          expect(draft.isBloodTypeCertified, isTrue);
+          expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+
+          final noChip = find.text('No');
+          await tester.ensureVisible(noChip);
+          await tester.tap(noChip);
+          await tester.pumpAndSettle();
+
+          expect(draft.isBloodTypeCertified, isFalse);
+        },
+      );
+
+      testWidgets(
+        'tocar dos veces seguidas un dropdown lo abre y lo cierra mediante controller.close()',
+        (tester) async {
+          tester.view.physicalSize = const Size(800, 2000);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.resetPhysicalSize);
+
+          final draft = RegisterDraft();
+          await tester.pumpWidget(
+            _wrap(
+              Step3PatientData(draft: draft, onBack: () {}, onContinue: () {}),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final expandIcon = find.byIcon(Icons.expand_more).first;
+          await tester.ensureVisible(expandIcon);
+
+          await tester.tap(expandIcon);
+          await tester.pumpAndSettle();
+          expect(find.byType(MenuItemButton), findsWidgets);
+
+          await tester.tap(expandIcon, warnIfMissed: false);
+          await tester.pumpAndSettle();
+          expect(find.byType(MenuItemButton), findsNothing);
+        },
+      );
+    },
+  );
 }

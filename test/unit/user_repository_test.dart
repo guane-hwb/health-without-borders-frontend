@@ -1,4 +1,4 @@
-// test/unit/features/auth/data/user_repository_test.dart
+// test/unit/user_repository_test.dart
 
 import 'dart:convert';
 
@@ -333,6 +333,56 @@ void main() {
         ),
       );
     });
+
+    test(
+      'incluye document_type y document_number recortados cuando se proporcionan',
+      () async {
+        Map<String, dynamic>? capturedBody;
+
+        final client = MockClient((request) async {
+          capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return _ok(kUserJson);
+        });
+
+        final (:repo, fakeAuth: _) = _buildSut(client);
+        await repo.createUser(
+          email: 'doc@clinic.com',
+          fullName: 'Dr. Strange',
+          documentType: '  CC  ',
+          documentNumber: '  123456789  ',
+          role: 'doctor',
+          password: 'secret',
+        );
+
+        expect(capturedBody, containsPair('document_type', 'CC'));
+        expect(capturedBody, containsPair('document_number', '123456789'));
+      },
+    );
+
+    test(
+      'omite document_type y document_number cuando están vacíos o con espacios',
+      () async {
+        Map<String, dynamic>? capturedBody;
+
+        final client = MockClient((request) async {
+          capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return _ok(kUserJson);
+        });
+
+        final (:repo, fakeAuth: _) = _buildSut(client);
+        await repo.createUser(
+          email: 'nurse2@clinic.com',
+          fullName: 'Nurse Two',
+          documentType: '   ',
+          documentNumber: '',
+          role: 'nurse',
+          password: 'secret',
+        );
+
+        expect(capturedBody!.containsKey('document_type'), isFalse);
+        expect(capturedBody!.containsKey('document_number'), isFalse);
+      },
+    );
   });
 
   // ══════════════════════════════════════════════════════════════════════════

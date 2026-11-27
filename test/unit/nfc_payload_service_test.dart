@@ -1629,4 +1629,123 @@ void main() {
       expect(capturedAad(), isNull);
     });
   });
+
+  group('casos borde de resiliencia y validación', () {
+    test(
+      'NfcPayloadTooLargeException muestra el hint adecuado según el chip',
+      () {
+        final ntag213 = NfcPayloadTooLargeException(
+          messageBytes: 200,
+          payloadBytes: 168,
+          chipCapacity: 144,
+        );
+        expect(ntag213.toString(), contains('NTAG213 detectado'));
+
+        final ntag216 = NfcPayloadTooLargeException(
+          messageBytes: 920,
+          payloadBytes: 888,
+          chipCapacity: 888,
+        );
+        expect(ntag216.toString(), endsWith('over.'));
+      },
+    );
+
+    test(
+      'ignora el error en el pre-cifrado y reintenta dentro del tap',
+      () async {
+        var calls = 0;
+        when(
+          () => codec.encode(any(), extraAad: any(named: 'extraAad')),
+        ).thenAnswer((_) async {
+          calls++;
+          if (calls == 1) {
+            throw StateError('fallo transitorio antes del tap');
+          }
+          return Uint8List.fromList([1, 2, 3]);
+        });
+
+        final ndef = _FakeNdef(maxSize: kNtag215MaxSize);
+        final service = _service(codec, HwbTag(uid: kExpectedUid, ndef: ndef));
+
+        final result = await service.writeTriagePayload({'fn': 'Martha'});
+
+        expect(calls, 2);
+        expect(result.bytesWritten, 3);
+        expect(ndef.written, isNotNull);
+      },
+    );
+
+    test('guardianCopyPatientId devuelve null si patientId no es String', () {
+      expect(
+        NfcPayloadService.guardianCopyPatientId(<String, dynamic>{
+          'patientId': 12345,
+        }),
+        isNull,
+      );
+    });
+
+    test(
+      'devuelve none si un registro v2 descifra pero su contenido no es CBOR válido',
+      () async {
+        const String hexKey =
+            '0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20';
+        final realCodec = NfcPayloadCodec.fromKeyring(
+          keyring: NfcKeyring.single(hexKey),
+        );
+
+        final sealedCorruptCbor = await realCodec.seal(
+          Uint8List.fromList(<int>[0xFF, 0x00, 0x01]),
+        );
+
+        final tag = HwbTag(
+          uid: kExpectedUid,
+          ndef: _FakeNdef(
+            maxSize: kNtag215MaxSize,
+            cachedMessage: NdefMessage(
+              records: <NdefRecord>[
+                buildExternalRecord(kHwbTriageV2Type, sealedCorruptCbor),
+              ],
+            ),
+          ),
+        );
+
+        final service = NfcPayloadService(
+          codec: realCodec,
+          tagSource: _FakeTagSource.tag(tag),
+          writeFormat: NfcPayloadFormat.v2,
+        );
+
+        final result = await service.readHwbChip();
+        expect(result.kind, HwbChipKind.none);
+      },
+    );
+
+    test(
+      'writeGuardianRecord acepta expectedUid coincidente con distinto formato',
+      () async {
+        when(
+          () => codec.encode(any(), extraAad: any(named: 'extraAad')),
+        ).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
+
+        final ndef = _FakeNdef(maxSize: 888);
+        final service = _service(codec, HwbTag(uid: 'ab:cd:ef', ndef: ndef));
+
+        final result = await service.writeGuardianRecord(
+          expectedUid: 'AB-CD-EF',
+          buildFit: (int budget) => const GuardianPayloadFit(
+            payload: {'a': 1},
+            includedConsultations: 0,
+            includedVaccines: 0,
+            totalConsultations: 0,
+            totalVaccines: 0,
+            estimatedBytes: 3,
+            fits: true,
+          ),
+        );
+
+        expect(result.uid, 'ab:cd:ef');
+        expect(ndef.written, isNotNull);
+      },
+    );
+  });
 }

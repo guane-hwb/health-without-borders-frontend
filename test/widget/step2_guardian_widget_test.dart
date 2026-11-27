@@ -1521,4 +1521,175 @@ void main() {
       expect(find.textContaining('${s.formMissingPrefix}:'), findsNothing);
     });
   });
+
+  group('Step2Guardian — Parentesco "Otro" (05) y limpieza de errores', () {
+    testWidgets(
+      '53. Cuidador 1 y 2 con parentesco "05" muestran el campo condicional, validan vacío y persisten el detalle en Atrás y Continuar',
+      (tester) async {
+        resizeViewport(tester);
+        var continued = false;
+        var backed = false;
+
+        final draft = RegisterDraft()
+          ..guardianName = 'Ana María García'
+          ..guardianPhone = '3158492041'
+          ..guardianDeviceUid = 'HWB041A2CDE'
+          ..guardianDocNumber = '52384912'
+          ..guardianDocType = 'CC'
+          ..guardianAuthAccepted = true
+          ..guardianSignatureStrokes = [
+            [const Offset(10, 10), const Offset(50, 50)],
+          ];
+
+        await tester.pumpWidget(
+          buildSubject(
+            draft: draft,
+            requiredForMinor: true,
+            onBack: () => backed = true,
+            onContinue: () => continued = true,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Otro').first);
+        await tester.pumpAndSettle();
+        expect(find.text('Especifique el parentesco'), findsOneWidget);
+
+        await tester.tap(find.text('Agregar'));
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        final name2Field = find
+            .widgetWithText(TextField, s.guardianFullNameHint)
+            .last;
+        await tester.ensureVisible(name2Field);
+        await tester.enterText(name2Field, 'Carlos López');
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Otro').last);
+        await tester.pumpAndSettle();
+        expect(find.text('Especifique el parentesco'), findsNWidgets(2));
+
+        final dynamic state = tester.state(find.byType(Step2Guardian));
+        await tester.runAsync(() async {
+          await state.saveForTest();
+        });
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('Especifique el parentesco (Cuidador 2)'),
+          findsOneWidget,
+        );
+
+        final relOtherFields = find.widgetWithText(
+          TextField,
+          'Ej. Padrino, vecino, tutor legal',
+        );
+        expect(relOtherFields, findsNWidgets(2));
+
+        await tester.enterText(relOtherFields.first, '  Tía materna  ');
+        await tester.pump();
+        await tester.enterText(relOtherFields.last, '  Padrino  ');
+        await tester.pumpAndSettle();
+
+        final backBtn = find.byIcon(Icons.arrow_back);
+        await tester.ensureVisible(backBtn);
+        await tester.tap(backBtn);
+        await tester.pumpAndSettle();
+
+        expect(backed, isTrue);
+        expect(draft.guardianRelationshipOther, 'Tía materna');
+        expect(draft.guardian2RelationshipOther, 'Padrino');
+
+        await tester.runAsync(() async {
+          await state.saveForTest();
+        });
+        await tester.pumpAndSettle();
+
+        expect(continued, isTrue);
+        expect(draft.guardianRelationshipOther, 'Tía materna');
+        expect(draft.guardian2RelationshipOther, 'Padrino');
+      },
+    );
+
+    testWidgets(
+      '54. Editar correo inválido del cuidador 1 limpia su error y eliminar cuidador 2 purga sus errores activos',
+      (tester) async {
+        resizeViewport(tester);
+        final s = AppStrings.forTesting('es');
+
+        final draft = RegisterDraft()
+          ..guardianName = 'Ana María García'
+          ..guardianPhone = '3158492041'
+          ..guardianDeviceUid = 'HWB041A2CDE'
+          ..guardianDocNumber = '52384912'
+          ..guardianEmail = 'correo-invalido'
+          ..guardianAuthAccepted = true
+          ..guardianSignatureStrokes = [
+            [const Offset(10, 10), const Offset(50, 50)],
+          ]
+          ..guardian2Name = 'Carlos López'
+          ..guardian2Phone = '12'
+          ..guardian2DocNumber = '12';
+
+        await tester.pumpWidget(buildSubject(draft: draft));
+        await tester.pumpAndSettle();
+
+        final dynamic state = tester.state(find.byType(Step2Guardian));
+        await tester.runAsync(() async {
+          await state.saveForTest();
+        });
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('Correo electrónico inválido'),
+          findsWidgets,
+        );
+        expect(
+          find.textContaining('Documento de cuidador 2 inválido'),
+          findsOneWidget,
+        );
+
+        final email1Field = find.widgetWithText(TextField, s.emailHint).first;
+        await tester.ensureVisible(email1Field);
+        await tester.enterText(email1Field, 'ana@correo.com');
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('Correo electrónico inválido'),
+          findsNothing,
+        );
+
+        final removeG2Btn = find.byIcon(Icons.delete_outline);
+        await tester.ensureVisible(removeG2Btn);
+        await tester.tap(removeG2Btn);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('Documento de cuidador 2 inválido'),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      '55. Reporta tipo de documento faltante cuando draft.guardianDocType se inicializa vacío',
+      (tester) async {
+        resizeViewport(tester);
+        final draft = RegisterDraft()..guardianDocType = '';
+
+        await tester.pumpWidget(buildSubject(draft: draft));
+        await tester.pumpAndSettle();
+
+        final dynamic state = tester.state(find.byType(Step2Guardian));
+        await tester.runAsync(() async {
+          await state.saveForTest();
+        });
+        await tester.pumpAndSettle();
+
+        final s = AppStrings.forTesting('es');
+        expect(find.textContaining(s.documentTypeLabel), findsWidgets);
+      },
+    );
+  });
 }

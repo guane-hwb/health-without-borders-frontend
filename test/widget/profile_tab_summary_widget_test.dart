@@ -1166,4 +1166,96 @@ void main() {
       },
     );
   });
+
+  group('Parentesco "Otro" (código 05) del cuidador —', () {
+    testWidgets(
+      'muestra "Otro (<detalle>)" en español cuando relationship es 05 y relationshipOther tiene texto',
+      (tester) async {
+        final draft = _baseRecord(
+          guardian: GuardianInfo(
+            name: 'Sofía Martínez',
+            relationship: '05',
+            relationshipOther: 'Tía materna',
+            phone: '3001112233',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _buildWidget(draft: draft, locale: const Locale('es')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Otro (Tía materna) · 3001112233', skipOffstage: false),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'muestra "Otro" sin paréntesis cuando relationship es 05 y relationshipOther está vacío o nulo',
+      (tester) async {
+        final draft = _baseRecord(
+          guardian: GuardianInfo(
+            name: 'Luis Gómez',
+            relationship: '05',
+            relationshipOther: '   ',
+            phone: '3004445566',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _buildWidget(draft: draft, locale: const Locale('es')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Otro · 3004445566', skipOffstage: false),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'muestra "Other (<detalle>)" y "Other" en inglés cuando relationship es 05',
+      (tester) async {
+        final withDetail = _baseRecord(
+          guardian: GuardianInfo(
+            name: 'Martha Díaz',
+            relationship: '05',
+            relationshipOther: 'Godmother',
+            phone: '3007778899',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _buildWidget(draft: withDetail, locale: const Locale('en')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Other (Godmother) · 3007778899', skipOffstage: false),
+          findsOneWidget,
+        );
+
+        final withoutDetail = _baseRecord(
+          guardian: GuardianInfo(
+            name: 'Pedro Díaz',
+            relationship: '05',
+            phone: '3009990011',
+          ),
+        );
+
+        await tester.pumpWidget(
+          _buildWidget(draft: withoutDetail, locale: const Locale('en')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Other · 3009990011', skipOffstage: false),
+          findsOneWidget,
+        );
+      },
+    );
+  });
 }

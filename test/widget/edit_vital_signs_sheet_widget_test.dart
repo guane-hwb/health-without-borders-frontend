@@ -12,6 +12,7 @@ Widget _wrap({
   double? weight,
   double? height,
   String? bloodType,
+  bool isBloodTypeCertified = false,
   double? previousWeight,
   double? previousHeight,
   void Function({
@@ -20,7 +21,8 @@ Widget _wrap({
     double? height,
     double? muac,
     bool isBloodTypeCertified,
-  })? onConfirm,
+  })?
+  onConfirm,
 }) {
   return AppLocale(
     locale: locale,
@@ -31,6 +33,7 @@ Widget _wrap({
           weight: weight,
           height: height,
           bloodType: bloodType,
+          isBloodTypeCertified: isBloodTypeCertified,
           previousWeight: previousWeight,
           previousHeight: previousHeight,
           onConfirm:
@@ -242,17 +245,18 @@ void main() {
             weight: 72.5,
             height: 170.0,
             bloodType: 'O+',
-            onConfirm: ({
-              String? bloodType,
-              double? weight,
-              double? height,
-              double? muac,
-              bool isBloodTypeCertified = false,
-            }) {
-              confirmedWeight = weight;
-              confirmedHeight = height;
-              confirmedBloodType = bloodType;
-            },
+            onConfirm:
+                ({
+                  String? bloodType,
+                  double? weight,
+                  double? height,
+                  double? muac,
+                  bool isBloodTypeCertified = false,
+                }) {
+                  confirmedWeight = weight;
+                  confirmedHeight = height;
+                  confirmedBloodType = bloodType;
+                },
           ),
         );
 
@@ -277,16 +281,17 @@ void main() {
 
         await tester.pumpWidget(
           _wrap(
-            onConfirm: ({
-              String? bloodType,
-              double? weight,
-              double? height,
-              double? muac,
-              bool isBloodTypeCertified = false,
-            }) {
-              confirmedWeight = weight;
-              confirmedBloodType = bloodType;
-            },
+            onConfirm:
+                ({
+                  String? bloodType,
+                  double? weight,
+                  double? height,
+                  double? muac,
+                  bool isBloodTypeCertified = false,
+                }) {
+                  confirmedWeight = weight;
+                  confirmedBloodType = bloodType;
+                },
           ),
         );
 
@@ -317,17 +322,18 @@ void main() {
 
         await tester.pumpWidget(
           _wrap(
-            onConfirm: ({
-              String? bloodType,
-              double? weight,
-              double? height,
-              double? muac,
-              bool isBloodTypeCertified = false,
-            }) {
-              confirmedWeight = weight;
-              confirmedHeight = height;
-              confirmedBloodType = bloodType;
-            },
+            onConfirm:
+                ({
+                  String? bloodType,
+                  double? weight,
+                  double? height,
+                  double? muac,
+                  bool isBloodTypeCertified = false,
+                }) {
+                  confirmedWeight = weight;
+                  confirmedHeight = height;
+                  confirmedBloodType = bloodType;
+                },
           ),
         );
 
@@ -350,15 +356,16 @@ void main() {
       String? selectedBlood;
       await tester.pumpWidget(
         _wrap(
-          onConfirm: ({
-            String? bloodType,
-            double? weight,
-            double? height,
-            double? muac,
-            bool isBloodTypeCertified = false,
-          }) {
-            selectedBlood = bloodType;
-          },
+          onConfirm:
+              ({
+                String? bloodType,
+                double? weight,
+                double? height,
+                double? muac,
+                bool isBloodTypeCertified = false,
+              }) {
+                selectedBlood = bloodType;
+              },
         ),
       );
 
@@ -382,15 +389,16 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           bloodType: 'AB+',
-          onConfirm: ({
-            String? bloodType,
-            double? weight,
-            double? height,
-            double? muac,
-            bool isBloodTypeCertified = false,
-          }) {
-            selectedBlood = bloodType;
-          },
+          onConfirm:
+              ({
+                String? bloodType,
+                double? weight,
+                double? height,
+                double? muac,
+                bool isBloodTypeCertified = false,
+              }) {
+                selectedBlood = bloodType;
+              },
         ),
       );
 
@@ -710,4 +718,122 @@ void main() {
       });
     },
   );
+
+  group('EditVitalSignsSheet — Certificación y bloqueo del tipo de sangre', () {
+    testWidgets(
+      'marca el checkbox de certificación y lo envía en onConfirm cuando no está bloqueado',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        String? confirmedBloodType;
+        bool? confirmedCertified;
+
+        await tester.pumpWidget(
+          _wrap(
+            bloodType: 'O+',
+            isBloodTypeCertified: false,
+            locale: 'es',
+            onConfirm:
+                ({
+                  String? bloodType,
+                  double? weight,
+                  double? height,
+                  double? muac,
+                  bool isBloodTypeCertified = false,
+                }) {
+                  confirmedBloodType = bloodType;
+                  confirmedCertified = isBloodTypeCertified;
+                },
+          ),
+        );
+
+        final checkbox = find.byType(CheckboxListTile);
+        expect(checkbox, findsOneWidget);
+        expect(tester.widget<CheckboxListTile>(checkbox).value, isFalse);
+
+        await tester.ensureVisible(checkbox);
+        await tester.tap(checkbox);
+        await tester.pumpAndSettle();
+
+        expect(tester.widget<CheckboxListTile>(checkbox).value, isTrue);
+
+        final confirmBtn = find.byType(ElevatedButton).first;
+        await tester.ensureVisible(confirmBtn);
+        await tester.tap(confirmBtn);
+        await tester.pumpAndSettle();
+
+        expect(confirmedBloodType, 'O+');
+        expect(confirmedCertified, isTrue);
+      },
+    );
+
+    testWidgets(
+      'bloquea la edición cuando isBloodTypeCertified es true y bloodType no está vacío (ES y EN)',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        String? confirmedBloodType;
+        bool? confirmedCertified;
+
+        await tester.pumpWidget(
+          _wrap(
+            bloodType: 'A-',
+            isBloodTypeCertified: true,
+            locale: 'es',
+            onConfirm:
+                ({
+                  String? bloodType,
+                  double? weight,
+                  double? height,
+                  double? muac,
+                  bool isBloodTypeCertified = false,
+                }) {
+                  confirmedBloodType = bloodType;
+                  confirmedCertified = isBloodTypeCertified;
+                },
+          ),
+        );
+
+        expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+        expect(find.text('Certificado'), findsOneWidget);
+        expect(
+          find.text(
+            'Verificado con certificado/examen. No se puede modificar.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.byType(CheckboxListTile), findsNothing);
+
+        await tester.tap(find.text('O+'), warnIfMissed: false);
+        await tester.pump();
+
+        final confirmBtn = find.byType(ElevatedButton).first;
+        await tester.ensureVisible(confirmBtn);
+        await tester.tap(confirmBtn);
+        await tester.pumpAndSettle();
+
+        expect(confirmedBloodType, 'A-');
+        expect(confirmedCertified, isTrue);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+
+        await tester.pumpWidget(
+          _wrap(bloodType: 'A-', isBloodTypeCertified: true, locale: 'en'),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Certified'), findsOneWidget);
+        expect(
+          find.text('Verified with certificate/lab test. Cannot be edited.'),
+          findsOneWidget,
+        );
+      },
+    );
+  });
 }

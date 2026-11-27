@@ -2057,4 +2057,91 @@ void main() {
       expect(find.text('Copiar datos'), findsNothing);
     });
   });
+
+  group(
+    'SyncQueueScreen – auditoría con usuario autenticado al borrar datos clínicos',
+    () {
+      testWidgets(
+        'propaga userId, ownerUserId y organizationId de currentUser a logEmergencyAccess',
+        (tester) async {
+          final clinicalEntry = makeClinicalEntry();
+          final activeUser = UserSession(
+            id: 'user-audit-99',
+            email: 'doctor@hwb.org',
+            fullName: 'Dra. Camila Ríos',
+            role: UserRole.doctor,
+            organizationId: 'org-audit-77',
+          );
+
+          final authedMock = MockAuthRepository();
+          when(() => authedMock.currentUser).thenReturn(activeUser);
+          when(
+            () => authedMock.sessionNotifier,
+          ).thenReturn(ValueNotifier<UserSession?>(activeUser));
+
+          when(
+            () => db.getUnsyncedRecords(ownerUserId: 'user-audit-99'),
+          ).thenAnswer((_) async => [clinicalEntry]);
+          when(
+            () => db.getSyncNotices(ownerUserId: 'user-audit-99'),
+          ).thenAnswer((_) async => <SyncNotice>[]);
+          when(
+            () => db.logEmergencyAccess(
+              patientUid: any(named: 'patientUid'),
+              patientName: any(named: 'patientName'),
+              userId: any(named: 'userId'),
+              ownerUserId: any(named: 'ownerUserId'),
+              organizationId: any(named: 'organizationId'),
+              reason: any(named: 'reason'),
+            ),
+          ).thenAnswer((_) async {});
+          when(
+            () => db.deleteRecord(clinicalEntry.patientId),
+          ).thenAnswer((_) async {});
+
+          await tester.pumpWidget(
+            AppScope(
+              authRepository: authedMock,
+              userRepository: MockUserRepository(),
+              patientRepository: MockPatientRepository(),
+              localDatabase: db,
+              syncEngine: syncEngine,
+              statsRepository: StatsRepository(
+                apiClient: ApiClient(baseUrl: 'http://localhost'),
+                authRepository: authedMock,
+              ),
+              reachability: reachability,
+              child: const _LocaleWrapper(
+                locale: 'es',
+                child: MaterialApp(home: SyncQueueScreen()),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(Icons.delete_outline));
+          await tester.pumpAndSettle();
+
+          await tester.enterText(
+            find.byType(TextField),
+            'Registro ingresado por error',
+          );
+          await tester.tap(find.text('Eliminar'));
+          await tester.pumpAndSettle();
+
+          verify(
+            () => db.logEmergencyAccess(
+              patientUid: clinicalEntry.deviceUid,
+              patientName: clinicalEntry.patientName,
+              userId: 'user-audit-99',
+              ownerUserId: 'user-audit-99',
+              organizationId: 'org-audit-77',
+              reason: 'discard_clinical_data: Registro ingresado por error',
+            ),
+          ).called(1);
+          verify(() => db.deleteRecord(clinicalEntry.patientId)).called(1);
+        },
+      );
+    },
+  );
 }

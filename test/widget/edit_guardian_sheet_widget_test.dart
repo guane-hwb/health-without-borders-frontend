@@ -615,30 +615,30 @@ void main() {
       testWidgets(
         'cancels closing when clicking Keep editing in unsaved dialog',
         (tester) async {
-        await tester.pumpWidget(
-          _buildSubject(
-            guardian: _sampleGuardian(consent: fakeConsent),
-            guardianIndex: 1,
-            onConfirm: (_) {},
-          ),
-        );
+          await tester.pumpWidget(
+            _buildSubject(
+              guardian: _sampleGuardian(consent: fakeConsent),
+              guardianIndex: 1,
+              onConfirm: (_) {},
+            ),
+          );
 
-        final nameField = find.byWidgetPredicate(
-          (w) => w is TextField && w.controller?.text == 'María García',
-        );
-        await tester.enterText(nameField, 'María Modificada');
-        await tester.pump();
+          final nameField = find.byWidgetPredicate(
+            (w) => w is TextField && w.controller?.text == 'María García',
+          );
+          await tester.enterText(nameField, 'María Modificada');
+          await tester.pump();
 
-        await tester.tap(find.byIcon(Icons.close_rounded));
-        await tester.pumpAndSettle();
+          await tester.tap(find.byIcon(Icons.close_rounded));
+          await tester.pumpAndSettle();
 
-        expect(find.byType(AlertDialog), findsOneWidget);
+          expect(find.byType(AlertDialog), findsOneWidget);
 
           await tester.tap(find.text('Seguir editando'));
-        await tester.pumpAndSettle();
+          await tester.pumpAndSettle();
 
-        expect(find.byType(EditGuardianSheet), findsOneWidget);
-        expect(find.byType(AlertDialog), findsNothing);
+          expect(find.byType(EditGuardianSheet), findsOneWidget);
+          expect(find.byType(AlertDialog), findsNothing);
         },
       );
 
@@ -1099,4 +1099,94 @@ void main() {
       });
     },
   );
+
+  group('EditGuardianSheet — Parentesco "Otro" (código 05)', () {
+    testWidgets(
+      'seleccionar código 05 muestra el campo "Especifique el parentesco", valida vacío y guarda el texto recortado',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        GuardianInfo? received;
+
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(relationship: '01', consent: fakeConsent),
+            guardianIndex: 1,
+            onConfirm: (g) => received = g,
+            locale: 'es',
+          ),
+        );
+
+        expect(find.text('Especifique el parentesco'), findsNothing);
+
+        await tester.tap(find.text('Otro'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Especifique el parentesco'), findsOneWidget);
+
+        final confirmBtn = find.text(sEs.confirmChanges);
+        await tester.ensureVisible(confirmBtn);
+        await tester.tap(confirmBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Por favor especifique el parentesco'),
+          findsOneWidget,
+        );
+        expect(received, isNull);
+
+        final relOtherField = find.ancestor(
+          of: find.byWidgetPredicate(
+            (w) =>
+                w is InputDecorator &&
+                w.decoration.hintText == 'Ej. Padrino, vecino, tutor legal',
+          ),
+          matching: find.byType(TextFormField),
+        );
+        await tester.enterText(relOtherField, '  Tía materna  ');
+        await tester.pump();
+
+        await tester.ensureVisible(confirmBtn);
+        await tester.tap(confirmBtn);
+        await tester.pumpAndSettle();
+
+        expect(received?.relationship, '05');
+        expect(received?.relationshipOther, 'Tía materna');
+      },
+    );
+
+    testWidgets(
+      'muestra etiquetas y validación en inglés para parentesco "Other" (05)',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildSubject(
+            guardian: _sampleGuardian(relationship: '01', consent: fakeConsent),
+            guardianIndex: 1,
+            onConfirm: (_) {},
+            locale: 'en',
+          ),
+        );
+
+        await tester.tap(find.text('Other'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Specify relationship'), findsOneWidget);
+
+        final confirmBtn = find.text('Confirm changes');
+        await tester.ensureVisible(confirmBtn);
+        await tester.tap(confirmBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Please specify the relationship'), findsOneWidget);
+      },
+    );
+  });
 }
