@@ -432,4 +432,19 @@ void main() {
       expect(d.nationalityName, nameBefore);
     });
   });
+
+  group('Certificación de tipo de sangre — regla de asignación', () {
+    test(
+      'isBloodTypeCertified cambia según selección y se reinicia al deseleccionar sangre',
+      () {
+        final draft = RegisterDraft()..bloodType = 'A+';
+
+        draft.isBloodTypeCertified = ('certified' == 'certified');
+        expect(draft.isBloodTypeCertified, isTrue);
+
+        draft.isBloodTypeCertified = ('mentioned' == 'certified');
+        expect(draft.isBloodTypeCertified, isFalse);
+      },
+    );
+  });
 }

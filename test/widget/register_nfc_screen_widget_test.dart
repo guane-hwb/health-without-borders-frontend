@@ -2057,4 +2057,116 @@ void main() {
       },
     );
   });
+
+  group('RegisterNfcScreen — ramas residuales (_step >= 5 y NTAG216 en EN)', () {
+    final validHexKey = List.filled(32, 'ab').join();
+
+    late _FakeNfcService service;
+
+    setUp(() {
+      service = _FakeNfcService();
+      RegisterNfcScreen.overrideServiceBuilder = (_) => service;
+      when(
+        () => auth.getNfcKeyring(),
+      ).thenAnswer((_) async => NfcKeyring.single(validHexKey));
+    });
+
+    tearDown(() {
+      RegisterNfcScreen.overrideServiceBuilder = null;
+    });
+
+    testWidgets(
+      'onPopInvokedWithResult en el paso final (_step == 5) cierra la pantalla',
+      (tester) async {
+        await pumpScreen(tester);
+        await advanceToHub(tester);
+
+        tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.tap(find.text('Empezar'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 800));
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RegisterNfcScreen), findsOneWidget);
+
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        popScope.onPopInvokedWithResult?.call(false, null);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RegisterNfcScreen), findsNothing);
+        expect(find.byType(HomeScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'avisa en inglés antes del toque si la copia del menor supera la capacidad de un NTAG215',
+      (tester) async {
+        await pumpScreen(tester, locale: 'en');
+        final RegisterDraft draft = tester
+            .widget<Step3PatientData>(find.byType(Step3PatientData))
+            .draft;
+        await advanceToReview(tester);
+
+        draft
+          ..documentType = 'TI'
+          ..documentNumber = '1098765432'
+          ..firstName = 'Valentina'
+          ..secondName = 'Sofía'
+          ..firstLastName = 'Rodríguez'
+          ..secondLastName = 'Gómez'
+          ..dob = DateTime(2015, 3, 21)
+          ..street = 'Carrera 15 # 23-47, Barrio La Playa, apto. 302'
+          ..addressCity = 'Cúcuta'
+          ..cityCode = '54001'
+          ..addressState = 'Norte de Santander'
+          ..zone = 'U'
+          ..ethnicity = '06'
+          ..bloodType = 'O+'
+          ..guardianName = 'María Fernanda Gómez'
+          ..guardianPhone = '3001234567'
+          ..guardianDeviceUid = 'AA:BB:CC:DD'
+          ..guardianDocType = 'CC'
+          ..guardianDocNumber = '1090123456'
+          ..guardianAuthAccepted = true
+          ..guardianEmail = 'maria.gomez@example.com'
+          ..guardian2Name = 'Carlos Andrés Rodríguez'
+          ..guardian2Phone = '3109876543'
+          ..guardian2DocType = 'CC'
+          ..guardian2DocNumber = '1090654321'
+          ..guardian2AuthAccepted = true
+          ..guardian2Email = 'carlos.rodriguez@example.com';
+
+        await tester.widget<Step5Review>(find.byType(Step5Review)).onConfirm();
+        await tester.pumpAndSettle();
+
+        tester.widget<Step6Success>(find.byType(Step6Success)).onFinish();
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.tap(find.text('Start'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 800));
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(find.text('NTAG216 device required'), findsOneWidget);
+        expect(
+          find.textContaining(
+            "The minor's record exceeds the capacity of an NTAG215 device",
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('Skip'));
+        await tester.pumpAndSettle();
+      },
+    );
+  });
 }

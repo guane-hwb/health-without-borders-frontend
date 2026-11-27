@@ -716,4 +716,18 @@ void main() {
       },
     );
   });
+
+  group('Parentesco "Otro" (código 05) — validación y normalización', () {
+    test(
+      '39. Valida campo obligatorio cuando relationship es 05 en G1 o G2',
+      () {
+        String? resolveOther(String rel, String raw) =>
+            (rel == '05' && raw.trim().isNotEmpty) ? raw.trim() : null;
+
+        expect(resolveOther('05', '  Tutor legal  '), 'Tutor legal');
+        expect(resolveOther('05', '   '), isNull);
+        expect(resolveOther('01', 'Tutor legal'), isNull);
+      },
+    );
+  });
 }

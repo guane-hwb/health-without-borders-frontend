@@ -13,10 +13,33 @@ import 'package:health_without_borders_frontend/src/core/nfc/partial_card_notice
 import 'package:health_without_borders_frontend/src/features/nfc/domain/patient_record.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/profile_nfc_actions.dart';
 import 'package:health_without_borders_frontend/src/features/nfc/presentation/profile/widgets/reassign_device_dialog.dart';
+import 'package:health_without_borders_frontend/src/core/di/app_scope.dart';
+import 'package:health_without_borders_frontend/src/core/network/api_client.dart';
+import 'package:health_without_borders_frontend/src/core/network/reachability.dart';
+import 'package:health_without_borders_frontend/src/core/storage/local_database.dart';
+import 'package:health_without_borders_frontend/src/core/sync/sync_engine.dart';
+import 'package:health_without_borders_frontend/src/features/admin/data/stats_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/auth_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/data/user_repository.dart';
+import 'package:health_without_borders_frontend/src/features/nfc/data/patient_repository.dart';
+import 'package:health_without_borders_frontend/src/features/auth/domain/user_session.dart';
+import 'package:flutter/services.dart';
 
 class _MockNfcKeyring extends Mock implements NfcKeyring {}
 
 class _MockNfcPayloadCodec extends Mock implements NfcPayloadCodec {}
+
+class _MockLocalDatabase extends Mock implements LocalDatabase {}
+
+class _MockAuthRepository extends Mock implements AuthRepository {}
+
+class _MockUserRepository extends Mock implements UserRepository {}
+
+class _MockPatientRepository extends Mock implements PatientRepository {}
+
+class _MockSyncEngine extends Mock implements SyncEngine {}
+
+class _MockReachability extends Mock implements Reachability {}
 
 class _FakePatientFullRecord extends Fake implements PatientFullRecord {}
 
@@ -1087,5 +1110,177 @@ void main() {
       expect(service.reads, 1);
       expect(service.triageUids, isEmpty);
     });
+  });
+
+  group('instanciación por defecto de NfcPayloadService con AppScope', () {
+    const MethodChannel nfcChannel = MethodChannel(
+      'plugins.flutter.io/nfc_manager',
+    );
+
+    setUp(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(nfcChannel, (MethodCall call) async {
+            if (call.method == 'isAvailable' ||
+                call.method == 'Nfc#isAvailable') {
+              return false;
+            }
+            return null;
+          });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(nfcChannel, null);
+    });
+
+    Widget wrapWithAppScope(Widget child, LocalDatabase localDb) {
+      final api = ApiClient(baseUrl: 'https://api.test');
+      final auth = _MockAuthRepository();
+      when(
+        () => auth.sessionNotifier,
+      ).thenReturn(ValueNotifier<UserSession?>(null));
+      return AppScope(
+        authRepository: auth,
+        userRepository: _MockUserRepository(),
+        patientRepository: _MockPatientRepository(),
+        statsRepository: StatsRepository(apiClient: api, authRepository: auth),
+        localDatabase: localDb,
+        syncEngine: _MockSyncEngine(),
+        reachability: _MockReachability(),
+        child: _wrap(child),
+      );
+    }
+
+    testWidgets(
+      'executeUpdateNfcChips construye NfcPayloadService por defecto con onWritten de AppScope cuando serviceBuilder es null',
+      (tester) async {
+        final mockDb = _MockLocalDatabase();
+        when(() => mockKeyring.isEmpty).thenReturn(false);
+        when(() => mockKeyring.versions).thenReturn(<int>[1]);
+        when(() => mockKeyring.keys).thenReturn(<int, String>{1: validHexKey});
+
+        final originalOnError = FlutterError.onError;
+        FlutterError.onError = (FlutterErrorDetails details) {
+          if (details.exception is PlatformException) return;
+          originalOnError?.call(details);
+        };
+
+        bool? result;
+        try {
+          await tester.pumpWidget(
+            wrapWithAppScope(
+              Builder(
+                builder: (ctx) => ElevatedButton(
+                  onPressed: () async {
+                    result = await executeUpdateNfcChips(
+                      context: ctx,
+                      record: _createRecord(),
+                      keyring: mockKeyring,
+                      patientChipDirty: true,
+                      guardianChipDirty: false,
+                    );
+                  },
+                  child: const Text('Run Default Update'),
+                ),
+              ),
+              mockDb,
+            ),
+          );
+
+          await tester.tap(find.text('Run Default Update'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+
+          final empezar = find.text('Empezar');
+          if (empezar.evaluate().isNotEmpty) {
+            await tester.tap(empezar);
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 300));
+          }
+
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 50)),
+          );
+          await tester.pump();
+
+          final omitir = find.text('Omitir');
+          if (omitir.evaluate().isNotEmpty) {
+            await tester.tap(omitir);
+          } else {
+            final BuildContext modalCtx = tester.element(
+              find.byType(BottomSheet),
+            );
+            Navigator.of(modalCtx).pop(false);
+          }
+          await tester.pumpAndSettle();
+        } finally {
+          FlutterError.onError = originalOnError;
+        }
+
+        expect(result, isFalse);
+      },
+    );
+
+    testWidgets(
+      'executeReassignOne construye NfcPayloadService por defecto con onWritten de AppScope cuando serviceBuilder es null',
+      (tester) async {
+        final mockDb = _MockLocalDatabase();
+        when(() => mockKeyring.isEmpty).thenReturn(false);
+        when(() => mockKeyring.versions).thenReturn(<int>[1]);
+        when(() => mockKeyring.keys).thenReturn(<int, String>{1: validHexKey});
+        final codec = NfcPayloadCodec.fromKeyring(keyring: mockKeyring);
+
+        PatientFullRecord? result = _createRecord();
+        await tester.pumpWidget(
+          wrapWithAppScope(
+            Builder(
+              builder: (ctx) => ElevatedButton(
+                onPressed: () async {
+                  result = await executeReassignOne(
+                    context: ctx,
+                    target: ReassignTarget.patient,
+                    record: _createRecord(),
+                    codec: codec,
+                    isEs: true,
+                    showSnack: (_, {error = false}) {},
+                  );
+                },
+                child: const Text('Run Default Reassign'),
+              ),
+            ),
+            mockDb,
+          ),
+        );
+
+        await tester.tap(find.text('Run Default Reassign'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        final empezar = find.text('Empezar');
+        if (empezar.evaluate().isNotEmpty) {
+          await tester.tap(empezar);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+        }
+
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+
+        final omitir = find.text('Omitir');
+        if (omitir.evaluate().isNotEmpty) {
+          await tester.tap(omitir);
+        } else {
+          final BuildContext modalCtx = tester.element(
+            find.byType(BottomSheet),
+          );
+          Navigator.of(modalCtx).pop(false);
+        }
+        await tester.pumpAndSettle();
+
+        expect(result, isNull);
+      },
+    );
   });
 }

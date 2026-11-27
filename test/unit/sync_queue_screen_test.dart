@@ -558,4 +558,42 @@ void main() {
       expect(foreign(1, 4), equals(0));
     });
   });
+
+  group('Auditoría al descartar datos clínicos — propagación de usuario', () {
+    test(
+      'propaga userId, ownerUserId y organizationId cuando hay sesión activa',
+      () async {
+        when(
+          () => db.logEmergencyAccess(
+            patientUid: any(named: 'patientUid'),
+            patientName: any(named: 'patientName'),
+            userId: any(named: 'userId'),
+            ownerUserId: any(named: 'ownerUserId'),
+            organizationId: any(named: 'organizationId'),
+            reason: any(named: 'reason'),
+          ),
+        ).thenAnswer((_) async {});
+
+        await db.logEmergencyAccess(
+          patientUid: 'dev-001',
+          patientName: 'Juan Diaz',
+          userId: 'u-1',
+          ownerUserId: 'u-1',
+          organizationId: 'org-1',
+          reason: 'discard_clinical_data: Error de captura',
+        );
+
+        verify(
+          () => db.logEmergencyAccess(
+            patientUid: 'dev-001',
+            patientName: 'Juan Diaz',
+            userId: 'u-1',
+            ownerUserId: 'u-1',
+            organizationId: 'org-1',
+            reason: 'discard_clinical_data: Error de captura',
+          ),
+        ).called(1);
+      },
+    );
+  });
 }

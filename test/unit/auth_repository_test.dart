@@ -2223,6 +2223,333 @@ void main() {
       expect(repo.hasToken, isFalse);
     });
   });
+
+  group('bloqueo local y fallback de getNfcKeyring', () {
+    test('isLocalLocked y setLocalLocked reflejan el estado de bloqueo', () {
+      expect(repo.isLocalLocked.value, isFalse);
+
+      repo.setLocalLocked(true);
+      expect(repo.isLocalLocked.value, isTrue);
+
+      repo.setLocalLocked(false);
+      expect(repo.isLocalLocked.value, isFalse);
+    });
+
+    test(
+      'getNfcKeyring consulta /users/me cuando hay token en caché pero no anillo guardado',
+      () async {
+        final String jwt = _validJwt('doc@hwb.org');
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenAnswer((_) async => jwt);
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => _refreshJwt());
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyringKey),
+        ).thenAnswer((_) async => null);
+        when(
+          () => storage.read(key: AuthRepository.nfcKeyKey),
+        ).thenAnswer((_) async => null);
+
+        when(
+          () => api.getJson(
+            path: '/api/v1/users/me',
+            headers: any(named: 'headers'),
+          ),
+        ).thenAnswer(
+          (_) async => <String, dynamic>{
+            ..._meResponse(),
+            'nfc_keyring': <String, dynamic>{'1': 'DD' * 32},
+            'nfc_key_version': 1,
+          },
+        );
+
+        await repo.getAccessToken();
+        final NfcKeyring? keyring = await repo.getNfcKeyring();
+
+        expect(keyring, isNotNull);
+        expect(keyring!.keyFor(1), 'DD' * 32);
+      },
+    );
+  });
+
+  group('revocaciones pendientes y flushPendingRevocations()', () {
+    const String pendingKey = 'hwb_pending_logout_tokens';
+
+    test(
+      'getPendingRevocations decodifica tokens no vacíos y flushPendingRevocations los envía y limpia',
+      () async {
+        when(
+          () => storage.read(key: pendingKey),
+        ).thenAnswer((_) async => jsonEncode(<String>['rt-1', '', 'rt-2']));
+        when(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer((_) async => <String, dynamic>{});
+
+        final List<String> pending = await repo.getPendingRevocations();
+        expect(pending, equals(<String>['rt-1', 'rt-2']));
+
+        await repo.flushPendingRevocations();
+
+        verify(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            body: <String, dynamic>{'refresh_token': 'rt-1'},
+          ),
+        ).called(1);
+        verify(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            body: <String, dynamic>{'refresh_token': 'rt-2'},
+          ),
+        ).called(1);
+        verify(() => storage.delete(key: pendingKey)).called(1);
+      },
+    );
+
+    test(
+      'flushPendingRevocations descarta tokens con 400/401/422 y conserva los que fallan por red o 500',
+      () async {
+        when(() => storage.read(key: pendingKey)).thenAnswer(
+          (_) async => jsonEncode(<String>['rt-401', 'rt-500', 'rt-err']),
+        );
+
+        when(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            body: <String, dynamic>{'refresh_token': 'rt-401'},
+          ),
+        ).thenThrow(ApiException('invalid', statusCode: 401));
+        when(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            body: <String, dynamic>{'refresh_token': 'rt-500'},
+          ),
+        ).thenThrow(ApiException('server error', statusCode: 500));
+        when(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            body: <String, dynamic>{'refresh_token': 'rt-err'},
+          ),
+        ).thenThrow(Exception('socket closed'));
+
+        await repo.flushPendingRevocations();
+
+        verify(
+          () => storage.write(
+            key: pendingKey,
+            value: jsonEncode(<String>['rt-500', 'rt-err']),
+          ),
+        ).called(1);
+        verifyNever(() => storage.delete(key: pendingKey));
+      },
+    );
+
+    test(
+      'flushPendingRevocations ignora errores del almacén al persistir o borrar',
+      () async {
+        when(
+          () => storage.read(key: pendingKey),
+        ).thenAnswer((_) async => jsonEncode(<String>['rt-ok']));
+        when(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer((_) async => <String, dynamic>{});
+        when(
+          () => storage.delete(key: pendingKey),
+        ).thenThrow(Exception('storage locked'));
+
+        await expectLater(repo.flushPendingRevocations(), completes);
+      },
+    );
+
+    test(
+      '_enqueuePendingRevocation captura errores de escritura en storage durante logout offline',
+      () async {
+        final String jwt = _validJwt('a@b.com');
+        when(
+          () => api.postForm(
+            path: any(named: 'path'),
+            form: any(named: 'form'),
+          ),
+        ).thenAnswer(
+          (_) async => <String, dynamic>{
+            'access_token': jwt,
+            'refresh_token': 'r-fail-write',
+          },
+        );
+        when(
+          () => api.getJson(
+            path: any(named: 'path'),
+            headers: any(named: 'headers'),
+          ),
+        ).thenAnswer((_) async => _meResponse());
+        when(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenThrow(ApiException('offline', statusCode: 500));
+        when(
+          () => storage.write(
+            key: pendingKey,
+            value: any(named: 'value'),
+          ),
+        ).thenThrow(Exception('write error'));
+
+        await repo.login(email: 'a@b.com', password: 'x');
+        await expectLater(repo.logout(), completes);
+      },
+    );
+  });
+
+  group('logout() — rutas de respaldo y manejo de errores', () {
+    test(
+      'logout solo con refresh_token (sin access_token) revoca en /api/v1/logout',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenAnswer((_) async => null);
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => 'only-refresh-token');
+        when(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer((_) async => <String, dynamic>{});
+
+        await repo.logout();
+
+        verify(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            body: <String, dynamic>{'refresh_token': 'only-refresh-token'},
+          ),
+        ).called(1);
+      },
+    );
+
+    test(
+      'logout solo con refresh_token encola revocación si falla /api/v1/logout',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenAnswer((_) async => null);
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => 'only-refresh-offline');
+        when(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            body: any(named: 'body'),
+          ),
+        ).thenThrow(Exception('sin red'));
+
+        await repo.logout();
+
+        verify(
+          () => storage.write(
+            key: 'hwb_pending_logout_tokens',
+            value: jsonEncode(<String>['only-refresh-offline']),
+          ),
+        ).called(1);
+      },
+    );
+
+    test(
+      'logout con access_token expirado continúa si el refresh previo lanza excepción',
+      () async {
+        final String expiredJwt = _buildJwt(<String, dynamic>{
+          'sub': 'a@b.com',
+          'exp':
+              DateTime.now()
+                  .subtract(const Duration(hours: 2))
+                  .millisecondsSinceEpoch ~/
+              1000,
+        });
+
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenAnswer((_) async => expiredJwt);
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => 'rt-expired');
+        when(
+          () => api.postJson(
+            path: '/api/v1/login/refresh',
+            body: any(named: 'body'),
+          ),
+        ).thenThrow(Exception('fallo inesperado al refrescar'));
+        when(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer((_) async => <String, dynamic>{});
+
+        await repo.logout();
+
+        verify(
+          () => api.postJson(
+            path: '/api/v1/logout',
+            headers: <String, String>{'Authorization': 'Bearer $expiredJwt'},
+            body: <String, dynamic>{'refresh_token': 'rt-expired'},
+          ),
+        ).called(1);
+      },
+    );
+
+    test(
+      'logout captura error inesperado al leer tokenKey y limpia la sesión',
+      () async {
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenThrow(Exception('error leyendo tokenKey'));
+
+        await expectLater(repo.logout(), completes);
+
+        expect(repo.hasToken, isFalse);
+        verify(() => storage.delete(key: AuthRepository.tokenKey)).called(1);
+      },
+    );
+
+    test(
+      'logout captura excepción inesperada tras leer refreshToken y encola la revocación pendiente',
+      () async {
+        final String overflowExpJwt = _buildJwt(<String, dynamic>{
+          'sub': 'a@b.com',
+          'exp': 90000000000000,
+        });
+
+        when(
+          () => storage.read(key: AuthRepository.tokenKey),
+        ).thenAnswer((_) async => overflowExpJwt);
+        when(
+          () => storage.read(key: AuthRepository.refreshKey),
+        ).thenAnswer((_) async => 'rt-unexpected-error');
+
+        await repo.logout();
+
+        verify(
+          () => storage.write(
+            key: 'hwb_pending_logout_tokens',
+            value: jsonEncode(<String>['rt-unexpected-error']),
+          ),
+        ).called(1);
+        expect(repo.hasToken, isFalse);
+      },
+    );
+  });
 }
 
 String _docJwt() => _validJwt('doc@hwb.org');

@@ -493,6 +493,72 @@ void main() {
       }
     });
   });
+
+  group('UserSession.documentType y documentNumber', () {
+    test(
+      'mapea document_type y document_number cuando vienen con valor y hace trim',
+      () {
+        final json = {
+          'id': '10',
+          'email': 'doc@org.com',
+          'full_name': 'Dra. Laura Gómez',
+          'role': 'doctor',
+          'organization_id': 'org-1',
+          'document_type': '  CE  ',
+          'document_number': '  1098765432  ',
+        };
+
+        final session = UserSession.fromJson(json);
+
+        expect(session.documentType, 'CE');
+        expect(session.documentNumber, '1098765432');
+
+        final serialized = session.toJson();
+        expect(serialized['document_type'], 'CE');
+        expect(serialized['document_number'], '1098765432');
+      },
+    );
+
+    test(
+      'asigna valores por defecto cuando document_type o document_number son nulos o vacíos',
+      () {
+        final session = UserSession.fromJson({
+          'id': '11',
+          'email': 'nurse@org.com',
+          'role': 'nurse',
+          'organization_id': 'org-1',
+          'document_type': '   ',
+          'document_number': '   ',
+        });
+
+        expect(session.documentType, 'CC');
+        expect(session.documentNumber, isNull);
+        expect(session.toJson().containsKey('document_number'), isFalse);
+      },
+    );
+
+    test(
+      'copyWith actualiza documentType y documentNumber preservando los demás campos',
+      () {
+        final initial = UserSession(
+          id: '12',
+          email: 'a@b.com',
+          fullName: 'Ana',
+          role: UserRole.doctor,
+          organizationId: 'o1',
+        );
+
+        final updated = initial.copyWith(
+          documentType: 'PA',
+          documentNumber: 'AB123456',
+        );
+
+        expect(updated.documentType, 'PA');
+        expect(updated.documentNumber, 'AB123456');
+        expect(updated.id, initial.id);
+      },
+    );
+  });
 }
 
 // ─────────────────────────────────────────────
